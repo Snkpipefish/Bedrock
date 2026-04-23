@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 2 CLOSED (tagget `v0.2.0-fase-2`). DataStore med SQLite-backing dekker alle 4 kjerne-tabeller (prices, cot_disaggregated, cot_legacy, fundamentals, weather). 10 public I/O-metoder; 107/107 tester grønne; ADR-002 dokumenterer backend-valget (med SIMD-pinning-policy).
+- **Phase:** 3 — åpen. Session 10 FERDIG: `bedrock backfill prices` CLI + Stooq-fetcher + --dry-run. En fetcher, ett CLI-subkommando, klar til å skrive mot SQLite fra live data.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Start **Fase 3 (backfill-CLI)** i NY session. Referanse: PLAN § 6.4 + PLAN § 13 Fase 3-rad. Minst én `bedrock backfill prices --instruments all --from 2016` skal kunne skrive til SQLite. Kilde: eksisterende `~/cot-explorer/` fetch-kode (stooq/Yahoo for priser), eller ferskt script. Fetch-laget i § 7 hører til Fase 5; Fase 3 kan begynne med én fetcher som demo.
+- **Next task:** Fase 3 session 11 — neste backfill-subkommando. Kandidater: `backfill cot` (CFTC disaggregated via Socrata API — `https://publicreporting.cftc.gov/resource/jun7-fc8e.json`), `backfill fundamentals` (FRED API, krever `FRED_API_KEY` fra `~/.bedrock/secrets.env`), eller `backfill weather` (ERA5 eller Open-Meteo — sistnevnte har ingen auth). FRED er enklest etter Stooq; COT er viktigst for positioning-drivere. Bruker velger.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -53,6 +53,53 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 10: Fase 3 åpnet, `backfill prices`
+
+Første backfill-subkommando + første fetcher-modul.
+
+**Opprettet:**
+- `src/bedrock/fetch/__init__.py`
+- `src/bedrock/fetch/base.py` — `http_get_with_retry` (tenacity, 3 forsøk,
+  exponential backoff på `RequestException`). Generisk `retry`-dekorator
+  for ikke-HTTP. Bruker **stdlib logging** (per bruker-beslutning i
+  session 10, ikke structlog — drivers/trend.py beholder structlog)
+- `src/bedrock/fetch/prices.py` — `fetch_prices(ticker, from_date, to_date)`
+  mot Stooq CSV. `build_stooq_url_params` eksponert for `--dry-run`.
+  `PriceFetchError` for permanente feil
+- `src/bedrock/cli/__init__.py`
+- `src/bedrock/cli/__main__.py` — click-gruppe med `-v` for DEBUG-logging
+- `src/bedrock/cli/backfill.py` — `bedrock backfill prices`:
+  - obligatoriske: `--instrument`, `--ticker`, `--from`
+  - defaults: `--db data/bedrock.db`, `--to i dag`, `--tf D1`
+  - `--dry-run` bygger URL og viser destinasjon uten HTTP eller
+    DB-skriving (ingen parent-dir opprettes)
+- `tests/unit/test_fetch_prices.py` (10 tester — URL-bygging, mocked
+  HTTP success+feil, FX uten volume, no-data-respons)
+- `tests/unit/test_cli_backfill.py` (11 tester — normal flow, --dry-run,
+  tf-respekt, dir-auto-opprettelse, argument-validering)
+
+**Design-valg:**
+- Stooq over Yahoo: enklere CSV-endepunkt, ingen auth
+- stdlib logging i fetch/CLI, structlog beholdes der det allerede er
+- `--dry-run` viser kun URL + destinasjon, gjør ingen HTTP-kall
+  (bruker-spesifikasjon: "verifisere URL uten å skrive til DB")
+- CLI tar `--ticker` eksplisitt (instrument→ticker-mapping hører til
+  instrument-config i Fase 5, ikke Fase 3)
+
+**Commit:** `<hash kommer>`.
+
+**Tester:** 128/128 grønne på 8.1 sek.
+
+**Bevisste utsettelser:**
+- Andre backfill-subkommandoer (cot, fundamentals, weather) — egne sessions
+- Instrument-ticker-mapping fra YAML — Fase 5
+- Live integrasjonstest mot Stooq — flaky; venter til CI er satt opp med
+  retry/skipif
+- `--concurrent`-flagg for parallell backfill av flere instrumenter —
+  premature optimization; venter til det faktisk trengs
+
+**Neste session:** Fase 3 session 11 — neste backfill-subkommando.
 
 ### 2026-04-24 — Session 9: Fase 2 CLOSED
 
