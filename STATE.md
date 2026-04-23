@@ -2,21 +2,19 @@
 
 ## Current state
 
-- **Phase:** 1 — Engine core (session 2 FERDIG: skjelett + weighted_horizon)
+- **Phase:** 1 — Engine core (session 3 FERDIG: additive_sum + agri-grade; motor komplett for begge asset-klasser)
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Fase 1 session 3 — første ekte drivere (`sma200_align`, `momentum_z`) + minimal `DataStore`-stub for å kunne teste dem
-  - Alternativt (bruker kan velge): `additive_sum`-aggregator + agri-grade, eller logiske Gold-scenarier med manuelt preparerte fixtures
-  - Åpent spørsmål: skal `DataStore` stubbes nå (kort pris-series i minne for å drive drivere i test) eller vente til Fase 2?
+- **Next task:** Fase 1 session 4 — første ekte drivere. Foreslår minimal in-memory `DataStore`-stub + `sma200_align` + `momentum_z` + logiske tester mot kurerte fiktive pris-series (Gold bull-scenario). DataStore formaliseres fullt i Fase 2, men stubben låser driver-signaturen.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
 
-- Fase 1 session 3 scope: skal `sma200_align` + `momentum_z` skrives mot en
-  minimal in-memory `DataStore`-stub nå, eller skal vi heller gjøre
-  `additive_sum`-aggregatoren først (slik at agri-siden får samme skjelett)?
 - Skal pre-commit-hooks (ruff/yamllint/commitizen) aktiveres nå eller venter
   vi til `uv sync` er kjørt? Per nå committer vi uten pre-commit-validering.
+- PLAN § 10.6 (alt editerbart via admin-UI, YAML auto-committes): bekreftet
+  notert for Fase 8. Pydantic-modellene har `populate_by_name=True` på
+  grade-terskel-modellene slik at round-trip YAML <-> model fungerer.
 
 ## Invariants (må holdes)
 
@@ -33,6 +31,37 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 3 (Claude Code + bruker)
+
+Fase 1 session 3: `additive_sum` + agri-grade. Engine komplett for begge
+asset-klasser; ingen drivere ennå.
+
+**Opprettet / endret:**
+- `aggregators.additive_sum(family_scores, family_caps)` — agri-variant
+- `grade.AgriGradeThreshold` + `AgriGradeThresholds` + `grade_agri()`
+  (absolutte terskler, ikke pct-av-max)
+- `engine` refaktorert: `FinancialRules` + `FinancialFamilySpec` (renamed
+  fra `Rules`/`FamilySpec`), `AgriRules` + `AgriFamilySpec`,
+  `Rules = FinancialRules | AgriRules` TypeAlias. `Engine.score()`
+  dispatcher via `isinstance`. `horizon` er nå Optional på både metode-sign
+  og `GroupResult`
+- `tests/unit/test_engine_agri_smoke.py` (5 tester), utvidet
+  `test_aggregators.py` (+5) og `test_grade.py` (+7)
+
+**Bevisste utsettelser:**
+- Ingen ekte drivere ennå (kommer session 4)
+- `gates`-felt på Rules (PLAN § 4.2 `cap_grade`-regler) utsatt
+
+**Commit:** `c57fe82` (additive_sum + agri-rules/grade). Auto-push aktiv.
+
+**Tester:** 44/44 grønne lokalt i `.venv`. ADR-001 dekker valget av
+aggregator-plugin-arkitektur — ingen ny ADR nødvendig (implementasjonen er
+execution av den beslutningen).
+
+**Neste session:** session 4 — første ekte drivere (`sma200_align`,
+`momentum_z`) mot minimal in-memory `DataStore`-stub, med logiske tester
+på kurerte pris-serier.
 
 ### 2026-04-24 — Session 2 (Claude Code + bruker)
 
