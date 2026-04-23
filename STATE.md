@@ -2,10 +2,14 @@
 
 ## Current state
 
-- **Phase:** 3 — åpen. Session 10 FERDIG: `bedrock backfill prices` CLI + Stooq-fetcher + --dry-run. En fetcher, ett CLI-subkommando, klar til å skrive mot SQLite fra live data.
+- **Phase:** 3 — åpen. Session 11 FERDIG: `bedrock backfill cot-disaggregated` via CFTC Socrata. To fetchere (Stooq + CFTC), to CLI-subkommandoer.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Fase 3 session 11 — neste backfill-subkommando. Kandidater: `backfill cot` (CFTC disaggregated via Socrata API — `https://publicreporting.cftc.gov/resource/jun7-fc8e.json`), `backfill fundamentals` (FRED API, krever `FRED_API_KEY` fra `~/.bedrock/secrets.env`), eller `backfill weather` (ERA5 eller Open-Meteo — sistnevnte har ingen auth). FRED er enklest etter Stooq; COT er viktigst for positioning-drivere. Bruker velger.
+- **Next task:** Fase 3 session 12 — velg mellom:
+  (a) `backfill cot-legacy` (samme mønster som disaggregated, annet datasett 6dca-aqww, enkel videreføring)
+  (b) `backfill fundamentals` (FRED, krever `FRED_API_KEY` fra `~/.bedrock/secrets.env` + secrets-håndtering)
+  (c) `backfill weather` (Open-Meteo, ingen auth)
+  Forslag: (a) først for å fullføre COT-dekning, deretter (c) som no-auth-kilde, deretter (b) som introduserer secrets-lasting.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -53,6 +57,53 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 11: `backfill cot-disaggregated`
+
+Andre backfill-subkommando + andre fetcher-modul. Følger samme mønster
+som prices — eksponert `build_socrata_query` for `--dry-run`,
+`CotFetchError` for permanente feil, mocked HTTP i tester.
+
+**Opprettet:**
+- `src/bedrock/fetch/cot_cftc.py`:
+  - `CFTC_DISAGGREGATED_URL` = Futures Only Disaggregated (72hh-3qpy)
+  - `fetch_cot_disaggregated(contract, from_date, to_date)` — henter
+    SoQL-filtrert Socrata-JSON, normaliserer til Bedrock-schema
+  - Socrata-til-Bedrock-feltmapping (`m_money_*` → `mm_*`, `prod_merc_*`
+    → `comm_*`, etc.)
+  - Socrata leverer tall som strenger → `pd.to_numeric` + `int64`-cast
+  - ISO-timestamp (f.eks. `2024-01-02T00:00:00.000`) trimmes til
+    `YYYY-MM-DD`
+  - Tom respons returnerer tom DataFrame med riktig kolonne-sett
+    (ikke exception)
+- `bedrock.cli.backfill.cot_disaggregated_cmd`:
+  - Obligatoriske: `--contract`, `--from`
+  - Defaults: `--db data/bedrock.db`, `--to i dag`
+  - `--dry-run` viser URL + `$where`/`$order`/`$limit` uten HTTP eller DB
+- `tests/unit/test_fetch_cot_cftc.py` (12 tester — query-bygging, mocked
+  HTTP success+feil, string-til-int-konvertering, end-to-end mot
+  DataStore, timestamp-trimming, empty-response)
+- `tests/unit/test_cli_backfill_cot.py` (6 tester — normal flow, empty
+  result OK, --dry-run, argument-validering)
+
+**Design-valg:**
+- Kontrakt-navn er CFTCs eksakte `market_and_exchange_names`-verdi
+  (f.eks. `'GOLD - COMMODITY EXCHANGE INC.'`). Instrument-til-kontrakt-
+  mapping hører til Fase 5 instrument-config
+- Ingen pagination implementert: 10 år × ukentlig = ~520 rader per
+  kontrakt, godt under Socratas $limit=50000
+
+**Commits:** `<hash kommer>`.
+
+**Tester:** 146/146 grønne på 7.6 sek.
+
+**Bevisste utsettelser:**
+- `backfill cot-legacy` — session 12
+- `backfill fundamentals` (FRED) — krever secrets-håndtering
+- `backfill weather` (Open-Meteo) — senere session
+- Live integrasjonstest mot CFTC Socrata — flaky
+
+**Neste session:** Fase 3 session 12.
 
 ### 2026-04-24 — Session 10: Fase 3 åpnet, `backfill prices`
 
