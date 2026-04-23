@@ -2,10 +2,14 @@
 
 ## Current state
 
-- **Phase:** 1 — Engine core (session 4 FERDIG: InMemoryStore + første 2 trend-drivere; Engine kjører end-to-end)
+- **Phase:** 1 CLOSED (tagget `v0.1.0-fase-1`). Motor komplett for begge asset-klasser; 2 ekte drivere registrert; InMemoryStore-stub etablert.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Fase 1 session 5 — flere drivere. Foreslår: `d1_4h_congruence` (trend), `cot_mm_percentile` + `cot_commercial_z` (positioning). Krever at InMemoryStore utvides med `get_cot()`-stub. Alternativt kan vi avslutte Fase 1 her (motor + 2 drivere er teknisk nok for "skjelettet") og gå til Fase 2 (ekte DuckDB-DataStore + backfill).
+- **Next task:** Start Fase 2 i NY session. Erstatt `InMemoryStore` med ekte
+  `DataStore` (DuckDB + parquet). Schema-design for prices/COT/fundamentals/
+  weather/trades. Implementer `get_prices` med samme signatur. Unit-tester
+  som kjører mot midlertidig parquet-fil i tmp. Referanse: PLAN § 6 +
+  STATE-invariant "eksisterende drivere skal ikke endres når DataStore byttes inn".
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -27,10 +31,52 @@
 - **Setup-generator skal ha determinisme + hysterese + stabilitets-filtre**, ikke
   lifecycle-tracking.
 - **YAML har ingen logikk.** Alltid.
+- **Driver-kontrakt låst** (fra Fase 1): `(store, instrument, params) -> float`
+  med `store.get_prices(instrument, tf, lookback) -> pd.Series`. Fase 2s
+  `DataStore` må implementere samme signatur slik at ingen drivere behøver
+  endring ved byttet fra InMemoryStore.
+- **Engine API låst** (fra Fase 1): `Engine.score(instrument, store, rules, horizon=None) -> GroupResult`.
+  `rules` er `FinancialRules | AgriRules`. Ingen breaking changes på
+  `GroupResult` uten ADR.
 
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 5: Fase 1 CLOSED
+
+Verifisert at additive_sum + agri-grade er reell implementasjon (ikke
+placeholder): grep mot src/ fant null `NotImplementedError`/`TODO`/`FIXME`/
+`XXX`. Alle agri-symboler på plass (`additive_sum`, `AgriRules`,
+`AgriFamilySpec`, `AgriGradeThreshold(s)`, `grade_agri`, `_score_agri`).
+66/66 tester grønne.
+
+**Tag:** `v0.1.0-fase-1` opprettet og pushet.
+
+**Fase 1 leveranse-sum:**
+- `Engine.score()` for begge asset-klasser (financial weighted_horizon,
+  agri additive_sum)
+- Pydantic-modeller for YAML round-trip (Rules, FamilySpec, GroupResult +
+  alias-støtte for A_plus/A/B)
+- Driver-registry med `@register`-dekorator og duplicate-guard
+- `grade_financial` (pct-av-max) + `grade_agri` (absolutte terskler)
+- `bedrock.data.store.InMemoryStore` med stabil `get_prices`-kontrakt som
+  Fase 2s ekte DataStore må implementere
+- 2 ekte drivere: `sma200_align`, `momentum_z` (trend-familien)
+- ADR-001: én Engine + aggregator-plugin
+- 66 tester: 27 unit (registry + aggregators + grade + engine smoke) +
+  12 agri + 7 store + 14 logiske driver-tester + 1 engine-integrerings-
+  sanity + 3 pre-eksisterende smoke
+
+**Utsatt til senere faser (bevisst):**
+- 3-8 resterende drivere (positioning, macro, fundamental, structure, risk,
+  analog) — skrives i Fase 2 mot ekte data
+- `gates`-felt på Rules (PLAN § 4.2 `cap_grade`) — Fase 2/3 når faktiske
+  scenarier trenger det
+- `StoreProtocol`-duplikat mellom `bedrock.engine.drivers` og
+  `bedrock.data.store` — konsolideres i Fase 2
+
+**Neste:** Fase 2 i ny session. Erstatt InMemoryStore med DuckDB+parquet.
 
 ### 2026-04-24 — Session 4 (Claude Code + bruker)
 
