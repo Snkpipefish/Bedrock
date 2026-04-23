@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 2 — åpen. Session 6 FERDIG: SQLite-DataStore erstatter InMemoryStore. Fase 2 bytter storage-backend fra PLAN-valget (DuckDB+parquet) til SQLite pga hardware-begrensning (se ADR-002).
+- **Phase:** 2 — åpen. Session 7 FERDIG: COT-støtte (CFTC disaggregated + legacy som to tabeller). DataStore dekker nå priser + COT.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Fase 2 session 7 — utvid DataStore med `get_cot()` og/eller `get_fundamentals()`/`get_weather()`. Foreslår: start med COT (brukes av positioning-driverne som kommer senere), skjema-design først (CFTC disaggregated/legacy kolonner), så `append_cot`, så tester. Alternativ rekkefølge hvis du foretrekker: backfill-CLI (Fase 3) før flere `get_*` for å teste mot ekte data tidlig.
+- **Next task:** Fase 2 session 8 — fundamentals (FRED-serier). Foreslår: `FredSeriesRow` + `DDL_FUNDAMENTALS`, `append_fundamentals(df)`, `get_fundamentals(series_id, from_, last_n)`. Enkelt schema (series_id, date, value). Deretter weather (us_cornbelt_daily-liknende). Backfill-CLI (Fase 3) venter til alle schemas er på plass.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -45,6 +45,45 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 7: COT-støtte i DataStore
+
+**Opprettet:**
+- `schemas.CotDisaggregatedRow` + `CotLegacyRow` Pydantic-modeller
+- `schemas.TABLE_COT_DISAGGREGATED` / `TABLE_COT_LEGACY` + DDL-konstanter
+- `schemas.COT_DISAGGREGATED_COLS` / `COT_LEGACY_COLS` kolonne-rekkefølge
+- `DataStore.append_cot_disaggregated(df)` / `append_cot_legacy(df)` —
+  INSERT OR REPLACE paa PK (report_date, contract). Felles private
+  `_append_cot()`-helper
+- `DataStore.get_cot(contract, report="disaggregated"|"legacy", last_n=None)`
+  — returnerer pd.DataFrame (multi-column)
+- `DataStore.has_cot(contract, report)` — test-hjelper
+- `tests/unit/test_store_cot.py` — 15 tester: append+get, last_n, dedupe,
+  append-nye-datoer, missing-columns, ukjent-contract, ukjent-report-type,
+  default-report-type, separate-contracts, has_cot, survive-reopen,
+  default-er-ikke-legacy
+
+**Design-valg:** To separate tabeller (cot_disaggregated, cot_legacy) i
+stedet for én tabell med `report_type`-kolonne. Grunn: ulike kolonne-
+strukturer fra CFTC gir NULL-sprawl ved felles tabell. PLAN § 6.2/6.3
+oppdatert tilsvarende.
+
+**Bevisste utsettelser:**
+- ICE og Euronext COT-tabeller (PLAN § 6.2 originalt) — utsettes til behov
+  oppstår i senere faser. CFTC dekker alle financial + agri-instrumenter
+  vi trenger nå
+- DataStoreProtocol uendret — drivere rører ikke COT ennå
+- Ingen positioning-drivere ennå (cot_mm_percentile etc.) — kommer når
+  flere drivere skrives, sannsynligvis etter Fase 2 avsluttes
+
+**Commits:** `6469d8c` (feat/data COT), `5843a11` (docs/plan § 6.2+6.3).
+Auto-push aktiv.
+
+**Tester:** 89/89 grønne på 4.6 sek.
+
+**Neste session:** Fase 2 session 8 — fundamentals (FRED-serier) og/eller
+weather. Alternativ: backfill-CLI (Fase 3) hvis bruker vil teste mot
+ekte data før flere schemas legges til.
 
 ### 2026-04-24 — Session 6: Fase 2 åpnet, SQLite-DataStore
 
