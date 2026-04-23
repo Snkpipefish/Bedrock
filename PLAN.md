@@ -847,6 +847,57 @@ Pipeline-kontrollbord. Viser helse per fetch-kilde (fresh/aging/stale/missing) m
 
 Fordi repoet er public ligger `admin.html` bak et separat endpoint som ikke linkes fra `index.html`. Bruker kan nå den via direkte URL + kode.
 
+### 10.6 Prinsipp: ingenting krever terminal
+
+All konfigurasjon, alle justeringer, all drift styres fra web-UI-et. Terminalen
+brukes kun av Claude Code under utvikling og av systemd i produksjon. Brukeren
+skal aldri måtte åpne terminal for å endre noe i daglig drift.
+
+**Editerbart via admin-UI (kode-beskyttet):**
+
+| Hva | Fil bak scenen | Hvor i UI |
+|---|---|---|
+| Scoring-regler per instrument | `config/instruments/*.yaml` | Admin → Instruments → velg → edit |
+| Driver-vekter og parametre | Samme | Admin → Instruments → familie → driver |
+| Grade-terskler (A+/A/B) | Samme, evt `config/defaults/` | Admin → Instruments → grade |
+| Horisont-vekter per asset-klasse | `config/defaults/family_*.yaml` | Admin → Defaults |
+| Fetch-cadence og stale-terskler | `config/fetch.yaml` | Admin → Pipeline → Fetch-schedule |
+| Bot-thresholds (confirmation, trail, giveback, osv.) | `config/bot.yaml` | Admin → Bot config |
+| Instrument-liste (legg til / fjern) | Egen YAML | Admin → Instruments → New |
+| Aktivering/deaktivering av fetch-kilder | `config/fetch.yaml` | Admin → Pipeline → toggle |
+
+**Styring via UI (ikke bare editering):**
+
+| Handling | UI-knapp | Bak scenen |
+|---|---|---|
+| Stopp alle åpne trades (killswitch) | Stor rød knapp øverst | POST `/kill all` med admin-kode |
+| Invalider enkeltsignal | Trykk på signal → "Cancel" | POST `/invalidate` |
+| Force-run pipeline nå | Admin → Pipeline → "Run now" | trigger systemd-service |
+| Pause pipeline midlertidig | Admin → Pipeline → "Pause" | deaktiver timer |
+| Vis siste kjørings-log | Admin → Logs | les `logs/pipeline.log`, 200 siste linjer |
+| Dry-run ny regel | Admin → Instruments → edit → "Dry-run" | kjør scoring mot siste 7 dager, vis diff |
+| Ta regelen i bruk | Samme editor → "Commit" | POST `/admin/rules`, YAML skrives, git-commit |
+| Se bot-status | Dashboard top-bar | read `signal_log.json` + `/status` |
+
+**Implementasjon:**
+
+- UI: `web/admin.html` (separat fra offentlig `index.html`, skjult URL, kode-gate)
+- Backend: utvid `signal_server` med admin-endpoints (`/admin/rules`, `/admin/fetch`, `/admin/bot`, `/admin/pipeline`)
+- Alle admin-endepunkter krever `X-Admin-Code`-header (SHA-256 hash matches ADMIN_CODE_HASH i env)
+- YAML-edits går gjennom dry-run + validering + diff-visning før commit
+- Alle endringer auto-commits med `config(<scope>): ...`-melding; auto-push-hook sender til GitHub
+
+**Hva UI IKKE dekker (én-gangs eller sikkerhets-kritisk):**
+
+- Installere uv / Python — én gang, Claude Code gjør det
+- SSH-nøkler / GitHub-tilgang — nettleser, ikke terminal
+- Førstegangs-systemd-installasjon — én gang, Claude Code gjør det
+- cTrader-credentials i `.env` — sensitivt, bruker skriver selv (f.eks. med tekst-editor
+  i filutforsker) fordi de aldri skal på GitHub
+
+Totalt: bruker skal kunne drive Bedrock uten å åpne terminal i daglig bruk. Terminal
+er kun for førstegangs-oppsett og utvikler-arbeid.
+
 ---
 
 ## 11. Testing — logiske tester
