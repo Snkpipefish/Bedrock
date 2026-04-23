@@ -16,7 +16,7 @@ dependencies = [
     # Data + historikk (SQLite via stdlib — se ADR-002 for hvorfor ikke
     # DuckDB/pyarrow: produksjons-hardwaren mangler SSE4.2/AVX)
     "pandas>=2.2",
-    "numpy>=1.26",
+    "numpy>=2.2,<2.3",  # SIMD-sensitive, pin upper bound (ADR-002)
 
     # HTTP / nettverk
     "requests>=2.32",

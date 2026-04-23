@@ -79,6 +79,41 @@ Nøytrale (verdt å nevne):
   momentet og tvinger driver-utvikling til å forbli mot InMemoryStore-stub.
   Forkastet.
 
+## Related: SIMD-sensitive dependency pinning
+
+Binær-wheels for numeriske Python-biblioteker bygges med stadig nyere
+CPU-instruksjons-sett. Wheels som fungerte på `pandas 2.3 + numpy 2.2`
+i dag kan krasje på samme hardware i morgen hvis en transitiv oppgradering
+drar inn en nyere numpy som bruker AVX2 internt.
+
+Vi oppdaget dette konkret under Fase 2 session 6 da `pip install` av
+`duckdb`/`pyarrow` også oppgraderte numpy; pandas begynte å `Illegal
+instruction`-krasje fordi `pandas.compat.pyarrow` prøver soft-import av
+pyarrow ved oppstart.
+
+**Constraint (generelt):** alle SIMD-sensitive avhengigheter pinnes med
+øvre grense til nærmeste minor som er verifisert å kjøre på produksjons-
+CPU-en. Når en avhengighet legges inn, må vi stille spørsmålet: "bruker
+denne pre-kompilert numerisk kode?" Hvis ja → pin til verifisert range.
+
+**Kjente SIMD-sensitive pakker** (per 2026-04-24):
+
+| Pakke | Grunn | Håndtering |
+|---|---|---|
+| `numpy` | bygges med SIMD (AVX2) fra 2.3+ (varsler allerede i 2.2) | pin `>=2.2,<2.3` |
+| `pandas` | avhenger av numpy; har soft-import av pyarrow | unngå pyarrow-wheel |
+| `pyarrow` | bygges med SSE4.2 minimum | ikke installere |
+| `duckdb` | bygges med AVX2 minimum | ikke installere |
+| `fastparquet` | avhenger av cramjam (SIMD) | ikke installere |
+| `scipy` | bygges med SIMD i senere versjoner | pin når introdusert |
+| `numexpr` | eksplisitt SIMD-bibliotek | pin når introdusert |
+
+**Oppgraderings-policy:** oppgradering av en SIMD-sensitiv avhengighet
+krever (1) lokal test `python -c "import X"` på produksjons-CPU-en,
+(2) full `pytest` grønn, (3) oppdatering av denne tabellen. Minor-
+oppgradering er ikke automatisk trygt selv med grønn CI, fordi CI-runnere
+har moderne CPU-er og vil ikke fange krasjen.
+
 ## Migreringsvei tilbake til DuckDB/parquet
 
 Hvis hardware oppgraderes og vi ønsker kolonnestore:
