@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 2 — åpen. Session 8 FERDIG: fundamentals (FRED) + weather (daglig region). DataStore dekker nå priser + COT + fundamentals + weather. Alle kjerne-tabeller klare for drivere og fetch-laget.
+- **Phase:** 2 CLOSED (tagget `v0.2.0-fase-2`). DataStore med SQLite-backing dekker alle 4 kjerne-tabeller (prices, cot_disaggregated, cot_legacy, fundamentals, weather). 10 public I/O-metoder; 107/107 tester grønne; ADR-002 dokumenterer backend-valget (med SIMD-pinning-policy).
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Forslag: avslutt Fase 2 her og gå til **Fase 3 (backfill-CLI)**. Fase 2-målet var "datalag: DuckDB+parquet, skjemaer, DataStore-API" — vi har nå SQLite-backing + 4 tabell-familier + full API. `find_analog_cases` (PLAN § 6.5) utsettes til Fase 9 per PLAN-tabell. trades-tabell venter til Fase 7 (bot-refaktor). Fase 3 = backfill-CLI: `bedrock backfill prices --from 2016`, `bedrock backfill cot` etc. — bruker fetch-laget fra eksisterende `cot-explorer`/`scalp_edge` eller fra ferskt script.
+- **Next task:** Start **Fase 3 (backfill-CLI)** i NY session. Referanse: PLAN § 6.4 + PLAN § 13 Fase 3-rad. Minst én `bedrock backfill prices --instruments all --from 2016` skal kunne skrive til SQLite. Kilde: eksisterende `~/cot-explorer/` fetch-kode (stooq/Yahoo for priser), eller ferskt script. Fetch-laget i § 7 hører til Fase 5; Fase 3 kan begynne med én fetcher som demo.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -41,10 +41,55 @@
 - **Engine API låst** (fra Fase 1): `Engine.score(instrument, store, rules, horizon=None) -> GroupResult`.
   `rules` er `FinancialRules | AgriRules`. Ingen breaking changes på
   `GroupResult` uten ADR.
+- **DataStore-API låst** (fra Fase 2): metoder `get_prices`, `get_cot`,
+  `get_fundamentals`, `get_weather` og tilsvarende `append_*` er
+  kontrakten drivere + fetch-lag bygger på. Returner-typer låst
+  (`pd.Series` for prices/fundamentals, `pd.DataFrame` for cot/weather).
+  Schema-endring krever ADR + migrerings-plan.
+- **SIMD-sensitive deps må pinnes** (fra ADR-002): numpy pinnet `>=2.2,<2.3`.
+  Nye SIMD-tunge pakker (pyarrow, duckdb, fastparquet, scipy, numexpr) må
+  avvises eller pinnes til versjon verifisert på produksjons-CPU.
 
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 9: Fase 2 CLOSED
+
+Verifisert at datalaget er reell implementasjon: grep mot `src/bedrock/data/`
+fant null `NotImplementedError`/`TODO`/`FIXME`/`XXX`. Alle 10 I/O-metoder
++ 4 `has_*`-hjelpere implementert mot SQLite. 107/107 tester grønne.
+
+**Tag:** `v0.2.0-fase-2` opprettet og pushet.
+
+**Fase 2 leveranse-sum:**
+- `bedrock.data.store.DataStore` — SQLite-backet via stdlib `sqlite3`
+  (null SIMD-avhengighet, kjører på produksjons-CPU-en)
+- `bedrock.data.store.DataStoreProtocol` — uendret kontrakt fra Fase 1;
+  `InMemoryStore` slettet
+- 5 tabeller: `prices`, `cot_disaggregated`, `cot_legacy`, `fundamentals`,
+  `weather`. PK-er sikrer idempotent re-run ved INSERT OR REPLACE
+- Pydantic-schemas for alle rad-typer (`PriceBar`, `CotDisaggregatedRow`,
+  `CotLegacyRow`, `FredSeriesRow`, `WeatherDailyRow`)
+- Getter-API: `get_prices`/`get_fundamentals` returnerer `pd.Series`
+  (skalar per dato), `get_cot`/`get_weather` returnerer `pd.DataFrame`
+  (multi-column). `last_n` overalt; `from_` utsatt til driver trenger det
+- Append-API: `append_prices`, `append_cot_disaggregated`,
+  `append_cot_legacy`, `append_fundamentals`, `append_weather`
+- ADR-002: SQLite-begrunnelse + SIMD-pinning-policy (tabell over
+  problem-pakker + oppgraderings-regler)
+- numpy pinnet `>=2.2,<2.3` i pyproject
+- 107 tester: 30 store-unit (prices + cot + fund + weather) + 77 fra
+  Fase 1 (engine, grade, aggregators, drivere, logisk)
+
+**Utsatt til senere faser (bevisst):**
+- `find_analog_cases` (PLAN § 6.5) — Fase 9 (analog-matching)
+- `trades`-tabell — Fase 7 (bot-refaktor)
+- `get_*(from_=...)`-argument — legges til når en driver trenger det
+- Ekte data i databasen — Fase 3 (backfill-CLI)
+- Fetch-modulene — Fase 5
+
+**Neste:** Fase 3 i ny session. Backfill-CLI for priser først.
 
 ### 2026-04-24 — Session 8: fundamentals + weather, numpy-pin
 
