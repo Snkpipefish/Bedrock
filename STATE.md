@@ -2,14 +2,10 @@
 
 ## Current state
 
-- **Phase:** 1 CLOSED (tagget `v0.1.0-fase-1`). Motor komplett for begge asset-klasser; 2 ekte drivere registrert; InMemoryStore-stub etablert.
+- **Phase:** 2 — åpen. Session 6 FERDIG: SQLite-DataStore erstatter InMemoryStore. Fase 2 bytter storage-backend fra PLAN-valget (DuckDB+parquet) til SQLite pga hardware-begrensning (se ADR-002).
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Start Fase 2 i NY session. Erstatt `InMemoryStore` med ekte
-  `DataStore` (DuckDB + parquet). Schema-design for prices/COT/fundamentals/
-  weather/trades. Implementer `get_prices` med samme signatur. Unit-tester
-  som kjører mot midlertidig parquet-fil i tmp. Referanse: PLAN § 6 +
-  STATE-invariant "eksisterende drivere skal ikke endres når DataStore byttes inn".
+- **Next task:** Fase 2 session 7 — utvid DataStore med `get_cot()` og/eller `get_fundamentals()`/`get_weather()`. Foreslår: start med COT (brukes av positioning-driverne som kommer senere), skjema-design først (CFTC disaggregated/legacy kolonner), så `append_cot`, så tester. Alternativ rekkefølge hvis du foretrekker: backfill-CLI (Fase 3) før flere `get_*` for å teste mot ekte data tidlig.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -19,6 +15,13 @@
 - PLAN § 10.6 (alt editerbart via admin-UI, YAML auto-committes): bekreftet
   notert for Fase 8. Pydantic-modellene har `populate_by_name=True` på
   grade-terskel-modellene slik at round-trip YAML <-> model fungerer.
+- Fase 2 rekkefølge: utvid DataStore med flere `get_*`-metoder først (COT,
+  fundamentals, weather) ELLER start backfill-CLI (Fase 3 per PLAN-tabell)
+  først for å få ekte data inn i sqlite-databasen tidlig? Begge er
+  forsvarlige. Lateness-argument: CLI trenger uansett `append_*`-metoder å
+  kalle, så schema-utvidelse kommer først uansett. Min anbefaling: session
+  7 = COT-schema + `get_cot`/`append_cot`; session 8 = fundamentals +
+  weather; session 9 = første backfill-CLI-command (prices fra stooq).
 
 ## Invariants (må holdes)
 
@@ -42,6 +45,42 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 6: Fase 2 åpnet, SQLite-DataStore
+
+Fase 2-oppstart traff uforventet hardware-blokker: CPU (Pentium T4200,
+2008) mangler SSE4.2/AVX/AVX2. Moderne `duckdb`, `pyarrow`, `fastparquet`-
+wheels krasjer med Illegal instruction ved import (bekreftet på T4200).
+Brukerbeslutning: SQLite + pandas i stedet for PLAN §6.1-valget.
+
+**Opprettet:**
+- `src/bedrock/data/schemas.py` — `PriceBar` Pydantic + `TABLE_PRICES` +
+  `DDL_PRICES` (SQLite DDL med PK instrument+tf+ts for INSERT OR REPLACE
+  dedupe)
+- `src/bedrock/data/store.py` — komplett rewrite:
+  - `DataStoreProtocol` **uendret** (driver-kontrakt låst fra Fase 1)
+  - `InMemoryStore` **slettet**
+  - `DataStore(db_path)` med `get_prices`, `append_prices`, `has_prices`.
+    Bruker stdlib `sqlite3` + `pd.read_sql` — ingen SIMD-avhengighet.
+- `docs/decisions/002-sqlite-instead-of-duckdb.md` — dokumenterer
+  hardware-begrunnelse + migreringsvei tilbake til DuckDB om hardware
+  oppgraderes
+
+**Endret:**
+- `tests/unit/test_store.py` — komplett omskrevet (15 tester, opp fra 7)
+- `tests/logical/test_trend_drivers.py` — fixture-basert med `tmp_path`,
+  ny `_add_closes`-helper. Driver-logikk uendret.
+- `PLAN.md` §6.1/6.2/6.3 — oppdatert for SQLite
+- `pyproject.toml` — duckdb + pyarrow fjernet fra deps
+
+**Commits:** `0f4e9cb` (feat/data), `56dc5b4` (ADR-002), `e15bafa`
+(plan+pyproject). Auto-push aktiv — alle på GitHub.
+
+**Tester:** 74/74 grønne på 3.4 sek. Ingen driver-kode endret.
+
+**Neste session:** Fase 2 session 7 — utvid DataStore med COT-støtte
+(`get_cot`, `append_cot`, schemas for CFTC disaggregated + legacy),
+eller hopp til backfill-CLI (Fase 3) avhengig av brukers valg.
 
 ### 2026-04-24 — Session 5: Fase 1 CLOSED
 
