@@ -19,9 +19,9 @@ driver-registry) slik at nye regler kan legges til uten kode-endring.
 
 ## Slutt av session (følg alltid)
 
-1. Commit alt ferdig kode (på feature-branch, ikke main).
-   **Auto-push-hook** pusher automatisk til `origin` etter hver commit, så
-   manuell `git push` er ikke nødvendig. Se `.githooks/README.md`.
+1. Commit alt ferdig kode til `main`.
+   **Auto-push-hook** pusher automatisk til `origin/main` etter hver commit.
+   Manuell `git push` er ikke nødvendig. Se `.githooks/README.md`.
 2. Oppdater `STATE.md`:
    - Ny entry øverst i session log (dato, hva ble gjort, commits, neste)
    - Oppdater `Current state`-blokken
@@ -32,14 +32,19 @@ driver-registry) slik at nye regler kan legges til uten kode-endring.
 
 ## Git-regler (kort)
 
-- Vi jobber på feature-branches (`feat/<scope>-<beskrivelse>`), aldri direkte på main
-- Push branch daglig til GitHub (også WIP), aldri la arbeid ligge kun lokalt > 24t
-- PR for alt som skal på main; CI grønn + review før merge
-- Squash-merge (én commit per logisk oppgave på main)
+**Gjeldende modus: Nivå 1 (enkel) — Fase 0 til og med Fase 10.**
+
+- Commit direkte til `main`. Ingen feature-branches, ingen PR under utvikling.
+- Auto-push-hook (`.githooks/post-commit`) sender hver commit til `origin/main` umiddelbart. Ingen manuell `git push`.
 - Commit-format: conventional commits — se `docs/commit_convention.md`
-- Aldri: force-push til main, amend etter push, commit av hemmeligheter, WIP på main
-- `STATE.md`-commits holdes separate fra kode-commits
+- Én logisk endring per commit. Tester grønne før commit.
+- `STATE.md`-commits holdes separate fra kode-commits (type `state:`).
+- Aldri: force-push, amend etter push, commit av hemmeligheter.
 - Fase-slutt markeres med tag: `v0.X.0-fase-Y`
+
+**Overgang til Nivå 3 (feature-branches + PR) aktiveres ved Fase 10-11** når vi
+nærmer oss live-cutover. Da aktiveres også branch-beskyttelse på main, og Claude
+Code bytter til feature-branch-flyt. Se `docs/branch_strategy.md` for full oppsett.
 
 ## Kode-konvensjoner
 

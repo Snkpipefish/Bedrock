@@ -2,11 +2,12 @@
 
 ## Current state
 
-- **Phase:** 0 — repo-oppsett
-- **Branch:** `main` (ikke startet første feature-branch ennå)
+- **Phase:** 0 — repo-oppsett FERDIG
+- **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
 - **Next task:** starte Fase 1 — Engine core
-  - Første konkrete: opprett `feat/engine-core` branch, skriv `src/bedrock/engine/engine.py` med `Engine` klasse-skjelett + unit-tester
+  - Første konkrete: skriv `src/bedrock/engine/engine.py` med `Engine` klasse-skjelett + driver-registry + `@register`-dekorator + unit-tester
+- **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
 

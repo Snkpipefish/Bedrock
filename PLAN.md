@@ -1144,13 +1144,41 @@ På-forespørsel-review støttes alltid: når bruker er i tvil, spør Chat.
 
 ## 18. Git-regler og commit-konvensjon (ny seksjon)
 
-### 18.1 Flyt
+### 18.1 To modus: utvikling vs. live
+
+**Nivå 1 (enkel) — aktiv under Fase 0 til og med Fase 10:**
+- Commit direkte til `main`
+- Auto-push-hook (`.githooks/post-commit`) sender hver commit til GitHub umiddelbart
+- Ingen feature-branches, ingen PR
+- Null ceremony, maksimal fart under utvikling
+- Main er ennå ikke produksjon (ingen systemd-service kjører fra den)
+
+**Nivå 3 (streng) — aktiveres ved Fase 10-11, før live-cutover:**
+- Feature-branch → auto-push branch → PR → CI grønn → review → squash-merge til main
+- Aldri direkte-til-main når main = produksjon
+- Branch-beskyttelse på GitHub (require PR, require status checks)
+- Beskrevet fullt i `docs/branch_strategy.md`
+
+**Overgang:** ved start av Fase 10 setter bruker opp branch-beskyttelse på main i
+GitHub-UI, og Claude Code bytter atferd til feature-branch-flyt. Dette er en
+1-minutts endring.
+
+### 18.2 Flyt (Nivå 1 — nå)
+
+```
+Claude Code gjør endring
+   → git add <filer>
+   → git commit -m "type(scope): subject"
+   → auto-push hooken sender til origin/main automatisk
+   → ferdig
+```
+
+### 18.3 Flyt (Nivå 3 — ved Fase 10+)
 
 Feature-branch → daglig push → PR → CI grønn → review → squash-merge til main.
+Se `docs/branch_strategy.md` for full beskrivelse.
 
-Aldri direkte-til-main. Main er produksjon (systemd-service kjører fra main).
-
-### 18.2 Branch-navn
+### 18.4 Branch-navn (Nivå 3)
 
 ```
 feat/<scope>-<beskrivelse>       feat/engine-core
@@ -1161,7 +1189,7 @@ docs/<beskrivelse>               docs/update-plan-session-discipline
 chore/<beskrivelse>              chore/bump-ruff
 ```
 
-### 18.3 Commit-format
+### 18.5 Commit-format
 
 Conventional Commits, håndhevet av commitizen pre-commit-hook:
 
@@ -1177,7 +1205,7 @@ Typer: `feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `chore`, `config`, `st
 
 Full liste og eksempler: `docs/commit_convention.md`.
 
-### 18.4 Regler
+### 18.6 Regler
 
 1. Én logisk endring per commit
 2. Tester grønne før commit
@@ -1189,7 +1217,7 @@ Full liste og eksempler: `docs/commit_convention.md`.
 8. Ingen WIP på main
 9. STATE.md-commits holdes separate fra kode
 
-### 18.5 Main-beskyttelse (GitHub-settings)
+### 18.7 Main-beskyttelse (GitHub-settings, aktiveres ved Fase 10)
 
 Bruker setter opp én gang:
 - Require PR before merging
@@ -1198,7 +1226,7 @@ Bruker setter opp én gang:
 - Require conversation resolution before merging
 - No bypassing
 
-### 18.6 Fase-tagger
+### 18.8 Fase-tagger
 
 ```bash
 git checkout main && git pull
