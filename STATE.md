@@ -58,6 +58,11 @@ Fase 0 infrastruktur opprettet.
 + første to drivere (`sma200_align`, `momentum_z`) + logiske tester for dem.
 
 **Open (bruker må gjøre):**
-1. Koble til GitHub-remote: `git remote add origin <URL>` + `git push -u origin main`
-2. Sett opp branch-beskyttelse på main i GitHub-settings (se `docs/branch_strategy.md`)
-3. Installer uv + kjør `uv sync --all-extras` + `uv run pre-commit install`
+1. Sett opp branch-beskyttelse på main i GitHub-settings (se `docs/branch_strategy.md`)
+2. Installer uv + kjør `uv sync --all-extras` + `uv run pre-commit install`
+
+**Oppnådd 2026-04-24:**
+- SSH-nøkkel generert og lagt inn på GitHub
+- Remote byttet fra HTTPS til SSH (git@github.com:Snkpipefish/Bedrock.git)
+- Main pushet — 3 commits på GitHub
+- Auto-push-hook verifisert fungerende
