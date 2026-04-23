@@ -19,11 +19,22 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 
 import pandas as pd
 
-from bedrock.data.schemas import DDL_PRICES, TABLE_PRICES
+from bedrock.data.schemas import (
+    COT_DISAGGREGATED_COLS,
+    COT_LEGACY_COLS,
+    DDL_COT_DISAGGREGATED,
+    DDL_COT_LEGACY,
+    DDL_PRICES,
+    TABLE_COT_DISAGGREGATED,
+    TABLE_COT_LEGACY,
+    TABLE_PRICES,
+)
+
+CotReport = Literal["disaggregated", "legacy"]
 
 
 class DataStoreProtocol(Protocol):
@@ -63,6 +74,8 @@ class DataStore:
     def _init_schema(self) -> None:
         with self._connect() as conn:
             conn.execute(DDL_PRICES)
+            conn.execute(DDL_COT_DISAGGREGATED)
+            conn.execute(DDL_COT_LEGACY)
             conn.commit()
 
     # ------------------------------------------------------------------
@@ -160,5 +173,103 @@ class DataStore:
             cursor = conn.execute(
                 f"SELECT 1 FROM {TABLE_PRICES} WHERE instrument = ? AND tf = ? LIMIT 1",
                 (instrument, tf),
+            )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # COT (Commitments of Traders) — CFTC
+    # ------------------------------------------------------------------
+
+    def append_cot_disaggregated(self, df: pd.DataFrame) -> int:
+        """Skriv rader til `cot_disaggregated`. Returnerer antall rader.
+
+        `df` må ha alle kolonner i `COT_DISAGGREGATED_COLS`. Duplicates på
+        (report_date, contract) overskrives via INSERT OR REPLACE (PK).
+        """
+        return self._append_cot(df, TABLE_COT_DISAGGREGATED, COT_DISAGGREGATED_COLS)
+
+    def append_cot_legacy(self, df: pd.DataFrame) -> int:
+        """Skriv rader til `cot_legacy`. Returnerer antall rader."""
+        return self._append_cot(df, TABLE_COT_LEGACY, COT_LEGACY_COLS)
+
+    def _append_cot(
+        self,
+        df: pd.DataFrame,
+        table: str,
+        expected_cols: tuple[str, ...],
+    ) -> int:
+        missing = [c for c in expected_cols if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_cot: {table} missing columns {missing}. "
+                f"Required: {list(expected_cols)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df[list(expected_cols)].copy()
+        # Normaliser report_date til ISO YYYY-MM-DD string.
+        prepared["report_date"] = pd.to_datetime(prepared["report_date"]).dt.strftime("%Y-%m-%d")
+
+        rows: Sequence[tuple] = [tuple(row) for row in prepared.itertuples(index=False)]
+        placeholders = ", ".join("?" * len(expected_cols))
+        cols_sql = ", ".join(expected_cols)
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {table} ({cols_sql}) VALUES ({placeholders})",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_cot(
+        self,
+        contract: str,
+        report: CotReport = "disaggregated",
+        last_n: int | None = None,
+    ) -> pd.DataFrame:
+        """Returner COT-rader for `contract`, sortert på report_date ASC.
+
+        `report="disaggregated"` (default) eller `"legacy"`.
+        `last_n` = N gir de N nyeste rapportene (eller hele historikken).
+
+        Returnerer pd.DataFrame med `report_date` som pd.Timestamp i en
+        kolonne (ikke index) — rapporter er diskrete ukentlige events, ikke
+        en kontinuerlig tidsserie, så indeksering på dato ville gitt lite
+        merverdi og forvirret drivere som forventer rå kolonner.
+
+        Kaster `KeyError` hvis ingen rader finnes for (contract, report).
+        """
+        if report == "disaggregated":
+            table = TABLE_COT_DISAGGREGATED
+        elif report == "legacy":
+            table = TABLE_COT_LEGACY
+        else:
+            raise ValueError(f"Unknown COT report type: {report!r}")
+
+        query = f"""
+            SELECT * FROM {table}
+            WHERE contract = ?
+            ORDER BY report_date ASC
+        """
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=(contract,))
+
+        if df.empty:
+            raise KeyError(f"No COT data for contract={contract!r} report={report!r}")
+
+        df["report_date"] = pd.to_datetime(df["report_date"])
+
+        if last_n is None:
+            return df
+        return df.tail(last_n).reset_index(drop=True)
+
+    def has_cot(self, contract: str, report: CotReport = "disaggregated") -> bool:
+        """Test-hjelper: sjekk om (contract, report) har minst én rad."""
+        table = TABLE_COT_DISAGGREGATED if report == "disaggregated" else TABLE_COT_LEGACY
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"SELECT 1 FROM {table} WHERE contract = ? LIMIT 1",
+                (contract,),
             )
             return cursor.fetchone() is not None
