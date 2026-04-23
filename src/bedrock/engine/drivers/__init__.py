@@ -89,3 +89,14 @@ def all_names() -> list[str]:
 def is_registered(name: str) -> bool:
     """Sjekk om et driver-navn finnes i registry."""
     return name in _REGISTRY
+
+
+# ---------------------------------------------------------------------------
+# Auto-register: importer alle driver-moduler slik at @register-kallene kjører.
+#
+# Ligger sist i modulen for å unngå sirkulær-import (driver-moduler importerer
+# `register` fra denne modulen).
+# ---------------------------------------------------------------------------
+
+# ruff: noqa: E402, F401
+from bedrock.engine.drivers import trend  # noqa: E402
