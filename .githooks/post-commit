@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Auto-push etter commit.
+#
+# Formål: bruker skal aldri måtte huske å pushe før laptop stenges.
+# Etter hver commit pusher vi automatisk til origin på gjeldende branch.
+#
+# Sikkerhetsrail: hvis du klarer å committe direkte til main ved uhell,
+# vil GitHub branch-beskyttelse avvise push-en og du får en feilmelding.
+# Commit-en er da fortsatt lokal og kan flyttes til feature-branch.
+#
+# Feil blir logget til /tmp/bedrock-push.log, commit blokkeres ALDRI.
+
+set +e  # aldri blokker commit
+
+branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+if [ -z "$branch" ]; then
+    # Detached HEAD eller rar tilstand — hopp over
+    exit 0
+fi
+
+if ! git remote | grep -q '^origin$'; then
+    echo "[auto-push] Ingen 'origin'-remote konfigurert. Kjør:"
+    echo "  git remote add origin <URL>"
+    echo "[auto-push] Commit lagret lokalt (sha: $(git rev-parse --short HEAD))."
+    exit 0
+fi
+
+# Sjekk om upstream er satt for gjeldende branch
+if git rev-parse --abbrev-ref "${branch}@{upstream}" >/dev/null 2>&1; then
+    # Upstream finnes — normal push
+    if git push --quiet 2>/tmp/bedrock-push.log; then
+        echo "[auto-push] → origin/$branch  ($(git rev-parse --short HEAD))"
+    else
+        echo "[auto-push] Push feilet. Detaljer:"
+        sed 's/^/  /' /tmp/bedrock-push.log
+        echo "[auto-push] Commit er lagret lokalt. Prøv manuelt: git push"
+    fi
+else
+    # Ny branch — sett upstream automatisk
+    if git push -u origin "$branch" --quiet 2>/tmp/bedrock-push.log; then
+        echo "[auto-push] → origin/$branch (ny branch, upstream satt)"
+    else
+        echo "[auto-push] Kunne ikke pushe ny branch '$branch'. Detaljer:"
+        sed 's/^/  /' /tmp/bedrock-push.log
+        echo "[auto-push] Commit er lagret lokalt."
+    fi
+fi
+
+exit 0

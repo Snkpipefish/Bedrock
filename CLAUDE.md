@@ -19,7 +19,9 @@ driver-registry) slik at nye regler kan legges til uten kode-endring.
 
 ## Slutt av session (følg alltid)
 
-1. Commit + push alt ferdig kode (på feature-branch, ikke main)
+1. Commit alt ferdig kode (på feature-branch, ikke main).
+   **Auto-push-hook** pusher automatisk til `origin` etter hver commit, så
+   manuell `git push` er ikke nødvendig. Se `.githooks/README.md`.
 2. Oppdater `STATE.md`:
    - Ny entry øverst i session log (dato, hva ble gjort, commits, neste)
    - Oppdater `Current state`-blokken
