@@ -13,10 +13,9 @@ dependencies = [
     "pyyaml>=6.0",
     "python-dotenv>=1.0",
 
-    # Data + historikk
-    "duckdb>=1.1",
+    # Data + historikk (SQLite via stdlib — se ADR-002 for hvorfor ikke
+    # DuckDB/pyarrow: produksjons-hardwaren mangler SSE4.2/AVX)
     "pandas>=2.2",
-    "pyarrow>=17.0",
     "numpy>=1.26",
 
     # HTTP / nettverk

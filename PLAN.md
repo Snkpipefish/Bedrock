@@ -555,48 +555,62 @@ Scoring-YAML har `min_score_publish` per horisont; setup-generator respekterer d
 
 ## 6. Historisk data-lag
 
-### 6.1 Valg: DuckDB + parquet
+### 6.1 Valg: SQLite + pandas (revidert 2026-04-24, ADR-002)
 
-Filbasert, null-tjeneste, SQL-interface, pandas-native. Migrering til ArcticDB senere er en endags-jobb hvis vi vokser ut.
+**Revidert fra DuckDB+parquet** — se ADR-002. Produksjons-hardwaren (Pentium
+T4200, 2008) mangler SSE4.2/AVX og klarer ikke kjøre binær-wheels for
+`duckdb` eller `pyarrow`/`fastparquet`. `Illegal instruction`-krasj ved
+import.
+
+**Nytt valg:** SQLite via Python stdlib `sqlite3`, pandas-native lesing
+(`pd.read_sql`), én `.db`-fil på disk. Ingen eksterne tjenester, null
+SIMD-avhengighet, bygget inn i Python selv.
+
+**Migreringsvei til DuckDB+parquet** hvis hardware oppgraderes: endags-
+jobb, kun `bedrock.data.store` endres. Drivere og Engine ser ikke
+endringen (samme `DataStoreProtocol`).
 
 ### 6.2 Skjema
 
-Én parquet-fil per (kilde × instrument). Eksempler:
+Én SQLite-database: `data/bedrock.db`. Tabeller:
 
 ```
-data/parquet/
-├── prices/
-│   ├── Gold_D1.parquet             # [ts, open, high, low, close, volume]
-│   ├── Gold_4H.parquet
-│   ├── Gold_1H.parquet
-│   ├── EURUSD_D1.parquet
-│   └── ...
-├── cot/
-│   ├── cftc_disaggregated.parquet   # [report_date, contract, mm_long, mm_short, ...]
-│   ├── ice.parquet
-│   └── euronext.parquet
-├── fundamentals/
-│   ├── fred_dgs10.parquet
-│   └── ...
-├── weather/
-│   ├── us_cornbelt_daily.parquet    # [date, tmax, tmin, precip, gdd, ...]
-│   └── ...
-└── trades/
-    └── trades.parquet               # [ts, signal_id, entry, exit, pnl_r, ...]
+prices:        [instrument, tf, ts, open, high, low, close, volume]
+               PK (instrument, tf, ts)
+
+cot:           [report_date, contract, report_type, mm_long, mm_short, ...]
+               PK (report_date, contract, report_type)  -- Fase 2 session 7+
+
+fundamentals:  [series_id, date, value]
+               PK (series_id, date)  -- Fase 2 session 7+
+
+weather:       [region, date, tmax, tmin, precip, gdd]
+               PK (region, date)  -- Fase 2 session 7+
+
+trades:        [ts, signal_id, entry, exit, pnl_r, ...]
+               PK (signal_id)  -- Fase 2 session 7+
 ```
+
+DDL-konstanter lever i `bedrock.data.schemas` (Pydantic-modeller + rå DDL).
+Pydantic validerer rader før skriving; DDL oppretter tabell ved
+`DataStore.__init__`.
 
 ### 6.3 API
 
 ```python
-store = DataStore()
-prices = store.get_prices("Gold", tf="D1", from_="2016-01-01")
+store = DataStore(db_path="data/bedrock.db")
+
+# Fase 2 session 6 (implementert):
+prices = store.get_prices("Gold", tf="D1", lookback=250)   # pd.Series indeksert på ts
+store.append_prices("Gold", "D1", df)                      # INSERT OR REPLACE på PK
+
+# Fase 2 senere sessions:
 cot = store.get_cot("Gold", report="disaggregated", last_n=104)
 weather = store.get_weather("us_cornbelt", from_="2024-01-01")
+store.append_cot(df)
+store.append_weather(df)
 
-# Skriv ny data (append)
-store.append_prices("Gold", new_bars_df)
-
-# Analog-søk
+# Analog-søk (Fase 9):
 neighbors = store.find_analog_cases(
     instrument="Gold",
     query_dims={"vix": 22, "dxy_chg5d": -1.5, "real_yield": 0.8, "cot_pct": 12},
@@ -605,6 +619,10 @@ neighbors = store.find_analog_cases(
 )
 # Returns list of (historic_date, similarity_score, forward_return_30d, forward_return_90d)
 ```
+
+**Driver-kontrakt uendret:** `get_prices(instrument, tf, lookback) -> pd.Series`
+er den samme Fase-1-signaturen som `InMemoryStore` (slettet i session 6)
+brukte. Drivere trenger ingen endring.
 
 ### 6.4 Backfill
 
