@@ -52,9 +52,12 @@ Fase 0 infrastruktur opprettet.
 - Config-stubs: `config/defaults/base.yaml`, `config/defaults/family_financial.yaml`, `config/defaults/family_agri.yaml`
 - `tests/conftest.py` + trivial smoke-test for å verifisere CI
 
-**Commits:** opprettes som én initial commit når git initialiseres ved slutten av session.
+**Commits:** `07c2b95` (initial repo setup, Fase 0 — 45 filer, 2804 insertions).
 
 **Neste session:** opprett `feat/engine-core` branch, skriv `Engine`-klasse + drivers-registry
 + første to drivere (`sma200_align`, `momentum_z`) + logiske tester for dem.
 
-**Open:** GitHub-remote må kobles av bruker (`git remote add origin <URL>`).
+**Open (bruker må gjøre):**
+1. Koble til GitHub-remote: `git remote add origin <URL>` + `git push -u origin main`
+2. Sett opp branch-beskyttelse på main i GitHub-settings (se `docs/branch_strategy.md`)
+3. Installer uv + kjør `uv sync --all-extras` + `uv run pre-commit install`
