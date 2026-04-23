@@ -1,0 +1,121 @@
+"""`bedrock backfill` — kommandoer for å fylle SQLite-databasen med historikk.
+
+Fase 3 session 10: kun `prices` subkommando (Stooq CSV).
+
+Senere sessions:
+- `backfill cot` (CFTC disaggregated + legacy)
+- `backfill fundamentals` (FRED)
+- `backfill weather` (ERA5 eller lignende)
+"""
+
+from __future__ import annotations
+
+import logging
+import sys
+from datetime import date, datetime
+from pathlib import Path
+
+import click
+
+from bedrock.data.store import DataStore
+from bedrock.fetch.prices import STOOQ_CSV_URL, build_stooq_url_params, fetch_prices
+
+_log = logging.getLogger(__name__)
+
+DEFAULT_DB_PATH = Path("data/bedrock.db")
+
+
+@click.group()
+def backfill() -> None:
+    """Fyll SQLite-databasen med historikk fra eksterne kilder."""
+
+
+@backfill.command("prices")
+@click.option(
+    "--instrument",
+    required=True,
+    help="Bedrock-instrumentnavn (f.eks. Gold, EURUSD).",
+)
+@click.option(
+    "--ticker",
+    required=True,
+    help="Stooq-ticker (f.eks. xauusd, eurusd). Case-insensitive.",
+)
+@click.option(
+    "--from",
+    "from_date",
+    required=True,
+    type=click.DateTime(formats=["%Y-%m-%d"]),
+    help="Start-dato (YYYY-MM-DD) inklusiv.",
+)
+@click.option(
+    "--to",
+    "to_date",
+    default=None,
+    type=click.DateTime(formats=["%Y-%m-%d"]),
+    help="Slutt-dato (YYYY-MM-DD) inklusiv. Default: i dag.",
+)
+@click.option(
+    "--tf",
+    default="D1",
+    show_default=True,
+    help="Timeframe-tag lagret i DB (info, ikke Stooq-param).",
+)
+@click.option(
+    "--db",
+    "db_path",
+    default=DEFAULT_DB_PATH,
+    show_default=True,
+    type=click.Path(path_type=Path),
+    help="Path til SQLite-databasen.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Vis URL som ville blitt hentet. Ingen HTTP-kall, ingen skriving.",
+)
+def prices_cmd(
+    instrument: str,
+    ticker: str,
+    from_date: datetime,
+    to_date: datetime | None,
+    tf: str,
+    db_path: Path,
+    dry_run: bool,
+) -> None:
+    """Backfill prisbarer fra Stooq til SQLite.
+
+    Eksempel:
+
+        bedrock backfill prices --instrument Gold --ticker xauusd --from 2016-01-01
+
+    `--dry-run` bygger og viser URL uten å gjøre HTTP-kall eller skrive til DB.
+    """
+    _from: date = from_date.date()
+    _to: date = to_date.date() if to_date is not None else date.today()
+
+    if dry_run:
+        params = build_stooq_url_params(ticker, _from, _to)
+        param_str = "&".join(f"{k}={v}" for k, v in params.items())
+        click.echo(f"DRY-RUN  URL: {STOOQ_CSV_URL}?{param_str}")
+        click.echo(f"DRY-RUN  Would write to: {db_path} (instrument={instrument}, tf={tf})")
+        return
+
+    click.echo(f"Fetching {instrument} ({ticker}) from {_from} to {_to}...")
+    df = fetch_prices(ticker, _from, _to)
+    click.echo(f"Fetched {len(df)} bars.")
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    store = DataStore(db_path)
+    written = store.append_prices(instrument, tf, df)
+    click.echo(f"Wrote {written} bars to {db_path} (instrument={instrument}, tf={tf}).")
+
+
+def main() -> None:
+    """Eksponert slik at `python -m bedrock.cli.backfill prices ...` også funker."""
+    backfill(standalone_mode=True)
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()
