@@ -9,7 +9,9 @@ Fase 2 session 7: `CotDisaggregatedRow`/`CotLegacyRow` — to separate tabeller
 pga ulik kolonnestruktur i CFTC disaggregated (managed money + other +
 commercial + non-reportable) vs legacy (non-commercial + commercial +
 non-reportable). NULL-sprawl unngås ved å holde dem separate.
-Senere sessions: `FredSeries`, `WeatherDaily`, `TradeRow`.
+Fase 2 session 8: `FredSeriesRow` (fundamentals, én verdi per (series_id, date))
+og `WeatherDailyRow` (region × daglig observasjon: tmax/tmin/precip/gdd).
+Senere sessions: `TradeRow`.
 """
 
 from __future__ import annotations
@@ -204,3 +206,86 @@ COT_LEGACY_COLS: tuple[str, ...] = (
     "open_interest",
 )
 """Forventet kolonne-rekkefølge for append_cot_legacy."""
+
+
+# ---------------------------------------------------------------------------
+# Fundamentals (FRED-stil: series_id × date × value)
+# ---------------------------------------------------------------------------
+
+
+class FredSeriesRow(BaseModel):
+    """En observasjon i en FRED-serie.
+
+    `series_id` er FRED's kode (f.eks. "DGS10" for 10Y treasury yield,
+    "DXY" for dollar-indeks). `value` kan være None — FRED rapporterer
+    ofte manglende observasjoner (helgedager, ikke-rapporterte perioder).
+    """
+
+    series_id: str
+    date: date
+    value: float | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+TABLE_FUNDAMENTALS = "fundamentals"
+
+DDL_FUNDAMENTALS = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_FUNDAMENTALS} (
+    series_id  TEXT NOT NULL,
+    date       TEXT NOT NULL,
+    value      REAL,
+    PRIMARY KEY (series_id, date)
+)
+"""
+"""DDL for fundamentals-tabellen.
+
+`value` er NULL-able (FRED-serier har ofte missing observations).
+`date` lagres som ISO YYYY-MM-DD TEXT; parses til pd.Timestamp ved lesing.
+PK (series_id, date) gir dedupe.
+"""
+
+FUNDAMENTALS_COLS: tuple[str, ...] = ("series_id", "date", "value")
+
+
+# ---------------------------------------------------------------------------
+# Weather (daglige observasjoner per region)
+# ---------------------------------------------------------------------------
+
+
+class WeatherDailyRow(BaseModel):
+    """Daglig vær-observasjon per region.
+
+    `region` er et logisk navn (f.eks. "us_cornbelt", "brazil_mato_grosso")
+    — ikke en GPS-koordinat. Aggregering fra rådata til region-nivå gjøres
+    i fetch-laget, ikke her.
+
+    Alle målinger er valgfrie; noen kilder rapporterer bare tmax/tmin, andre
+    også nedbør og GDD (growing-degree-days).
+    """
+
+    region: str
+    date: date
+    tmax: float | None = None  # °C
+    tmin: float | None = None  # °C
+    precip: float | None = Field(default=None, ge=0.0)  # mm
+    gdd: float | None = Field(default=None, ge=0.0)  # growing-degree-days
+
+    model_config = ConfigDict(extra="forbid")
+
+
+TABLE_WEATHER = "weather"
+
+DDL_WEATHER = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_WEATHER} (
+    region  TEXT NOT NULL,
+    date    TEXT NOT NULL,
+    tmax    REAL,
+    tmin    REAL,
+    precip  REAL,
+    gdd     REAL,
+    PRIMARY KEY (region, date)
+)
+"""
+
+WEATHER_COLS: tuple[str, ...] = ("region", "date", "tmax", "tmin", "precip", "gdd")

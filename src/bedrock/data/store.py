@@ -28,10 +28,16 @@ from bedrock.data.schemas import (
     COT_LEGACY_COLS,
     DDL_COT_DISAGGREGATED,
     DDL_COT_LEGACY,
+    DDL_FUNDAMENTALS,
     DDL_PRICES,
+    DDL_WEATHER,
+    FUNDAMENTALS_COLS,
     TABLE_COT_DISAGGREGATED,
     TABLE_COT_LEGACY,
+    TABLE_FUNDAMENTALS,
     TABLE_PRICES,
+    TABLE_WEATHER,
+    WEATHER_COLS,
 )
 
 CotReport = Literal["disaggregated", "legacy"]
@@ -76,6 +82,8 @@ class DataStore:
             conn.execute(DDL_PRICES)
             conn.execute(DDL_COT_DISAGGREGATED)
             conn.execute(DDL_COT_LEGACY)
+            conn.execute(DDL_FUNDAMENTALS)
+            conn.execute(DDL_WEATHER)
             conn.commit()
 
     # ------------------------------------------------------------------
@@ -271,5 +279,155 @@ class DataStore:
             cursor = conn.execute(
                 f"SELECT 1 FROM {table} WHERE contract = ? LIMIT 1",
                 (contract,),
+            )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # Fundamentals (FRED-stil tidsserier)
+    # ------------------------------------------------------------------
+
+    def append_fundamentals(self, df: pd.DataFrame) -> int:
+        """Skriv FRED-observasjoner. `df` må ha kolonner series_id, date, value.
+
+        `value` kan være None (FRED rapporterer ofte missing). Dedupe på
+        (series_id, date) via INSERT OR REPLACE.
+        """
+        missing = [c for c in FUNDAMENTALS_COLS if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_fundamentals: missing columns {missing}. "
+                f"Required: {list(FUNDAMENTALS_COLS)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df[list(FUNDAMENTALS_COLS)].copy()
+        prepared["date"] = pd.to_datetime(prepared["date"]).dt.strftime("%Y-%m-%d")
+
+        rows: Sequence[tuple] = [
+            (
+                row.series_id,
+                row.date,
+                None if pd.isna(row.value) else float(row.value),
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_FUNDAMENTALS} "
+                f"(series_id, date, value) VALUES (?, ?, ?)",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_fundamentals(
+        self,
+        series_id: str,
+        last_n: int | None = None,
+    ) -> pd.Series:
+        """Returner pd.Series (value indeksert på date) for en FRED-serie.
+
+        Kaster `KeyError` hvis `series_id` ikke finnes. NULL-verdier fra
+        FRED kommer ut som NaN i Series (pandas-native).
+        """
+        query = f"""
+            SELECT date, value FROM {TABLE_FUNDAMENTALS}
+            WHERE series_id = ?
+            ORDER BY date ASC
+        """
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=(series_id,))
+
+        if df.empty:
+            raise KeyError(f"No fundamentals for series_id={series_id!r}")
+
+        df["date"] = pd.to_datetime(df["date"])
+        series = df.set_index("date")["value"].astype("float64")
+        series.name = None
+
+        if last_n is None:
+            return series
+        return series.tail(last_n)
+
+    def has_fundamentals(self, series_id: str) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"SELECT 1 FROM {TABLE_FUNDAMENTALS} WHERE series_id = ? LIMIT 1",
+                (series_id,),
+            )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # Weather (daglige region-observasjoner)
+    # ------------------------------------------------------------------
+
+    def append_weather(self, df: pd.DataFrame) -> int:
+        """Skriv daglige vær-observasjoner. `df` må ha region, date; tmax,
+        tmin, precip, gdd er valgfrie."""
+        if "region" not in df.columns or "date" not in df.columns:
+            raise ValueError(
+                f"append_weather: df must have 'region' and 'date'. "
+                f"Got: {sorted(df.columns)}"
+            )
+
+        prepared = df.reindex(columns=list(WEATHER_COLS)).copy()
+        prepared["date"] = pd.to_datetime(prepared["date"]).dt.strftime("%Y-%m-%d")
+
+        rows: Sequence[tuple] = [
+            (
+                row.region,
+                row.date,
+                None if pd.isna(row.tmax) else float(row.tmax),
+                None if pd.isna(row.tmin) else float(row.tmin),
+                None if pd.isna(row.precip) else float(row.precip),
+                None if pd.isna(row.gdd) else float(row.gdd),
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_WEATHER} "
+                f"(region, date, tmax, tmin, precip, gdd) VALUES (?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_weather(
+        self,
+        region: str,
+        last_n: int | None = None,
+    ) -> pd.DataFrame:
+        """Returner vær-observasjoner for region (sortert på date ASC).
+
+        Returnerer pd.DataFrame med `date`-kolonne som pd.Timestamp.
+        Multi-column (tmax/tmin/precip/gdd); drivere velger selv hvilken
+        kolonne de trenger. Kaster `KeyError` hvis region mangler.
+        """
+        query = f"""
+            SELECT date, tmax, tmin, precip, gdd FROM {TABLE_WEATHER}
+            WHERE region = ?
+            ORDER BY date ASC
+        """
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=(region,))
+
+        if df.empty:
+            raise KeyError(f"No weather for region={region!r}")
+
+        df["date"] = pd.to_datetime(df["date"])
+
+        if last_n is None:
+            return df
+        return df.tail(last_n).reset_index(drop=True)
+
+    def has_weather(self, region: str) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"SELECT 1 FROM {TABLE_WEATHER} WHERE region = ? LIMIT 1",
+                (region,),
             )
             return cursor.fetchone() is not None

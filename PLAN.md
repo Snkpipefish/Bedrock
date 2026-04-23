@@ -593,6 +593,16 @@ cot_legacy:          [report_date, contract, noncomm_long, noncomm_short,
                      non-reportable). Brukes for kontrakter uten
                      disaggregated-rapport, og for historikk før 2010.
 
+fundamentals:        [series_id, date, value]
+                     PK (series_id, date)
+                     FRED-stil tidsserier. `value` er NULL-able (FRED
+                     rapporterer ofte missing observations).
+
+weather:             [region, date, tmax, tmin, precip, gdd]
+                     PK (region, date)
+                     Daglige region-observasjoner. Alle målinger
+                     valgfrie (noen kilder gir kun tmax/tmin).
+
 fundamentals:  [series_id, date, value]
                PK (series_id, date)  -- Fase 2 session 7+
 
@@ -621,11 +631,14 @@ cot = store.get_cot("GOLD", report="disaggregated", last_n=104)   # pd.DataFrame
 store.append_cot_disaggregated(df)
 store.append_cot_legacy(df)   # for kontrakter uten disaggregated
 
-# Fase 2 senere sessions:
-weather = store.get_weather("us_cornbelt", from_="2024-01-01")
-store.append_weather(df)
-fund = store.get_fundamentals("DGS10", from_="2016-01-01")
+# Fase 2 session 8 (implementert):
+fund = store.get_fundamentals("DGS10", last_n=120)            # pd.Series (value indeksert på date)
+weather = store.get_weather("us_cornbelt", last_n=90)         # pd.DataFrame (tmax/tmin/precip/gdd)
 store.append_fundamentals(df)
+store.append_weather(df)
+
+# Fase 2 senere sessions:
+# (ingen flere getters planlagt i Fase 2 — trades.parquet venter til bot-refaktor i Fase 7)
 
 # Analog-søk (Fase 9):
 neighbors = store.find_analog_cases(
