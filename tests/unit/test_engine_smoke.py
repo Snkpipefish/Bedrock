@@ -15,9 +15,9 @@ from bedrock.engine import drivers
 from bedrock.engine.engine import (
     DriverSpec,
     Engine,
-    FamilySpec,
+    FinancialFamilySpec,
+    FinancialRules,
     HorizonSpec,
-    Rules,
 )
 from bedrock.engine.grade import GradeThreshold, GradeThresholds
 
@@ -31,9 +31,9 @@ def _isolated_registry() -> Iterator[None]:
 
 
 @pytest.fixture
-def minimal_rules() -> Rules:
+def minimal_rules() -> FinancialRules:
     """To familier (trend, macro), én driver per, weighted_horizon."""
-    return Rules(
+    return FinancialRules(
         aggregation="weighted_horizon",
         horizons={
             "SWING": HorizonSpec(
@@ -43,8 +43,8 @@ def minimal_rules() -> Rules:
             ),
         },
         families={
-            "trend": FamilySpec(drivers=[DriverSpec(name="mock_full", weight=1.0)]),
-            "macro": FamilySpec(drivers=[DriverSpec(name="mock_half", weight=1.0)]),
+            "trend": FinancialFamilySpec(drivers=[DriverSpec(name="mock_full", weight=1.0)]),
+            "macro": FinancialFamilySpec(drivers=[DriverSpec(name="mock_half", weight=1.0)]),
         },
         grade_thresholds=GradeThresholds(
             a_plus=GradeThreshold(min_pct_of_max=0.75, min_families=2),
@@ -54,7 +54,7 @@ def minimal_rules() -> Rules:
     )
 
 
-def test_engine_scores_with_mock_drivers(minimal_rules: Rules) -> None:
+def test_engine_scores_with_mock_drivers(minimal_rules: FinancialRules) -> None:
     @drivers.register("mock_full")
     def _full(store: object, instrument: str, params: dict) -> float:
         return 1.0
@@ -77,7 +77,7 @@ def test_engine_scores_with_mock_drivers(minimal_rules: Rules) -> None:
     assert result.active_families == 2
 
 
-def test_engine_driver_trace_records_contributions(minimal_rules: Rules) -> None:
+def test_engine_driver_trace_records_contributions(minimal_rules: FinancialRules) -> None:
     @drivers.register("mock_full")
     def _full(store: object, instrument: str, params: dict) -> float:
         return 0.8
@@ -95,7 +95,7 @@ def test_engine_driver_trace_records_contributions(minimal_rules: Rules) -> None
     assert trend_driver.contribution == pytest.approx(0.8)
 
 
-def test_engine_passes_params_to_driver(minimal_rules: Rules) -> None:
+def test_engine_passes_params_to_driver(minimal_rules: FinancialRules) -> None:
     """Params fra YAML skal videresendes uendret til driver-funksjonen."""
     received: dict[str, dict] = {}
 
@@ -119,7 +119,7 @@ def test_engine_passes_params_to_driver(minimal_rules: Rules) -> None:
     assert received["full"] == {"tf": "D1", "lookback": 200}
 
 
-def test_engine_unknown_horizon_raises_keyerror(minimal_rules: Rules) -> None:
+def test_engine_unknown_horizon_raises_keyerror(minimal_rules: FinancialRules) -> None:
     @drivers.register("mock_full")
     def _f(store: object, instrument: str, params: dict) -> float:
         return 0.0
@@ -132,14 +132,23 @@ def test_engine_unknown_horizon_raises_keyerror(minimal_rules: Rules) -> None:
         Engine().score("Gold", None, minimal_rules, horizon="MAKRO")
 
 
-def test_engine_additive_sum_not_implemented_yet(minimal_rules: Rules) -> None:
-    rules = minimal_rules.model_copy(update={"aggregation": "additive_sum"})
-    with pytest.raises(NotImplementedError, match="additive_sum"):
-        Engine().score("Gold", None, rules, horizon="SWING")
+def test_engine_financial_rules_require_horizon(minimal_rules: FinancialRules) -> None:
+    """FinancialRules uten horizon-arg skal feile eksplisitt."""
+
+    @drivers.register("mock_full")
+    def _f(store: object, instrument: str, params: dict) -> float:
+        return 0.0
+
+    @drivers.register("mock_half")
+    def _h(store: object, instrument: str, params: dict) -> float:
+        return 0.0
+
+    with pytest.raises(ValueError, match="horizon"):
+        Engine().score("Gold", None, minimal_rules, horizon=None)
 
 
 def test_engine_active_families_excludes_zero_scored_families(
-    minimal_rules: Rules,
+    minimal_rules: FinancialRules,
 ) -> None:
     @drivers.register("mock_full")
     def _full(store: object, instrument: str, params: dict) -> float:

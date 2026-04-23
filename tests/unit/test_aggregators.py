@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from bedrock.engine.aggregators import weighted_horizon
+import pytest
+
+from bedrock.engine.aggregators import additive_sum, weighted_horizon
 
 
 def test_weighted_horizon_sum_with_unit_weights() -> None:
@@ -40,3 +42,38 @@ def test_weighted_horizon_empty_weights_yields_zero() -> None:
 
 def test_weighted_horizon_all_missing_yields_zero() -> None:
     assert weighted_horizon({}, {"trend": 1.0, "macro": 1.0}) == 0.0
+
+
+# ---------------------------------------------------------------------------
+# additive_sum (agri)
+# ---------------------------------------------------------------------------
+
+
+def test_additive_sum_multiplies_family_score_by_cap() -> None:
+    """outlook=1.0 * cap 5.0 + yield=1.0 * cap 3.0 = 8.0."""
+    scores = {"outlook": 1.0, "yield": 1.0}
+    caps = {"outlook": 5.0, "yield": 3.0}
+    assert additive_sum(scores, caps) == 8.0
+
+
+def test_additive_sum_partial_family_scores() -> None:
+    """outlook=0.5 * 5 + yield=0.8 * 3 = 2.5 + 2.4 = 4.9."""
+    scores = {"outlook": 0.5, "yield": 0.8}
+    caps = {"outlook": 5.0, "yield": 3.0}
+    assert additive_sum(scores, caps) == pytest.approx(4.9)
+
+
+def test_additive_sum_missing_family_scored_as_zero() -> None:
+    scores = {"outlook": 1.0}
+    caps = {"outlook": 5.0, "yield": 3.0}
+    assert additive_sum(scores, caps) == 5.0
+
+
+def test_additive_sum_ignores_families_without_cap() -> None:
+    scores = {"outlook": 1.0, "unknown": 99.0}
+    caps = {"outlook": 5.0}
+    assert additive_sum(scores, caps) == 5.0
+
+
+def test_additive_sum_empty_caps_yields_zero() -> None:
+    assert additive_sum({"outlook": 1.0}, {}) == 0.0

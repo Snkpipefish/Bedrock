@@ -1,28 +1,37 @@
 """Engine — hovedklasse for scoring.
 
-Kontrakt (forenklet):
+Kontrakt:
 
-    result = Engine().score(instrument, store, rules, horizon)
+    result = Engine().score(instrument, store, rules, horizon=...)
 
-Engine slår opp aggregator ut fra `rules.aggregation`, kjører hver driver i
-`rules.families` via `drivers`-registry, aggregerer, og returnerer en
-`GroupResult` med full explain-trace.
+Engine slår opp aggregator ut fra `rules.aggregation`-typen, kjører hver
+driver i `rules.families` via `drivers`-registry, aggregerer, og returnerer
+en `GroupResult` med full explain-trace.
 
-I Fase 1 session 2 er kun `weighted_horizon` implementert; `additive_sum`
-kaster `NotImplementedError`. Driver-kall bruker en minimal `store`-parameter
-(typet `Any` inntil `DataStore` fra Fase 2 lander).
+Reglene kommer i to former:
+
+- `FinancialRules` (aggregation="weighted_horizon"): har `horizons`-blokk,
+  score er horisont-avhengig. `horizon`-argumentet er påkrevd.
+- `AgriRules` (aggregation="additive_sum"): har `max_score` på toppnivå og
+  familie-`weight` som absolutt cap. Ingen horisont — den bestemmes i
+  Fase 4 (setup-generator) basert på setup-karakteristikk.
+
+`Rules` er en TypeAlias for unionen, slik at funksjoner som ikke bryr seg
+om varianten kan ta `Rules` direkte.
+
+`store` er typet `Any` i Fase 1 — formaliseres til `DataStore` i Fase 2.
 """
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from bedrock.engine import aggregators, drivers, grade
 
 # ---------------------------------------------------------------------------
-# Pydantic-modeller for YAML-reglene
+# Felles modeller
 # ---------------------------------------------------------------------------
 
 Aggregation = Literal["weighted_horizon", "additive_sum"]
@@ -36,37 +45,74 @@ class DriverSpec(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
 
 
-class FamilySpec(BaseModel):
-    """YAML: en familie har en liste drivere."""
+# ---------------------------------------------------------------------------
+# Financial-modeller (weighted_horizon)
+# ---------------------------------------------------------------------------
+
+
+class FinancialFamilySpec(BaseModel):
+    """Familie-spesifikasjon for financial. Vekt kommer fra horisonten."""
 
     drivers: list[DriverSpec]
 
 
 class HorizonSpec(BaseModel):
-    """YAML: en horisont har familie-vekter + score-cap + publish-gulv."""
+    """En horisonts familie-vekter + score-cap + publish-gulv."""
 
     family_weights: dict[str, float]
     max_score: float = Field(gt=0.0)
     min_score_publish: float = Field(ge=0.0)
 
 
-class Rules(BaseModel):
-    """Full regel-set for ett instrument. Parset fra YAML.
+class FinancialRules(BaseModel):
+    """Regelsett for et financial-instrument (Gold, EURUSD, Brent ...).
 
-    Fase 1-utgave — utvides i senere faser med `gates`, `inherits`,
-    instrument-metadata, og agri-spesifikke felter.
+    YAML-eksempel: se PLAN § 4.2 (Gold).
     """
 
-    aggregation: Aggregation
-    horizons: dict[str, HorizonSpec] = Field(default_factory=dict)
-    families: dict[str, FamilySpec]
+    aggregation: Literal["weighted_horizon"]
+    horizons: dict[str, HorizonSpec]
+    families: dict[str, FinancialFamilySpec]
     grade_thresholds: grade.GradeThresholds
 
     model_config = ConfigDict(extra="forbid")
 
 
 # ---------------------------------------------------------------------------
-# Pydantic-modeller for resultat / explain-trace
+# Agri-modeller (additive_sum)
+# ---------------------------------------------------------------------------
+
+
+class AgriFamilySpec(BaseModel):
+    """Familie-spesifikasjon for agri. `weight` er familiens absolutte cap."""
+
+    weight: float = Field(gt=0.0)
+    drivers: list[DriverSpec]
+
+
+class AgriRules(BaseModel):
+    """Regelsett for et agri-instrument (Corn, Coffee, Sugar ...).
+
+    YAML-eksempel: se PLAN § 4.3 (Corn).
+
+    Ingen `horizons` — horisont tildeles av setup-generator i Fase 4.
+    """
+
+    aggregation: Literal["additive_sum"]
+    max_score: float = Field(gt=0.0)
+    min_score_publish: float = Field(ge=0.0)
+    families: dict[str, AgriFamilySpec]
+    grade_thresholds: grade.AgriGradeThresholds
+
+    model_config = ConfigDict(extra="forbid")
+
+
+# Felles type-alias. Konkrete konstruktører er `FinancialRules` / `AgriRules`.
+Rules: TypeAlias = FinancialRules | AgriRules
+
+
+# ---------------------------------------------------------------------------
+# Resultat / explain-trace
 # ---------------------------------------------------------------------------
 
 
@@ -88,14 +134,13 @@ class FamilyResult(BaseModel):
 
 
 class GroupResult(BaseModel):
-    """Full scoring-output for ett instrument + horisont.
+    """Full scoring-output for ett instrument.
 
-    Denne modellen er API-et som setup-generator + signal-builder +
-    explain-CLI + UI leser. Holdes stabil på tvers av faser.
+    `horizon` er None for agri-resultat (horisonten kommer fra setup-generator).
     """
 
     instrument: str
-    horizon: str
+    horizon: str | None = None
     aggregation: Aggregation
     score: float
     grade: str
@@ -103,6 +148,10 @@ class GroupResult(BaseModel):
     active_families: int
     families: dict[str, FamilyResult]
     gates_triggered: list[str] = Field(default_factory=list)
+
+
+# Intern type for "noen FamilySpec" (financial eller agri — begge har `drivers`).
+_AnyFamilySpec = FinancialFamilySpec | AgriFamilySpec
 
 
 # ---------------------------------------------------------------------------
@@ -118,19 +167,32 @@ class Engine:
         instrument: str,
         store: Any,
         rules: Rules,
-        horizon: str,
+        horizon: str | None = None,
     ) -> GroupResult:
-        """Scorer `instrument` for en gitt `horizon` med gitte `rules`.
+        """Scorer `instrument` mot `rules`.
 
-        `store` er typet `Any` i Fase 1 — formaliseres til `DataStore` i
-        Fase 2. Alle drivere mottar samme `store`-objekt og plukker det de
-        trenger.
+        For `FinancialRules` må `horizon` oppgis. For `AgriRules` ignoreres
+        `horizon` (agri har ikke horisont-splitt på scoring-siden — det
+        bestemmes senere av setup-generator).
         """
-        if rules.aggregation == "additive_sum":
-            # Kommer i neste session. Kastes eksplisitt for å unngå stille feil.
-            raise NotImplementedError(
-                "Aggregator 'additive_sum' is not implemented yet. "
-                "Expected in next Fase 1 session (agri-support)."
+        if isinstance(rules, FinancialRules):
+            return self._score_financial(instrument, store, rules, horizon)
+        if isinstance(rules, AgriRules):
+            return self._score_agri(instrument, store, rules)
+        raise TypeError(f"Unknown rules type: {type(rules).__name__}")
+
+    # -- financial ----------------------------------------------------------
+
+    def _score_financial(
+        self,
+        instrument: str,
+        store: Any,
+        rules: FinancialRules,
+        horizon: str | None,
+    ) -> GroupResult:
+        if horizon is None:
+            raise ValueError(
+                "FinancialRules require a `horizon` argument (e.g. 'SWING')."
             )
 
         horizon_spec = rules.horizons.get(horizon)
@@ -138,15 +200,10 @@ class Engine:
             known = ", ".join(sorted(rules.horizons)) or "<none>"
             raise KeyError(f"Horizon '{horizon}' not defined in rules. Known: {known}")
 
-        # Kjør alle familier + drivere -> scores + per-driver-trace.
         family_results, family_scores = self._score_families(store, instrument, rules.families)
 
-        # Kombiner familie-scores -> total via aggregator.
         total_score = aggregators.weighted_horizon(family_scores, horizon_spec.family_weights)
-
-        # Tell aktive familier (score > 0) for grade-kravet.
-        active_families = sum(1 for s in family_scores.values() if s > 0.0)
-
+        active_families = self._count_active(family_scores)
         g = grade.grade_financial(
             total_score=total_score,
             max_score=horizon_spec.max_score,
@@ -165,13 +222,48 @@ class Engine:
             families=family_results,
         )
 
+    # -- agri ---------------------------------------------------------------
+
+    def _score_agri(
+        self,
+        instrument: str,
+        store: Any,
+        rules: AgriRules,
+    ) -> GroupResult:
+        family_results, family_scores = self._score_families(store, instrument, rules.families)
+
+        family_caps = {name: spec.weight for name, spec in rules.families.items()}
+        total_score = aggregators.additive_sum(family_scores, family_caps)
+        active_families = self._count_active(family_scores)
+        g = grade.grade_agri(
+            total_score=total_score,
+            active_families=active_families,
+            thresholds=rules.grade_thresholds,
+        )
+
+        return GroupResult(
+            instrument=instrument,
+            horizon=None,
+            aggregation=rules.aggregation,
+            score=total_score,
+            grade=g,
+            max_score=rules.max_score,
+            active_families=active_families,
+            families=family_results,
+        )
+
+    # -- felles -------------------------------------------------------------
+
     @staticmethod
     def _score_families(
         store: Any,
         instrument: str,
-        families: dict[str, FamilySpec],
+        families: dict[str, _AnyFamilySpec],
     ) -> tuple[dict[str, FamilyResult], dict[str, float]]:
-        """Kjør alle drivere per familie og returner (per-familie-trace, scores)."""
+        """Kjør alle drivere per familie. Felles for financial og agri.
+
+        Begge FamilySpec-klasser har attributtet `.drivers: list[DriverSpec]`.
+        """
         family_results: dict[str, FamilyResult] = {}
         family_scores: dict[str, float] = {}
 
@@ -201,3 +293,8 @@ class Engine:
             family_scores[family_name] = family_score
 
         return family_results, family_scores
+
+    @staticmethod
+    def _count_active(family_scores: dict[str, float]) -> int:
+        """Antall familier med score > 0."""
+        return sum(1 for s in family_scores.values() if s > 0.0)

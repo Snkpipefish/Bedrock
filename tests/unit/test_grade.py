@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from bedrock.engine.grade import GradeThreshold, GradeThresholds, grade_financial
+from bedrock.engine.grade import (
+    AgriGradeThreshold,
+    AgriGradeThresholds,
+    GradeThreshold,
+    GradeThresholds,
+    grade_agri,
+    grade_financial,
+)
 
 
 @pytest.fixture
@@ -62,3 +69,60 @@ def test_grade_thresholds_accept_yaml_style_aliases() -> None:
     thresholds = GradeThresholds.model_validate(yaml_style)
     assert thresholds.a_plus.min_pct_of_max == 0.75
     assert thresholds.a.min_families == 3
+
+
+# ---------------------------------------------------------------------------
+# grade_agri (absolutte terskler)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def corn_agri_thresholds() -> AgriGradeThresholds:
+    """Terskler fra PLAN § 4.3 Corn."""
+    return AgriGradeThresholds(
+        a_plus=AgriGradeThreshold(min_score=14.0, min_families_active=4),
+        a=AgriGradeThreshold(min_score=10.0, min_families_active=3),
+        b=AgriGradeThreshold(min_score=7.0, min_families_active=2),
+    )
+
+
+def test_grade_agri_a_plus(corn_agri_thresholds: AgriGradeThresholds) -> None:
+    assert grade_agri(15.0, 4, corn_agri_thresholds) == "A+"
+
+
+def test_grade_agri_a_plus_denied_when_families_insufficient(
+    corn_agri_thresholds: AgriGradeThresholds,
+) -> None:
+    # Score OK for A+ men kun 3 familier aktive -> faller til A
+    assert grade_agri(15.0, 3, corn_agri_thresholds) == "A"
+
+
+def test_grade_agri_a(corn_agri_thresholds: AgriGradeThresholds) -> None:
+    assert grade_agri(10.0, 3, corn_agri_thresholds) == "A"
+
+
+def test_grade_agri_b(corn_agri_thresholds: AgriGradeThresholds) -> None:
+    assert grade_agri(7.0, 2, corn_agri_thresholds) == "B"
+
+
+def test_grade_agri_c_when_below_all(corn_agri_thresholds: AgriGradeThresholds) -> None:
+    assert grade_agri(3.0, 1, corn_agri_thresholds) == "C"
+
+
+def test_grade_agri_c_when_score_high_but_one_family_active(
+    corn_agri_thresholds: AgriGradeThresholds,
+) -> None:
+    """Én familie aktiv selv med høy score -> C. Hindrer at én ekstrem familie
+    alene gir A+."""
+    assert grade_agri(20.0, 1, corn_agri_thresholds) == "C"
+
+
+def test_agri_grade_thresholds_accept_yaml_aliases() -> None:
+    yaml_style = {
+        "A_plus": {"min_score": 14, "min_families_active": 4},
+        "A": {"min_score": 10, "min_families_active": 3},
+        "B": {"min_score": 7, "min_families_active": 2},
+    }
+    thresholds = AgriGradeThresholds.model_validate(yaml_style)
+    assert thresholds.a_plus.min_score == 14
+    assert thresholds.b.min_families_active == 2
