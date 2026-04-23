@@ -575,11 +575,23 @@ endringen (samme `DataStoreProtocol`).
 Én SQLite-database: `data/bedrock.db`. Tabeller:
 
 ```
-prices:        [instrument, tf, ts, open, high, low, close, volume]
-               PK (instrument, tf, ts)
+prices:              [instrument, tf, ts, open, high, low, close, volume]
+                     PK (instrument, tf, ts)
 
-cot:           [report_date, contract, report_type, mm_long, mm_short, ...]
-               PK (report_date, contract, report_type)  -- Fase 2 session 7+
+cot_disaggregated:   [report_date, contract, mm_long, mm_short, other_long,
+                      other_short, comm_long, comm_short, nonrep_long,
+                      nonrep_short, open_interest]
+                     PK (report_date, contract)
+                     CFTC 2010-present (managed money / other / commercial /
+                     non-reportable)
+
+cot_legacy:          [report_date, contract, noncomm_long, noncomm_short,
+                      comm_long, comm_short, nonrep_long, nonrep_short,
+                      open_interest]
+                     PK (report_date, contract)
+                     CFTC 2006-present (non-commercial / commercial /
+                     non-reportable). Brukes for kontrakter uten
+                     disaggregated-rapport, og for historikk før 2010.
 
 fundamentals:  [series_id, date, value]
                PK (series_id, date)  -- Fase 2 session 7+
@@ -604,11 +616,16 @@ store = DataStore(db_path="data/bedrock.db")
 prices = store.get_prices("Gold", tf="D1", lookback=250)   # pd.Series indeksert på ts
 store.append_prices("Gold", "D1", df)                      # INSERT OR REPLACE på PK
 
+# Fase 2 session 7 (implementert):
+cot = store.get_cot("GOLD", report="disaggregated", last_n=104)   # pd.DataFrame
+store.append_cot_disaggregated(df)
+store.append_cot_legacy(df)   # for kontrakter uten disaggregated
+
 # Fase 2 senere sessions:
-cot = store.get_cot("Gold", report="disaggregated", last_n=104)
 weather = store.get_weather("us_cornbelt", from_="2024-01-01")
-store.append_cot(df)
 store.append_weather(df)
+fund = store.get_fundamentals("DGS10", from_="2016-01-01")
+store.append_fundamentals(df)
 
 # Analog-søk (Fase 9):
 neighbors = store.find_analog_cases(
