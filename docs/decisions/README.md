@@ -47,8 +47,6 @@ Nøytrale (men verdt å nevne):
 
 ## Indeks
 
-(ingen ADR-er ennå — første kommer i Fase 1)
-
 | # | Tittel | Status | Fase |
 |---|---|---|---|
-| 001 | <placeholder> | - | 1 |
+| [001](001-one-engine-two-aggregators.md) | Én Engine, to aggregatorer | accepted | 1 |
