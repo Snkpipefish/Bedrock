@@ -1,0 +1,54 @@
+# Pre-commit hooks for Bedrock
+# Installer: uv run pre-commit install
+# Kjør manuelt: uv run pre-commit run --all-files
+
+repos:
+  # Ruff — lint + format
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  # Pyright — type checking (kun error-nivå, ikke warning)
+  - repo: https://github.com/RobertCraigie/pyright-python
+    rev: v1.1.383
+    hooks:
+      - id: pyright
+        args: [--level, error]
+        additional_dependencies: [pydantic, pandas]
+
+  # YAML-lint (config-filene våre)
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args: [-c=.yamllint.yaml]
+
+  # Gitleaks — skanner for hemmeligheter i diff
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+
+  # Commitizen — valider commit-meldings-format
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.29.1
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
+  # Diverse generelle
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--unsafe]  # tillat custom YAML-tags vi måtte bruke senere
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: mixed-line-ending

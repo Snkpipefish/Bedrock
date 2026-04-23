@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+dist/
+build/
+
+# Virtual env
+.venv/
+venv/
+
+# UV
+.uv-cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Hemmeligheter — aldri commit
+.env
+*.env
+.env.local
+secrets/
+~/.bedrock/
+
+# Logger og lokale data-filer som vokser
+logs/
+*.log
+data/parquet/**/*.parquet
+data/latest/*.json
+data/setups/active.json
+data/_meta/*.json
+data/signal_log.json
+
+# Men behold mappene (via .gitkeep)
+!data/parquet/.gitkeep
+!data/latest/.gitkeep
+!data/setups/.gitkeep
+!data/_meta/.gitkeep
+
+# Test-artefakter
+tests/**/coverage.xml
+tests/**/htmlcov/
+.coverage
+.coverage.*
+
+# DuckDB working files
+*.duckdb
+*.duckdb.wal

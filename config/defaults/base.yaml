@@ -1,0 +1,44 @@
+# Globale defaults for Bedrock scoring.
+# Overstyres av family_*.yaml og per-instrument YAML.
+# Denne fila er stub — fylles inn i Fase 1 når engine implementeres.
+
+# Horisonter: definerer hva SCALP/SWING/MAKRO betyr mekanisk
+horizons:
+  SCALP:
+    description: "Intradag, entry 15m/1h, hold < 1 dag"
+    entry_tfs: ["15m", "1H"]
+    expected_hold_hours: [1, 24]
+    ttl_minutes: 15
+    min_rr: 1.5
+
+  SWING:
+    description: "Ca 2 uker, entry 4h/1D, hold 7-21 dager"
+    entry_tfs: ["4H", "D1"]
+    expected_hold_hours: [168, 504]  # 7-21 dager
+    ttl_hours: 4
+    min_rr: 2.5
+
+  MAKRO:
+    description: "Måneder, entry 1D/W, hold 30-90 dager, kun trailing exit"
+    entry_tfs: ["D1", "W1"]
+    expected_hold_hours: [720, 2160]  # 30-90 dager
+    ttl_hours: 24
+    min_rr: null  # ingen fast TP — trailing only
+
+# Hysterese på horisont-tildeling (PLAN § 5.4)
+hysteresis:
+  horizon_threshold_buffer_pct: 0.05  # ±5% buffer rundt terskel
+  sl_stability_atr: 0.3               # behold forrige SL hvis ny er innenfor 0.3×ATR
+  tp_stability_atr: 0.5               # samme for TP
+
+# Data-quality-terskler (stale/fresh)
+data_quality:
+  fresh_pct_of_max: 0.80
+  aging_pct_of_max: 1.00
+  # > 1.0 = stale
+
+# Default grade-terskler (overstyres per instrument)
+grade_thresholds:
+  A_plus: {min_pct_of_max: 0.75, min_families: 4}
+  A:      {min_pct_of_max: 0.55, min_families: 3}
+  B:      {min_pct_of_max: 0.35, min_families: 2}

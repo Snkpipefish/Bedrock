@@ -1,0 +1,19 @@
+# YAML-lint-regler for Bedrock
+# Streng nok til å fange feil, mild nok til å ikke irritere
+
+extends: default
+
+rules:
+  line-length:
+    max: 140
+    level: warning
+  indentation:
+    spaces: 2
+    indent-sequences: true
+  comments:
+    min-spaces-from-content: 1
+  document-start:
+    present: false  # vi krever ikke "---" øverst
+  truthy:
+    allowed-values: ['true', 'false', 'on', 'off']
+    check-keys: false

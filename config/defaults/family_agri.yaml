@@ -1,0 +1,46 @@
+# Default-oppsett for agri (grains, softs).
+# Instrument-filer (corn.yaml, coffee.yaml, ...) arver via "inherits: family_agri".
+# Stub — fullstendig driver-liste kommer i Fase 1.
+
+inherits: base
+aggregation: additive_sum
+max_score: 18
+min_score_publish: 7  # ~39% av max
+
+# Familie-struktur for additive-sum-modellen
+# Hver familie har en max weight (familie kan gi opptil X poeng)
+# Summerer til 18 totalt
+families:
+  outlook:
+    weight: 5
+    drivers: []
+  yield:
+    weight: 3
+    drivers: []
+  weather:
+    weight: 2
+    drivers: []
+  enso:
+    weight: 2
+    drivers: []
+  conab:
+    weight: 2
+    drivers: []
+  unica:
+    weight: 2
+    drivers: []
+  cross:
+    weight: 2
+    drivers: []
+
+# Grade-terskler på 0-18-skalaen (overstyrer base)
+grade_thresholds:
+  A_plus: {min_score: 14, min_families_active: 4}
+  A:      {min_score: 10, min_families_active: 3}
+  B:      {min_score: 7,  min_families_active: 2}
+
+# USDA-blackout — agri-spesifikk gate
+usda_blackout:
+  pre_hours: 3
+  post_hours: 3
+  sources: [WASDE, crop_progress, grain_stocks]

@@ -1,0 +1,53 @@
+# Default-oppsett for financial asset-klasser (fx, metals, energy, indices, crypto).
+# Instrument-filer arver dette via "inherits: family_financial".
+# Stub — fullstendig driver-liste kommer i Fase 1.
+
+inherits: base
+aggregation: weighted_horizon
+
+# Horisont-spesifikke vekter per familie (PLAN § 4.2)
+horizons:
+  SCALP:
+    family_weights:
+      trend: 1.2
+      positioning: 0.5
+      macro: 0.7
+      fundamental: 0.5
+      structure: 1.3
+      risk: 0.8
+    min_score_publish: 1.5
+
+  SWING:
+    family_weights:
+      trend: 1.0
+      positioning: 1.0
+      macro: 1.0
+      fundamental: 1.0
+      structure: 1.0
+      risk: 1.0
+    min_score_publish: 2.5
+
+  MAKRO:
+    family_weights:
+      trend: 0.8
+      positioning: 1.3
+      macro: 1.3
+      fundamental: 1.3
+      structure: 0.5
+      risk: 0.8
+    min_score_publish: 3.5
+
+# Default familie-struktur — per-instrument-fil kan erstatte hele eller deler
+families:
+  trend:
+    drivers: []  # instrument må spesifisere
+  positioning:
+    drivers: []
+  macro:
+    drivers: []
+  fundamental:
+    drivers: []
+  structure:
+    drivers: []
+  risk:
+    drivers: []
