@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 2 — åpen. Session 7 FERDIG: COT-støtte (CFTC disaggregated + legacy som to tabeller). DataStore dekker nå priser + COT.
+- **Phase:** 2 — åpen. Session 8 FERDIG: fundamentals (FRED) + weather (daglig region). DataStore dekker nå priser + COT + fundamentals + weather. Alle kjerne-tabeller klare for drivere og fetch-laget.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Fase 2 session 8 — fundamentals (FRED-serier). Foreslår: `FredSeriesRow` + `DDL_FUNDAMENTALS`, `append_fundamentals(df)`, `get_fundamentals(series_id, from_, last_n)`. Enkelt schema (series_id, date, value). Deretter weather (us_cornbelt_daily-liknende). Backfill-CLI (Fase 3) venter til alle schemas er på plass.
+- **Next task:** Forslag: avslutt Fase 2 her og gå til **Fase 3 (backfill-CLI)**. Fase 2-målet var "datalag: DuckDB+parquet, skjemaer, DataStore-API" — vi har nå SQLite-backing + 4 tabell-familier + full API. `find_analog_cases` (PLAN § 6.5) utsettes til Fase 9 per PLAN-tabell. trades-tabell venter til Fase 7 (bot-refaktor). Fase 3 = backfill-CLI: `bedrock backfill prices --from 2016`, `bedrock backfill cot` etc. — bruker fetch-laget fra eksisterende `cot-explorer`/`scalp_edge` eller fra ferskt script.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -45,6 +45,46 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 8: fundamentals + weather, numpy-pin
+
+Session 8 utvider DataStore med fundamentals (FRED) og weather.
+Inkluderer tillegg fra session 6 som bruker flaget etter-post: numpy
+pinnet mot SIMD-drift, ADR-002 utvidet med SIMD-policy.
+
+**Opprettet:**
+- `schemas.FredSeriesRow` + `DDL_FUNDAMENTALS` + `FUNDAMENTALS_COLS`
+  (series_id, date, value — value NULL-able)
+- `schemas.WeatherDailyRow` + `DDL_WEATHER` + `WEATHER_COLS`
+  (region, date, tmax, tmin, precip, gdd — alle målinger valgfrie)
+- `DataStore.append_fundamentals` / `get_fundamentals(series_id, last_n)`
+  returnerer pd.Series (shape likt get_prices — skalar per dato)
+- `DataStore.append_weather` / `get_weather(region, last_n)` returnerer
+  pd.DataFrame (multi-column, shape likt get_cot)
+- `has_fundamentals` / `has_weather` test-hjelpere
+- `tests/unit/test_store_fundamentals.py` (9 tester)
+- `tests/unit/test_store_weather.py` (9 tester)
+
+**Etterfyll til session 6 (bruker-flagget):**
+- `pyproject.toml`: numpy pinnet til `>=2.2,<2.3` med kommentar
+  "SIMD-sensitive, pin upper bound (ADR-002)"
+- `ADR-002`: ny seksjon "Related: SIMD-sensitive dependency pinning" med
+  tabell over kjente problem-pakker og oppgraderings-policy (CI-runnere
+  fanger ikke krasjen — lokal test på produksjons-CPU kreves)
+
+**Commits:** `2ab4ef6` (numpy pin + ADR-utvidelse), `52ea518`
+(fundamentals + weather + PLAN § 6.2/6.3).
+
+**Tester:** 107/107 grønne på 6.3 sek.
+
+**Bevisste utsettelser:**
+- `find_analog_cases` (PLAN § 6.5) venter til Fase 9
+- `trades`-tabell venter til Fase 7 (bot-refaktor)
+- `get_*(from_=...)`-argument utsatt til en driver faktisk trenger det
+  (i dag bruker alle get_* kun `last_n`)
+
+**Neste session:** avslutte Fase 2 og starte Fase 3 (backfill-CLI).
+DataStore-laget er ferdig utbygget for nåværende PLAN-scope.
 
 ### 2026-04-24 — Session 7: COT-støtte i DataStore
 
