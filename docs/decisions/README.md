@@ -50,3 +50,4 @@ Nøytrale (men verdt å nevne):
 | # | Tittel | Status | Fase |
 |---|---|---|---|
 | [001](001-one-engine-two-aggregators.md) | Én Engine, to aggregatorer | accepted | 1 |
+| [002](002-sqlite-instead-of-duckdb.md) | SQLite + pandas som storage-backend | accepted | 2 |
