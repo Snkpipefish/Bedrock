@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 1 — Engine core (session 3 FERDIG: additive_sum + agri-grade; motor komplett for begge asset-klasser)
+- **Phase:** 1 — Engine core (session 4 FERDIG: InMemoryStore + første 2 trend-drivere; Engine kjører end-to-end)
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Fase 1 session 4 — første ekte drivere. Foreslår minimal in-memory `DataStore`-stub + `sma200_align` + `momentum_z` + logiske tester mot kurerte fiktive pris-series (Gold bull-scenario). DataStore formaliseres fullt i Fase 2, men stubben låser driver-signaturen.
+- **Next task:** Fase 1 session 5 — flere drivere. Foreslår: `d1_4h_congruence` (trend), `cot_mm_percentile` + `cot_commercial_z` (positioning). Krever at InMemoryStore utvides med `get_cot()`-stub. Alternativt kan vi avslutte Fase 1 her (motor + 2 drivere er teknisk nok for "skjelettet") og gå til Fase 2 (ekte DuckDB-DataStore + backfill).
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -31,6 +31,40 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 4 (Claude Code + bruker)
+
+Fase 1 session 4: Engine-kjøring end-to-end med ekte drivere og datalag-stub.
+
+**Opprettet:**
+- `src/bedrock/data/__init__.py`
+- `src/bedrock/data/store.py` — `InMemoryStore` + `DataStoreProtocol`.
+  Implementerer `get_prices(instrument, tf, lookback)` som matches av den
+  ekte `DataStore` i Fase 2. API-kontrakten er stabil; drivere trenger
+  ingen endring ved senere bytte.
+- `src/bedrock/engine/drivers/trend.py` — `sma200_align`, `momentum_z`
+- Auto-registrering: `drivers/__init__.py` importerer `trend` slik at
+  `@register`-kall kjører ved import av drivers-pakken
+- `tests/unit/test_store.py` (7 tester)
+- `tests/logical/test_trend_drivers.py` (14 driver-tester + 1 Engine-integrerings-sanity)
+
+**Bevisste utsettelser:**
+- `DataStoreProtocol` i `bedrock.data.store` er minimal. Duplikat-Protocol
+  i `bedrock.engine.drivers.StoreProtocol` beholdes inntil Fase 2 konsoliderer
+- Ingen positioning/macro/structure-drivere ennå
+- `get_cot()`, `get_weather()` osv. er ikke på InMemoryStore ennå — legges
+  til når første driver som trenger dem skrives
+
+**Commit:** `819e14c` (store + trend-drivere). Auto-push aktiv.
+
+**Tester:** 66/66 grønne lokalt i `.venv` (sec 2.02). Ekte Gold-SWING-scenario
+med bare trend-familien gir score=1.0 og grade=B (riktig gitt enkelt regelsett).
+
+**Neste session:** valg mellom (a) flere drivere innenfor Fase 1 (foreslår
+positioning-familien: `cot_mm_percentile` + `cot_commercial_z` — krever
+`get_cot()` på store) eller (b) avslutt Fase 1 og start Fase 2 (DuckDB-store).
+Fase 1 estimert som "1 uke, 5-10 drivere" — vi har pt 2. Resterende 3-8
+drivere kan komme i Fase 2 hvor de har ekte data å kjøre mot.
 
 ### 2026-04-24 — Session 3 (Claude Code + bruker)
 
