@@ -54,17 +54,66 @@ def agri_signals_path(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def fetch_config_path(tmp_path: Path) -> Path:
+    """Minimal fetch.yaml for Kartrommet-tester."""
+    path = tmp_path / "fetch.yaml"
+    path.write_text(
+        """
+fetchers:
+  prices:
+    module: bedrock.fetch.prices
+    cron: "40 * * * 1-5"
+    stale_hours: 30
+    on_failure: retry_with_backoff
+    table: prices
+    ts_column: ts
+  cot_disaggregated:
+    module: bedrock.fetch.cot_cftc
+    cron: "0 22 * * 5"
+    stale_hours: 168
+    on_failure: log_and_skip
+    table: cot_disaggregated
+    ts_column: report_date
+  weather:
+    module: bedrock.fetch.weather
+    cron: "0 3 * * *"
+    stale_hours: 30
+    on_failure: retry_with_backoff
+    table: weather
+    ts_column: date
+  unknown_fetcher:
+    module: bedrock.fetch.custom
+    cron: "0 * * * *"
+    stale_hours: 12
+    on_failure: log_and_skip
+    table: custom
+    ts_column: ts
+""".strip()
+    )
+    return path
+
+
+@pytest.fixture
+def db_path(tmp_path: Path) -> Path:
+    return tmp_path / "test.db"
+
+
+@pytest.fixture
 def app_with_config(
     web_root: Path,
     trade_log_path: Path,
     signals_path: Path,
     agri_signals_path: Path,
+    fetch_config_path: Path,
+    db_path: Path,
 ):
     cfg = ServerConfig(
         web_root=web_root,
         trade_log_path=trade_log_path,
         signals_path=signals_path,
         agri_signals_path=agri_signals_path,
+        fetch_config_path=fetch_config_path,
+        db_path=db_path,
     )
     return create_app(cfg)
 
@@ -421,3 +470,171 @@ def test_setups_passes_through_setup_dict(
     assert setup["stop_loss"] == 2040.0
     assert setup["target_1"] == 2070.0
     assert setup["rr_t1"] == 2.5
+
+
+# ─────────────────────────────────────────────────────────────
+# /api/ui/pipeline_health (session 50 — Kartrommet)
+# ─────────────────────────────────────────────────────────────
+
+
+def test_pipeline_health_empty_db_all_missing(client: FlaskClient) -> None:
+    """Tom database (ingen observasjoner) → alle kilder status='missing'."""
+    r = client.get("/api/ui/pipeline_health")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert "groups" in data
+    # Alle fetchere fra fetch_config_path skal være "missing"
+    all_sources = [s for g in data["groups"] for s in g["sources"]]
+    assert len(all_sources) == 4  # prices, cot_disaggregated, weather, unknown_fetcher
+    for src in all_sources:
+        assert src["status"] == "missing"
+        assert src["age_hours"] is None
+        assert src["latest_observation"] is None
+
+
+def test_pipeline_health_groups_by_plan_categories(client: FlaskClient) -> None:
+    """Fetchere grupperes per PLAN § 10.4."""
+    r = client.get("/api/ui/pipeline_health")
+    data = r.get_json()
+    group_names = [g["name"] for g in data["groups"]]
+    # Core kommer før CFTC, før Geo, før Other (per _GROUP_ORDER)
+    assert group_names.index("Core") < group_names.index("CFTC")
+    assert group_names.index("CFTC") < group_names.index("Geo")
+    assert group_names.index("Geo") < group_names.index("Other")
+
+
+def test_pipeline_health_unknown_fetcher_in_other_group(
+    client: FlaskClient,
+) -> None:
+    """Fetchere som ikke er i _FETCHER_GROUPS havner i 'Other'."""
+    r = client.get("/api/ui/pipeline_health")
+    data = r.get_json()
+    other = next(g for g in data["groups"] if g["name"] == "Other")
+    assert any(s["name"] == "unknown_fetcher" for s in other["sources"])
+
+
+def test_pipeline_health_fresh_status_under_stale_threshold(
+    client: FlaskClient, db_path: Path,
+) -> None:
+    """Observasjon nyere enn stale_hours → status='fresh'."""
+    import sqlite3
+    from datetime import datetime, timezone, timedelta
+
+    # Tvang DataStore til å opprette schema først (ellers er db tom)
+    from bedrock.data.store import DataStore
+    DataStore(db_path)  # initialiserer schema
+
+    # Sett inn en prises-observasjon som er 1 time gammel (stale_hours=30)
+    one_hour_ago = (
+        datetime.now(timezone.utc) - timedelta(hours=1)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO prices (instrument, tf, ts, close) VALUES (?, ?, ?, ?)",
+            ("Gold", "D1", one_hour_ago, 2050.0),
+        )
+        conn.commit()
+
+    r = client.get("/api/ui/pipeline_health")
+    data = r.get_json()
+    prices = next(
+        s for g in data["groups"] for s in g["sources"] if s["name"] == "prices"
+    )
+    assert prices["status"] == "fresh"
+    assert prices["age_hours"] is not None
+    assert prices["age_hours"] < 2
+    assert prices["latest_observation"] is not None
+
+
+def test_pipeline_health_aging_between_1x_and_2x_stale(
+    client: FlaskClient, db_path: Path,
+) -> None:
+    """Observasjon 1×-2×stale_hours gammel → status='aging'."""
+    import sqlite3
+    from datetime import datetime, timezone, timedelta
+
+    from bedrock.data.store import DataStore
+    DataStore(db_path)
+
+    # 45 timer gammel (1.5 × 30)
+    aging = (
+        datetime.now(timezone.utc) - timedelta(hours=45)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO prices (instrument, tf, ts, close) VALUES (?, ?, ?, ?)",
+            ("Gold", "D1", aging, 2050.0),
+        )
+        conn.commit()
+
+    r = client.get("/api/ui/pipeline_health")
+    prices = next(
+        s for g in r.get_json()["groups"] for s in g["sources"]
+        if s["name"] == "prices"
+    )
+    assert prices["status"] == "aging"
+
+
+def test_pipeline_health_stale_above_2x(
+    client: FlaskClient, db_path: Path,
+) -> None:
+    """Observasjon > 2×stale_hours gammel → status='stale'."""
+    import sqlite3
+    from datetime import datetime, timezone, timedelta
+
+    from bedrock.data.store import DataStore
+    DataStore(db_path)
+
+    # 100 timer gammel (> 2 × 30)
+    old = (
+        datetime.now(timezone.utc) - timedelta(hours=100)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO prices (instrument, tf, ts, close) VALUES (?, ?, ?, ?)",
+            ("Gold", "D1", old, 2050.0),
+        )
+        conn.commit()
+
+    r = client.get("/api/ui/pipeline_health")
+    prices = next(
+        s for g in r.get_json()["groups"] for s in g["sources"]
+        if s["name"] == "prices"
+    )
+    assert prices["status"] == "stale"
+
+
+def test_pipeline_health_missing_fetch_config(
+    tmp_path: Path, web_root: Path,
+) -> None:
+    """fetch.yaml ikke funnet → 200 + error-melding, tom groups."""
+    cfg = ServerConfig(
+        web_root=web_root,
+        fetch_config_path=tmp_path / "does-not-exist.yaml",
+        db_path=tmp_path / "x.db",
+        trade_log_path=tmp_path / "log.json",
+        signals_path=tmp_path / "s.json",
+        agri_signals_path=tmp_path / "a.json",
+    )
+    client = create_app(cfg).test_client()
+    r = client.get("/api/ui/pipeline_health")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["groups"] == []
+    assert "error" in data
+    assert "ikke funnet" in data["error"]
+
+
+def test_pipeline_health_includes_cron_and_stale_hours(
+    client: FlaskClient,
+) -> None:
+    """Svar skal inkludere cron-streng + stale_hours per fetcher."""
+    r = client.get("/api/ui/pipeline_health")
+    prices = next(
+        s for g in r.get_json()["groups"] for s in g["sources"]
+        if s["name"] == "prices"
+    )
+    assert prices["cron"] == "40 * * * 1-5"
+    assert prices["stale_hours"] == 30
+    assert prices["table"] == "prices"
+    assert prices["module"] == "bedrock.fetch.prices"

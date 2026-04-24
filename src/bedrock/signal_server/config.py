@@ -58,6 +58,9 @@ class ServerConfig(BaseModel):
     trade_log_path: Path = Field(default=DEFAULT_TRADE_LOG_PATH)
     web_root: Path = Field(default=DEFAULT_WEB_ROOT)
 
+    # UI-fane Kartrommet (session 50)
+    fetch_config_path: Path = Field(default=Path("config/fetch.yaml"))
+
     # Feature-flagge (sanity-check for at vi er i bedrock-versjonen,
     # ikke i gammel scalp_edge)
     server_name: str = "bedrock-signal-server"

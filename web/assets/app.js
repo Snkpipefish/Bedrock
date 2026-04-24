@@ -165,11 +165,64 @@ async function loadAgriSetups() {
   }
 }
 
+// ─── Kartrommet: pipeline-helse (session 50) ──────────────────
+async function loadKartrommet() {
+  try {
+    const res = await fetch('/api/ui/pipeline_health').then(r => r.json());
+    renderKartrommet(res);
+  } catch (err) {
+    console.error('Kartrommet load feilet:', err);
+    const el = document.getElementById('kartrom-groups');
+    if (el) el.innerHTML = `<p class="empty">Fetch feilet: ${err.message}</p>`;
+  }
+}
+
+function renderKartrommet(res) {
+  const lastCheckEl = document.getElementById('kartrom-last-check');
+  if (lastCheckEl) lastCheckEl.textContent = res.last_check || '–';
+
+  const root = document.getElementById('kartrom-groups');
+  if (!root) return;
+
+  if (res.error) {
+    root.innerHTML = `<p class="empty">${res.error}</p>`;
+    return;
+  }
+
+  if (!res.groups || res.groups.length === 0) {
+    root.innerHTML = '<p class="empty">Ingen fetch-kilder konfigurert.</p>';
+    return;
+  }
+
+  root.innerHTML = res.groups.map(grp => `
+    <section class="pipeline-group">
+      <h3>${grp.name}</h3>
+      <table class="pipeline-table">
+        <thead>
+          <tr><th>Kilde</th><th>Tabell</th><th>Status</th><th>Alder</th><th>Stale-grense</th><th>Siste obs</th><th>Cron</th></tr>
+        </thead>
+        <tbody>
+          ${grp.sources.map(s => `<tr>
+            <td>${s.name}</td>
+            <td>${s.table}</td>
+            <td><span class="status-pill status-${s.status}">${s.status}</span></td>
+            <td>${s.age_hours !== null ? s.age_hours.toFixed(1) + ' t' : '–'}</td>
+            <td>${s.stale_hours} t</td>
+            <td>${s.latest_observation || '–'}</td>
+            <td><code>${s.cron || '–'}</code></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </section>
+  `).join('');
+}
+
 // ─── Lazy-load per fane ───────────────────────────────────────
 const loaders = {
   skipsloggen: loadSkipsloggen,
   financial: loadFinancialSetups,
   agri: loadAgriSetups,
+  kartrom: loadKartrommet,
 };
 
 function activateTab(tabId) {

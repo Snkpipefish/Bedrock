@@ -263,3 +263,141 @@ def setups_agri() -> Response:
 
     entries = _read_signals_list(_config().agri_signals_path)
     return _setups_response(entries, limit_str=request.args.get("limit"))
+
+
+# ─────────────────────────────────────────────────────────────
+# Pipeline-helse (Kartrommet, session 50)
+# ─────────────────────────────────────────────────────────────
+
+
+# Hardkodet gruppering av fetchere for UI-visning. Matcher PLAN § 10.4
+# (Core / Bot-priser / CFTC / Ekstern COT / Fundamentals / Sektor / Geo).
+# Fetchere som ikke finnes i mappingen havner i "Other"-gruppen.
+_FETCHER_GROUPS: dict[str, str] = {
+    "prices": "Core",
+    "cot_disaggregated": "CFTC",
+    "cot_legacy": "CFTC",
+    "fundamentals": "Fundamentals",
+    "weather": "Geo",
+}
+_DEFAULT_GROUP = "Other"
+
+# Rekkefølge på grupper i UI. Grupper som ikke er i listen havner sist.
+_GROUP_ORDER = ["Core", "Bot-priser", "CFTC", "Ekstern COT", "Fundamentals", "Sektor", "Geo", "Other"]
+
+
+def _classify_staleness(
+    has_data: bool, age_hours: float | None, stale_hours: float
+) -> str:
+    """Klassifiser staleness-nivå.
+
+    - missing: ingen observasjoner ennå
+    - fresh: under stale_hours
+    - aging: mellom 1×stale og 2×stale
+    - stale: over 2×stale
+    """
+    if not has_data or age_hours is None:
+        return "missing"
+    if age_hours < stale_hours:
+        return "fresh"
+    if age_hours < 2 * stale_hours:
+        return "aging"
+    return "stale"
+
+
+@ui_bp.get("/api/ui/pipeline_health")
+def pipeline_health() -> Response:
+    """Pipeline-helse per fetch-kilde.
+
+    Laster `config.fetch_config_path` + instansierer DataStore mot
+    `config.db_path`, kjører `status_report`, klassifiserer hver
+    kilde, grupperer per PLAN § 10.4 og returnerer JSON.
+
+    Feil-tilfeller (graceful, ingen 500):
+    - fetch.yaml mangler / ugyldig → `{"groups": [], "error": "..."}`
+    - db-feil per fetcher → status="missing" (row_count=0)
+    """
+    from datetime import datetime, timezone
+
+    from bedrock.config.fetch import (
+        FetchConfigError,
+        load_fetch_config,
+        status_report,
+    )
+    from bedrock.data.store import DataStore
+
+    cfg = _config()
+    now = datetime.now(timezone.utc)
+
+    try:
+        fetch_cfg = load_fetch_config(cfg.fetch_config_path)
+    except FileNotFoundError:
+        return jsonify(
+            {
+                "groups": [],
+                "last_check": now.isoformat(),
+                "error": f"fetch.yaml ikke funnet: {cfg.fetch_config_path}",
+            }
+        )
+    except FetchConfigError as exc:
+        return jsonify(
+            {
+                "groups": [],
+                "last_check": now.isoformat(),
+                "error": f"fetch.yaml ugyldig: {exc}",
+            }
+        )
+
+    try:
+        store = DataStore(cfg.db_path)
+        statuses = status_report(fetch_cfg, store, now=now)
+    except Exception as exc:  # noqa: BLE001 — UI skal ikke 500
+        log.warning("[UI] pipeline_health db-feil: %s", exc)
+        statuses = []
+
+    # Bygg per-gruppe-liste
+    groups: dict[str, list[dict[str, Any]]] = {}
+    spec_map = fetch_cfg.fetchers
+    for st in statuses:
+        group_name = _FETCHER_GROUPS.get(st.name, _DEFAULT_GROUP)
+        spec = spec_map.get(st.name)
+        source = {
+            "name": st.name,
+            "module": st.module,
+            "table": st.table,
+            "status": _classify_staleness(
+                st.has_data, st.age_hours, st.stale_hours
+            ),
+            "stale_hours": st.stale_hours,
+            "age_hours": round(st.age_hours, 2) if st.age_hours is not None else None,
+            "latest_observation": (
+                st.latest_observation.isoformat()
+                if st.latest_observation is not None
+                else None
+            ),
+            "cron": spec.cron if spec else None,
+        }
+        groups.setdefault(group_name, []).append(source)
+
+    # Sorter fetchere innen hver gruppe alfabetisk
+    for sources in groups.values():
+        sources.sort(key=lambda s: s["name"])
+
+    # Bygg respons-gruppe-liste i _GROUP_ORDER-rekkefølge
+    ordered_groups: list[dict[str, Any]] = []
+    for group_name in _GROUP_ORDER:
+        if group_name in groups:
+            ordered_groups.append(
+                {"name": group_name, "sources": groups[group_name]}
+            )
+    # Tilføy grupper som ikke er i _GROUP_ORDER (fremtidige tilskudd)
+    for group_name, sources in groups.items():
+        if group_name not in _GROUP_ORDER:
+            ordered_groups.append({"name": group_name, "sources": sources})
+
+    return jsonify(
+        {
+            "groups": ordered_groups,
+            "last_check": now.isoformat(),
+        }
+    )

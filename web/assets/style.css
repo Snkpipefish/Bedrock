@@ -206,3 +206,61 @@ main { padding: 20px; }
   width: 60px;
 }
 .setup-card table.levels td { font-family: "SF Mono", Menlo, monospace; }
+
+/* Kartrommet — pipeline-helse (session 50) */
+.pipeline-group {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.pipeline-group h3 {
+  margin: 0;
+  padding: 8px 12px;
+  background: #f0f0f2;
+  border-bottom: 1px solid #ddd;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #444;
+}
+.pipeline-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.pipeline-table th, .pipeline-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+}
+.pipeline-table th {
+  background: #fafafa;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #666;
+}
+.pipeline-table tbody tr:last-child td { border-bottom: none; }
+.pipeline-table code {
+  font-size: 11px;
+  background: #f5f5f5;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 1px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.status-fresh { background: #d4edda; color: #1f7a3a; }
+.status-aging { background: #fff3cd; color: #856404; }
+.status-stale { background: #f8d7da; color: #b33030; }
+.status-missing { background: #e2e3e5; color: #555; }
