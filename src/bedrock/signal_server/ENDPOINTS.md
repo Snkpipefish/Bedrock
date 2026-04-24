@@ -18,9 +18,9 @@ gjennom Fase 7 sessions.
 | kills | `/kill` | POST | **implementert** (session 36) | `endpoints/kills.py` |
 | kills | `/kills` | GET | **implementert** (session 36) | `endpoints/kills.py` |
 | kills | `/clear_kills` | POST | **implementert** (session 36) | `endpoints/kills.py` |
-| prices | `/push-prices` | POST | pending | `endpoints/prices.py` |
-| prices | `/prices` | GET | pending | `endpoints/prices.py` |
-| uploads | `/upload` | POST | pending | `endpoints/uploads.py` |
+| prices | `/push-prices` | POST | **implementert** (session 37) | `endpoints/prices.py` |
+| prices | `/prices` | GET | **implementert** (session 37) | `endpoints/prices.py` |
+| uploads | `/upload` | POST | **implementert** (session 37) | `endpoints/uploads.py` |
 | rules (ny) | `/admin/rules` | GET/PUT | pending | `endpoints/rules.py` |
 
 ## Session-plan (foreløpig)
@@ -32,7 +32,9 @@ gjennom Fase 7 sessions.
   (skriv-path; Pydantic body-validering; atomic append)
 - Session 36 ✓ — `endpoints/kills.py`: `/kill`, `/kills`, `/clear_kills`
   + `/invalidate` i signals_bp
-- Session 37 — `endpoints/prices.py` + `endpoints/uploads.py`
+- Session 37 ✓ — `endpoints/prices.py`: `/push-prices`, `/prices`
+  (DataStore-backed) + `endpoints/uploads.py`: `/upload`
+  (uuid-navngitt, whitelist, 10MB-cap)
 - Session 38 — `endpoints/rules.py` (PLAN § 8.3 — ny funksjonalitet,
   YAML-editering via UI)
 

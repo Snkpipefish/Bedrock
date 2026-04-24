@@ -131,5 +131,32 @@ class InvalidationRequest(BaseModel):
         return value
 
 
+class PriceBarIn(BaseModel):
+    """Ett pris-bar slik klienten sender det inn.
+
+    Close er påkrevd (minimum-kontrakt med DataStore.append_prices).
+    OHLV er valgfritt — NULL persistere fint i SQLite.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    ts: datetime
+    close: float
+    open: float | None = None
+    high: float | None = None
+    low: float | None = None
+    volume: float | None = None
+
+
+class PushPricesRequest(BaseModel):
+    """Payload for POST /push-prices."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    instrument: str
+    tf: str
+    bars: list[PriceBarIn] = Field(min_length=1)
+
+
 class SignalStoreError(Exception):
     """Signal-fil er korrupt eller har feil struktur."""

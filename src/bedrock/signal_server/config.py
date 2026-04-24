@@ -40,6 +40,14 @@ class ServerConfig(BaseModel):
     )
     kill_switch_path: Path = Field(default=DEFAULT_DATA_ROOT / "kills.json")
 
+    # DataStore (SQLite)
+    db_path: Path = Field(default=DEFAULT_DATA_ROOT / "bedrock.db")
+
+    # Uploads (bilder, pdf-er)
+    uploads_root: Path = Field(default=DEFAULT_DATA_ROOT / "uploads")
+    upload_max_bytes: int = 10 * 1024 * 1024  # 10 MB
+    upload_allowed_exts: tuple[str, ...] = (".png", ".jpg", ".jpeg", ".pdf")
+
     # Feature-flagge (sanity-check for at vi er i bedrock-versjonen,
     # ikke i gammel scalp_edge)
     server_name: str = "bedrock-signal-server"

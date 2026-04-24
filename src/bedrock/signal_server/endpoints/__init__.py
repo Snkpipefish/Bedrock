@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from bedrock.signal_server.endpoints.alerts import alerts_bp
 from bedrock.signal_server.endpoints.kills import kills_bp
+from bedrock.signal_server.endpoints.prices import prices_bp
 from bedrock.signal_server.endpoints.signals import signals_bp
+from bedrock.signal_server.endpoints.uploads import uploads_bp
 
-__all__ = ["alerts_bp", "kills_bp", "signals_bp"]
+__all__ = ["alerts_bp", "kills_bp", "prices_bp", "signals_bp", "uploads_bp"]

@@ -156,7 +156,6 @@ def test_status_lists_registered_endpoints() -> None:
     assert "/status" in endpoints
     # Disse kommer i senere sessions — sjekk at de IKKE er her ennå
     assert "/admin/rules" not in endpoints
-    assert "/upload" not in endpoints
 
 
 # ---------------------------------------------------------------------------
