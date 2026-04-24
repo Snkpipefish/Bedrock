@@ -16,6 +16,7 @@ from pathlib import Path
 import click
 
 from bedrock.cli._instrument_lookup import (
+    DEFAULT_DEFAULTS_DIR,
     DEFAULT_INSTRUMENTS_DIR,
     find_instrument,
 )
@@ -25,6 +26,17 @@ from bedrock.config.instruments import (
     load_all_instruments,
 )
 from bedrock.engine.engine import AgriRules, FinancialRules
+
+
+def _defaults_dir_option(f):
+    return click.option(
+        "--defaults-dir",
+        "defaults_dir",
+        default=DEFAULT_DEFAULTS_DIR,
+        show_default=True,
+        type=click.Path(path_type=Path),
+        help="Katalog med defaults-YAML-er (brukt av `inherits:`).",
+    )(f)
 
 
 @click.group()
@@ -41,7 +53,8 @@ def instruments() -> None:
     type=click.Path(path_type=Path),
     help="Katalog med instrument-YAML-er.",
 )
-def list_cmd(instruments_dir: Path) -> None:
+@_defaults_dir_option
+def list_cmd(instruments_dir: Path, defaults_dir: Path) -> None:
     """List alle instrumenter i katalog med sentral metadata."""
     if not instruments_dir.exists():
         raise click.UsageError(
@@ -49,7 +62,7 @@ def list_cmd(instruments_dir: Path) -> None:
         )
 
     try:
-        configs = load_all_instruments(instruments_dir)
+        configs = load_all_instruments(instruments_dir, defaults_dir=defaults_dir)
     except InstrumentConfigError as exc:
         raise click.UsageError(f"Kunne ikke laste instrumenter: {exc}") from exc
 
@@ -82,9 +95,10 @@ def list_cmd(instruments_dir: Path) -> None:
     type=click.Path(path_type=Path),
     help="Katalog med instrument-YAML-er.",
 )
-def show_cmd(instrument_id: str, instruments_dir: Path) -> None:
+@_defaults_dir_option
+def show_cmd(instrument_id: str, instruments_dir: Path, defaults_dir: Path) -> None:
     """Vis full config for ett instrument (metadata + rules-oversikt)."""
-    cfg = find_instrument(instrument_id, instruments_dir)
+    cfg = find_instrument(instrument_id, instruments_dir, defaults_dir=defaults_dir)
     _print_instrument(cfg)
 
 

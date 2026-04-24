@@ -27,8 +27,10 @@ families: { ... }
 grade_thresholds: { ... }
 ```
 
-`inherits: family_financial` (PLAN § 4.2) er utsatt til senere session —
-session 21 kjører flat YAML uten inheritance. Gates er også utsatt.
+`inherits: family_financial` (PLAN § 4.2) resolves rekursivt fra
+`config/defaults/` (session 23). Shallow merge på top-level keys —
+barnets felter vinner. `gates` og `usda_blackout` er fortsatt stille-
+skippet til egne sessions implementerer scoring/kalender-støtte.
 """
 
 from __future__ import annotations
@@ -40,6 +42,8 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from bedrock.engine.engine import AgriRules, FinancialRules
+
+DEFAULT_DEFAULTS_DIR = Path("config/defaults")
 
 
 class InstrumentMetadata(BaseModel):
@@ -90,16 +94,27 @@ class InstrumentConfigError(ValueError):
 # ---------------------------------------------------------------------------
 
 
-def load_instrument_config(path: Path | str) -> InstrumentConfig:
+def load_instrument_config(
+    path: Path | str,
+    defaults_dir: Path | str | None = None,
+) -> InstrumentConfig:
     """Les og valider én instrument-YAML.
 
-    Reiser `InstrumentConfigError` ved manglende `instrument`-blokk eller
-    ukjent aggregation. Pydantic-valideringsfeil propageres (caller ser
-    hva som er galt).
+    `inherits: <name>` resolves rekursivt mot `defaults_dir` (default:
+    `config/defaults/`). Shallow merge på top-level keys — barnets felter
+    vinner. Se `_resolve_inherits` for full semantikk.
+
+    Reiser `InstrumentConfigError` ved manglende `instrument`-blokk,
+    ukjent aggregation, manglende parent, eller circular inheritance.
+    Pydantic-valideringsfeil propageres (caller ser hva som er galt).
     """
     target = Path(path)
     if not target.exists():
         raise FileNotFoundError(f"Instrument config not found: {target}")
+
+    resolved_defaults = (
+        Path(defaults_dir) if defaults_dir is not None else DEFAULT_DEFAULTS_DIR
+    )
 
     with target.open(encoding="utf-8") as f:
         data = yaml.safe_load(f)
@@ -109,12 +124,21 @@ def load_instrument_config(path: Path | str) -> InstrumentConfig:
             f"{target}: expected YAML mapping at root, got {type(data).__name__}"
         )
 
+    if "inherits" in data:
+        data = _resolve_inherits(
+            data, resolved_defaults, source=str(target), chain=[]
+        )
+
     return _parse_instrument_dict(data, source=str(target))
 
 
-def load_all_instruments(directory: Path | str) -> dict[str, InstrumentConfig]:
+def load_all_instruments(
+    directory: Path | str,
+    defaults_dir: Path | str | None = None,
+) -> dict[str, InstrumentConfig]:
     """Les alle `*.yaml` i katalog og returner som `{instrument.id: config}`.
 
+    `defaults_dir` deles av alle filer — default `config/defaults/`.
     Duplikate IDer kaster `InstrumentConfigError`. Non-YAML-filer og
     underkataloger ignoreres. Tom katalog returnerer tom dict.
     """
@@ -124,7 +148,7 @@ def load_all_instruments(directory: Path | str) -> dict[str, InstrumentConfig]:
 
     result: dict[str, InstrumentConfig] = {}
     for yaml_path in sorted(target.glob("*.yaml")):
-        cfg = load_instrument_config(yaml_path)
+        cfg = load_instrument_config(yaml_path, defaults_dir=defaults_dir)
         inst_id = cfg.instrument.id
         if inst_id in result:
             raise InstrumentConfigError(
@@ -134,6 +158,80 @@ def load_all_instruments(directory: Path | str) -> dict[str, InstrumentConfig]:
         result[inst_id] = cfg
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Private: inherits-resolver
+# ---------------------------------------------------------------------------
+
+
+def _resolve_inherits(
+    raw: dict[str, Any],
+    defaults_dir: Path,
+    source: str,
+    chain: list[str],
+) -> dict[str, Any]:
+    """Rekursiv opprulling av `inherits: <parent>` fra `defaults_dir`.
+
+    Regel (shallow merge):
+
+    - `inherits: X` slår opp `defaults_dir/X.yaml`.
+    - X kan selv ha `inherits: Y` — opprulles rekursivt.
+    - Top-level keys flettes: `{**parent_resolved, **child}` — barnet
+      vinner per top-level key. Nested dicts erstatter helt (f.eks. hvis
+      barnet definerer `families:`, overtar det hele familie-blokken —
+      ingen merging under familie-nivå).
+    - `inherits`-nøkkelen slettes fra sluttresultatet.
+
+    Kaster `InstrumentConfigError` ved manglende parent, circular
+    inheritance, eller ugyldig YAML-struktur i parent.
+    """
+    parent_name = raw.get("inherits")
+    if parent_name is None:
+        # Ingen inherits: ikke noe å gjøre (burde ikke nåes av caller)
+        return {k: v for k, v in raw.items() if k != "inherits"}
+
+    if not isinstance(parent_name, str):
+        raise InstrumentConfigError(
+            f"{source}: `inherits` must be a string, got "
+            f"{type(parent_name).__name__}"
+        )
+
+    if parent_name in chain:
+        cycle = " → ".join([*chain, parent_name])
+        raise InstrumentConfigError(
+            f"{source}: circular inherits chain: {cycle}"
+        )
+
+    parent_path = defaults_dir / f"{parent_name}.yaml"
+    if not parent_path.exists():
+        raise InstrumentConfigError(
+            f"{source}: `inherits: {parent_name}` not found at {parent_path}. "
+            f"Forventet fil: {defaults_dir}/{parent_name}.yaml"
+        )
+
+    with parent_path.open(encoding="utf-8") as f:
+        parent_raw = yaml.safe_load(f)
+
+    if not isinstance(parent_raw, dict):
+        raise InstrumentConfigError(
+            f"{parent_path}: expected YAML mapping at root, got "
+            f"{type(parent_raw).__name__}"
+        )
+
+    # Recursively resolve parent's own `inherits` first
+    if "inherits" in parent_raw:
+        parent_raw = _resolve_inherits(
+            parent_raw,
+            defaults_dir,
+            source=str(parent_path),
+            chain=[*chain, parent_name],
+        )
+
+    # Shallow merge: child wins on each top-level key
+    merged = {**parent_raw, **raw}
+    merged.pop("inherits", None)
+    return merged
 
 
 # ---------------------------------------------------------------------------
@@ -152,13 +250,29 @@ _RULES_KEYS: frozenset[str] = frozenset(
     }
 )
 
+# Felter som gjelder hver rules-modell. Brukes til å filtrere bort
+# irrelevante-for-denne-typen felter som arves fra defaults/base.yaml.
+# Eksempel: base.yaml har `horizons` (med entry_tfs/hold-definisjoner
+# brukt av setup-generatoren), ikke FinancialRules' `horizons`. For agri
+# ignoreres `horizons` helt; for financial ignoreres `max_score`/
+# `min_score_publish` (lever per-horisont i HorizonSpec).
+_FINANCIAL_RULES_KEYS: frozenset[str] = frozenset(
+    {"aggregation", "horizons", "families", "grade_thresholds"}
+)
+_AGRI_RULES_KEYS: frozenset[str] = frozenset(
+    {"aggregation", "max_score", "min_score_publish", "families", "grade_thresholds"}
+)
+
 # Nøkler som er bevisst utsatt til senere session — vi ignorerer dem nå
 # uten error slik at YAML-er skrevet for fremtiden ikke bryter i dag.
+# `inherits` fjernet session 23: resolves nå av `_resolve_inherits` og
+# eksisterer ikke lenger på tidspunkt for `_parse_instrument_dict`.
 _DEFERRED_KEYS: frozenset[str] = frozenset(
     {
-        "inherits",  # Fase 5 senere: familie-defaults inheritance
-        "gates",  # PLAN § 4.2 cap_grade-regler
-        "usda_blackout",  # agri-spesifikk kalender-gate
+        "gates",  # PLAN § 4.2 cap_grade-regler — fase 5 senere session
+        "usda_blackout",  # agri-spesifikk kalender-gate — fase 5 senere
+        "data_quality",  # base.yaml default — brukes ikke av engine enda
+        "hysteresis",  # base.yaml default — forbruk av setups-modulen
     }
 )
 
@@ -193,9 +307,11 @@ def _parse_instrument_dict(data: dict[str, Any], source: str) -> InstrumentConfi
 
     aggregation = rules_data.get("aggregation")
     if aggregation == "weighted_horizon":
-        rules = FinancialRules.model_validate(rules_data)
+        filtered = {k: v for k, v in rules_data.items() if k in _FINANCIAL_RULES_KEYS}
+        rules = FinancialRules.model_validate(filtered)
     elif aggregation == "additive_sum":
-        rules = AgriRules.model_validate(rules_data)
+        filtered = {k: v for k, v in rules_data.items() if k in _AGRI_RULES_KEYS}
+        rules = AgriRules.model_validate(filtered)
     else:
         raise InstrumentConfigError(
             f"{source}: unknown or missing 'aggregation'. "
@@ -206,6 +322,7 @@ def _parse_instrument_dict(data: dict[str, Any], source: str) -> InstrumentConfi
 
 
 __all__ = [
+    "DEFAULT_DEFAULTS_DIR",
     "InstrumentMetadata",
     "InstrumentConfig",
     "InstrumentConfigError",

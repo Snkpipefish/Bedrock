@@ -200,3 +200,140 @@ def test_instruments_help(runner: CliRunner) -> None:
     assert result.exit_code == 0
     assert "list" in result.output
     assert "show" in result.output
+
+
+# ---------------------------------------------------------------------------
+# inherits — CLI-integrasjon (session 23)
+# ---------------------------------------------------------------------------
+
+
+def test_show_resolves_inherits_from_defaults_dir(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """`bedrock instruments show` skal rulle opp `inherits:` slik at
+    et slankt instrument-YAML viser de arvede familiene/horisontene."""
+    defaults = tmp_path / "defaults"
+    defaults.mkdir()
+    (defaults / "family_financial.yaml").write_text(
+        """\
+aggregation: weighted_horizon
+horizons:
+  SWING:
+    family_weights: {trend: 1.0}
+    max_score: 5.0
+    min_score_publish: 2.5
+families:
+  trend:
+    drivers: [{name: sma200_align, weight: 1.0, params: {tf: D1}}]
+grade_thresholds:
+  A_plus: {min_pct_of_max: 0.75, min_families: 1}
+  A:      {min_pct_of_max: 0.55, min_families: 1}
+  B:      {min_pct_of_max: 0.35, min_families: 1}
+"""
+    )
+    insts = tmp_path / "insts"
+    insts.mkdir()
+    (insts / "gold.yaml").write_text(
+        """\
+inherits: family_financial
+instrument:
+  id: Gold
+  asset_class: metals
+  ticker: XAUUSD
+"""
+    )
+
+    result = runner.invoke(
+        cli,
+        [
+            "instruments",
+            "show",
+            "Gold",
+            "--instruments-dir",
+            str(insts),
+            "--defaults-dir",
+            str(defaults),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Gold" in result.output
+    # Arvet fra family_financial
+    assert "SWING" in result.output
+    assert "trend" in result.output
+
+
+def test_list_resolves_inherits(runner: CliRunner, tmp_path: Path) -> None:
+    defaults = tmp_path / "defaults"
+    defaults.mkdir()
+    (defaults / "family_financial.yaml").write_text(
+        """\
+aggregation: weighted_horizon
+horizons:
+  SWING:
+    family_weights: {trend: 1.0}
+    max_score: 5.0
+    min_score_publish: 2.5
+families:
+  trend:
+    drivers: [{name: sma200_align, weight: 1.0, params: {tf: D1}}]
+grade_thresholds:
+  A_plus: {min_pct_of_max: 0.75, min_families: 1}
+  A:      {min_pct_of_max: 0.55, min_families: 1}
+  B:      {min_pct_of_max: 0.35, min_families: 1}
+"""
+    )
+    insts = tmp_path / "insts"
+    insts.mkdir()
+    (insts / "eurusd.yaml").write_text(
+        """\
+inherits: family_financial
+instrument:
+  id: EURUSD
+  asset_class: fx
+  ticker: EURUSD
+"""
+    )
+
+    result = runner.invoke(
+        cli,
+        [
+            "instruments",
+            "list",
+            "--instruments-dir",
+            str(insts),
+            "--defaults-dir",
+            str(defaults),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "EURUSD" in result.output
+
+
+def test_show_missing_defaults_dir_on_inherits_errors(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """Instrument bruker `inherits:` men defaults-dir mangler → tydelig feil."""
+    insts = tmp_path / "insts"
+    insts.mkdir()
+    (insts / "gold.yaml").write_text(
+        "inherits: family_financial\ninstrument: {id: Gold, asset_class: metals, ticker: XAUUSD}\n"
+    )
+
+    missing_defaults = tmp_path / "no-defaults"
+
+    result = runner.invoke(
+        cli,
+        [
+            "instruments",
+            "show",
+            "Gold",
+            "--instruments-dir",
+            str(insts),
+            "--defaults-dir",
+            str(missing_defaults),
+        ],
+    )
+    assert result.exit_code != 0
+    assert "family_financial" in result.output or "not found" in result.output.lower()

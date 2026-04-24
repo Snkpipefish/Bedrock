@@ -22,6 +22,7 @@ from pathlib import Path
 import click
 
 from bedrock.config.instruments import (
+    DEFAULT_DEFAULTS_DIR,
     InstrumentConfig,
     InstrumentConfigError,
     load_all_instruments,
@@ -33,11 +34,15 @@ DEFAULT_INSTRUMENTS_DIR = Path("config/instruments")
 def find_instrument(
     instrument_id: str,
     instruments_dir: Path | str = DEFAULT_INSTRUMENTS_DIR,
+    defaults_dir: Path | str | None = None,
 ) -> InstrumentConfig:
     """Slå opp instrument-config etter ID.
 
     Prøver først eksakt match, så case-insensitive. Reiser
     `click.UsageError` hvis ingen match eller katalogen mangler.
+
+    `defaults_dir` propages til `load_all_instruments` for `inherits`-
+    resolution. Default: `config/defaults/`.
     """
     target_dir = Path(instruments_dir)
     if not target_dir.exists():
@@ -47,7 +52,7 @@ def find_instrument(
         )
 
     try:
-        all_configs = load_all_instruments(target_dir)
+        all_configs = load_all_instruments(target_dir, defaults_dir=defaults_dir)
     except InstrumentConfigError as exc:
         raise click.UsageError(f"Kunne ikke laste instrument-config: {exc}") from exc
 
@@ -69,4 +74,4 @@ def find_instrument(
     )
 
 
-__all__ = ["DEFAULT_INSTRUMENTS_DIR", "find_instrument"]
+__all__ = ["DEFAULT_INSTRUMENTS_DIR", "DEFAULT_DEFAULTS_DIR", "find_instrument"]
