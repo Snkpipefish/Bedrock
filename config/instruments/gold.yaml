@@ -1,0 +1,77 @@
+# Gold — financial instrument (metals)
+# Referanse: PLAN § 4.2
+
+inherits: family_financial  # ignorert i Fase 5 session 21; kommer senere
+
+instrument:
+  id: Gold
+  asset_class: metals
+  ticker: XAUUSD
+  cfd_ticker: Gold
+  stooq_ticker: xauusd
+  cot_contract: "GOLD - COMMODITY EXCHANGE INC."
+  cot_report: disaggregated
+  fred_series_ids:
+    - DGS10    # 10Y treasury yield (real-yield-driver)
+    - DTWEXBGS # broad dollar index
+
+aggregation: weighted_horizon
+
+horizons:
+  SCALP:
+    family_weights:
+      trend: 1.2
+      positioning: 0.5
+      macro: 0.7
+      structure: 1.3
+      risk: 0.8
+    max_score: 4.5
+    min_score_publish: 1.5
+  SWING:
+    family_weights:
+      trend: 1.0
+      positioning: 1.0
+      macro: 1.0
+      structure: 1.0
+      risk: 1.0
+    max_score: 5.0
+    min_score_publish: 2.5
+  MAKRO:
+    family_weights:
+      trend: 0.8
+      positioning: 1.3
+      macro: 1.3
+      structure: 0.5
+      risk: 0.8
+    max_score: 4.7
+    min_score_publish: 3.5
+
+families:
+  trend:
+    drivers:
+      - {name: sma200_align, weight: 0.5, params: {tf: D1}}
+      - {name: momentum_z, weight: 0.5, params: {window: 20}}
+  positioning:
+    drivers:
+      # Forelopig placeholder — ekte positioning-drivere kommer i senere fase
+      - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+  macro:
+    drivers:
+      - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+  structure:
+    drivers:
+      - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+  risk:
+    drivers:
+      - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+
+grade_thresholds:
+  A_plus:
+    min_pct_of_max: 0.75
+    min_families: 4
+  A:
+    min_pct_of_max: 0.55
+    min_families: 3
+  B:
+    min_pct_of_max: 0.35
+    min_families: 2

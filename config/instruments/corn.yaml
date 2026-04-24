@@ -1,0 +1,60 @@
+# Corn — agri instrument (grains)
+# Referanse: PLAN § 4.3
+
+inherits: family_agri  # ignorert i Fase 5 session 21
+
+instrument:
+  id: Corn
+  asset_class: grains
+  ticker: ZC
+  cfd_ticker: Corn
+  stooq_ticker: zc.f
+  cot_contract: "CORN - CHICAGO BOARD OF TRADE"
+  cot_report: disaggregated
+  weather_region: us_cornbelt
+  weather_lat: 40.75
+  weather_lon: -96.75
+
+aggregation: additive_sum
+max_score: 18
+min_score_publish: 7
+
+families:
+  outlook:
+    weight: 5
+    drivers:
+      # Placeholder-driver inntil agri-drivere skrives
+      - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+  yield:
+    weight: 3
+    drivers:
+      - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+  weather:
+    weight: 2
+    drivers:
+      - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+  enso:
+    weight: 2
+    drivers:
+      - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+  conab:
+    weight: 2
+    drivers:
+      - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+  cross:
+    weight: 2
+    drivers:
+      - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+
+grade_thresholds:
+  A_plus:
+    min_score: 14
+    min_families_active: 4
+  A:
+    min_score: 10
+    min_families_active: 3
+  B:
+    min_score: 7
+    min_families_active: 2
+
+# usda_blackout: ignorert i session 21, kommer med kalender-integrering
