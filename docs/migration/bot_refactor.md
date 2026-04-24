@@ -583,21 +583,49 @@ implementert (linje 2235+), men testes aldri uten ekte broker. Mitigering:
 parallell-drift (§ 8 punkt 7) med syntetisk "bytt hvilken bot eier posisjonen"-
 scenario.
 
-### 10.3 Åpent til bruker: SIGHUP-reload scope
+### 10.3 Avklart: SIGHUP-reload-split (session 39)
 
-Skal `bot.yaml` SIGHUP-reload kun plukke opp endringer i "myke" felter (trail_atr,
-giveback, confirmation-terskler) men kreve restart for "harde" felter
-(instrument-lister, reconnect-budsjett)? Eller all-or-nothing? Min anbefaling:
-kun myke felter reloades; harde felter krever restart med advarsel i logg.
-**Trenger avklaring i session 43** før config-struktur sementeres.
+Bruker har besvart: `bot.yaml` splittes i to top-level seksjoner.
 
-### 10.4 Åpent til bruker: `_git_push_log` fjerning bekreftet?
+- **`startup_only`** — krever prosess-restart for å ta effekt. SIGHUP gir
+  advarsel i logg hvis disse er endret ("restart kreves for å aktivere ny
+  verdi"). Eksempler:
+  - cTrader host / port
+  - Symbol-liste (INSTRUMENT_MAP, PRICE_FEED_MAP)
+  - account_id
+  - Reconnect-budsjett (`reconnect.{window_sec,max_in_window}`)
+  - Signal-server URL
+- **`reloadable`** — SIGHUP plukker opp endringer umiddelbart uten restart.
+  Eksempler:
+  - Terskler: confirmation, trail_atr, giveback, break_even, weekend,
+    monday_gap, spread
+  - Risk: risk_pct, daily_loss
+  - Agri session-tider
+  - Horizon-TTL, horizon-min-rr
+  - Polling-intervaller
 
-PLAN og denne planen forutsetter at `.githooks/post-commit` i Bedrock-repoet
-dekker alt som `_git_push_log` gjorde. Er det tilfelle for bot-loggen
-(`scalp_edge.log` + `trading_bot.log` → `signal_log.json`)? Eller er disse
-egne commits vi må ha bot-siden til å lage? **Sjekk i session 42** før
-comms-porten.
+`bot/config.py` Pydantic-modell deler eksplisitt i `BotConfigStartupOnly`
+og `BotConfigReloadable` slik at type-systemet reflekterer distinksjonen.
+SIGHUP-handler sammenligner gammelt og nytt `startup_only`-objekt; ved
+avvik → log.warning + behold gammelt. `reloadable` erstattes atomisk.
+
+### 10.4 Avklart: `_git_push_log` → batch-daglig commit (session 39)
+
+Bruker har besvart: Bedrocks `.githooks/post-commit` dekker push-delen, men
+boten må fortsatt gjøre `git add + git commit` selv for trade-logging.
+**Batching**: én commit per dag (ved daily_loss-reset midnatt UTC), ikke
+én per trade-close — unngår spam-historikk. SSH-tilgang for bot-service
+håndteres i Fase 13 cutover (ikke Fase 8).
+
+Implementasjon i session 42:
+
+- `bot/comms.py` (eller `bot/safety.py` nær daily-reset) får
+  `_commit_daily_log()` som kalles fra `_reset_daily_loss_if_new_day`
+- `git add <trade_log_file>` + `git commit -m "log: bot trades <date>"` —
+  én commit per kalenderdag UTC
+- Feilmodus: git-kommandoen feiler (tom diff, ingen repo-tilgang) →
+  log.warning, ikke fatal
+- Post-commit-hook tar push automatisk
 
 ---
 

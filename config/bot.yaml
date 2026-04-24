@@ -1,0 +1,202 @@
+# Bedrock trading-bot config
+#
+# Splittet i to seksjoner (Fase 8, session 39-40):
+#
+# - startup_only: krever bot-restart for endring. SIGHUP logger
+#   advarsel, men holder gamle verdier aktive.
+# - reloadable:   SIGHUP plukker opp endringer umiddelbart.
+#
+# Alle tall er defaults portert 1:1 fra ~/scalp_edge/trading_bot.py
+# ved Fase 8-oppstart. Se docs/migration/bot_refactor.md § 5 for kilde-
+# linjenumre og forklaring per felt.
+#
+# Schema valideres av bedrock.bot.config.BotConfig (extra="forbid").
+
+startup_only:
+  # Signal-server URL. Bedrock-server lytter på 5100; gammel scalp_edge
+  # signal_server er fortsatt på 5000 i parallell-drift (Fase 11-12).
+  signal_url: "http://localhost:5100"
+
+  # Navn på env-var som holder API-nøkkelen (ikke selve nøkkelen).
+  # Nøkkelen skal aldri ligge i YAML (CLAUDE.md + PLAN § 10.6).
+  signal_api_key_env: "SCALP_API_KEY"
+
+  # cTrader reconnect-budsjett. >= max_in_window reconnects innen
+  # window_sec sekunder = FATAL exit (kode 79).
+  reconnect:
+    window_sec: 600
+    max_in_window: 5
+
+reloadable:
+  # 3-punkt confirmation (body, wick-rejection, EMA-gradient)
+  # Scoring-modell — krev minst min_score av 3 poeng.
+  confirmation:
+    min_score_default: 2
+    max_candles_default: 6
+    body_threshold_atr_pct: 0.30   # body ≥ 0.30 × ATR for 1 poeng
+    ema_gradient_buy_min: -0.05
+    ema_gradient_sell_max: 0.05
+
+  # Risk-% per tier. Velges av bot basert på geo/VIX/character.
+  risk_pct:
+    full: 1.0
+    half: 0.5
+    quarter: 0.25
+
+  # Daily-loss-gate. Bot låser entries når daily_loss ≥ limit.
+  # limit = max(pct_of_balance × balance, minimum_nok) — minimum
+  # gjelder for små kontoer.
+  daily_loss:
+    pct_of_balance: 2.0
+    minimum_nok: 500
+
+  # Spread-filter (entry-gate)
+  spread:
+    min_samples: 10                    # cold-start-vern
+    agri_multiplier: 2.5               # agri: 2.5 × snitt-spread
+    non_agri_multiplier_of_stop: 2.0   # non-agri: stop_multiplier × 2
+
+  # Per-horisont TTL i sekunder. Signaler eldre enn dette ignoreres.
+  horizon_ttl:
+    scalp:  900       # 15 min
+    swing:  14400     # 4 t
+    makro:  86400     # 24 t
+
+  # Per-horisont minimum R:R-gate
+  horizon_min_rr:
+    scalp: 1.0
+    swing: 1.3
+    makro: 1.5
+
+  # Signal-server-polling. Bot adapter intervall når SCALP-signaler er
+  # aktive (kortere horisont = raskere poll).
+  polling:
+    default_seconds: 60
+    scalp_active_seconds: 20
+
+  # Fredag 20:00 CET: lukk SCALP + stram SL. 19:00-20:00: kun stram SL.
+  weekend:
+    sl_atr_mult: 1.5
+
+  # Mandag første time: blokker entry hvis gap > 2×ATR fra fredag close
+  monday_gap:
+    atr_multiplier: 2.0
+
+  # Trailing-stop fallback (brukes hvis group_params mangler verdi)
+  trail:
+    default_atr_mult: 1.5
+
+  # Agri-spesifikke begrensninger
+  agri:
+    max_concurrent: 2
+    max_per_subgroup: 1
+    max_spread_atr_ratio: 0.40
+    # Åpningstider i CET (Europe/Oslo) — DST-korrekt via ZoneInfo
+    session_times_cet:
+      corn:    { start: "09:00", end: "21:00" }
+      wheat:   { start: "09:00", end: "21:00" }
+      soybean: { start: "09:00", end: "21:00" }
+      coffee:  { start: "09:00", end: "19:30" }
+      cotton:  { start: "09:00", end: "20:00" }
+      sugar:   { start: "09:00", end: "19:30" }
+      cocoa:   { start: "09:00", end: "19:30" }
+
+  # Oil-spesifikke gate-verdier
+  oil:
+    min_sl_pips: 25
+    max_spread_mult: 3.0
+
+  # Per-gruppe exit/management. Oppslag via
+  # bedrock.bot.instruments.get_group_name(instrument).
+  #
+  # trail_atr:  multiplikator for trailing stop-distanse
+  # gb_peak:    peak-progress som aktiverer giveback-logikk (0-1)
+  # gb_exit:    exit hvis drawdown fra peak > gb_exit (0-1)
+  # be_atr:     break-even-aktivering (atr-ratio av fremgang mot T1)
+  # expiry:     timeout-candles (15m-enheter)
+  # ema9_exit:  true = P4 EMA9-exit aktiv (scalp-style)
+  group_params:
+    fx:
+      trail_atr: 2.5
+      gb_peak: 0.85
+      gb_exit: 0.30
+      be_atr: 0.10
+      expiry: 32
+      ema9_exit: true
+    gold:
+      trail_atr: 3.5
+      gb_peak: 0.90
+      gb_exit: 0.45
+      be_atr: 0.25
+      expiry: 48
+      ema9_exit: false
+    silver:
+      trail_atr: 3.5
+      gb_peak: 0.88
+      gb_exit: 0.42
+      be_atr: 0.25
+      expiry: 48
+      ema9_exit: false
+    oil:
+      trail_atr: 3.0
+      gb_peak: 0.90
+      gb_exit: 0.45
+      be_atr: 0.20
+      expiry: 48
+      ema9_exit: false
+    indices:
+      trail_atr: 2.8
+      gb_peak: 0.85
+      gb_exit: 0.35
+      be_atr: 0.15
+      expiry: 40
+      ema9_exit: true
+    corn:
+      trail_atr: 2.0
+      gb_peak: 0.85
+      gb_exit: 0.35
+      be_atr: 0.20
+      expiry: 48
+      ema9_exit: true
+    wheat:
+      trail_atr: 2.0
+      gb_peak: 0.85
+      gb_exit: 0.35
+      be_atr: 0.20
+      expiry: 48
+      ema9_exit: true
+    soybean:
+      trail_atr: 2.0
+      gb_peak: 0.85
+      gb_exit: 0.35
+      be_atr: 0.20
+      expiry: 48
+      ema9_exit: true
+    coffee:
+      trail_atr: 2.5
+      gb_peak: 0.88
+      gb_exit: 0.35
+      be_atr: 0.20
+      expiry: 48
+      ema9_exit: true
+    cocoa:
+      trail_atr: 2.5
+      gb_peak: 0.88
+      gb_exit: 0.35
+      be_atr: 0.20
+      expiry: 48
+      ema9_exit: true
+    sugar:
+      trail_atr: 2.5
+      gb_peak: 0.88
+      gb_exit: 0.35
+      be_atr: 0.20
+      expiry: 48
+      ema9_exit: true
+    cotton:
+      trail_atr: 2.5
+      gb_peak: 0.88
+      gb_exit: 0.35
+      be_atr: 0.20
+      expiry: 48
+      ema9_exit: true
