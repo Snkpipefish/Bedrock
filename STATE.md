@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 7 — åpen. Session 34 FERDIG: `/signals` + `/agri-signals` (read-only). `PersistedSignal` Pydantic-schema med extra='allow' (forward-compat), `storage.load_signals` med 500-ved-korrupt-fil semantikk, separat financial/agri-filer. Session 33 FERDIG: skeleton (app-factory + /health + /status).
+- **Phase:** 7 — åpen. Session 35 FERDIG: `/push-alert` + `/push-agri-alert` POST-skriv-path med Pydantic body-validering og atomic `append_signal`-helper (tmp + os.replace). Session 34 FERDIG: read-endepunkter. Session 33 FERDIG: skeleton.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Session 35 — `endpoints/alerts.py`: `/push-alert` + `/push-agri-alert` (POST, skriv-path). Pydantic-validering av innkommende body (instrument, direction, horizon, score, grade + valgfrie setup-felter), atomic write til `cfg.signals_path` / `cfg.agri_signals_path`. Ved validering-feil: 400 + error-detalj. Append-semantikk (ikke overwrite). Kan brukes av orchestrator og av push-fra-backtest. Storage-laget utvider `load_signals` med `append_signal(path, signal)`-helper med atomic .tmp+rename for rase-fri skriving.
+- **Next task:** Session 36 — `endpoints/kills.py` + `/invalidate` (i signals-bp). `/kill` (POST) setter en kill-switch på en instrument+horizon-kombinasjon, `/clear_kills` (POST) fjerner alle. Kill-switch persisteres i `cfg.kill_switch_path` (default `data/kills.json`), samme atomic write-mønster som signals. `/invalidate` (POST til signals-bp) markerer ett spesifikt signal som invalidated — ender ikke opp med en `invalidated_at`-felt og endrer state slik at bot ikke handler på det. Pydantic-modeller for Kill + InvalidationRequest. Les-endepunkt `/kills` (GET) bør kanskje også være med for UI-synlighet.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -87,6 +87,56 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 35: /push-alert + /push-agri-alert skriv-path
+
+**Opprettet:**
+- `storage.append_signal(path, signal)`:
+  - Read-modify-write via `load_signals` + append + `_atomic_write_json`
+  - Atomic write: `tempfile.mkstemp` (samme filesystem) → `json.dump` +
+    `os.fsync` → `os.replace`. Rydder tmp ved exception
+  - Korrupt eksisterende fil → `SignalStoreError` (hindrer overwrite)
+  - Auto-oppretter parent-dir
+- `bedrock.signal_server.endpoints.alerts_bp`:
+  - `POST /push-alert` → `cfg.signals_path`
+  - `POST /push-agri-alert` → `cfg.agri_signals_path`
+  - Felles `_parse_and_append` med status-koder:
+    - 415 ikke-JSON Content-Type
+    - 400 ugyldig JSON eller ikke-objekt-body
+    - 400 Pydantic-valideringsfeil (med `include_context=False`-
+      trimmet details)
+    - 500 ved korrupt eksisterende fil
+    - 201 + validert signal ved suksess
+- `tests/unit/test_signal_server_alerts.py` (21 tester)
+
+**Endret:**
+- `app.py`: registrerer alerts_bp
+- `endpoints/__init__.py`: eksporterer alerts_bp
+- `ENDPOINTS.md`: /push-alert + /push-agri-alert implementert
+- `test_signal_server_app.py`: /status-test fikset
+
+**Design-valg:**
+- Atomic write via `os.replace` (ikke `os.rename`): `replace` er
+  cross-platform og overskriver eksisterende fil; `rename` feiler
+  på Windows hvis target finnes
+- mkstemp på samme parent: `rename` på tvers av filsystem er ikke
+  atomisk; må være innenfor samme mount
+- `fsync` før rename: beskytter mot krasj mellom skriv og rename
+  (fil ville vært tom ved reboot ellers)
+- Korrupt eksisterende fil → 500 (ikke overwrite): beskytter
+  eksisterende signaler; ops må fikse/slette manuelt
+- Read-modify-write på server (ikke klient-side last-seen): holder
+  protokoll enkel; klienten vet ikke om tidligere innhold
+- `include_context=False`: ekskluderer ValueError-instanser som
+  ikke er JSON-serialiserbare
+- Returnerer 201 + normalisert signal: klient ser hva som faktisk
+  ble lagret
+
+**Commits:** `1d880d3`.
+
+**Tester:** 597/597 grønne på 23.8 sek (fra 576 session 34, +21).
+
+**Neste session:** 36 — kill-switch + invalidate.
 
 ### 2026-04-24 — Session 34: /signals + /agri-signals read-endepunkter
 
