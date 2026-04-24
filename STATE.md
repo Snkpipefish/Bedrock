@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 6 — åpen. Session 30 FERDIG: systemd-unit-generator + `bedrock systemd generate/install/list` CLI. 10 unit-filer generert og sjekket inn i `systemd/`. Ingen Python-daemon — systemd tar jobben per bruker-direktiv.
+- **Phase:** 6 — åpen. Session 31 FERDIG: `currency_cross_trend`-driver (BRL/USD for softs, generisk for andre cross). Session 30 FERDIG: systemd-unit-generator. Installasjon utsatt til Fase 11 cutover per bruker-direktiv (gamle cot-explorer-timere kjører fortsatt).
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Session 31 — bruker-valg står fritt. Fase 6-kandidater som gjenstår fra PLAN § 7.3: (a) BRL/USD aktiv driver for softs; (b) Baltic Dry Index → agri-cross-driver; (c) utvide `usda.yaml` med WASDE/Crop Progress/Grain Stocks når bruker ønsker bredere dekning. Alternativt kan Fase 6 lukkes med tag `v0.6.0-fase-6` nå og neste fase (PLAN § 8 signal-server eller § 9 bot-refaktor) åpnes. Min anbefaling: start BRL/USD-driveren (a) fordi den er den minste leveransen som gir konkret verdi (kommer inn i scoring for softs). Så lukk Fase 6 etter 1-2 sessions til.
+- **Next task:** Session 32 — min anbefaling: Baltic Dry Index → agri-cross-driver (PLAN § 7.3, "Baltic Dry til agri"). Samme mønster som currency_cross_trend: generisk trend-driver lesbar mot BDI-serien. Alternativt lukk Fase 6 med tag `v0.6.0-fase-6`. PLAN § 7.3-gjenværende (Eksport-policy-tracker, IGC, Disease-varsling) er alle større leveranser som passer bedre i senere faser. Baltic Dry er minste relevante leveranse som fullfører Fase 6-scope.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -87,6 +87,50 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 31: currency_cross_trend-driver
+
+Femte Fase 6-leveranse. PLAN § 7.3 "BRL/USD aktivt drivet" for softs.
+
+**Opprettet:**
+- `bedrock.engine.drivers.currency.currency_cross_trend`:
+  - Params: source (påkrevd), lookback (default 30), tf (default D1),
+    direction ("direct"/"invert")
+  - Score-mapping: pct >= +10%: 1.0, >= +5%: 0.8, >= +2%: 0.65,
+    >= 0%: 0.5, >= -2%: 0.35, >= -5%: 0.2, < -5%: 0.0
+  - `direction: invert` snur fortegn for tilfeller der kun motsatt
+    cross (USDBRL) finnes
+  - Defensive: manglende source / ukjent direction / kort historikk /
+    tomt prisoppslag → 0.0 + logg
+- `tests/logical/test_currency_drivers.py` (17 tester)
+
+**Endret:**
+- `bedrock.engine.drivers.__init__`: importerer currency-modul
+
+**Design-valg:**
+- `instrument`-argumentet ignoreres; driveren leser fra
+  `params["source"]`. Dette er første cross-driver-mønster og kan
+  gjenbrukes for andre cross (CNY/USD for metaller, etc.)
+- Step-funksjon i tester istedenfor lineær ramp: gir eksakt pct-
+  endring over lookback-vinduet og matcher driverens formel presis
+- Én driver med `direction: invert` framfor to (bull/bear) holder
+  YAML-reglene kortere
+- Ikke wiring til noen YAML-instrument — det hører til instrument-
+  config-arbeid, ikke driver-leveransen
+
+**Commits:** `57e05a4`.
+
+**Tester:** 537/537 grønne på 22.4 sek (fra 520 session 30, +17).
+
+**Bevisste utsettelser:**
+- Wiring av driver i sugar.yaml/coffee.yaml — senere session
+- BRL/USD backfill — CLI støtter allerede `bedrock backfill prices
+  --ticker brlusd=x` via Stooq
+- Regresjons-baserte cross-drivere / auto-detect retning —
+  premature, venter til konkret behov
+
+**Neste session:** 32 — Baltic Dry til agri (PLAN § 7.3), eller
+lukk Fase 6 med tag hvis bruker er fornøyd med nåværende scope.
 
 ### 2026-04-24 — Session 30: systemd-unit-generator
 
