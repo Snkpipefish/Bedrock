@@ -22,6 +22,12 @@ from bedrock.orchestrator.signals import (
     generate_signals,
 )
 
+# Side-effekt-import: sikrer at `usda_blackout`-gate registreres slik
+# at orchestrator-kall med `gates: [usda_blackout]` fungerer uten at
+# caller må huske på å importere modulen først.
+# ruff: noqa: E402, F401
+from bedrock.fetch import usda_calendar  # noqa: E402
+
 __all__ = [
     "OrchestratorError",
     "OrchestratorResult",

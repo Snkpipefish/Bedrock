@@ -1,0 +1,17 @@
+# USDA rapport-datoer for usda_blackout-gate.
+#
+# Alle tidsstempler er UTC (ISO 8601 med Z-suffiks).
+# USDA publiserer typisk 12:00 ET (16:00 UTC i EDT / 17:00 UTC i EST).
+#
+# Oppdateres årlig av bruker. Format: {rapport_type: [list av ISO-datetime]}
+#
+# Referanse: https://www.usda.gov/about-usda/news/calendar
+# Brukere: src/bedrock/fetch/usda_calendar.py (loader) +
+#         bedrock.fetch.usda_calendar.usda_blackout gate
+
+# Prospective Plantings — årlig rundt 30. mars. Publisert 12:00 ET.
+# Stor markeds-beveger: viser bøndenes planting-intensjon for året.
+prospective_plantings:
+  - 2024-03-28T16:00:00Z
+  - 2025-03-31T16:00:00Z
+  - 2026-03-31T16:00:00Z
