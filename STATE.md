@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 5 — åpen. Session 22 FERDIG: CLI-integrasjon av `InstrumentConfig`. `bedrock backfill *` har nytt `--instrument`-flagg som slår opp ticker/contract/region/lat/lon/fred-series fra YAML; `fundamentals --instrument X` itererer over alle FRED-serier med per-item resiliens + retry-oppsummering. Ny `bedrock instruments list/show` kommando-gruppe.
+- **Phase:** 5 — åpen. Session 23 FERDIG: `inherits:`-inheritance i instrument-YAML (rekursivt `base` ← `family_*` ← instrument via shallow merge). `bedrock instruments show/list` fikk `--defaults-dir`-flagg.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Fase 5 fortsetter. Kandidater: (a) `inherits: family_financial/family_agri`-defaults-inheritance mot `config/defaults/family_*.yaml` (stille-skippet i session 21, YAML-filene skrevet for det); (b) `gates: [...]` med `cap_grade` (PLAN § 4.2) — krever scoring-engine-utvidelse; (c) `usda_blackout` kalender-gate (PLAN § 4.3); (d) top-level orchestrator som knytter instrument-config + DataStore + setup-generator sammen til én `generate_setups(instrument_id)`-API for UI/signal_server. Bruker velger.
+- **Next task:** Fase 5 session 24 — top-level orchestrator `bedrock.orchestrator.generate_signals(instrument_id, store, horizon=None)` som limer sammen InstrumentConfig → DataStore → Engine.score → setup-generator → stabilize_setup → SetupSnapshot. Skal være integrasjons-momentet før Fase 6+ (signal-server). Begrunnelse for rekkefølge: inherits (a) var lavrisiko og er nå unblock; orchestrator (d) bygger på alt Fase 1-5 har produsert og vil avsløre API-gaps før vi bygger ytre lag. Gates (b) og usda_blackout (c) kommer etter orchestrator (b krever ADR for DSL, c krever USDA-kalender-fetcher vi ikke har).
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -73,6 +73,71 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 23: inherits-inheritance + beslutnings-retningslinje
+
+Tredje komponent i Fase 5. `inherits: family_financial` (og transitivt
+`inherits: base`) resolver nå rekursivt fra `config/defaults/` via
+shallow merge på top-level keys. YAML-filene gold.yaml/corn.yaml kan nå
+skrives slankere ved å arve fra family_*-defaults.
+
+Brukeren ga også eksplisitt feedback om beslutningsautonomi: Claude
+skal ikke forelegge A/B/C/D-valg for ren implementasjons-rekkefølge.
+Lagret som feedback-memory + ny CLAUDE.md-seksjon "Beslutnings-
+retningslinje" som skiller bestem-selv-områder (rekkefølge, mappe-
+plassering, intern struktur) fra spør-bruker-områder (trading,
+UX, sikkerhet, scope).
+
+**Opprettet:**
+- `bedrock.config.instruments._resolve_inherits(raw, defaults_dir,
+  source, chain)` — rekursiv resolver:
+  - Opprulling av parent's egen `inherits:` før merge
+  - Shallow merge: `{**parent_resolved, **child}` per top-level key
+  - Sletter `inherits`-nøkkelen etter opprulling
+  - Circular-detect via chain-argument → tydelig cycle-melding
+  - Manglende parent → tydelig "not found at <path>"-melding
+- `DEFAULT_DEFAULTS_DIR = Path("config/defaults")` eksportert
+- `_FINANCIAL_RULES_KEYS` / `_AGRI_RULES_KEYS`: filtrerer rules_data
+  per aggregation slik at base.yaml's `horizons` (entry_tfs/hold-
+  semantikk) ikke krasjer AgriRules-validering
+- `tests/unit/test_config_instruments_inherits.py` (9 tester)
+- CLAUDE.md § "Beslutnings-retningslinje"
+- Memory-fil `feedback_decision_autonomy.md`
+
+**Endret:**
+- `load_instrument_config(path, defaults_dir=None)` +
+  `load_all_instruments(directory, defaults_dir=None)`: begge tar nå
+  `defaults_dir`-param
+- `bedrock.cli._instrument_lookup.find_instrument`: `defaults_dir`
+  propages til `load_all_instruments`
+- `bedrock.cli.instruments list/show`: `--defaults-dir`-flagg
+- `_DEFERRED_KEYS`: fjernet `inherits` (resolves nå), lagt til
+  `data_quality` + `hysteresis` (arvet fra base.yaml, ikke enda brukt
+  av engine/setups)
+- `test_cli_instruments.py`: +3 tester for CLI-inherits-flow
+
+**Design-valg:**
+- Shallow merge (ikke deep): hvis gold.yaml lister `trend`/`positioning`
+  og family_financial har `fundamental`, skal ikke `fundamental` sniekes
+  inn via deep merge. "Child list is the full list" matcher hvordan
+  brukere faktisk tenker om YAML-defaults
+- Filter-per-aggregation i `_parse_instrument_dict`: cleaner enn å
+  gjøre extra='ignore' på Rules-modellene — bevarer strict typo-
+  fangst innenfor hver rules-modell
+- `DEFAULT_DEFAULTS_DIR` kun brukt hvis YAML har `inherits:`. YAML
+  uten inherits funker uavhengig av om katalogen eksisterer
+- `gates` og `usda_blackout` fortsatt stille-skippet: scope-disiplin,
+  egne sessions implementerer scoring-integrasjon
+
+**Commits:** `c880ad4` (CLAUDE.md), `485b63e` (inherits).
+
+**Tester:** 388/388 grønne på 12.5 sek (fra 376 i session 22, +12).
+
+**Bevisste utsettelser (uendret):**
+- `gates` cap_grade — trenger DSL-ADR
+- `usda_blackout` — trenger USDA-kalender-fetcher
+
+**Neste session:** 24 — orchestrator som knytter alt sammen.
 
 ### 2026-04-24 — Session 22: CLI-integrasjon av InstrumentConfig
 
