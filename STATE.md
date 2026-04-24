@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 4 CLOSED (tagget `v0.4.0-fase-4`). Setup-generator komplett: nivå-detektor (3 av 7 typer), setup-bygger med clustering/ATR/asymmetri, hysterese + snapshot, horisont-klassifisering + score-gate. 330/330 tester grønne.
+- **Phase:** 5 — åpen. Session 21 FERDIG: `bedrock.config.instruments` med `InstrumentConfig` Pydantic + YAML-lasting + gold.yaml + corn.yaml som eksempler.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Start **Fase 5 (fetch-refactor + instrument-config)** i NY session. PLAN § 7 + § 3 krever: (a) instrument-config YAML (per-instrument metadata: ticker, cot_contract, lat/lon, asset_class), (b) `config/fetch.yaml` med cadence, (c) migrering av fetch-moduler til samme signatur-kontrakt, (d) nye datakilder (USDA WASDE, Crop Progress, BRL-driver, Baltic-shipping). Scope for session 21 blir instrument-config først — uten den er CLI-backfill manuell per instrument.
+- **Next task:** Fase 5 session 22 — integrer `InstrumentConfig` med backfill-CLI. `bedrock backfill prices --instrument gold` skal automatisk slå opp `stooq_ticker` fra YAML; `bedrock backfill cot-disaggregated --instrument gold` slår opp `cot_contract`; `bedrock backfill weather --instrument corn` slår opp `weather_lat/lon`. Legg til valgfri `--instrument`-flag til hver subkommando; eksisterende eksplisitt CLI-args fortsatt støttet. Foreslår også `bedrock instruments list` og `bedrock instruments show <id>` subkommandoer for å inspisere config.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -73,6 +73,60 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 21: Fase 5 åpnet, instrument-config
+
+Første komponent i Fase 5: per-instrument YAML-konfigurasjon som
+binder sammen metadata (ticker/contract/region) med rules (engine-input).
+
+**Opprettet:**
+- `src/bedrock/config/instruments.py`:
+  - `InstrumentMetadata` Pydantic — id, asset_class, ticker + alle
+    optional fetch-pekere (`stooq_ticker`, `cot_contract`, `cot_report`,
+    `weather_region/lat/lon`, `fred_series_ids`)
+  - `InstrumentConfig` = metadata + rules (union `FinancialRules |
+    AgriRules`)
+  - `load_instrument_config(path)` — pyyaml + splitt top-level keys i
+    metadata vs rules; `aggregation` diskriminerer union
+  - `load_all_instruments(dir)` — `{id: config}` dict over alle
+    `*.yaml`; duplikat-ID → error; ikke-yaml skippes
+  - `InstrumentConfigError` for struktur-feil; Pydantic-feil propageres
+  - `extra='forbid'` på begge modeller → fanger typos
+  - Bevisst stille skip av `inherits`, `gates`, `usda_blackout`
+    (kommer i senere sessions — YAML skrevet for fremtid bryter ikke)
+- `config/instruments/gold.yaml` (PLAN § 4.2) — Gold med full
+  horisont-sett, metadata inkl. cot_contract + fred_series_ids.
+  Placeholder-drivere (sma200_align) hvor ekte drivere mangler
+- `config/instruments/corn.yaml` (PLAN § 4.3) — Corn agri med 6
+  familier + caps, weather_region=us_cornbelt med lat/lon
+- `tests/unit/test_config_instruments.py` (21 tester)
+
+**Design-valg:**
+- Nested `rules:` ville vært Pydantic-native, men PLAN § 4.2/4.3 har
+  top-level keys (aggregation/horizons/families). Custom parser
+  honorerer PLAN-strukturen og ville uansett trenges for `inherits`-
+  inheritance senere
+- Placeholder-drivere i gold/corn.yaml: `sma200_align` i alle familier.
+  Driver-registry har kun 2 drivere ennå; ekte drivere per familie
+  kommer i senere fase. YAML-filene er strukturelt komplette men
+  semantisk MVP
+- Deferred-keys er stille-skippet (ikke advarsel): lar MVP-filer ha
+  `inherits: family_financial`-stubs uten å lage støy
+
+**Commits:** `5fd42a1` kode+config+tester.
+
+**Tester:** 351/351 grønne på 11.2 sek.
+
+**Bevisste utsettelser:**
+- `inherits: family_financial` → Fase 5 senere session (defaults-
+  inheritance mot `config/defaults/family_*.yaml`)
+- `gates: [...]` → senere session (scoring-engine må først støtte
+  cap_grade)
+- `usda_blackout: ...` → senere session (kalender-integrering)
+- CLI-integrasjon — session 22
+
+**Neste session:** session 22 — CLI-integrasjon (`bedrock backfill
+prices --instrument gold` etc.).
 
 ### 2026-04-24 — Session 20: Fase 4 CLOSED
 
