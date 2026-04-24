@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from bedrock.signal_server.endpoints.alerts import alerts_bp
 from bedrock.signal_server.endpoints.signals import signals_bp
 
-__all__ = ["signals_bp"]
+__all__ = ["alerts_bp", "signals_bp"]

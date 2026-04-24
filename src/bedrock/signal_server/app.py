@@ -14,7 +14,7 @@ from __future__ import annotations
 from flask import Flask
 
 from bedrock.signal_server.config import ServerConfig
-from bedrock.signal_server.endpoints import signals_bp
+from bedrock.signal_server.endpoints import alerts_bp, signals_bp
 
 
 def create_app(config: ServerConfig | None = None) -> Flask:
@@ -31,6 +31,7 @@ def create_app(config: ServerConfig | None = None) -> Flask:
 
     _register_meta_endpoints(app, cfg)
     app.register_blueprint(signals_bp)
+    app.register_blueprint(alerts_bp)
     return app
 
 

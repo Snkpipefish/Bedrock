@@ -155,8 +155,8 @@ def test_status_lists_registered_endpoints() -> None:
     assert "/health" in endpoints
     assert "/status" in endpoints
     # Disse kommer i senere sessions — sjekk at de IKKE er her ennå
-    assert "/push-alert" not in endpoints
     assert "/kill" not in endpoints
+    assert "/admin/rules" not in endpoints
 
 
 # ---------------------------------------------------------------------------

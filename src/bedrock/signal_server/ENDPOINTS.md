@@ -10,8 +10,8 @@ gjennom Fase 7 sessions.
 |---|---|---|---|---|
 | meta | `/health` | GET | **implementert** (session 33) | `app.py` |
 | meta | `/status` | GET | **implementert** (session 33) | `app.py` |
-| alerts | `/push-alert` | POST | pending | `endpoints/alerts.py` |
-| alerts | `/push-agri-alert` | POST | pending | `endpoints/alerts.py` |
+| alerts | `/push-alert` | POST | **implementert** (session 35) | `endpoints/alerts.py` |
+| alerts | `/push-agri-alert` | POST | **implementert** (session 35) | `endpoints/alerts.py` |
 | signals | `/signals` | GET | **implementert** (session 34) | `endpoints/signals.py` |
 | signals | `/agri-signals` | GET | **implementert** (session 34) | `endpoints/signals.py` |
 | signals | `/invalidate` | POST | pending | `endpoints/signals.py` |
@@ -27,8 +27,8 @@ gjennom Fase 7 sessions.
 - Session 33 ✓ — app-factory + `/health` + `/status` + ENDPOINTS.md
 - Session 34 ✓ — `endpoints/signals.py`: `/signals`, `/agri-signals`
   (read-only, Pydantic-validering av fil-innhold)
-- Session 35 — `endpoints/alerts.py`: `/push-alert`, `/push-agri-alert`
-  (skriv-path; Pydantic for innkommende body)
+- Session 35 ✓ — `endpoints/alerts.py`: `/push-alert`, `/push-agri-alert`
+  (skriv-path; Pydantic body-validering; atomic append)
 - Session 36 — `endpoints/kills.py` + `/invalidate`
 - Session 37 — `endpoints/prices.py` + `endpoints/uploads.py`
 - Session 38 — `endpoints/rules.py` (PLAN § 8.3 — ny funksjonalitet,
