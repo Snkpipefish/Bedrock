@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 3 CLOSED (tagget `v0.3.0-fase-3`). Backfill-CLI komplett: 5 fetchere + 5 subkommandoer + secrets-modul + delt Socrata-helper + konsekvent `--dry-run`-mønster. 210/210 tester grønne.
+- **Phase:** 4 — åpen. Session 16 FERDIG: nivå-detektor med 3 detektorer (swing, prior H/L, round numbers) + `DataStore.get_prices_ohlc` + Level/LevelType Pydantic-modeller. Første komponent i setup-generator på plass.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Start **Fase 4 (setup-generator)** eller **Fase 5 (fetch-refactor + instrument-config)** i ny session. PLAN § 13 rekkefølge er Fase 4 → Fase 5. Men Fase 5 er praktisk nødvendig for at backfill-CLI skal bli brukbar uten å skrive ut CLI-args manuelt per instrument. Forslag: Fase 5 først (instrument-config med ticker/contract/lat-lon-mapping + YAML-drevet cadence), så Fase 4 (setup-generator). Alternativt: Fase 4 per PLAN-orden, deretter Fase 5. Bruker velger.
+- **Next task:** Fase 4 session 17 — setup-bygger (§ 5.2). Tar `list[Level]` + nåpris + direction (BUY/SELL) + horisont og bygger entry-zone/SL/TP. Inkluderer **nivå-clustering** (merge swing + round number innenfor ATR-buffer) som ble utsatt fra session 16. Asymmetri-gate (min R:R per horisont, § 5.3) kommer med dette. ATR-beregning inn her (krever close-series). MAKRO-setups får `tp=None` (trailing-only).
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -61,6 +61,63 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 16: Fase 4 åpnet, nivå-detektor
+
+Første komponent i setup-generator. PLAN § 5.1 dekket med 3 av 7 detektor-
+typer; resten (volume-profile, COT-pivot) utsatt til egne sessions når
+design er mer konkret.
+
+**Opprettet:**
+- `bedrock.data.store.DataStore.get_prices_ohlc(instrument, tf, lookback)`
+  — returnerer full OHLCV-DataFrame. Trengs fordi `get_prices` (close-only)
+  ikke eksponerer high/low som nivå-detektoren trenger
+- `src/bedrock/setups/__init__.py`
+- `src/bedrock/setups/levels.py`:
+  - `LevelType` enum (str-backed for JSON/YAML): `SWING_HIGH/LOW`,
+    `PRIOR_HIGH/LOW`, `ROUND_NUMBER`
+  - `Level` Pydantic (price, type, strength 0..1, ts optional)
+  - `detect_swing_levels(ohlc, window)` — fraktal. Strength = prominens
+    × 20 + 0.5 floor, cap 1.0
+  - `detect_prior_period_levels(ohlc, period)` — pandas resample
+    "W"/"D"/"M" (sistnevnte oversatt til "ME" internt). Strength fast 0.8
+  - `detect_round_numbers(current_price, step, count_above, count_below)`
+    — multipler av step rundt nåpris. Strength via trailing-zeros i
+    (price/step): 0→0.5, 1→0.7, 2+→0.9. `ts=None` (ikke tidsbundet)
+  - `rank_levels` — synkende strength-sortering, INGEN dedup (per
+    bruker-krav: clustering hører i setup-bygger session 17)
+- `tests/unit/test_store_ohlc.py` (7 tester — DatetimeIndex, kolonner,
+  dtypes, lookback, NULL-håndtering)
+- `tests/unit/test_setups_levels.py` (30 tester — Level-model, swings
+  med prominens-variasjoner, prior-period med W/D/M, round numbers med
+  step-variasjoner + edge cases, rank-levels stabilitet, integrasjons-
+  test mot DataStore)
+
+**Design-valg:**
+- Hver detektor dokumenterer strength-heuristikken eksplisitt i docstring
+  (per bruker-krav). Formelen skal kunne refineres uten å flytte definisjon
+- Swing-strength bruker prominens (ikke test-count) i MVP. PLAN § 5.1
+  nevner test-count; det krever historikk-scanning og kommer senere
+- Prior-period fast 0.8 — ingen aldersdegradering MVP
+- Round-number trailing-zero-heuristikk reflekterer hvordan tradere
+  faktisk prisetter runde tall ($2000 > $2010)
+- `rank_levels` gjør ingen dedup — per session-scope-avtale
+
+**Bevisste utsettelser:**
+- Volume-profile POC/VAH/VAL — krever tick-data/volum-distribusjon
+- COT-pivot — design-runde rundt "pivot-definition" (MM-percentile
+  reversering?)
+- ATR-bånd — kommer med setup-bygger siden det kun er buffer
+- Setup-bygger selv — session 17 (inkluderer nivå-clustering)
+- Determinisme/hysterese — session 18+
+- Horisont-klassifisering — senere session
+
+**Commits:** `<hash kommer>`.
+
+**Tester:** 247/247 grønne på 10.6 sek.
+
+**Neste session:** setup-bygger med nivå-clustering + ATR + asymmetri-
+gate.
 
 ### 2026-04-24 — Session 15: Fase 3 CLOSED
 
