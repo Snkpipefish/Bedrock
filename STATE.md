@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 8 **ÅPEN** (Bot-refaktor). Session 39 lukket research-leveranse: `docs/migration/bot_refactor.md` med full modul-inventar, metode-kart (66 metoder på ScalpEdgeBot), agri-override-bug-lokalisering, og refaktor-rekkefølge session 40-47.
+- **Phase:** 8 **ÅPEN** (Bot-refaktor). Session 40 lukket — skjelett + state + instruments + config + bot.yaml + 43 tester. Null logikk-endring; gammel `~/scalp_edge/trading_bot.py` uendret i parallell-drift.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Session 40 — åpne refaktoreringen per `docs/migration/bot_refactor.md § 8 punkt 1`: opprett `src/bedrock/bot/__init__.py`, `bot/state.py` (flytt TradePhase/Candle/TradeState/CandleBuffer dataclasses uendret), `bot/instruments.py` (INSTRUMENT_MAP, PRICE_FEED_MAP, FX_USD_DIRECTION etc. som ren data-lookup), `bot/config.py` (Pydantic-modell for bot.yaml) og første versjon av `config/bot.yaml` med defaults fra migrasjonsdokument § 5.1+5.2. Tester: roundtrip YAML → Pydantic → dict. Null logikk-endring; gammel `~/scalp_edge/trading_bot.py` røres ikke.
+- **Next task:** Session 41 — ctrader_client-porten per `docs/migration/bot_refactor.md § 8 punkt 2`. Port `ScalpEdgeBot.__init__`-transport-felter, `start`, `_on_connected`/`_on_disconnected`/`_fatal_exit`, `_on_message`-dispatcher, auth-handlers (`_on_app_auth`/`_on_account_auth`/`_on_trader_info`), symbols-list, subscribe-spots, historical-bars-request, heartbeat, watchdog. Exposes callback-grensesnitt: `on_spot`, `on_execution`, `on_reconcile`, `on_historical_bars`, `on_order_error`, `on_error_res`. Ingen trade-logikk i denne modulen. Tester: mock Twisted reactor, verifiser at dispatch kaller riktig callback per payloadType.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -87,6 +87,84 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 40: bot/ skjelett + state + instruments + config
+
+**Opprettet:**
+- `src/bedrock/bot/__init__.py` (pakke-doc med modul-oversikt)
+- `src/bedrock/bot/state.py` — `TradePhase`, `Candle`, `TradeState`,
+  `CandleBuffer` portert 1:1 fra `~/scalp_edge/trading_bot.py:335-398`.
+  Forblir dataclass (ikke Pydantic); endring krever ADR
+- `src/bedrock/bot/instruments.py` — `INSTRUMENT_MAP`, `PRICE_FEED_MAP`,
+  `INSTRUMENT_TO_PRICE_KEY`, `FX_USD_DIRECTION`, `AGRI_INSTRUMENTS`,
+  `AGRI_SUBGROUPS`, `INSTRUMENT_GROUP` + `net_usd_direction`,
+  `looks_like_fx_pair`, `get_group_name`. Ren data-lookup; ikke i YAML
+  fordi YAML-en ville blitt rent støy og kreve egen Pydantic-modell
+- `src/bedrock/bot/config.py` — Pydantic-modell for `config/bot.yaml`
+  med eksplisitt splitt:
+  - `StartupOnlyConfig`: signal_url, signal_api_key_env, reconnect
+  - `ReloadableConfig`: confirmation, risk_pct, daily_loss, spread,
+    horizon_ttl, horizon_min_rr, polling, weekend, monday_gap, trail,
+    agri (incl. session_times_cet), oil, group_params (per gruppe)
+  - `load_bot_config(path)` — oppstart-lasting, støtter tom eller
+    manglende fil → Pydantic-defaults
+  - `reload_bot_config(path, current)` — SIGHUP-handler-entry: leser
+    ny YAML, beholder `current.startup_only` aktiv, bytter bare
+    `reloadable`, returnerer `(merged_config, diffs: list[str])`
+  - `diff_startup_only(a, b)` — rekursiv sammenligning for warning-
+    logging ved SIGHUP
+  - Path-oppløsning: eksplisitt argument > env `BEDROCK_BOT_CONFIG` > default
+- `config/bot.yaml` — alle defaults fra `trading_bot.py` portert 1:1.
+  Top-level seksjoner `startup_only` + `reloadable`
+- `tests/unit/bot/test_state.py` (5 tester) — enum, Candle-konstruksjon,
+  TradeState-defaults, CandleBuffer-defaults, uavhengige deque-instanser
+- `tests/unit/bot/test_instruments.py` (16 tester) — lookup-komplett,
+  ingen overlapp mellom trading- og pris-feed-symboler, net_usd_direction
+  per retning, looks_like_fx_pair positive+negative, get_group_name
+  fallback, FX-dekning
+- `tests/unit/bot/test_config.py` (22 tester) — defaults, empty/partial
+  YAML-merge, bundled `config/bot.yaml` parses og matcher Python-
+  defaults, roundtrip, extra=forbid på nested modeller, SIGHUP-diff
+  top-level + nested, reload holder startup_only og bytter reloadable,
+  path-oppløsning (arg > env > default), GroupParams-validering
+
+**Design-valg:**
+- YAML-splitt med `startup_only`/`reloadable` speiles i Pydantic-
+  typer, ikke konvensjon — type-systemet gjør det umulig å blande
+- `reload_bot_config` returnerer diff-liste i stedet for å logge
+  selv; caller (SIGHUP-handler i `bot/__main__.py`, kommer session 45)
+  styrer loggernavn
+- `signal_api_key_env` holder *navn* på env-var, ikke selve nøkkelen
+  (secrets kun via env/fil per PLAN § 10.6)
+- `GroupParams` er felt-nivå påkrevd (ingen defaults) for å fange
+  utilsiktet utelatelse av `ema9_exit` eller `expiry` ved ny gruppe
+- `_default_group_params()` dekker 12 grupper fra gammel bot;
+  brukeren kan overstyre alle eller deler via `reloadable.group_params`
+- `AGRI_INSTRUMENTS` som `frozenset` i stedet for `set` — signaliserer
+  at den ikke skal muteres, matcher i dag-semantikk i gammel bot
+- Sortert nøkler i `_walk_diff` for deterministisk diff-output
+
+**Prosess-avklaringer fra bruker (session 40):**
+- SIGHUP-split bekreftet: startup_only = signal_url, reconnect,
+  account_id-nivå; reloadable = terskler + risk + agri + polling
+- Bot gjør git-add+commit selv for trade-logging, men batches til
+  én commit per dag ved daily_loss-reset (unngår spam). SSH-tilgang
+  for bot-service håndteres i Fase 13 cutover. Implementeres i
+  session 42 med `bot/comms.py` eller `bot/safety.py`
+
+**Ikke endret:**
+- `~/scalp_edge/` — fullstendig READ-ONLY under hele session
+- Ingen prosesser rørt
+
+**Commits:** `0802327`.
+
+**Tester:** 715/715 grønne (fra 672 + 43 nye) på 28.9 sek.
+Kjøring krever `PYTHONPATH=src` — verifisert at `bedrock`-pakken
+ikke er installert som editable, men tester fungerer likevel.
+
+**Neste session:** 41 — `bot/ctrader_client.py` per migration-plan
+§ 8 punkt 2. Port Twisted + Protobuf + reconnect-laget; ingen
+trade-logikk, kun transport.
 
 ### 2026-04-24 — Session 39: Fase 8 åpnet, migrasjonsplan for bot-refaktor
 
