@@ -32,7 +32,7 @@ driver-registry) slik at nye regler kan legges til uten kode-endring.
 
 ## Git-regler (kort)
 
-**Gjeldende modus: Nivå 1 (enkel) — Fase 0 til og med Fase 10.**
+**Gjeldende modus: Nivå 1 (enkel) — Fase 0 til og med Fase 11.**
 
 - Commit direkte til `main`. Ingen feature-branches, ingen PR under utvikling.
 - Auto-push-hook (`.githooks/post-commit`) sender hver commit til `origin/main` umiddelbart. Ingen manuell `git push`.
@@ -42,7 +42,7 @@ driver-registry) slik at nye regler kan legges til uten kode-endring.
 - Aldri: force-push, amend etter push, commit av hemmeligheter.
 - Fase-slutt markeres med tag: `v0.X.0-fase-Y`
 
-**Overgang til Nivå 3 (feature-branches + PR) aktiveres ved Fase 10-11** når vi
+**Overgang til Nivå 3 (feature-branches + PR) aktiveres ved Fase 11-12** når vi
 nærmer oss live-cutover. Da aktiveres også branch-beskyttelse på main, og Claude
 Code bytter til feature-branch-flyt. Se `docs/branch_strategy.md` for full oppsett.
 

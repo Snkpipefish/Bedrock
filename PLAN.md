@@ -638,9 +638,9 @@ store.append_fundamentals(df)
 store.append_weather(df)
 
 # Fase 2 senere sessions:
-# (ingen flere getters planlagt i Fase 2 — trades.parquet venter til bot-refaktor i Fase 7)
+# (ingen flere getters planlagt i Fase 2 — trades.parquet venter til bot-refaktor i Fase 8)
 
-# Analog-søk (Fase 9):
+# Analog-søk (Fase 10):
 neighbors = store.find_analog_cases(
     instrument="Gold",
     query_dims={"vix": 22, "dxy_chg5d": -1.5, "real_yield": 0.8, "cot_pct": 12},
@@ -1109,19 +1109,22 @@ Hver fase avsluttes med testing + commit. Ingen fase starter før forrige er gr�
 |---|---|---|---|
 | **0** | Bedrock-repo, pyproject.toml, uv, pre-commit (ruff, pyright), CI | 1-2 dager | `pytest` kjører tomme tester grønt |
 | **1** | Engine + driver-registry + aggregators + grade + explain. 5-10 drivere. Eksempel-YAML Gold + Corn. | 1 uke | Logiske tester for scoring-scenarioer |
-| **2** | Data-lag: DuckDB + parquet, skjemaer, DataStore-API | 4-5 dager | Unit-tester på store.py |
+| **2** | Data-lag: SQLite + pandas (revidert, ADR-002), skjemaer, DataStore-API | 4-5 dager | Unit-tester på store.py |
 | **3** | Backfill-CLI: priser, COT, FRED, vær. 10 års historikk. | 1 uke (+ kjøretid) | Data-integritets-tester |
 | **4** | Setup-generator: nivå-detektor + generator + persistence + horisont-klassifisering. MAKRO no-TP. | 2 uker | Logiske tester for setup-output. Dette er hjertet i "asymmetri-målet". |
-| **5** | Fetch-laget: flytt alle moduler, config-drevet cadence. USDA WASDE + Crop Progress + BRL-driver + Baltic-til-agri. | 1 uke | Smoke-tester per fetcher |
-| **6** | Signal-server refaktor: modul-splitt, /admin/rules, schema-validering | 3-5 dager | API-tester |
-| **7** | Bot-refaktor: splitt i 8 moduler, fjern agri-override, config-ekstraksjon | 1 uke | Bot må fortsatt kjøre demo i parallell |
-| **8** | UI: 4 faner + admin-editor. Erstatter eksisterende HTML. | 1-2 uker | Visuell verifisering + signal-visning-tester |
-| **9** | Analog-matching: K-NN, per asset-klasse, outcome-labels, integrer i scoring + UI | 1 uke | Backtest av analog-driver mot forward-return |
-| **10** | Backtest-rammeverk + 12 måneder historikk-replay | 1 uke | Output: rapport over signal-performance |
-| **11** | 2 uker demo-parallell-drift | 2 uker | Cutover-kriterier møtt |
-| **12** | Cutover: skru av gamle timers, gå live | 1 dag | Alt grønt |
+| **5** | Scoring-motor komplett: per-instrument YAML med `inherits`-inheritance, orchestrator (score_instrument + generate_signals), gates/cap_grade (ADR-003), bedrock signals CLI-wrapper. | 1-2 uker | Orchestrator E2E-tester + instrument-YAML-validering |
+| **6** | Fetch-laget: USDA-kalender + usda_blackout-gate, config-drevet `fetch.yaml` + status-CLI, `bedrock fetch run <name>`-dispatcher med per-item resiliens, systemd-unit-generator (generate/install/list). Ekstra drivere (BRL/USD, BDI, Crop Progress, WASDE) legges til fortløpende når behov oppstår — ikke blockere. | 1-2 uker | Smoke-tester per fetcher + CLI-integrasjonstester |
+| **7** | Signal-server refaktor: modul-splitt fra 974-linjers fil, `/admin/rules` endpoint, schema-validering | 3-5 dager | API-tester |
+| **8** | Bot-refaktor: splitt i 8 moduler, fjern agri-ATR-override-bug (trading_bot.py:2665-2691), config-ekstraksjon | 1 uke | Bot må fortsatt kjøre demo i parallell |
+| **9** | UI: 4 faner + admin-editor. Erstatter eksisterende HTML. | 1-2 uker | Visuell verifisering + signal-visning-tester |
+| **10** | Analog-matching: K-NN, per asset-klasse, outcome-labels, integrer i scoring + UI | 1 uke | Backtest av analog-driver mot forward-return |
+| **11** | Backtest-rammeverk + 12 måneder historikk-replay | 1 uke | Output: rapport over signal-performance |
+| **12** | 2 uker demo-parallell-drift | 2 uker | Cutover-kriterier møtt |
+| **13** | Cutover: skru av gamle timers (cot-explorer + scalp_edge), install systemd-units, gå live | 1 dag | Alt grønt |
 
-Totalt: ~12-16 uker. Kan parallelliseres noe (data-lag og engine kan jobbes samtidig).
+Totalt: ~14-18 uker. Kan parallelliseres noe (data-lag og engine kan jobbes samtidig).
+
+**Merk:** Fase 5 ble lagt inn 2026-04-24 for å reflektere faktisk leveranse — den originale Fase 5 "fetch-laget" er nå Fase 6, og alle senere faser er skjøvet ett hakk. Tags: `v0.1.0-fase-1` .. `v0.5.0-fase-5` (sessions 21-26), `v0.6.0-fase-6` (sessions 27-31).
 
 ---
 
@@ -1218,7 +1221,7 @@ Ikke "gjør hele Fase 4". Alltid bryt ned til atomisk scope.
 
 ### 17.6 Claude Chat som fase-gate-review
 
-Ved slutten av hver større fase (Fase 1, 4, 6, 7, 10) kjører bruker en Claude
+Ved slutten av hver større fase (Fase 1, 4, 5, 7, 8, 11) kjører bruker en Claude
 Chat-session med prompt av typen:
 
 > "Her er diff for Fase N (ved lenke til git-log + endrede filer). Gå gjennom:
@@ -1245,20 +1248,20 @@ På-forespørsel-review støttes alltid: når bruker er i tvil, spør Chat.
 
 ### 18.1 To modus: utvikling vs. live
 
-**Nivå 1 (enkel) — aktiv under Fase 0 til og med Fase 10:**
+**Nivå 1 (enkel) — aktiv under Fase 0 til og med Fase 11:**
 - Commit direkte til `main`
 - Auto-push-hook (`.githooks/post-commit`) sender hver commit til GitHub umiddelbart
 - Ingen feature-branches, ingen PR
 - Null ceremony, maksimal fart under utvikling
 - Main er ennå ikke produksjon (ingen systemd-service kjører fra den)
 
-**Nivå 3 (streng) — aktiveres ved Fase 10-11, før live-cutover:**
+**Nivå 3 (streng) — aktiveres ved Fase 11-12, før live-cutover:**
 - Feature-branch → auto-push branch → PR → CI grønn → review → squash-merge til main
 - Aldri direkte-til-main når main = produksjon
 - Branch-beskyttelse på GitHub (require PR, require status checks)
 - Beskrevet fullt i `docs/branch_strategy.md`
 
-**Overgang:** ved start av Fase 10 setter bruker opp branch-beskyttelse på main i
+**Overgang:** ved start av Fase 11 setter bruker opp branch-beskyttelse på main i
 GitHub-UI, og Claude Code bytter atferd til feature-branch-flyt. Dette er en
 1-minutts endring.
 
@@ -1272,7 +1275,7 @@ Claude Code gjør endring
    → ferdig
 ```
 
-### 18.3 Flyt (Nivå 3 — ved Fase 10+)
+### 18.3 Flyt (Nivå 3 — ved Fase 11+)
 
 Feature-branch → daglig push → PR → CI grønn → review → squash-merge til main.
 Se `docs/branch_strategy.md` for full beskrivelse.
@@ -1316,7 +1319,7 @@ Full liste og eksempler: `docs/commit_convention.md`.
 8. Ingen WIP på main
 9. STATE.md-commits holdes separate fra kode
 
-### 18.7 Main-beskyttelse (GitHub-settings, aktiveres ved Fase 10)
+### 18.7 Main-beskyttelse (GitHub-settings, aktiveres ved Fase 11)
 
 Bruker setter opp én gang:
 - Require PR before merging
