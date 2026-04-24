@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 5 — åpen. Session 23 FERDIG: `inherits:`-inheritance i instrument-YAML (rekursivt `base` ← `family_*` ← instrument via shallow merge). `bedrock instruments show/list` fikk `--defaults-dir`-flagg.
+- **Phase:** 5 — åpen. Session 24 FERDIG: `bedrock.orchestrator` — både `score_instrument` og `generate_signals` (full E2E). Pipeline knytter InstrumentConfig → DataStore → Engine → setup-generator → hysterese → SetupSnapshot.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Fase 5 session 24 — top-level orchestrator `bedrock.orchestrator.generate_signals(instrument_id, store, horizon=None)` som limer sammen InstrumentConfig → DataStore → Engine.score → setup-generator → stabilize_setup → SetupSnapshot. Skal være integrasjons-momentet før Fase 6+ (signal-server). Begrunnelse for rekkefølge: inherits (a) var lavrisiko og er nå unblock; orchestrator (d) bygger på alt Fase 1-5 har produsert og vil avsløre API-gaps før vi bygger ytre lag. Gates (b) og usda_blackout (c) kommer etter orchestrator (b krever ADR for DSL, c krever USDA-kalender-fetcher vi ikke har).
+- **Next task:** Fase 5 session 25 — `gates: [...]` med `cap_grade` (PLAN § 4.2). Krever ADR for gate-DSL (safe predikat-evaluator, ikke eval()) + Engine-integrasjon slik at `gates_triggered` faktisk populeres. Etter det: `usda_blackout` (PLAN § 4.3) som konkret gate — krever USDA-kalender-fetcher (ny `bedrock.fetch.usda_calendar` eller tilsvarende). Alternativ hvis bruker foretrekker: CLI-kommando `bedrock signals <instrument_id>` som eksponerer orchestrator via CLI for manuell testing/demo.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -69,10 +69,86 @@
   - `classify_horizon`, `is_score_sufficient`, `apply_horizon_hysteresis`
     — rule-based horisont-tildeling
   - Brytes kun med ADR.
+- **Orchestrator API låst** (fra Fase 5 session 24):
+  - `score_instrument(instrument_id, store, *, horizon, instruments_dir,
+    defaults_dir, engine) -> GroupResult`
+  - `generate_signals(instrument_id, store, *, horizons, directions,
+    instruments_dir, defaults_dir, snapshot_path, now, price_tf,
+    price_lookback, swing_window, round_number_step, setup_config,
+    hysteresis_config, engine, write_snapshot) -> OrchestratorResult`
+  - `OrchestratorResult`, `SignalEntry`, `OrchestratorError` Pydantic/
+    Exception
+  - YAML-horisonter er uppercase (SCALP/SWING/MAKRO); `Horizon`-enum
+    lowercase (scalp/swing/makro). Mapping encapsulert i
+    `_YAML_TO_ENUM`/`_ENUM_TO_YAML` i `signals.py`. CLI og web-UI
+    bruker orchestrator-API-et direkte uten å kjenne til mappingen.
+  - Brytes kun med ADR.
 
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 24: orchestrator (score + signals) E2E
+
+Fjerde komponent i Fase 5. Integrasjons-moment: YAML + DataStore +
+Engine + setup-generator + hysterese + snapshot kobles sammen i én
+topp-nivå-funksjon. Første sted hele Fase 1-4-stacken kjører i ett
+kall. Utført i én session (session 24) i to del-commits:
+`79a997a` score + `ce9e601` signals.
+
+**Opprettet:**
+- `bedrock.orchestrator.__init__` — public exports
+- `bedrock.orchestrator.score.score_instrument`:
+  - Minimum-bridge: YAML-lasting + `Engine.score` → `GroupResult`
+  - Case-insensitive filnavn-match mot `<id>.yaml`
+  - Horisont-validering: financial krever horisont, agri krever None
+  - `OrchestratorError` på manglende YAML / ugyldig horisont
+- `bedrock.orchestrator.signals.generate_signals`:
+  - Full E2E: score + OHLC-fetch + ATR + level-detect + build_setup +
+    stabilize (via snapshot) + SetupSnapshot-skriving
+  - `SignalEntry` per (direction, horizon): score, grade, published,
+    setup (eller skip_reason)
+  - `OrchestratorResult`: liste av entries + run_ts + snapshot_written
+  - Financial: én score per horisont. Agri: én score delt på alle 3
+    horisonter (default SCALP/SWING/MAKRO × BUY/SELL = 6 entries)
+  - Horisont-filter + retnings-filter via kwargs
+  - Round-number-detektor inkluderes kun når caller angir step
+    (asset-klasse-spesifikt)
+  - `write_snapshot=False` deaktiverer persistens (for tester/dry-run)
+- `tests/logical/test_orchestrator_score.py` (8 tester)
+- `tests/logical/test_orchestrator_signals.py` (10 tester)
+
+**Design-valg:**
+- YAML/enum-mapping encapsulert: YAML-nøkler er `"SCALP"/"SWING"/
+  "MAKRO"` (PLAN § 4.2); `Horizon`-enum-verdier er lowercase
+  `"scalp"` etc. (fra session 17). `_YAML_TO_ENUM`-mapping ligger i
+  `signals.py` slik at caller kan bruke begge casinger i kwarg
+- Snapshot-flyt: én load (pre), én save (post). Ingen inkrementelle
+  writes — save_snapshot skriver atomisk via tmp-rename (session 18)
+- `SignalEntry` alltid inkluderer retry-informasjon: hvis
+  build_setup returnerer None, `setup=None` + `skip_reason` satt.
+  Caller filtrerer selv (UI kan vise "no setup found" status)
+- Engine-instans injiserbar slik at caller kan gjenbruke samme på
+  tvers av mange kall og batch-prosessere effektivt
+- `_find_yaml` duplikat i score.py (private_protected): delt helper
+  ville kreve eksport; for session 24 lettere å la begge moduler
+  bruke samme logikk. Konsolideres hvis flere orchestrator-moduler
+  kommer
+
+**Commits:** `79a997a` (score), `ce9e601` (signals).
+
+**Tester:** 406/406 grønne på 15.3 sek (fra 388 i session 23, +18).
+
+**Bevisste utsettelser:**
+- `gates`/`cap_grade` (PLAN § 4.2) — neste session, krever ADR for
+  gate-DSL (safe predikat-evaluator, ikke eval())
+- `usda_blackout` (PLAN § 4.3) — trenger USDA-kalender-fetcher
+- CLI-kommando `bedrock signals <id>` som wrapper på
+  `generate_signals` — klargjort for senere (API er stabil)
+- Analog-matching / `find_analog_cases` — Fase 9
+- Signal v1 schema for eksport til signal_server — Fase 6
+
+**Neste session:** 25 — gates (eller CLI-wrapper avhengig av bruker).
 
 ### 2026-04-24 — Session 23: inherits-inheritance + beslutnings-retningslinje
 
