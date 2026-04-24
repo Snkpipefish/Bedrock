@@ -15,6 +15,17 @@ Senere sessions utvider med:
 
 from __future__ import annotations
 
-from bedrock.orchestrator.score import score_instrument
+from bedrock.orchestrator.score import OrchestratorError, score_instrument
+from bedrock.orchestrator.signals import (
+    OrchestratorResult,
+    SignalEntry,
+    generate_signals,
+)
 
-__all__ = ["score_instrument"]
+__all__ = [
+    "OrchestratorError",
+    "OrchestratorResult",
+    "SignalEntry",
+    "generate_signals",
+    "score_instrument",
+]
