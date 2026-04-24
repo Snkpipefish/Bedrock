@@ -17,6 +17,7 @@ from pathlib import Path
 
 import click
 
+from bedrock.config.secrets import get_secret
 from bedrock.data.store import DataStore
 from bedrock.fetch.cot_cftc import (
     CFTC_DISAGGREGATED_URL,
@@ -25,12 +26,20 @@ from bedrock.fetch.cot_cftc import (
     fetch_cot_disaggregated,
     fetch_cot_legacy,
 )
+from bedrock.fetch.fred import (
+    FRED_OBSERVATIONS_URL,
+    build_fred_params,
+    fetch_fred_series,
+)
 from bedrock.fetch.prices import STOOQ_CSV_URL, build_stooq_url_params, fetch_prices
 from bedrock.fetch.weather import (
     OPEN_METEO_ARCHIVE_URL,
     build_open_meteo_params,
     fetch_weather,
 )
+
+_FRED_API_KEY_ENV = "FRED_API_KEY"
+_MASKED_API_KEY = "***"
 
 _log = logging.getLogger(__name__)
 
@@ -367,6 +376,107 @@ def weather_cmd(
     db_path.parent.mkdir(parents=True, exist_ok=True)
     store = DataStore(db_path)
     written = store.append_weather(df)
+    click.echo(f"Wrote {written} observation(s) to {db_path}.")
+
+
+@backfill.command("fundamentals")
+@click.option(
+    "--series-id",
+    required=True,
+    help="FRED-serie-ID (f.eks. DGS10, DXY, UNRATE).",
+)
+@click.option(
+    "--api-key",
+    default=None,
+    help=(
+        f"FRED API-nøkkel. Hvis utelatt, leses fra env-var {_FRED_API_KEY_ENV} "
+        f"eller ~/.bedrock/secrets.env."
+    ),
+)
+@click.option(
+    "--from",
+    "from_date",
+    required=True,
+    type=click.DateTime(formats=["%Y-%m-%d"]),
+    help="Start-dato (YYYY-MM-DD) inklusiv.",
+)
+@click.option(
+    "--to",
+    "to_date",
+    default=None,
+    type=click.DateTime(formats=["%Y-%m-%d"]),
+    help="Slutt-dato (YYYY-MM-DD) inklusiv. Default: i dag.",
+)
+@click.option(
+    "--db",
+    "db_path",
+    default=DEFAULT_DB_PATH,
+    show_default=True,
+    type=click.Path(path_type=Path),
+    help="Path til SQLite-databasen.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help=(
+        "Vis URL og parametre (API-nøkkel maskes). Ingen HTTP-kall, "
+        "ingen DB-skriving. Fungerer uten å ha FRED-nøkkel satt."
+    ),
+)
+def fundamentals_cmd(
+    series_id: str,
+    api_key: str | None,
+    from_date: datetime,
+    to_date: datetime | None,
+    db_path: Path,
+    dry_run: bool,
+) -> None:
+    """Backfill en FRED-serie (f.eks. DGS10, DXY) til SQLite.
+
+    Eksempel:
+
+        bedrock backfill fundamentals --series-id DGS10 --from 2016-01-01
+
+    API-nøkkel: CLI-arg > env-var FRED_API_KEY > ~/.bedrock/secrets.env.
+    Registrer nøkkel på https://fred.stlouisfed.org/docs/api/api_key.html
+    """
+    _from: date = from_date.date()
+    _to: date = to_date.date() if to_date is not None else date.today()
+
+    # Secret-resolver: CLI-arg > env-var/secrets-fil. Under dry-run trenger
+    # vi ikke en ekte nøkkel.
+    if api_key is None:
+        api_key = get_secret(_FRED_API_KEY_ENV)
+
+    if dry_run:
+        # Masker api_key i URL uansett om den er satt eller ikke, slik at
+        # dry-run-output kan deles uten å lekke nøkkelen.
+        params = build_fred_params(series_id, _MASKED_API_KEY, _from, _to)
+        param_str = "&".join(f"{k}={v}" for k, v in params.items())
+        click.echo(f"DRY-RUN  URL: {FRED_OBSERVATIONS_URL}?{param_str}")
+        click.echo(f"DRY-RUN  Would write to: {db_path} (series_id={series_id})")
+        key_state = "resolved" if api_key else "MISSING (live run vil feile)"
+        click.echo(f"DRY-RUN  API-key: {key_state}")
+        return
+
+    if api_key is None:
+        raise click.UsageError(
+            f"FRED API-nøkkel ikke funnet. Sett env-var {_FRED_API_KEY_ENV}, "
+            f"legg til i ~/.bedrock/secrets.env, eller bruk --api-key. "
+            f"Nøkkel hentes gratis fra https://fred.stlouisfed.org/docs/api/api_key.html"
+        )
+
+    click.echo(f"Fetching FRED {series_id} from {_from} to {_to}...")
+    df = fetch_fred_series(series_id, api_key, _from, _to)
+    click.echo(f"Fetched {len(df)} observation(s).")
+
+    if df.empty:
+        click.echo("No rows to write.")
+        return
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    store = DataStore(db_path)
+    written = store.append_fundamentals(df)
     click.echo(f"Wrote {written} observation(s) to {db_path}.")
 
 
