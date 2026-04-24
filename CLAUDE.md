@@ -81,6 +81,48 @@ Code bytter til feature-branch-flyt. Se `docs/branch_strategy.md` for full oppse
 | `config/instruments/*.yaml` | Bruker via admin-UI + Claude Code | Ofte, alltid med dry-run først |
 | `src/**/*.py` | Claude Code | Fase-drevet |
 
+## Beslutnings-retningslinje
+
+Claude Code har full kontekst (PLAN, STATE, kode, docs) og skal ta
+implementasjons-beslutninger selv. Brukerens tid er dyr; Claude's
+standardmodus er **bestem og kjør**, ikke "forelegg valg".
+
+### Bestem selv (ikke spør)
+
+- **Rekkefølge på sub-tasks innen en åpen fase.** Bruk dependencies,
+  risiko-for-omarbeid, og leveranse-verdi til å prioritere. Forklar kort
+  (1-2 setninger) hvorfor rekkefølgen er valgt.
+- **Mappe-plassering og modul-navngivning.** Følg eksisterende struktur
+  (`src/bedrock/<domene>/<fil>.py`).
+- **Intern modul-struktur, klasser vs funksjoner, helpers vs inline.**
+  Optimer for lesbarhet og test-isolering.
+- **Test-organisering.** `unit/` for små komponent-tester, `logical/`
+  for atferds-tester, `snapshot/` for drift-fangst. Nye testfiler
+  følger eksisterende navnekonvensjon.
+- **Refactor vs nyskriv.** Når en komponent endres, vurder selv om
+  eksisterende kode skal utvides eller byttes ut.
+- **Pydantic-modell-struktur.** Felt-navn, valgfrihet, validering — så
+  lenge det holder signal-schema v1 og låste API-kontrakter.
+
+### Spør brukeren (via AskUserQuestion)
+
+- **Trading-logikk og preferanser.** Horisont-terskler, R:R-minima,
+  grade-terskler, asset-klasse-spesifikk atferd, hvor "harde" gates
+  skal være. Disse påvirker faktiske trade-beslutninger.
+- **UX-valg synlige for bruker.** CLI-flagge-navn, output-format,
+  kommando-hierarki, admin-UI-interaksjoner.
+- **Sikkerhet og secrets.** Hvor nøkler hentes fra, hva som logges,
+  hva som maskes, tilgangs-grenser.
+- **Scope-utvidelser utover gjeldende task.** Hvis Claude oppdager at
+  en bedre løsning krever å gjøre mer enn det som er spurt om — flagg
+  det, ikke bare utvid scope stille.
+
+### Når i tvil
+
+Foretrekk å bestemme selv og forklare kort, framfor å spørre. En
+feil-rekkefølge er billig å rette (commit + re-order); en
+avbrutt-for-å-spørre koster brukerens oppmerksomhet hver gang.
+
 ## Ikke-gjør (kommer fra tidligere feil)
 
 - Ikke kopier scalp_edge-bot-logikk blindt. Fjern agri ATR-override (gammel bug).
