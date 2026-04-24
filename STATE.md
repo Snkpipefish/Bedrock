@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 5 — åpen. Session 24 FERDIG: `bedrock.orchestrator` — både `score_instrument` og `generate_signals` (full E2E). Pipeline knytter InstrumentConfig → DataStore → Engine → setup-generator → hysterese → SetupSnapshot.
+- **Phase:** 5 — åpen. Session 25 FERDIG: gates/cap_grade implementert via named-function-registry (ADR-003). Engine kapper nå grade og populerer `GroupResult.gates_triggered`. Standard-bibliotek: `min_active_families`, `score_below`, `family_score_below`.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Fase 5 session 25 — `gates: [...]` med `cap_grade` (PLAN § 4.2). Krever ADR for gate-DSL (safe predikat-evaluator, ikke eval()) + Engine-integrasjon slik at `gates_triggered` faktisk populeres. Etter det: `usda_blackout` (PLAN § 4.3) som konkret gate — krever USDA-kalender-fetcher (ny `bedrock.fetch.usda_calendar` eller tilsvarende). Alternativ hvis bruker foretrekker: CLI-kommando `bedrock signals <instrument_id>` som eksponerer orchestrator via CLI for manuell testing/demo.
+- **Next task:** Fase 5 session 26 — CLI-wrapper `bedrock signals <instrument_id>` som eksponerer orchestrator via CLI for manuell testing. Viser score + grade + gates_triggered + setup per (direction, horizon). Begrunnelse: gates nå synlige i GroupResult; CLI-demo gjør dem testbare manuelt UTEN å bygge web-UI. Etter det gjenstår (c) `usda_blackout` som konkret gate — krever USDA-kalender-fetcher (`bedrock.fetch.usda_calendar`).
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -87,6 +87,70 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 25: gates / cap_grade (ADR-003)
+
+Femte komponent i Fase 5. Gates er det første sub-systemet som kan
+kappe grade uten å endre score — PLAN § 4.2-feature nå funksjonelt.
+
+**Opprettet:**
+- `docs/decisions/003-gates-via-named-registry-not-dsl.md` — ADR
+  begrunner named-function-registry istedenfor string-DSL
+- `bedrock.engine.gates`:
+  - `GateSpec` Pydantic (name, params, cap_grade)
+  - `GateContext` dataclass (instrument, score, max_score,
+    active_families, family_scores, now)
+  - Registry: `@gate_register("navn")`, `get_gate`, `all_gate_names`,
+    `is_gate_registered`
+  - `apply_gates(specs, context) -> (cap|None, triggered_names)` —
+    flere utløste: laveste cap vinner
+  - `cap_grade(grade, cap)` — aksepterer både `"A+"` (engine-form)
+    og `"A_plus"` (YAML-form) via `_CAP_ALIAS`
+  - Standard-bibliotek: `min_active_families`, `score_below`,
+    `family_score_below` — alle data-frie, brukbare umiddelbart
+- `tests/unit/test_gates.py` (18 tester)
+- `tests/unit/test_engine_gates_integration.py` (10 tester)
+
+**Endret:**
+- `FinancialRules.gates: list[GateSpec]` + `AgriRules.gates` (default
+  tom). Serialiseres som del av Rules, valideres strict.
+- `Engine._score_financial` / `_score_agri`: bygger GateContext,
+  kjører `apply_gates`, kapper grade, populerer
+  `GroupResult.gates_triggered`
+- `bedrock.config.instruments`: fjernet `gates` fra `_DEFERRED_KEYS`;
+  lagt til i `_RULES_KEYS` + `_FINANCIAL_RULES_KEYS` +
+  `_AGRI_RULES_KEYS`
+- `test_gates_key_ignored_silently` → `test_gates_key_parsed_into_rules`
+  (ny ekspliitt test for parsing)
+
+**Design-valg:**
+- Named-function registry (ikke DSL): samme mønster som drivers, null
+  eval-risiko, typet params, testbart
+- Cap_grade-alias: engine bruker `"A+"`; YAML-brukere ser
+  `grade_thresholds: {A_plus: ...}` og forventer å skrive `cap_grade:
+  A_plus`. Begge aksepteres i gates.py
+- `gates_triggered` i rekkefølge av spec-deklarasjon, ikke trigger-tid
+  (deterministisk explain-trace)
+- `GateContext` er smal per prinsipp: data-frie gates kan brukes i dag;
+  event-kalender/freshness krever egen ADR + utvidelse senere
+- Tester er unit-nivå med null data-dependency (dummy-driver
+  `always_one`). Orchestrator+ekte-data-tester kommer via signals E2E
+  allerede i session 24
+
+**Commits:** `185abe1`.
+
+**Tester:** 436/436 grønne på 15.2 sek (fra 406 session 24, +30).
+
+**Bevisste utsettelser:**
+- `usda_blackout` som ekte gate — trenger USDA-kalender-fetcher (egen
+  session)
+- Gate som sjekker `now` mot event-kalender — samme
+- `freshness` / `data_quality`-gate — trenger freshness-spor fra
+  DataStore (egen session eller som del av Fase 6)
+- Generisk DSL over registry-funksjoner (OR-kombinasjon, NOT) —
+  kommer når konkret behov dukker opp, ny ADR
+
+**Neste session:** 26 — CLI-wrapper `bedrock signals <instrument_id>`.
 
 ### 2026-04-24 — Session 24: orchestrator (score + signals) E2E
 
