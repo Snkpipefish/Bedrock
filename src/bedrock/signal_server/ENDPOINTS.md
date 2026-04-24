@@ -21,7 +21,9 @@ gjennom Fase 7 sessions.
 | prices | `/push-prices` | POST | **implementert** (session 37) | `endpoints/prices.py` |
 | prices | `/prices` | GET | **implementert** (session 37) | `endpoints/prices.py` |
 | uploads | `/upload` | POST | **implementert** (session 37) | `endpoints/uploads.py` |
-| rules (ny) | `/admin/rules` | GET/PUT | pending | `endpoints/rules.py` |
+| rules (ny) | `/admin/rules` | GET | **implementert** (session 38) | `endpoints/rules.py` |
+| rules (ny) | `/admin/rules/<id>` | GET | **implementert** (session 38) | `endpoints/rules.py` |
+| rules (ny) | `/admin/rules/<id>` | PUT | **implementert** (session 38) | `endpoints/rules.py` |
 
 ## Session-plan (foreløpig)
 
@@ -35,8 +37,10 @@ gjennom Fase 7 sessions.
 - Session 37 ✓ — `endpoints/prices.py`: `/push-prices`, `/prices`
   (DataStore-backed) + `endpoints/uploads.py`: `/upload`
   (uuid-navngitt, whitelist, 10MB-cap)
-- Session 38 — `endpoints/rules.py` (PLAN § 8.3 — ny funksjonalitet,
-  YAML-editering via UI)
+- Session 38 ✓ — `endpoints/rules.py`: GET list, GET detail, PUT
+  valider+skriv. X-Admin-Code auth. Dry-run-diff + git-commit
+  (resten av PLAN § 8.3) bevisst utsatt — krever orchestrator-
+  snapshot-kobling + git-integrasjon, egen session når UI trenger
 
 Schema-valdiering (Pydantic) på innkommende body er en del av hver
 endepunkt-session. Gammel scalp_edge aksepterte ustrukturert JSON —

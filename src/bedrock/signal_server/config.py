@@ -48,6 +48,10 @@ class ServerConfig(BaseModel):
     upload_max_bytes: int = 10 * 1024 * 1024  # 10 MB
     upload_allowed_exts: tuple[str, ...] = (".png", ".jpg", ".jpeg", ".pdf")
 
+    # Admin / rule-editor
+    instruments_dir: Path = Field(default=Path("config/instruments"))
+    admin_code: str | None = None  # None => /admin/rules-endepunkter deaktivert
+
     # Feature-flagge (sanity-check for at vi er i bedrock-versjonen,
     # ikke i gammel scalp_edge)
     server_name: str = "bedrock-signal-server"
@@ -71,5 +75,7 @@ def load_from_env(env: dict[str, str] | None = None) -> ServerConfig:
         payload["port"] = int(source["BEDROCK_SERVER_PORT"])
     if "BEDROCK_DATA_ROOT" in source:
         payload["data_root"] = Path(source["BEDROCK_DATA_ROOT"])
+    if "BEDROCK_ADMIN_CODE" in source:
+        payload["admin_code"] = source["BEDROCK_ADMIN_CODE"]
 
     return ServerConfig(**payload)

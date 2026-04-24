@@ -18,6 +18,7 @@ from bedrock.signal_server.endpoints import (
     alerts_bp,
     kills_bp,
     prices_bp,
+    rules_bp,
     signals_bp,
     uploads_bp,
 )
@@ -41,6 +42,7 @@ def create_app(config: ServerConfig | None = None) -> Flask:
     app.register_blueprint(kills_bp)
     app.register_blueprint(prices_bp)
     app.register_blueprint(uploads_bp)
+    app.register_blueprint(rules_bp)
     return app
 
 

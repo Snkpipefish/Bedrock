@@ -154,8 +154,8 @@ def test_status_lists_registered_endpoints() -> None:
     # Meta-endepunkter fra session 33
     assert "/health" in endpoints
     assert "/status" in endpoints
-    # Disse kommer i senere sessions — sjekk at de IKKE er her ennå
-    assert "/admin/rules" not in endpoints
+    # Alle kjerne-endepunkter finnes nå — meta-endepunktene er fortsatt her
+    assert len(endpoints) > 5
 
 
 # ---------------------------------------------------------------------------

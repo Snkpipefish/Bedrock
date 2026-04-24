@@ -132,6 +132,44 @@ def load_instrument_config(
     return _parse_instrument_dict(data, source=str(target))
 
 
+def load_instrument_from_yaml_string(
+    yaml_content: str,
+    defaults_dir: Path | str | None = None,
+    source_name: str = "<string>",
+) -> InstrumentConfig:
+    """Valider en YAML-streng mot InstrumentConfig-schema.
+
+    Brukes av `bedrock.signal_server.endpoints.rules` for å validere
+    bruker-input før skriving til disk. Semantikk-parallell til
+    `load_instrument_config`, men uten fil-I/O.
+
+    `source_name` vises i feilmeldinger — default `"<string>"`.
+    """
+    try:
+        data = yaml.safe_load(yaml_content)
+    except yaml.YAMLError as exc:
+        raise InstrumentConfigError(
+            f"{source_name}: ugyldig YAML: {exc}"
+        ) from exc
+
+    if not isinstance(data, dict):
+        raise InstrumentConfigError(
+            f"{source_name}: expected YAML mapping at root, got "
+            f"{type(data).__name__}"
+        )
+
+    resolved_defaults = (
+        Path(defaults_dir) if defaults_dir is not None else DEFAULT_DEFAULTS_DIR
+    )
+
+    if "inherits" in data:
+        data = _resolve_inherits(
+            data, resolved_defaults, source=source_name, chain=[]
+        )
+
+    return _parse_instrument_dict(data, source=source_name)
+
+
 def load_all_instruments(
     directory: Path | str,
     defaults_dir: Path | str | None = None,
