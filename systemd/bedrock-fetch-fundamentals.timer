@@ -1,0 +1,13 @@
+# Auto-generert av `bedrock systemd generate`.
+# Ikke rediger manuelt — kjør CLI-kommandoen på nytt hvis config endrer seg.
+[Unit]
+Description=Bedrock fetch timer: fundamentals
+Requires=bedrock-fetch-fundamentals.service
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+Persistent=true
+Unit=bedrock-fetch-fundamentals.service
+
+[Install]
+WantedBy=timers.target

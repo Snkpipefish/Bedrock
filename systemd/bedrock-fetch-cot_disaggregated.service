@@ -1,0 +1,16 @@
+# Auto-generert av `bedrock systemd generate`.
+# Ikke rediger manuelt — kjør CLI-kommandoen på nytt hvis config endrer seg.
+[Unit]
+Description=Bedrock fetch: cot_disaggregated (bedrock.fetch.cot_cftc)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/pc/bedrock
+ExecStart=/home/pc/bedrock/.venv/bin/bedrock fetch run cot_disaggregated
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,13 @@
+# Auto-generert av `bedrock systemd generate`.
+# Ikke rediger manuelt — kjør CLI-kommandoen på nytt hvis config endrer seg.
+[Unit]
+Description=Bedrock fetch timer: prices
+Requires=bedrock-fetch-prices.service
+
+[Timer]
+OnCalendar=Mon-Fri *-*-* *:40:00
+Persistent=true
+Unit=bedrock-fetch-prices.service
+
+[Install]
+WantedBy=timers.target

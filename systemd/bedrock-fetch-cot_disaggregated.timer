@@ -1,0 +1,13 @@
+# Auto-generert av `bedrock systemd generate`.
+# Ikke rediger manuelt — kjør CLI-kommandoen på nytt hvis config endrer seg.
+[Unit]
+Description=Bedrock fetch timer: cot_disaggregated
+Requires=bedrock-fetch-cot_disaggregated.service
+
+[Timer]
+OnCalendar=Fri *-*-* 22:00:00
+Persistent=true
+Unit=bedrock-fetch-cot_disaggregated.service
+
+[Install]
+WantedBy=timers.target
