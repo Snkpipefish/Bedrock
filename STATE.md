@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 4 — åpen. Session 16 FERDIG: nivå-detektor med 3 detektorer (swing, prior H/L, round numbers) + `DataStore.get_prices_ohlc` + Level/LevelType Pydantic-modeller. Første komponent i setup-generator på plass.
+- **Phase:** 4 — åpen. Session 17 FERDIG: setup-bygger med ATR, nivå-clustering, asymmetri-gate. Detektor + bygger nå på plass; gjenstår hysterese/determinisme (§ 5.4) og horisont-klassifisering (§ 5.5).
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Fase 4 session 17 — setup-bygger (§ 5.2). Tar `list[Level]` + nåpris + direction (BUY/SELL) + horisont og bygger entry-zone/SL/TP. Inkluderer **nivå-clustering** (merge swing + round number innenfor ATR-buffer) som ble utsatt fra session 16. Asymmetri-gate (min R:R per horisont, § 5.3) kommer med dette. ATR-beregning inn her (krever close-series). MAKRO-setups får `tp=None` (trailing-only).
+- **Next task:** Fase 4 session 18 — determinisme + hysterese (§ 5.4). Setup-generatoren er allerede deterministisk (samme input → samme output). Session 18 legger til **snapshot-basert hysterese**: sammenligning mot siste kjøring lagret i `data/setups/last_run.json`. Hvis nytt setup er "nært" forrige (SL/TP innenfor hysterese-buffer), behold forrige SL/TP og ID. Dette hindrer flip-flopping mellom kjøringer uten lifecycle-tracking.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -61,6 +61,56 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 17: setup-bygger
+
+Andre komponent i Fase 4. PLAN § 5.2 + § 5.3 dekket: clustering, ATR,
+entry/SL/TP per horisont, asymmetri-gate.
+
+**Opprettet:**
+- `bedrock.setups.generator`:
+  - `Direction` (BUY/SELL), `Horizon` (SCALP/SWING/MAKRO) — str-backed
+    enums
+  - `Setup` Pydantic (instrument, direction, horizon, entry, sl, tp, rr,
+    atr + traceability: entry_cluster_price/types, tp_cluster_*).
+    `tp+rr=None` for MAKRO (trailing-only)
+  - `ClusteredLevel` Pydantic (price, types, strength, source_count)
+  - `SetupConfig` med defaults per PLAN § 5.3 (min_rr_scalp=1.5,
+    min_rr_swing=2.5, cluster_atr_multiplier=0.3, sl_atr_multiplier=0.3,
+    min_entry_strength=0.6)
+  - `compute_atr(ohlc, period=14)` — True Range SMA (MVP; Wilder senere)
+  - `cluster_levels(levels, buffer)` — transitiv single-link. Kjede-
+    effekt: 100/100.2/100.5 med buffer=0.3 blir én klynge. Strength =
+    strongest + 0.1×(n-1), konfluens-bonus
+  - `build_setup(...)` — deterministisk. Entry=nærmeste sterke klynge
+    bak nåpris; SL=entry±buffer; TP=horisont-spesifikk (SCALP 1./2.,
+    SWING 2./3., MAKRO None) med R:R-gate
+- `tests/unit/test_setups_generator.py` (27 tester — ATR edge cases,
+  clustering incl. transitiv, BUY+SELL per horisont, rejection-paths,
+  determinisme, integrasjon med detektorer)
+
+**Design-valg:**
+- Clustering bruker transitiv single-link, ikke centroid-klustering —
+  unngår iterativ konvergens, gir deterministisk resultat
+- Cluster-pris = den sterkestes pris (ikke snitt) — bevarer faktisk
+  støtte/motstand-nivå (snitt ville gitt en "syntetisk" pris som aldri
+  eksisterer som nivå)
+- MAKRO håndteres separat og returnerer Setup uten TP-klyngelookup
+  (ingen grunn til å kreve TP-kandidater for trailing)
+- `atr` tas som parameter (ikke beregnet inni) slik at caller kan
+  gjenbruke på tvers av BUY/SELL × SCALP/SWING/MAKRO kombinasjoner
+
+**Commits:** `<hash kommer>`.
+
+**Tester:** 274/274 grønne på 10.8 sek.
+
+**Bevisste utsettelser:**
+- Hysterese + snapshot-komparasjon (§ 5.4) — session 18
+- Horisont-klassifisering fra setup-karakteristikk (§ 5.5) — session 19
+- Per-instrument YAML-overrides av `SetupConfig` — Fase 5
+- Volume-profile-nivåer — senere; krever tick-data
+
+**Neste session:** determinisme/hysterese (§ 5.4).
 
 ### 2026-04-24 — Session 16: Fase 4 åpnet, nivå-detektor
 
