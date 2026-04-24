@@ -77,6 +77,7 @@ class SignalEntry(BaseModel):
     published: bool  # score ≥ min_score_publish
     setup: StableSetup | None = None  # None hvis build_setup returnerte None
     skip_reason: str | None = None  # hvorfor setup er None
+    gates_triggered: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -379,6 +380,7 @@ def _build_entry(
             published=False,  # ingen setup → ingen publish uansett
             setup=None,
             skip_reason="build_setup returned None (no asymmetric setup found)",
+            gates_triggered=list(group_result.gates_triggered),
         )
 
     # Stabiliser hvis previous finnes
@@ -404,6 +406,7 @@ def _build_entry(
         published=published,
         setup=stable,
         skip_reason=None,
+        gates_triggered=list(group_result.gates_triggered),
     )
 
 

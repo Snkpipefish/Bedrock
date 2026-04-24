@@ -14,6 +14,7 @@ import click
 
 from bedrock.cli.backfill import backfill
 from bedrock.cli.instruments import instruments
+from bedrock.cli.signals import signals_cmd
 
 
 @click.group()
@@ -29,6 +30,7 @@ def cli(verbose: bool) -> None:
 
 cli.add_command(backfill)
 cli.add_command(instruments)
+cli.add_command(signals_cmd, name="signals")
 
 
 if __name__ == "__main__":
