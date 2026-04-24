@@ -26,6 +26,11 @@ from bedrock.fetch.cot_cftc import (
     fetch_cot_legacy,
 )
 from bedrock.fetch.prices import STOOQ_CSV_URL, build_stooq_url_params, fetch_prices
+from bedrock.fetch.weather import (
+    OPEN_METEO_ARCHIVE_URL,
+    build_open_meteo_params,
+    fetch_weather,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -271,6 +276,98 @@ def cot_legacy_cmd(
     store = DataStore(db_path)
     written = store.append_cot_legacy(df)
     click.echo(f"Wrote {written} report(s) to {db_path}.")
+
+
+@backfill.command("weather")
+@click.option(
+    "--region",
+    required=True,
+    help="Region-tag som lagres i DB (f.eks. us_cornbelt, brazil_mato_grosso).",
+)
+@click.option(
+    "--lat",
+    "latitude",
+    required=True,
+    type=float,
+    help="Breddegrad (decimal degrees).",
+)
+@click.option(
+    "--lon",
+    "longitude",
+    required=True,
+    type=float,
+    help="Lengdegrad (decimal degrees).",
+)
+@click.option(
+    "--from",
+    "from_date",
+    required=True,
+    type=click.DateTime(formats=["%Y-%m-%d"]),
+    help="Start-dato (YYYY-MM-DD) inklusiv.",
+)
+@click.option(
+    "--to",
+    "to_date",
+    default=None,
+    type=click.DateTime(formats=["%Y-%m-%d"]),
+    help="Slutt-dato (YYYY-MM-DD) inklusiv. Default: i dag.",
+)
+@click.option(
+    "--db",
+    "db_path",
+    default=DEFAULT_DB_PATH,
+    show_default=True,
+    type=click.Path(path_type=Path),
+    help="Path til SQLite-databasen.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Vis URL og parametre. Ingen HTTP-kall, ingen DB-skriving.",
+)
+def weather_cmd(
+    region: str,
+    latitude: float,
+    longitude: float,
+    from_date: datetime,
+    to_date: datetime | None,
+    db_path: Path,
+    dry_run: bool,
+) -> None:
+    """Backfill daglige vær-observasjoner fra Open-Meteo Archive til SQLite.
+
+    Eksempel:
+
+        bedrock backfill weather --region us_cornbelt --lat 40.75 --lon -96.75 --from 2016-01-01
+
+    `gdd` lagres som NULL — beregnes senere i driver med crop-spesifikk
+    base-temperatur.
+    """
+    _from: date = from_date.date()
+    _to: date = to_date.date() if to_date is not None else date.today()
+
+    if dry_run:
+        params = build_open_meteo_params(latitude, longitude, _from, _to)
+        param_str = "&".join(f"{k}={v}" for k, v in params.items())
+        click.echo(f"DRY-RUN  URL: {OPEN_METEO_ARCHIVE_URL}?{param_str}")
+        click.echo(f"DRY-RUN  Would write to: {db_path} (region={region})")
+        return
+
+    click.echo(
+        f"Fetching weather for region={region!r} lat={latitude} lon={longitude} "
+        f"from {_from} to {_to}..."
+    )
+    df = fetch_weather(region, latitude, longitude, _from, _to)
+    click.echo(f"Fetched {len(df)} daily observation(s).")
+
+    if df.empty:
+        click.echo("No rows to write.")
+        return
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    store = DataStore(db_path)
+    written = store.append_weather(df)
+    click.echo(f"Wrote {written} observation(s) to {db_path}.")
 
 
 def main() -> None:
