@@ -2,16 +2,18 @@
 
 ## Current state
 
-- **Phase:** 8 **ÅPEN** (Bot-refaktor). Session 45 lukket — `bot/exit.py` med `ExitEngine` (P1-P5 exit-prioritet + cTrader event-handlere + trade-close-logging) + `EntryEngine.set_manage_open_positions` + `get_ema9_h1` + 36 nye tester. **Åtte av åtte bot-logikkmoduler er nå portert.** Gjenstår: `bot/__main__.py` + wire-up i session 46.
+- **Phase:** 8 **LUKKET** (Bot-refaktor). Tag `v0.8.0-fase-8` pushet. Session 46 leverte `bot/__main__.py` + wire-up + `docs/bot_running.md` + 18 nye tester. **Alle ni bot-moduler portert** fra `~/scalp_edge/trading_bot.py` (~3000 linjer) til `bedrock.bot/` (~4000 linjer inkl. tester). Botport kan kjøres parallelt: `python -m bedrock.bot --demo`.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Session 46 — `bot/__main__.py` og full integrasjon. Scope:
-  1. `__main__.py` entry-point: credentials-lasting via `load_credentials_from_env`, BotConfig-lasting via `load_bot_config`, SIGHUP-handler som kaller `reload_bot_config` og logger startup_only-diffs, SIGTERM-handler som lukker cleanly.
-  2. Wire-up: instansier SafetyMonitor, CtraderClient, SignalComms, EntryEngine, ExitEngine. Wire `entry.set_manage_open_positions(exit.manage_open_positions)`. Wire client.callbacks (on_spot/on_historical_bars/on_symbols_ready → entry; on_execution/on_order_error/on_reconcile → exit). Wire comms.on_signals → entry.on_signals.
-  3. Start-sekvens: comms-polling-loop, client.start() blokkerer i reactor.
-  4. Dokumentasjon: `docs/bot_running.md` med credentials-format, SIGHUP-flyt, systemd-unit-eksempel.
-  5. Tester: smoke-test som kjører `bot/__main__.py` med alle env-vars satt men uten ekte cTrader-connection (mock Client).
-  6. Etter session 46 kan bot-porten kjøres parallelt med gammel `trading_bot.py`. Fase 8 avsluttes da og vi går videre til Fase 9.
+- **Next task:** **Fase 9** per PLAN-tabell § 16 — admin-UI for YAML-config-editering. Scope vurderes av neste session:
+  1. Admin-auth (WTForms CSRF, session-basert login med `ADMIN_PASSWORD`-env-var)
+  2. Read-view: liste alle `config/instruments/*.yaml`-filer med full innhold
+  3. Edit-view: form per YAML-nivå (ikke free-tekst) — Pydantic-schema dikterer felter
+  4. Dry-run-validering: parse + validate Pydantic før save
+  5. Atomisk save + auto-commit + auto-push (bruker auto-push-hook)
+  6. Killswitch-knapp i UI når logget inn (flipper aktuell bot til pause)
+  7. Audit-log: hvem endret hvilken fil når (enkelt — bare timestamp + auth)
+- Alternativt: Fase 10 (UI-oppdateringer for bot-logg + setups-tabell) — avgjøres i neste session basert på hva bruker prioriterer.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -93,6 +95,143 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 46: bot/__main__.py + FASE 8 LUKKET
+
+**Scope:** Siste modul i bot-refaktor. `__main__.py` wirer opp alle
+bot-moduler og starter Twisted reactor. Etter denne er hele
+`trading_bot.py` portert til Bedrock.
+
+**Opprettet:**
+- `src/bedrock/bot/__main__.py` (~260 linjer) — entry-point:
+  - argparse `--demo`/`--live` (live krever interaktiv 'JA'),
+    `--config` for custom bot.yaml-sti
+  - `build_bot(demo, config_path)` instansierer og wirer
+    SafetyMonitor → CtraderClient → SignalComms → EntryEngine →
+    ExitEngine i én funksjon. Returnerer alle instanser slik at
+    tester kan verifisere wire-up uten å starte reactor
+  - `_apply_kill_ids(active_states, kill_ids)`: markerer IN_TRADE-
+    states med `kill_switch=True`. P2 i ExitEngine lukker ved neste
+    candle (ikke fra HTTP-callback-tråd)
+  - `_make_sighup_handler`: kaller `reload_bot_config` + muterer
+    eksisterende `ReloadableConfig` in-place via
+    `apply_reloadable_inplace`. Alle moduler ser nye verdier
+    umiddelbart. `startup_only`-diffs logges som warning. Exception-
+    safe: ugyldig YAML → error-log, gammel config beholdes
+  - `_make_shutdown_handler("SIGTERM"/"SIGINT")`: kaller
+    `reactor.callFromThread(reactor.stop)` — sikker på tvers av
+    tråder
+  - `_schedule_polling_loop(comms, config, reactor)`: initial
+    `callLater(0, _tick)`; hver tick kaller `comms.fetch_once()` +
+    planlegger neste via `adaptive_poll_interval` (SCALP-watchlist
+    aktivt → 20s, ellers 60s). Exception i fetch_once svelges
+  - `register_signal_handlers`: binder SIGHUP/SIGTERM/SIGINT via
+    `signal.signal()` FØR `reactor.run()`
+  - `main(argv)`: orchestrerer hele oppstart. Live-mode uten 'JA'
+    → return 0. Credentials mangler → return 1
+
+- `docs/bot_running.md` (~100 linjer):
+  - Env-var-oppsett (creds + SCALP_API_KEY + BEDROCK_BOT_CONFIG)
+  - Start-kommandoer med `PYTHONPATH=src`
+  - Signal-oppførsel-tabell (SIGHUP/SIGTERM/SIGINT)
+  - Systemd-unit-eksempel med EnvironmentFile + ExecReload +
+    TimeoutStopSec=60s (må gi tid til å lukke posisjoner)
+  - Kjørings-logikk fra oppstart → trade → management → shutdown
+  - Exit-kode-tabell (78 auth-fatal, 79 reconnect-budsjett, 80
+    symbol-mismatch)
+  - Smoke-test-kommando for CI
+
+**Endret:**
+- `src/bedrock/bot/config.py` — `apply_reloadable_inplace(current, new)`:
+  ny helper som muterer `current.ReloadableConfig` in-place fra
+  `new`'s felter via `type(new).model_fields` (Pydantic v2-kompatibel).
+  Dette er SIGHUP-mekanismen — alle moduler som holder ref til
+  samme ReloadableConfig-instans ser nye verdier uten restart
+
+**Design-valg:**
+- SIGHUP-semantikk: `reloadable`-delen muteres in-place (alle
+  moduler får nye verdier), `startup_only` krever restart.
+  `apply_reloadable_inplace` er bevisst ikke en swap — swap ville
+  krevd at alle moduler fikk ny referanse; mutasjon er enklere og
+  matcher «config er delt state»-modellen
+- Kill-switch propagering via polling-loop: /kill-endpoint pushes
+  signal_ids → `_apply_kill_ids` setter `kill_switch=True` → P2 i
+  ExitEngine lukker ved neste candle. Bevisst å ikke lukke i HTTP-
+  callback-tråden fordi ordre-sending må gå via Twisted-reactoren
+- `reactor.callFromThread(reactor.stop)` i shutdown-handler i
+  stedet for `reactor.stop()` direkte — SIGTERM/SIGINT kan fyres
+  fra annen tråd enn reactor-tråden, og `stop()` er ikke thread-safe
+- `build_bot()` returnerer alle instanser slik at smoke-tester kan
+  verifisere wire-up uten reactor.start(). Tester mocker ikke
+  internal modul-konstruksjon — bruker ekte moduler med fake env
+- Polling-loop er `callLater`-basert, ikke `LoopingCall`. `callLater`
+  lar oss justere intervall pr tick basert på signal-aktivitet;
+  `LoopingCall` ville kreve start/stop ved hver reconfiguration
+
+**Tester (18 nye i test_main.py):**
+- `_apply_kill_ids`: setter kill på IN_TRADE-state, ignorerer
+  AWAITING_CONFIRMATION; tom kill-ids er no-op
+- `apply_reloadable_inplace`: muterer current til new sine verdier
+  (confirmation.min_score_default 2→99, risk_pct.full 1.0→1.5)
+- `build_bot`: verifiserer at alle seks client-callbacks wires til
+  riktig entry/exit-metode; entry._manage_open_positions ==
+  exit.manage_open_positions; comms._on_signals == entry.on_signals
+- `build_bot` warner ved manglende SCALP_API_KEY
+- `build_bot` raiser RuntimeError ved manglende creds
+- SIGHUP-handler: nye reloadable-verdier aktiveres (3/8 i stedet
+  for 2/6 defaults); startup_only-diff logger warning med
+  "signal_url"; ugyldig YAML → error-log + config uendret
+- Shutdown-handler: `reactor.callFromThread(stop)` kalt når
+  `reactor.running=True`; no-op når False
+- `_schedule_polling_loop`: initial `callLater(0, _tick)`;
+  `_tick()` kaller fetch_once og scheduler med
+  scalp_active_seconds når watchlist har SCALP; default_seconds
+  når `latest_signals is None`; `fetch_once.side_effect=Exception`
+  svelges og neste tick schedulert uansett
+- `register_signal_handlers` binder alle tre signaler
+- `main(["--live"])` uten 'JA' → return 0 + 'Avbrutt' i stdout
+- `main(["--demo"])` uten creds → return 1 + 'Mangler
+  miljøvariabler' i error-log
+
+**Ikke endret:**
+- `~/scalp_edge/` — READ-ONLY gjennom hele session
+- Ingen prosesser rørt
+- Ingen kode-endring i eksisterende Bedrock-moduler utenom `config.py`
+
+**Commits:** `25d872b`. Tag `v0.8.0-fase-8` pushet til origin.
+
+**Tester:** 944/944 grønne (fra 926 + 18 nye) på 30.6 sek.
+
+═══════════════════════════════════════════════════════════
+FASE 8 BOT-REFAKTOR LUKKET
+═══════════════════════════════════════════════════════════
+
+Alle ni bot-moduler portert fra `~/scalp_edge/trading_bot.py`
+(~3000 linjer) til `bedrock.bot/` (~4000 linjer inkl. tester):
+  __init__.py + state.py + instruments.py + config.py +
+  ctrader_client.py + safety.py + comms.py + entry.py +
+  sizing.py + exit.py + __main__.py
+
+Session-telling:
+- Session 36: bot/__init__ + state + instruments + config
+- Session 37-40: safety + comms (flere iterasjoner)
+- Session 41: ctrader_client (transport-lag)
+- Session 42: safety + comms stabilisert
+- Session 43: entry + sizing + AGRI-BUG FIX (kritisk)
+- Session 44: _execute_trade + cTrader ordre-APIs
+- Session 45: exit.py med ExitEngine
+- Session 46: __main__.py + wire-up + docs
+
+Kritisk bug-fix levert (session 43): `_recalibrate_agri_levels`
+fjernet — agri-signalers reelt-nivå-baserte SL/T1/T2/entry_zone
+respekteres nå gjennom hele bot-pipelinen.
+
+Botport kan nå kjøres parallelt med gammel `trading_bot.py`:
+    PYTHONPATH=src .venv/bin/python -m bedrock.bot --demo
+
+**Neste fase:** Fase 9 (admin-UI for YAML-config-editering) eller
+Fase 10 (UI-oppdateringer for bot-logg og setups) per PLAN-
+tabell. Brukeren velger prioritet.
 
 ### 2026-04-24 — Session 45: bot/exit.py med ExitEngine
 
