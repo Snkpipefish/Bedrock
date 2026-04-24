@@ -14,9 +14,10 @@ gjennom Fase 7 sessions.
 | alerts | `/push-agri-alert` | POST | **implementert** (session 35) | `endpoints/alerts.py` |
 | signals | `/signals` | GET | **implementert** (session 34) | `endpoints/signals.py` |
 | signals | `/agri-signals` | GET | **implementert** (session 34) | `endpoints/signals.py` |
-| signals | `/invalidate` | POST | pending | `endpoints/signals.py` |
-| kills | `/kill` | POST | pending | `endpoints/kills.py` |
-| kills | `/clear_kills` | POST | pending | `endpoints/kills.py` |
+| signals | `/invalidate` | POST | **implementert** (session 36) | `endpoints/signals.py` |
+| kills | `/kill` | POST | **implementert** (session 36) | `endpoints/kills.py` |
+| kills | `/kills` | GET | **implementert** (session 36) | `endpoints/kills.py` |
+| kills | `/clear_kills` | POST | **implementert** (session 36) | `endpoints/kills.py` |
 | prices | `/push-prices` | POST | pending | `endpoints/prices.py` |
 | prices | `/prices` | GET | pending | `endpoints/prices.py` |
 | uploads | `/upload` | POST | pending | `endpoints/uploads.py` |
@@ -29,7 +30,8 @@ gjennom Fase 7 sessions.
   (read-only, Pydantic-validering av fil-innhold)
 - Session 35 ✓ — `endpoints/alerts.py`: `/push-alert`, `/push-agri-alert`
   (skriv-path; Pydantic body-validering; atomic append)
-- Session 36 — `endpoints/kills.py` + `/invalidate`
+- Session 36 ✓ — `endpoints/kills.py`: `/kill`, `/kills`, `/clear_kills`
+  + `/invalidate` i signals_bp
 - Session 37 — `endpoints/prices.py` + `endpoints/uploads.py`
 - Session 38 — `endpoints/rules.py` (PLAN § 8.3 — ny funksjonalitet,
   YAML-editering via UI)

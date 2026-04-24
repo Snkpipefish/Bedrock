@@ -19,6 +19,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from bedrock.signal_server.schemas import (
+    KillSwitch,
     PersistedSignal,
     SignalStoreError,
 )
@@ -108,3 +109,117 @@ def append_signal(path: Path, signal: PersistedSignal) -> None:
     existing.append(signal)
     payload = [entry.model_dump(mode="json") for entry in existing]
     _atomic_write_json(path, payload)
+
+
+# ---------------------------------------------------------------------------
+# Kill-switch I/O
+# ---------------------------------------------------------------------------
+
+
+def load_kills(path: Path) -> list[KillSwitch]:
+    """Les aktive kill-switches. Tom/manglende fil → `[]`.
+
+    Samme feilsemantikk som `load_signals`: struktur-feil → SignalStoreError.
+    """
+    if not path.exists():
+        return []
+
+    try:
+        raw = path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise SignalStoreError(f"kan ikke lese {path}: {exc}") from exc
+
+    if not raw:
+        return []
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SignalStoreError(f"{path} er ikke gyldig JSON: {exc}") from exc
+
+    if not isinstance(data, list):
+        raise SignalStoreError(
+            f"{path} må ha JSON-array som top-level, fikk {type(data).__name__}"
+        )
+
+    kills: list[KillSwitch] = []
+    for idx, row in enumerate(data):
+        if not isinstance(row, dict):
+            raise SignalStoreError(
+                f"{path}[{idx}] må være objekt, fikk {type(row).__name__}"
+            )
+        try:
+            kills.append(KillSwitch.model_validate(row))
+        except ValidationError as exc:
+            raise SignalStoreError(
+                f"{path}[{idx}] feiler validering: {exc}"
+            ) from exc
+    return kills
+
+
+def upsert_kill(path: Path, kill: KillSwitch) -> None:
+    """Legg til eller oppdater et kill. Dedupe på (instrument, horizon).
+
+    Nyeste vinner: eksisterende entry på samme slot erstattes.
+    """
+    existing = load_kills(path)
+    dedupe = {k.slot: k for k in existing}
+    dedupe[kill.slot] = kill
+    payload = [k.model_dump(mode="json") for k in dedupe.values()]
+    _atomic_write_json(path, payload)
+
+
+def clear_all_kills(path: Path) -> int:
+    """Fjern alle kills. Returnerer antall som ble fjernet."""
+    existing = load_kills(path)
+    count = len(existing)
+    _atomic_write_json(path, [])
+    return count
+
+
+# ---------------------------------------------------------------------------
+# Invalidation
+# ---------------------------------------------------------------------------
+
+
+def invalidate_matching(
+    path: Path,
+    *,
+    instrument: str,
+    direction: str,
+    horizon: str,
+    reason: str,
+    now: str,
+) -> int:
+    """Marker matchende signaler i `path` som invalidated.
+
+    Match: eksakt (instrument, direction, horizon). Setter felter
+    `invalidated=True`, `invalidated_at=<now>`, `invalidated_reason=<reason>`
+    på hver matchende entry via `model_dump` + dict-update (siden
+    PersistedSignal har `extra='allow'`).
+
+    Returnerer antall signaler som ble markert. 0 hvis ingen match.
+    Tom/manglende fil → 0.
+    """
+    existing = load_signals(path)
+    if not existing:
+        return 0
+
+    count = 0
+    payload: list[dict] = []
+    for entry in existing:
+        dumped = entry.model_dump(mode="json")
+        if (
+            dumped["instrument"] == instrument
+            and dumped["direction"] == direction
+            and dumped["horizon"] == horizon
+        ):
+            dumped["invalidated"] = True
+            dumped["invalidated_at"] = now
+            dumped["invalidated_reason"] = reason
+            count += 1
+        payload.append(dumped)
+
+    if count:
+        _atomic_write_json(path, payload)
+    return count

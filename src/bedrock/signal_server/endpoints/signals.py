@@ -18,11 +18,20 @@ Filene bestemmes av `ServerConfig.signals_path` og
 
 from __future__ import annotations
 
-from flask import Blueprint, current_app, jsonify
+from datetime import datetime
+
+from flask import Blueprint, current_app, jsonify, request
+from pydantic import ValidationError
 
 from bedrock.signal_server.config import ServerConfig
-from bedrock.signal_server.schemas import SignalStoreError
-from bedrock.signal_server.storage import load_signals
+from bedrock.signal_server.schemas import (
+    InvalidationRequest,
+    SignalStoreError,
+)
+from bedrock.signal_server.storage import (
+    invalidate_matching,
+    load_signals,
+)
 
 signals_bp = Blueprint("signals", __name__)
 
@@ -51,3 +60,71 @@ def get_agri_signals() -> tuple[object, int]:
         return jsonify({"error": str(exc)}), 500
 
     return jsonify([entry.model_dump(mode="json") for entry in entries]), 200
+
+
+@signals_bp.post("/invalidate")
+def invalidate() -> tuple[object, int]:
+    """Marker matchende signaler i begge fil-settene som invalidated.
+
+    Body: `{instrument, direction, horizon, reason?}`. Sjekker BÅDE
+    signals.json og agri_signals.json — orchestrator vet hvilken
+    fil signalet ligger i, men klienten trenger ikke vite det.
+    Returnerer telling per fil.
+    """
+    if not request.is_json:
+        return (
+            jsonify({"error": "Content-Type må være application/json"}),
+            415,
+        )
+    payload = request.get_json(silent=True)
+    if payload is None:
+        return jsonify({"error": "body må være gyldig JSON"}), 400
+    if not isinstance(payload, dict):
+        return jsonify({"error": "body må være et JSON-objekt"}), 400
+
+    try:
+        req = InvalidationRequest.model_validate(payload)
+    except ValidationError as exc:
+        return (
+            jsonify(
+                {
+                    "error": "validering feilet",
+                    "details": exc.errors(include_context=False),
+                }
+            ),
+            400,
+        )
+
+    cfg = _get_config()
+    now = datetime.utcnow().isoformat()
+
+    try:
+        financial_count = invalidate_matching(
+            cfg.signals_path,
+            instrument=req.instrument,
+            direction=req.direction,
+            horizon=req.horizon,
+            reason=req.reason,
+            now=now,
+        )
+        agri_count = invalidate_matching(
+            cfg.agri_signals_path,
+            instrument=req.instrument,
+            direction=req.direction,
+            horizon=req.horizon,
+            reason=req.reason,
+            now=now,
+        )
+    except SignalStoreError as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    return (
+        jsonify(
+            {
+                "financial_matched": financial_count,
+                "agri_matched": agri_count,
+                "total": financial_count + agri_count,
+            }
+        ),
+        200,
+    )
