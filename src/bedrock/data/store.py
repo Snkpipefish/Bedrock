@@ -184,6 +184,51 @@ class DataStore:
             )
             return cursor.fetchone() is not None
 
+    def get_prices_ohlc(
+        self,
+        instrument: str,
+        tf: str = "D1",
+        lookback: int | None = None,
+    ) -> pd.DataFrame:
+        """Returner full OHLCV DataFrame for `(instrument, tf)`.
+
+        Indeks: `ts` som `pd.DatetimeIndex`, ascending.
+        Kolonner: `open`, `high`, `low`, `close`, `volume` (alle float64;
+        NULL fra DB kommer ut som NaN).
+
+        `lookback`=N gir siste N bars. Kaster `KeyError` hvis ukjent.
+
+        Brukes av `bedrock.setups.levels` (Fase 4) som trenger high/low
+        for swing-deteksjon og prior H/L. `get_prices` (close-only) er
+        fortsatt primær for drivere som ikke bryr seg om OHLCV.
+        """
+        query = f"""
+            SELECT ts, open, high, low, close, volume FROM {TABLE_PRICES}
+            WHERE instrument = ? AND tf = ?
+            ORDER BY ts ASC
+        """
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=(instrument, tf))
+
+        if df.empty:
+            raise KeyError(f"No prices for instrument={instrument!r} tf={tf!r}")
+
+        df["ts"] = pd.to_datetime(df["ts"])
+        df = df.set_index("ts")
+        df = df.astype(
+            {
+                "open": "float64",
+                "high": "float64",
+                "low": "float64",
+                "close": "float64",
+                "volume": "float64",
+            }
+        )
+
+        if lookback is None:
+            return df
+        return df.tail(lookback)
+
     # ------------------------------------------------------------------
     # COT (Commitments of Traders) — CFTC
     # ------------------------------------------------------------------
