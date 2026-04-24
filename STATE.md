@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 8 **ÅPEN** (Bot-refaktor). Session 40 lukket — skjelett + state + instruments + config + bot.yaml + 43 tester. Null logikk-endring; gammel `~/scalp_edge/trading_bot.py` uendret i parallell-drift.
+- **Phase:** 8 **ÅPEN** (Bot-refaktor). Session 41 lukket — `bot/ctrader_client.py` (transport-lag, ~680 linjer) + 32 tester. Null logikk-endring utover credentials-via-konstruktør og AGRI-dump-sti. Gammel `~/scalp_edge/trading_bot.py` uendret i parallell-drift.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Session 41 — ctrader_client-porten per `docs/migration/bot_refactor.md § 8 punkt 2`. Port `ScalpEdgeBot.__init__`-transport-felter, `start`, `_on_connected`/`_on_disconnected`/`_fatal_exit`, `_on_message`-dispatcher, auth-handlers (`_on_app_auth`/`_on_account_auth`/`_on_trader_info`), symbols-list, subscribe-spots, historical-bars-request, heartbeat, watchdog. Exposes callback-grensesnitt: `on_spot`, `on_execution`, `on_reconcile`, `on_historical_bars`, `on_order_error`, `on_error_res`. Ingen trade-logikk i denne modulen. Tester: mock Twisted reactor, verifiser at dispatch kaller riktig callback per payloadType.
+- **Next task:** Session 42 — `bot/safety.py` + `bot/comms.py` per `docs/migration/bot_refactor.md § 8 punkt 3`. Safety: daily_loss state + persist + kill-switch-flagg + fetch-fail-escalating-logging. Comms: signal-server HTTP-fetch med tenacity-retry, POST /push-prices, daglig batch-git-commit av trade-log ved daily_loss-reset midnatt UTC (bekreftet i session 39). SIGNAL_URL leses fra startup_only.signal_url. Fjerne `_git_push_log` fra gammel flyt — erstattes av batch-commit. Bot-state paths flyttes til `~/bedrock/data/bot/`. Tester: retry-logikk med mock HTTP, daily-loss round-trip, batch-commit feil-toleranse.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -87,6 +87,96 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 41: bot/ctrader_client transport-port
+
+**Opprettet:**
+- `src/bedrock/bot/ctrader_client.py` (~680 linjer) — port av transport-
+  laget fra `~/scalp_edge/trading_bot.py`:
+  - `CtraderCredentials` (dataclass): cTrader OAuth-felt, injiseres
+    via konstruktør istedenfor modul-level env-globale
+  - `CtraderCallbacks` (dataclass): 8 callbacks med no-op defaults:
+    `on_spot`, `on_historical_bars`, `on_execution`, `on_order_error`,
+    `on_error_res`, `on_reconcile`, `on_symbols_ready`, `on_trader_info`
+  - `CtraderClient`: eier Twisted-client + symbol-lookup-state
+    (`symbol_map`, `symbol_digits`, `symbol_price_digits`, `symbol_pip`,
+    `symbol_info`, `price_feed_sids`) + bid/ask/spread_history + reconnect-
+    budsjett + watchdog/heartbeat
+  - Public metoder: `start()`, `send()`, `send_reconcile()`,
+    `request_historical_bars(symbol_id, period, bars_back)`
+  - Private: `_on_connected`, `_on_disconnected`, `_fatal_exit`,
+    `_on_message` (dispatcher), `_on_app_auth`, `_on_account_auth`,
+    `_on_trader_info`, `_on_symbols_list` (inkl. throttle-scheduling),
+    `_on_subscribe_spots`, `_on_symbol_by_id`, `_dump_agri_symbol_info`,
+    `_on_spot`, `_on_historical_bars`, `_on_execution`,
+    `_on_order_error`, `_on_error_res`, `_on_reconcile`,
+    `_send_heartbeat`, `_watchdog_check`, `_check_symbol_silence`
+  - Modulkonstanter: `M15_PERIOD`/`M5_PERIOD`/`H1_PERIOD`,
+    `AUTH_FATAL_ERROR_CODES` (6 koder), `AGRI_SYMBOL_INFO_PATH`,
+    watchdog-terskler, heartbeat-intervall (25s), watchdog-intervall (30s)
+  - `load_credentials_from_env()` for `bot/__main__.py` session 45
+- `tests/unit/bot/test_ctrader_client.py` (32 tester)
+
+**Endringer fra gammel bot (ikke "logikk", men nødvendige):**
+- Credentials: injiseres via `CtraderCredentials` i stedet for
+  modul-global `CLIENT_ID`/`CLIENT_SECRET`/`ACCESS_TOKEN`/`ACCOUNT_ID`
+- AGRI-symbol-dump flyttet fra `~/cot-explorer/data/prices/` til
+  `~/bedrock/data/bot/agri_symbol_info.json` (cot-explorer eksisterer
+  ikke som referanse i Bedrock)
+- Reconnect-budsjett leses fra `StartupOnlyConfig.reconnect` (var
+  modul-konstanter `RECONNECT_WINDOW_SEC=600`/`RECONNECT_MAX_IN_WINDOW=5`)
+- `_on_error_res` sjekker nå `AUTH_FATAL_ERROR_CODES` eksplisitt og
+  kaller `_fatal_exit(78)` (gammel bot hadde lignende sjekk spredt i
+  `_on_app_auth`/`_on_account_auth`-paths; ny sentralisering fanger
+  token-expired selv på senere responses)
+
+**Design-valg:**
+- `CtraderCallbacks` med no-op defaults slik at testing ikke krever
+  full bot-wiring og stegvis integrasjon er enkelt
+- Callbacks eksception-isolert med try/except: én krasj i entry/exit
+  stopper ikke transport-laget
+- `on_symbols_ready(client)` fires FØR subscribe-spots starter —
+  bot/entry har tid til å initialisere candle-buffere før første
+  spot-event ankommer
+- Transport-laget eier bid/ask + spread_history (ikke candle-buffere),
+  fordi disse er rene TCP-side-effekter av SpotEvent
+- `request_historical_bars` tar `period` som argument (ny flexibility)
+  i stedet for gammel `_request_historical_bars_h1` duplikatmetode
+- Handler-dispatcher (`_handlers()`) returnerer dict som bygges ved
+  første kall; instansierer prototype-protobuf-meldinger lazy slik at
+  import av modulen (for ctrader_client-konstruksjon i tester) ikke
+  krever fullt protobuf-reg-oppsett
+- Agri-dump bruker `pathlib.Path`/`read_text`/`write_text` i stedet
+  for `os.path`/`open()` — ryddigere; samme atferd
+
+**Dependency-håndtering:**
+- Bot-extras installert i `.venv`:
+  - `twisted==24.3.0`
+  - `protobuf==6.33.6`
+  - `service_identity==24.2.0`
+  - `ctrader-open-api==0.9.2` (med `--no-deps` for å omgå
+    transitive `protobuf==3.20.1`-pin)
+- Dette matcher `~/scalp_edge/requirements.txt` produksjonsversjoner.
+  `pyproject.toml`-endring utsatt — når `uv sync` brukes i Fase 11-12
+  cutover trengs `[tool.uv] override-dependencies = ["protobuf>=6.0"]`
+  eller tilsvarende
+
+**Ikke gjort i denne session:**
+- `send_new_order`, `amend_sl_tp`, `close_position`, `cancel_order`:
+  utsatt til session 43-44 (entry/exit trenger dem; generell `send()`
+  dekker inntil da)
+
+**Ikke endret:**
+- `~/scalp_edge/` — fullstendig READ-ONLY
+- Ingen prosesser rørt
+- `pyproject.toml` — bot-extras-blokken uendret (kjent konflikt
+  noteres for ops-oppsett)
+
+**Commits:** `5f710a3`.
+
+**Tester:** 747/747 grønne (fra 715 + 32 nye) på 28.5 sek.
+
+**Neste session:** 42 — `bot/safety.py` + `bot/comms.py`.
 
 ### 2026-04-24 — Session 40: bot/ skjelett + state + instruments + config
 
