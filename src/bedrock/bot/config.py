@@ -364,6 +364,21 @@ def _walk_diff(
         out.append(f"{prefix}: {cur!r} → {new!r}")
 
 
+def apply_reloadable_inplace(
+    current: ReloadableConfig, new: ReloadableConfig
+) -> None:
+    """Muter `current` in-place til å matche `new`'s felter.
+
+    Trengs av SIGHUP-handleren i `bot/__main__.py`: alle bot-moduler
+    holder samme ReloadableConfig-instans via `self._config`. I stedet
+    for å bytte ut referansen overalt (krever full module-graph-
+    oppdatering), oppdaterer vi feltene på plass. Pydantic v2 støtter
+    `__setattr__` på BaseModel så lenge ikke `frozen=True`.
+    """
+    for name in type(new).model_fields:
+        setattr(current, name, getattr(new, name))
+
+
 def reload_bot_config(
     path: Path | str | None, current: BotConfig
 ) -> tuple[BotConfig, list[str]]:
