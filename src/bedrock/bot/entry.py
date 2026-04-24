@@ -456,6 +456,21 @@ class EntryEngine:
         atrs = self.atr14_h1.get(symbol_id, [])
         return atrs[-1] if atrs else None
 
+    def get_ema9_h1(self, symbol_id: int, offset: int = 0) -> Optional[float]:
+        """1H EMA9 — brukes av ExitEngine for SWING/MAKRO P4 (EMA9-kryss)."""
+        emas = self.ema9_h1.get(symbol_id, [])
+        idx = -(offset + 1)
+        return emas[idx] if len(emas) >= abs(idx) else None
+
+    def set_manage_open_positions(
+        self, callback: ManagePositionsCallback
+    ) -> None:
+        """Sett (eller bytt ut) manage_open_positions-callbacken etter
+        konstruksjon. Brukes i `bot/__main__.py` for å koble ExitEngine
+        inn etter at begge er instansiert (sirkulær dep: ExitEngine
+        trenger EntryEngine-ref, EntryEngine trenger manage-callback)."""
+        self._manage_open_positions = callback
+
     def get_normal_spread(self, symbol_id: int) -> float:
         hist = self._client.spread_history.get(symbol_id, deque())
         return sum(hist) / len(hist) if hist else 0.0
