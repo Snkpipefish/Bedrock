@@ -8,16 +8,15 @@
   - **Runde 3 (session 54-55):** admin-rule-editor på separat URL med kode-gate
 - Session 47 lukket — Fane 1 Skipsloggen (KPI + trade-log-tabell).
 - Session 48 lukket — Fane 2 Financial setups (kort-grid med grade/score-sortering).
-- Session 49 lukket — Fane 3 Soft commodities (samme kort-grid; backend klar fra 48, kun frontend-wire).
+- Session 49 lukket — Fane 3 Soft commodities (samme kort-grid; backend klar fra 48).
+- Session 50 lukket — Fane 4 Kartrommet (pipeline-helse, gruppert per PLAN § 10.4). **Runde 1 LUKKET** — alle fire faner har funksjonell data-wiring.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** **Session 50 — Fane 4 Kartrommet** (siste i runde 1). Pipeline-helse per fetch-kilde. Scope:
-  1. Kartlegg `data/_meta/` — hvilke filer/format skriver fetch-lag (generated_at, row_count, source-navn)
-  2. `GET /api/ui/pipeline_health` i `ui_bp` — iterer `data/_meta/*.json`, klassifiser hver kilde som fresh/aging/stale/missing basert på `fetch.yaml`-cadence + current time, returner gruppert liste (Core / Bot-priser / CFTC / Ekstern COT / Fundamentals / Sektor / Geo per PLAN § 10.4)
-  3. `web/index.html` kartrom-fane: tabell/kort per gruppe med status-farge
-  4. `app.js` rendrer + 60-sek auto-refresh
-  5. Tester: klassifisering ved forskjellige alder-verdier, manglende _meta-fil → "missing", gruppering
-- Etter session 50: runde 1 ferdig. Runde 2 (sessions 51-53) gir styling/flyt/filtrering/detaljmodaler.
+- **Next task:** **Runde 2 (sessions 51-53)** — styling, flyt, filtrering, detaljmodaler. Konkret scope for session 51 velges ved start:
+  - **Option A (polish-først):** farger + typografi + header + visuell hierarki. Gir umiddelbar UX-vin.
+  - **Option B (filter-først):** filter-bar på Skipsloggen (horizon/result/instrument) og setups-fanene (grade/instrument/direction). Funksjonell forbedring uten polish.
+  - **Option C (modal-først):** klikk-på-rad/kort åpner detaljmodal med explain-trace/analog-matcher. Forutsetter at backend eksponerer denne informasjonen — må kartlegges.
+- Runde 3 (sessions 54-55) er admin-rule-editor på separat URL med kode-gate.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -99,6 +98,115 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 50: Fase 9 runde 1 — Kartrommet + RUNDE 1 LUKKET
+
+**Scope:** Siste fane i runde 1. Pipeline-helse per fetch-kilde,
+gruppert per PLAN § 10.4. Etter denne er alle fire faner wired med
+minimal data-flyt.
+
+**Opprettet:**
+- `GET /api/ui/pipeline_health` i `ui_bp`:
+  - Laster `config.fetch_config_path` via `load_fetch_config`
+  - Instansierer `DataStore(config.db_path)`
+  - Kjører `status_report(fetch_cfg, store)` → `list[FetcherStatus]`
+  - Klassifiserer via `_classify_staleness(has_data, age_hours, stale_hours)`:
+    - `missing` (ingen observasjoner)
+    - `fresh` (age < stale_hours)
+    - `aging` (stale_hours ≤ age < 2×stale_hours)
+    - `stale` (age ≥ 2×stale_hours)
+  - Grupperer via hardkodet `_FETCHER_GROUPS` mapping:
+    `prices→Core`, `cot_*→CFTC`, `fundamentals→Fundamentals`,
+    `weather→Geo`, øvrige → `Other`
+  - `_GROUP_ORDER` definerer UI-rekkefølge (Core first, Other last)
+  - Respons: `{groups: [{name, sources: [...]}], last_check}`. Hver
+    source har `name/module/table/status/stale_hours/age_hours/
+    latest_observation/cron`
+
+- `web/index.html` kartrom-fane med last_check-meta + group-container
+
+- `web/assets/app.js`:
+  - `loadKartrommet()` fetcher og kaller `renderKartrommet(res)`
+  - Per gruppe: `<section class="pipeline-group">` med `<h3>`-header
+    + `<table class="pipeline-table">` (kilde/tabell/status/alder/
+    stale-grense/siste-obs/cron)
+  - Status-pill med `.status-{fresh,aging,stale,missing}`-klasser
+  - Graceful: `res.error` → viser feilmelding; tom groups → "Ingen
+    fetch-kilder konfigurert"
+
+- `web/assets/style.css`:
+  - `.pipeline-group` med gråtone-header
+  - `.pipeline-table` med uppercase th-labels
+  - `.status-pill` klasser med grønn/gul/rød/grå farger
+
+**Endret:**
+- `ServerConfig` har nytt felt `fetch_config_path` (default `config/fetch.yaml`)
+
+**Design-valg:**
+- **Graceful ved førstegangs oppstart:** Tom SQLite → alle fetchere
+  viser `missing` (ingen observasjoner enda). `fetch.yaml` mangler →
+  200 + error-felt, ikke 500. Fetch.yaml ugyldig → samme. UI-en skal
+  aldri være bryte når bot/pipeline ikke har kjørt enda
+- **Hardkodet gruppering (ikke YAML-drevet):** Runde 1 skal være
+  minimal. Hvis fremtidige fetchere trenger egen gruppe, legg de til
+  i `_FETCHER_GROUPS` + evt. `_GROUP_ORDER`. YAML-drevet gruppering
+  vurderes i runde 2 hvis det blir mange nye fetchere
+- **2× stale_hours som aging-grense:** enkelt heuristic; matches
+  intuisjonen "fetcher skulle ha kjørt igjen". Finere granularitet
+  (3 grader, fast-grense i YAML) kan komme senere
+- **Ingen auto-refresh på Kartrommet ennå:** Bruker må tabbe tilbake
+  for å oppdatere. Runde 2 legger til polling hvis det trengs;
+  pipeline-state endrer seg sjelden nok at 30-sek-poll er overkill
+
+**Tester (8 nye):**
+- `empty_db_all_missing`: alle fire fetchere fra test-fetch.yaml er
+  `missing` med `age_hours=None`
+- `groups_by_plan_categories`: `Core < CFTC < Geo < Other` i svaret
+- `unknown_fetcher_in_other_group`: `unknown_fetcher` havner i "Other"
+- `fresh_status_under_stale_threshold`: 1t gammel prises-obs i
+  sqlite → status=`fresh`
+- `aging_between_1x_and_2x_stale`: 45t (1.5 × 30) → `aging`
+- `stale_above_2x`: 100t (>2 × 30) → `stale`
+- `missing_fetch_config`: ikke-eksisterende fil → 200 + error-felt,
+  tom `groups`
+- `includes_cron_and_stale_hours`: respons inneholder `cron`-streng
+  og `stale_hours`-tall per kilde
+
+**Ikke endret:**
+- Orchestrator/bot: uendret
+- `check_staleness` og `status_report` fra `bedrock.config.fetch`
+  gjenbrukes uendret
+
+**Commits:** `36065f5`.
+
+**Tester:** 979/979 grønne (fra 971 + 8 nye) på 33.2 sek.
+
+═══════════════════════════════════════════════════════════
+FASE 9 RUNDE 1 LUKKET
+═══════════════════════════════════════════════════════════
+
+Alle fire faner har funksjonell data-wiring (sessions 47-50).
+Data-kilder:
+- `~/bedrock/data/bot/signal_log.json` (ExitEngine)
+- `data/signals.json` (orchestrator/push-alert)
+- `data/agri_signals.json` (samme)
+- `data/bedrock.db` (DataStore latest-observations)
+- `config/fetch.yaml` (fetcher-definisjoner)
+
+Backend-endepunkter:
+- `GET /` + `GET /assets/<path>` (static)
+- `GET /api/ui/trade_log` (+ `/summary`)
+- `GET /api/ui/setups/financial`
+- `GET /api/ui/setups/agri`
+- `GET /api/ui/pipeline_health`
+
+Frontend: 4 faner, vanilla JS med lazy-load per fane. Skipsloggen
+har 30-sek auto-refresh; andre lades ved tab-klikk. Minimal CSS
+(polish kommer i runde 2).
+
+**Neste:** Runde 2 — styling/filtrering/modaler. Bruker velger
+mellom polish-først (A), filter-først (B), eller modal-først (C)
+ved session 51-start.
 
 ### 2026-04-24 — Session 49: Fase 9 runde 1 — Soft commodities
 
