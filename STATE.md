@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 3 — åpen. Session 14 FERDIG: `bedrock backfill fundamentals` (FRED) + `bedrock.config.secrets`-modul. Fem fetchere (Stooq, CFTC disagg, CFTC legacy, Open-Meteo, FRED), fem CLI-subkommandoer, komplett backfill-dekning for Fase 3-scope.
+- **Phase:** 3 CLOSED (tagget `v0.3.0-fase-3`). Backfill-CLI komplett: 5 fetchere + 5 subkommandoer + secrets-modul + delt Socrata-helper + konsekvent `--dry-run`-mønster. 210/210 tester grønne.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Avslutt Fase 3 og tag `v0.3.0-fase-3` i neste session. Alle 5 backfill-subkommandoer implementert med --dry-run, idempotent INSERT OR REPLACE, mocked tester, stdlib logging. Fase 4 (setup-generator) eller Fase 5 (fetch-refactor + instrument-config) er neste — sannsynligvis Fase 5 siden backfill-CLI nå trenger config-drevet cadence og instrument→ticker-mapping for å bli brukbar i praksis.
+- **Next task:** Start **Fase 4 (setup-generator)** eller **Fase 5 (fetch-refactor + instrument-config)** i ny session. PLAN § 13 rekkefølge er Fase 4 → Fase 5. Men Fase 5 er praktisk nødvendig for at backfill-CLI skal bli brukbar uten å skrive ut CLI-args manuelt per instrument. Forslag: Fase 5 først (instrument-config med ticker/contract/lat-lon-mapping + YAML-drevet cadence), så Fase 4 (setup-generator). Alternativt: Fase 4 per PLAN-orden, deretter Fase 5. Bruker velger.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -49,10 +49,73 @@
 - **SIMD-sensitive deps må pinnes** (fra ADR-002): numpy pinnet `>=2.2,<2.3`.
   Nye SIMD-tunge pakker (pyarrow, duckdb, fastparquet, scipy, numexpr) må
   avvises eller pinnes til versjon verifisert på produksjons-CPU.
+- **Backfill-CLI-kontrakt låst** (fra Fase 3): alle `bedrock backfill *`-
+  kommandoer har felles mønster — `--from` påkrevd, `--to` default i dag,
+  `--db` default `data/bedrock.db`, `--dry-run` viser URL uten HTTP/DB.
+  Nye subkommandoer må følge samme signatur.
+- **Secrets kun via env/fil** (fra Fase 3): hemmeligheter leses fra
+  `~/.bedrock/secrets.env` eller env-var via `bedrock.config.secrets`.
+  Aldri hardkodet, aldri i YAML, aldri i UI. `--dry-run` masker secrets
+  uansett om de er satt eller ikke.
 
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 15: Fase 3 CLOSED
+
+Verifisert at Fase 3 er reell implementasjon: grep mot
+`src/bedrock/{fetch,cli,config}/` fant null `NotImplementedError`/`TODO`/
+`FIXME`/`XXX`. 5 fetchere + 5 CLI-subkommandoer implementert. 210/210
+tester grønne.
+
+**Tag:** `v0.3.0-fase-3` opprettet og pushet.
+
+**Fase 3 leveranse-sum:**
+- **5 fetchere** (`bedrock.fetch.*`):
+  - `prices.fetch_prices` (Stooq CSV, no auth)
+  - `cot_cftc.fetch_cot_disaggregated` (CFTC Socrata 72hh-3qpy, 2010-)
+  - `cot_cftc.fetch_cot_legacy` (CFTC Socrata 6dca-aqww, 2006-)
+  - `weather.fetch_weather` (Open-Meteo Archive, no auth)
+  - `fred.fetch_fred_series` (FRED, krever API-key)
+- **5 CLI-subkommandoer** (`bedrock backfill *`):
+  - `prices`, `cot-disaggregated`, `cot-legacy`, `weather`, `fundamentals`
+  - Felles mønster: `--from` required, `--to` default i dag, `--db`
+    default `data/bedrock.db`, `--dry-run` viser URL uten HTTP/DB
+- **Fetch-base** (`bedrock.fetch.base`):
+  - `http_get_with_retry` (tenacity, 3 forsøk, exp backoff)
+  - stdlib logging (per bruker-beslutning, ikke structlog)
+- **Secrets** (`bedrock.config.secrets`):
+  - `load_secrets` / `get_secret` / `require_secret`
+  - Prioritet env-var > fil > default
+  - `~/.bedrock/secrets.env` via python-dotenv, ingen env-mutasjon
+  - `--dry-run` masker alltid secrets (aldri lekk via logs)
+- **Delt Socrata-helper**: `_fetch_cot_socrata` + `_normalize_cot` felles
+  for disaggregated og legacy; offentlige fetchere er tynne wrappere
+- **Idempotent backfill**: alle fetchere → DataStore.append_* med
+  INSERT OR REPLACE på PK, trygg å re-kjøre
+- **105 nye tester** (fra 107 ved Fase 2-close → 210 nå): prices (17),
+  cot-disagg (18), cot-legacy (11), weather (18), fred+secrets+CLI (35),
+  + 6 CLI-specific parent-help/argument-validation
+
+**Utsatt til senere faser (bevisst):**
+- Instrument→ticker/contract/lat-lon-mapping — Fase 5 (YAML)
+- Config-drevet cadence (cron-scheduled backfill) — Fase 5
+- ICE/Euronext COT, Conab/UNICA, USDA WASDE — Fase 5 hvis drivere trenger
+- Live integrasjonstester mot eksterne API-er — flaky; manuell verifisering
+  når bruker kjører CLI
+- systemd-integrasjon — Fase 5/11
+
+**Kommando-oversikt (alle har `--dry-run`):**
+```
+bedrock backfill prices --instrument Gold --ticker xauusd --from 2016-01-01
+bedrock backfill cot-disaggregated --contract "GOLD - COMMODITY EXCHANGE INC." --from 2010-01-01
+bedrock backfill cot-legacy --contract "CORN - CHICAGO BOARD OF TRADE" --from 2006
+bedrock backfill weather --region us_cornbelt --lat 40.75 --lon -96.75 --from 2016-01-01
+bedrock backfill fundamentals --series-id DGS10 --from 2016-01-01
+```
+
+**Neste:** Fase 4 eller Fase 5 i ny session. Bruker velger.
 
 ### 2026-04-24 — Session 14: `backfill fundamentals` (FRED) + secrets-modul
 
