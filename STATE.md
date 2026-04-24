@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 4 — åpen. Session 17 FERDIG: setup-bygger med ATR, nivå-clustering, asymmetri-gate. Detektor + bygger nå på plass; gjenstår hysterese/determinisme (§ 5.4) og horisont-klassifisering (§ 5.5).
+- **Phase:** 4 — åpen. Session 18 FERDIG: hysterese + snapshot-persistens. Tre av fire komponenter i setup-generator på plass (detektor, bygger, hysterese); gjenstår horisont-klassifisering (§ 5.5).
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Fase 4 session 18 — determinisme + hysterese (§ 5.4). Setup-generatoren er allerede deterministisk (samme input → samme output). Session 18 legger til **snapshot-basert hysterese**: sammenligning mot siste kjøring lagret i `data/setups/last_run.json`. Hvis nytt setup er "nært" forrige (SL/TP innenfor hysterese-buffer), behold forrige SL/TP og ID. Dette hindrer flip-flopping mellom kjøringer uten lifecycle-tracking.
+- **Next task:** Fase 4 session 19 — horisont-klassifisering (§ 5.5). PLAN beskriver: SCALP hvis entry_tf=15m, SWING hvis 4h/D1 + expected_hold 7-21d, MAKRO hvis D1/W + 30-90d. Inkluderer score-hysterese på horisont-terskler (±5% buffer mot flip-flopping). Output: `classify_horizon(setup_context) -> Horizon`. Kan avslutte Fase 4 etter dette med tag `v0.4.0-fase-4`.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -61,6 +61,58 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 18: hysterese + snapshot
+
+Tredje komponent i Fase 4. PLAN § 5.4 stabilitets-filtre dekket; horisont-
+hysterese (§ 5.4.2) utsatt til session 19 siden horisont-klassifisering
+ikke finnes ennå.
+
+**Opprettet:**
+- `bedrock.setups.hysteresis`:
+  - `HysteresisConfig` (sl_atr=0.3, tp_atr=0.5, enabled=True)
+  - `compute_setup_id(instrument, direction, horizon)` — 12-char SHA1.
+    Slot-basert: `Gold BUY SCALP` = samme ID uavhengig av entry/SL/TP
+  - `StableSetup` Pydantic (setup_id, first_seen, last_updated, setup)
+  - `SetupSnapshot` Pydantic (run_ts, setups) + `.find(...)`-metode
+  - `stabilize_setup(new, previous, now, config) -> StableSetup`:
+    * SL innenfor buffer → behold forrige; utenfor → ny
+    * TP samme (men tp=None i MAKRO går gjennom begge veier)
+    * R:R recomputed etter substitusjon
+    * first_seen bevares når slot matcher; last_updated = now
+    * enabled=False slår av alt
+    * Mismatched slot → ValueError (bug-detection for caller)
+  - `apply_hysteresis_batch` for batch-prosessering
+- `bedrock.setups.snapshot`:
+  - `DEFAULT_SNAPSHOT_PATH = data/setups/last_run.json` (PLAN § 5.4)
+  - `load_snapshot(path)` — None ved manglende fil
+  - `save_snapshot(snapshot, path)` — atomic write (tmp + rename),
+    auto-opprettet parent-dir
+
+**Design-valg:**
+- Setup-ID basert på slot (instrument, direction, horizon), ikke på
+  entry/SL/TP. Gir UI-kontinuitet: kortet for Gold BUY SWING beholder
+  ID mens innholdet oppdateres
+- Atomic write via `.tmp + rename`: POSIX-atomisk, hindrer at pipeline
+  leser halvskrevet fil
+- JSON-format (ikke pickle): menneskelesbar for debugging, schema-safe
+  via Pydantic v2
+- Slot-mismatch detekteres og rises ValueError — caller-bug er bedre
+  loggeligst enn stille feil
+
+**Commits:** `<hash kommer>`.
+
+**Tester:** 299/299 grønne på 12.3 sek. Inkluderer en pipeline-
+integrasjonstest over 3 sekvensielle kjøringer som verifiserer at
+`first_seen` låses ved første kjøring og `SL=99.7` holdes stabil
+gjennom tre påfølgende runs med små SL-justeringer.
+
+**Bevisste utsettelser:**
+- Horisont-hysterese (§ 5.4.2, ±5% buffer rundt horisont-terskel) —
+  session 19, krever `classify_horizon` først
+- Per-instrument YAML-overrides av HysteresisConfig — Fase 5
+
+**Neste session:** horisont-klassifisering (§ 5.5) → Fase 4 closure.
 
 ### 2026-04-24 — Session 17: setup-bygger
 
