@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 3 — åpen. Session 13 FERDIG: `bedrock backfill weather` via Open-Meteo Archive. Fire fetchere (Stooq, CFTC disagg, CFTC legacy, Open-Meteo), fire CLI-subkommandoer. Alle no-auth kilder dekket.
+- **Phase:** 3 — åpen. Session 14 FERDIG: `bedrock backfill fundamentals` (FRED) + `bedrock.config.secrets`-modul. Fem fetchere (Stooq, CFTC disagg, CFTC legacy, Open-Meteo, FRED), fem CLI-subkommandoer, komplett backfill-dekning for Fase 3-scope.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Fase 3 session 14 — `backfill fundamentals` via FRED. Dette er første kilde som krever **secrets** (FRED_API_KEY). Introduserer `bedrock.config.secrets`-modul som leser `~/.bedrock/secrets.env` (per PLAN § 2 prinsipp 10). FRED-endepunkt: `https://api.stlouisfed.org/fred/series/observations` med `series_id`, `api_key`, `observation_start`, `observation_end`, `file_type=json`. Bruker må ha nøkkel registrert før live-kjøring; tester mocker bort auth-lasting.
+- **Next task:** Avslutt Fase 3 og tag `v0.3.0-fase-3` i neste session. Alle 5 backfill-subkommandoer implementert med --dry-run, idempotent INSERT OR REPLACE, mocked tester, stdlib logging. Fase 4 (setup-generator) eller Fase 5 (fetch-refactor + instrument-config) er neste — sannsynligvis Fase 5 siden backfill-CLI nå trenger config-drevet cadence og instrument→ticker-mapping for å bli brukbar i praksis.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -53,6 +53,69 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 14: `backfill fundamentals` (FRED) + secrets-modul
+
+Siste backfill-subkommando i Fase 3. Første kilde som krever auth —
+introduserer `bedrock.config.secrets` med prioriterte lookup-regler.
+
+**Opprettet:**
+- `src/bedrock/config/__init__.py`
+- `src/bedrock/config/secrets.py`:
+  - `DEFAULT_SECRETS_PATH = ~/.bedrock/secrets.env` (ekspandert)
+  - `load_secrets(path)` via `python-dotenv`s `dotenv_values` — ingen
+    `os.environ`-mutasjon, ingen global state
+  - `get_secret(name, path, default)` — prioritet: env-var > fil > default
+  - `require_secret(name, path)` kaster `SecretNotFoundError` hvis mangler
+  - Ikke-eksisterende fil håndteres som tom dict
+- `src/bedrock/fetch/fred.py`:
+  - `FRED_OBSERVATIONS_URL` + `build_fred_params` (eksponert for masking)
+  - `fetch_fred_series(series_id, api_key, from_date, to_date)` —
+    returnerer DataFrame matching `DataStore.append_fundamentals`
+  - FRED's `"."` for missing observations → NaN → NULL i DB
+  - HTTP-feil inkluderer body-preview (FREDs error-messages nyttig ved
+    debugging av auth/serie-ID-problemer)
+  - `FredFetchError` for permanente feil
+- `bedrock.cli.backfill.fundamentals_cmd`:
+  - Obligatoriske: `--series-id`, `--from`
+  - API-key resolver: `--api-key` CLI > env-var `FRED_API_KEY` >
+    secrets-fil > `click.UsageError`
+  - `--dry-run` MASKERER api_key som `***` i URL-output (aldri lekk
+    via logs/screenshots). Rapporterer `resolved`/`MISSING`.
+    Fungerer uten nøkkel
+- `tests/unit/test_config_secrets.py` (15 tester — parse, kommentarer,
+  blank-linjer, env-override, fil-default, tilde-ekspansjon, require-
+  raises, error-message-includes-path)
+- `tests/unit/test_fetch_fred.py` (10 tester — param-bygging, mocked
+  HTTP success+feil, `.`-til-NaN-konvertering, empty-observations,
+  malformed payload, e2e mot DataStore, correct URL)
+- `tests/unit/test_cli_backfill_fundamentals.py` (10 tester — CLI-key,
+  env-var, CLI-overrides-env, no-key-errors, masking i dry-run,
+  dry-run-uten-key, resolved/MISSING-reporting, empty-result,
+  required-args, parent-help)
+
+**Design-valg:**
+- `python-dotenv` (allerede i pyproject fra Fase 0) i stedet for custom
+  parser: håndterer quoting, escaping, kommentarer riktig
+- API-key-masking i dry-run ikke-valgfritt: alltid `***`. Dry-run-output
+  skal kunne deles i logs eller screenshots uten å lekke
+- HTTP-error body-preview: 200 tegn er nok til å se FRED's error-message
+  uten å blote loggen
+- Ingen separat "fundamentals" (Pydantic) validering i fetcher — stole
+  på at `DataStore.append_fundamentals` valideres der
+
+**Commits:** `<hash kommer>`.
+
+**Tester:** 210/210 grønne på 9.5 sek.
+
+**Bevisste utsettelser:**
+- Live-test mot FRED med ekte nøkkel — manuell når bruker er klar
+- Instrument→series-ID-mapping (f.eks. "us_10y_yield" → "DGS10") —
+  Fase 5 instrument-config
+- CLI for ICE COT / Euronext COT / Conab / UNICA / USDA WASDE —
+  ikke i Fase 3-scope; kommer i Fase 5 hvis/når drivere trenger dem
+
+**Neste session:** avslutte Fase 3, tag `v0.3.0-fase-3`.
 
 ### 2026-04-24 — Session 13: `backfill weather` (Open-Meteo, no auth)
 
