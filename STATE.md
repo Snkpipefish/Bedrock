@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 6 — åpen. Session 31 FERDIG: `currency_cross_trend`-driver (BRL/USD for softs, generisk for andre cross). Session 30 FERDIG: systemd-unit-generator. Installasjon utsatt til Fase 11 cutover per bruker-direktiv (gamle cot-explorer-timere kjører fortsatt).
+- **Phase:** 6 **CLOSED** (tag `v0.6.0-fase-6`). Sessions 27-31 leverte fetch-laget komplett: USDA-kalender + `usda_blackout`-gate, config-drevet `fetch.yaml` + status-CLI, `bedrock fetch run <name>`-dispatcher med per-item resiliens, systemd-unit-generator (generate/install/list), og `currency_cross_trend`-driver. PLAN § 13 omnummerert for å reflektere faktisk leveranse (ny Fase 5 lagt inn, senere faser skjøvet ett hakk).
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Session 32 — min anbefaling: Baltic Dry Index → agri-cross-driver (PLAN § 7.3, "Baltic Dry til agri"). Samme mønster som currency_cross_trend: generisk trend-driver lesbar mot BDI-serien. Alternativt lukk Fase 6 med tag `v0.6.0-fase-6`. PLAN § 7.3-gjenværende (Eksport-policy-tracker, IGC, Disease-varsling) er alle større leveranser som passer bedre i senere faser. Baltic Dry er minste relevante leveranse som fullfører Fase 6-scope.
+- **Next task:** Session 32 — åpner **Fase 7: Signal-server refaktor** per PLAN § 8. Dagens `~/scalp_edge/signal_server.py` er 974 linjer som må splittes i modul-struktur. Scope: start med `bedrock.signal_server`-pakken (init), endepunkt-inventar, så én endepunkt-gruppe per session. Første sub-task er å mappe dagens endepunkter (push-alert, signals, kill, upload, prices, health osv.) til moduler og lage en tom Flask-app-skeleton med helse-endepunkt som smoke-testes. Schema-validering (Pydantic for signal-body) og /admin/rules-endepunktet kommer senere i fasen. Fase 7 er PLAN-estimert til 3-5 dager.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -87,6 +87,56 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 32: Fase 6 CLOSED + PLAN-nummerering sync
+
+Fase 6 leveranse verifisert. Ingen ny kode; ren rydding.
+
+**Tagget:** `v0.6.0-fase-6` med leveranse-summary.
+
+**Fase 6 leveranse-sum (sessions 27-31):**
+- **USDA-kalender + `usda_blackout`-gate** (session 27): `usda.yaml`-
+  loader med 6 måneders blackout-vindu per event, `usda_in_blackout`-
+  gate som nekter signaler i pre-event-stillhet
+- **Config-drevet `fetch.yaml`** (session 28): Pydantic-validert
+  schema med cron + stale_hours + on_failure, `bedrock fetch
+  status`-CLI som viser hvilke kilder som er oppdaterte
+- **`bedrock fetch run <name>`-dispatcher** (session 29): runner-
+  registry for alle 5 fetchere, --stale-only-filter, --instrument-
+  filter, per-item resiliens med retry-kommando-summary
+- **systemd-unit-generator** (session 30): `bedrock systemd
+  generate/install/list`-CLI, cron → OnCalendar-konverter, 10 auto-
+  genererte unit-filer committet. Installasjon utsatt til Fase 12
+  cutover per bruker-direktiv
+- **`currency_cross_trend`-driver** (session 31): BRL/USD-style
+  cross-driver (generisk via params.source), unidirectional bull
+  med `direction: invert`-flag
+
+**Ikke i Fase 6 (bevisst utsatt):**
+- BRL/USD-backfill — `bedrock backfill prices --ticker brlusd=x`
+  fungerer, men er ikke kjørt
+- Baltic Dry → agri-driver
+- WASDE PDF-parsing, Crop Progress, Eksport-policy-tracker, IGC,
+  Disease-varsling (PLAN § 7.3)
+- systemd-install (Fase 12 cutover)
+
+Disse er drivere/kilder som kan legges til når som helst uten å
+blockere senere faser.
+
+**PLAN § 13-rydding:**
+- Ny Fase 5 "Scoring-motor komplett" lagt inn (reflekterer faktisk
+  leveranse sessions 21-26)
+- Fase 5 "Fetch-laget" → Fase 6
+- Fase 6 "Signal-server" → Fase 7
+- Alle senere faser skjøvet ett hakk (bot=8, UI=9, analog=10,
+  backtest=11, demo=12, cutover=13)
+- PLAN-referanser oppdatert: "trades.parquet venter til Fase 8",
+  "Analog-søk (Fase 10)", gate-review-faser, Nivå 3-overgang
+- CLAUDE.md synkronisert (Fase 0-11 = Nivå 1, Fase 11-12 = overgang)
+
+**Tester:** 537/537 grønne (uendret fra session 31).
+
+**Neste session:** 33 — åpner Fase 7, signal-server-refaktor.
 
 ### 2026-04-24 — Session 31: currency_cross_trend-driver
 
