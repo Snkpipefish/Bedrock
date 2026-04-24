@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 8 **ÅPEN** (Bot-refaktor). Session 41 lukket — `bot/ctrader_client.py` (transport-lag, ~680 linjer) + 32 tester. Null logikk-endring utover credentials-via-konstruktør og AGRI-dump-sti. Gammel `~/scalp_edge/trading_bot.py` uendret i parallell-drift.
+- **Phase:** 8 **ÅPEN** (Bot-refaktor). Session 42 lukket — `bot/safety.py` + `bot/comms.py` + 64 tester. Fem av åtte bot/-moduler portert (__init__, state, instruments, config, ctrader_client, safety, comms). Gjenstår: `entry`, `sizing`, `exit`, `__main__`. Gammel `~/scalp_edge/trading_bot.py` uendret i parallell-drift.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Session 42 — `bot/safety.py` + `bot/comms.py` per `docs/migration/bot_refactor.md § 8 punkt 3`. Safety: daily_loss state + persist + kill-switch-flagg + fetch-fail-escalating-logging. Comms: signal-server HTTP-fetch med tenacity-retry, POST /push-prices, daglig batch-git-commit av trade-log ved daily_loss-reset midnatt UTC (bekreftet i session 39). SIGNAL_URL leses fra startup_only.signal_url. Fjerne `_git_push_log` fra gammel flyt — erstattes av batch-commit. Bot-state paths flyttes til `~/bedrock/data/bot/`. Tester: retry-logikk med mock HTTP, daily-loss round-trip, batch-commit feil-toleranse.
+- **Next task:** Session 43 — `bot/entry.py` + `bot/sizing.py` per migrasjonsplan § 8 punkt 4. **Kritisk: slett `_recalibrate_agri_levels` og all kall til den — dette er Fase 8s hovedbug-fix.** Port fra `~/scalp_edge/trading_bot.py`: `_on_spot` route (etter transport-callback), `_handle_trendbar*`, indikator-oppdaterings-metoder (`_update_indicators`/`_h1`, `_update_atr14_5m`), `_on_candle_closed`, `_process_watchlist_signal` (224 linjer hovedlogikk), `_passes_filters` (spread/RR/session/correlation), `_check_confirmation` (3-punkt), `_execute_trade`, `_save_confirmation_stats`. Splitt ut `size_volume(rules, balance, sl_dist, ...)` til `sizing.py`. Tester: `test_agri_signal_not_overridden` (kritisk regresjonstest), confirmation score-matrise, R:R-gate per horisont, cold-start spread-vern, daily-loss-block.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -87,6 +87,80 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 42: bot/safety + bot/comms
+
+**Opprettet:**
+- `src/bedrock/bot/safety.py` (~280 linjer) — `SafetyMonitor`:
+  - Eier daily-loss-state + atomic persist (tempfile + os.replace)
+    til `~/bedrock/data/bot/daily_loss_state.json`
+  - `reset_daily_loss_if_new_day()` returnerer bool + kaller
+    `on_rollover(prev_date, new_date)` FØR state resettes
+  - `daily_loss_limit(balance, cfg)` statisk: max(pct × balance, nok-gulv)
+  - `daily_loss_exceeded(balance, cfg)` → bool
+  - `record_fetch_success()` — rydder server_frozen + fail-count
+  - `record_fetch_failure(reason)` — eskalerende log
+    (INFO n≤2 → WARNING 3≤n<10 → ERROR hvert 10. fra n=10)
+  - Flagg: `server_frozen`, `bot_locked`, `bot_locked_until`
+  - Corrupted/old-day state-handling: ignorerer trygt
+  - Callback-exception isolert slik at git-commit-feil ikke
+    blokkerer daily-reset
+- `src/bedrock/bot/comms.py` (~320 linjer) — HTTP-lag + batch-commit:
+  - `SignalComms(startup_cfg, api_key, safety, on_signals, on_kill_ids,
+    session)` — valgfri requests.Session for mocking
+  - `fetch_signals()` → dict | None. Schema-versjon-warn én gang per
+    ukjent versjon. Sync med safety-tellere. on_signals-callback
+  - `fetch_kill_ids()` → list[str]. Støtter både liste-svar og
+    `{signal_ids: [...]}`. Fryser IKKE bot ved feil
+  - `push_prices(prices)` → bool. POST /push-prices med X-API-Key
+  - `fetch_once()` → `FetchResult(signals_data, kill_ids)` —
+    convenience for polling-loop
+  - Hand-rolled retry (0/1/3s backoff) i `_fetch_with_retry`. Retry
+    kun på 5xx + nettverksfeil; 4xx propageres umiddelbart
+  - `adaptive_poll_interval(signals_data, PollingConfig)` — ren
+    funksjon, scalp_active_seconds hvis SCALP watchlist aktiv
+  - `assemble_prices_from_state(symbol_map, price_feed_sids, last_bid)`
+    — ren funksjon, bygger /push-prices-payload fra CtraderClient-state
+  - `commit_daily_trade_log(log_path, date, repo_root)` — git-add +
+    commit, `.githooks/post-commit` pusher. Toleranse: manglende fil
+    = True, utenfor repo = False+warning, "nothing to commit" = True,
+    commit-failure = False+warning
+  - `SUPPORTED_SCHEMA_VERSIONS = frozenset({1.0, 2.0, 2.1})`
+- `tests/unit/bot/test_safety.py` (26 tester)
+- `tests/unit/bot/test_comms.py` (38 tester)
+
+**Design-valg:**
+- Polling-loopen (reactor.callLater self-scheduling) ligger ikke i
+  comms.py — flyttes til `bot/__main__.py` i session 45 der
+  Twisted-wiring er relevant. Ren HTTP + interval-beregning er her
+  for test-isolering
+- Schema-warn-set per-instans (ikke modul-nivå) slik at ny
+  SignalComms gjenoppretter varslene — enklere test-isolering
+- `commit_daily_trade_log` er modul-funksjon, ikke metode, så
+  `safety.on_rollover` kan binde via `functools.partial` i
+  `bot/__main__.py`
+- Atomic write via tempfile + os.replace er forandring fra gammel
+  bot (som gjorde direkte write). Dette er ikke "logikk" men
+  robustness mot mid-write crash
+- Initial retry-implementasjon brukte `sleep_fn=time.sleep`-default.
+  Fix: `time.sleep` slås opp per kall (ikke bundet ved definisjon)
+  slik at `patch('bedrock.bot.comms.time.sleep')` fungerer i tester
+
+**Endringer fra gammel bot (ikke logikk):**
+- `_git_push_log` (no-op i gammel bot etter K5) erstattes av faktisk
+  daglig commit — kalt fra safety.on_rollover ved midnatt UTC
+  (session 39-avtalen)
+- daily_loss_state.json flyttet til `~/bedrock/data/bot/`
+- Atomic persist (tempfile + os.replace)
+- SIGNAL_URL leses fra `StartupOnlyConfig.signal_url` istedenfor
+  modul-globalt
+
+**Commits:** `dab6bc3`.
+
+**Tester:** 811/811 grønne (fra 747 + 64 nye) på 29.3 sek.
+
+**Neste session:** 43 — `bot/entry.py` + `bot/sizing.py`. Kritisk:
+slett `_recalibrate_agri_levels` (agri-ATR-override-bug).
 
 ### 2026-04-24 — Session 41: bot/ctrader_client transport-port
 
