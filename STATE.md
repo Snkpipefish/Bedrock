@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 7 — åpen. Session 36 FERDIG: `/kill` + `/kills` + `/clear_kills` + `/invalidate`. KillSwitch Pydantic med dedupe på (instrument, horizon). InvalidationRequest markerer matchende signaler i både signals.json og agri_signals.json via `invalidated=True` + `invalidated_at` + `invalidated_reason`. 4 nye endepunkter, 29 nye tester.
+- **Phase:** 7 — åpen. Session 37 FERDIG: `/push-prices` + `/prices` (DataStore-backed) + `/upload` (uuid-navngitt, whitelist, 10MB-cap). Samtlige kjerne-endepunkter fra gammel scalp_edge.signal_server er nå portert — gjenstår `/admin/rules` (session 38, ny funksjonalitet per PLAN § 8.3).
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Session 37 — `endpoints/prices.py` + `endpoints/uploads.py`. `/push-prices` (POST) mottar pris-ticks fra bot og persisterer (fil-basert eller DataStore-backed; velges per implementasjon). `/prices` (GET) leser siste N priser for et instrument. `/upload` (POST) håndterer fil-uploads (setup-screenshots, backtest-rapporter). For scope: holde det enkelt — `/prices` leser eksisterende DataStore (`bedrock.data.store.DataStore`), `/push-prices` appender via `append_prices`. `/upload` lagrer til `cfg.data_root / "uploads" / <uuid>.<ext>` med size-limit 10MB og content-type-whitelist (png, jpg, pdf).
+- **Next task:** Session 38 — `endpoints/rules.py` per PLAN § 8.3. Ny funksjonalitet (fantes ikke i gammel scalp_edge): `/admin/rules` (GET + PUT) lar UI redigere instrument-YAML-filer. GET returnerer liste over tilgjengelige instrumenter + rådata. PUT validerer ny YAML-body via `InstrumentConfig`-Pydantic (allerede finnes i bedrock.config.instruments), skriver atomisk, returnerer valideringsfeil ved brudd. Scope inkluderer auto-commit-hook hvis git er tilgjengelig (PLAN § 10.6), men kan utsettes til senere session hvis det blir for stort. Etter session 38 kan Fase 7 lukkes med tag `v0.7.0-fase-7`.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -87,6 +87,54 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 37: /push-prices + /prices + /upload
+
+**Opprettet:**
+- `schemas.PriceBarIn` (ts + close påkrevd; OHLV valgfritt;
+  extra='forbid') og `PushPricesRequest`
+- `config`: `db_path`, `uploads_root`, `upload_max_bytes` (10 MB),
+  `upload_allowed_exts` (.png, .jpg, .jpeg, .pdf)
+- `endpoints.prices_bp`:
+  - `POST /push-prices` → DataStore.append_prices via fresh
+    DataStore per request. 201 med `{instrument, tf, bars_written}`
+  - `GET /prices?instrument=X&tf=Y&last_n=N` — last_n default 500.
+    Tom store / ukjent slot → 200 + `bars: []`
+- `endpoints.uploads_bp`:
+  - `POST /upload` multipart/form-data med `file`-felt. Ekstensjon-
+    whitelist + 10 MB-cap + tom-fil-sjekk. Lagres som
+    `<token_hex(16)><ext>`. 413 ved størrelse-overskridelse
+- `tests/unit/test_signal_server_prices_uploads.py` (22 tester)
+
+**Endret:**
+- `app.py`, `endpoints/__init__.py`: registrerer prices_bp + uploads_bp
+- `ENDPOINTS.md`: 3 endepunkter markert implementert
+- `prices.py`: DataStore.get_prices KeyError → tom 200-respons
+- `test_signal_server_app.py`: /status-test oppdatert
+
+**Design-valg:**
+- Fresh DataStore per request: ingen connection-pooling før multi-
+  worker er relevant
+- Idempotent INSERT OR REPLACE på (instrument, tf, ts): bot kan
+  retry trygt
+- `secrets.token_hex(16)` for upload-navn: unngår path-traversal +
+  PII-lekkasje. Original filnavn returneres til klienten, men ikke
+  bevart på disk
+- Multipart-upload lese til minne før disk-write: 10 MB-cap sikrer
+  det er akseptabelt; stream-basert kunne blitt relevant ved GB-skala
+- `extra='forbid'` på price-schemas: klient-typos fanges med 400
+- KeyError fra get_prices → 200 + `bars: []`: semantikk-match med
+  /signals ved manglende fil; fravær av data ≠ server-feil
+
+**Commits:** `a63bc7d`.
+
+**Tester:** 648/648 grønne på 26.5 sek (fra 626 session 36, +22).
+
+**Endepunkt-progresjon:** samtlige kjerne-endepunkter fra gammel
+scalp_edge.signal_server (974 linjer) er nå portert. Gjenstår
+`/admin/rules` (session 38, PLAN § 8.3 — ny funksjonalitet).
+
+**Neste session:** 38 — `/admin/rules` GET/PUT.
 
 ### 2026-04-24 — Session 36: /kill + /kills + /clear_kills + /invalidate
 
