@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 7 — åpen. Session 37 FERDIG: `/push-prices` + `/prices` (DataStore-backed) + `/upload` (uuid-navngitt, whitelist, 10MB-cap). Samtlige kjerne-endepunkter fra gammel scalp_edge.signal_server er nå portert — gjenstår `/admin/rules` (session 38, ny funksjonalitet per PLAN § 8.3).
+- **Phase:** 7 — **klar for closure**. Session 38 FERDIG: `/admin/rules` GET list + detail + PUT validate+write, X-Admin-Code auth, path-traversal-beskyttelse. Alle PLAN § 8.1/8.2/8.3-subseksjoner dekket. Dry-run-diff + git-commit (resten av § 8.3) bevisst utsatt — krever orchestrator-snapshot-kobling og UI-side.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
-- **Blocked:** nei
-- **Next task:** Session 38 — `endpoints/rules.py` per PLAN § 8.3. Ny funksjonalitet (fantes ikke i gammel scalp_edge): `/admin/rules` (GET + PUT) lar UI redigere instrument-YAML-filer. GET returnerer liste over tilgjengelige instrumenter + rådata. PUT validerer ny YAML-body via `InstrumentConfig`-Pydantic (allerede finnes i bedrock.config.instruments), skriver atomisk, returnerer valideringsfeil ved brudd. Scope inkluderer auto-commit-hook hvis git er tilgjengelig (PLAN § 10.6), men kan utsettes til senere session hvis det blir for stort. Etter session 38 kan Fase 7 lukkes med tag `v0.7.0-fase-7`.
+- **Blocked:** nei — venter på bruker-bekreftelse av Fase 7-tag.
+- **Next task:** Bruker bekrefter `v0.7.0-fase-7`-tag → åpne Fase 8 (Bot-refaktor) per PLAN § 9. Bot-arbeidet inkluderer: modulsplitt fra 974-linjers trading_bot.py, **fjerning av agri-ATR-override-bug** (trading_bot.py:2665-2691, kjent siden Fase 0 invariants), config-ekstraksjon (per-instrument og per-horisont TP/SL-parametre til YAML), pricing/kill-switch/signal-henting mot ny signal_server (port 5100). Bot må fortsatt kunne kjøre i demo parallell med gammel bot (Fase 12 cutover). Første session: modul-inventar + migrasjonsplan uten å endre kjørende bot.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -87,6 +87,61 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 38: /admin/rules + Fase 7 klar for closure
+
+**Opprettet:**
+- `bedrock.config.instruments.load_instrument_from_yaml_string`:
+  public validator for YAML-string (parallell til
+  `load_instrument_config` som tar Path)
+- `config`: `instruments_dir`, `admin_code: str | None`,
+  `BEDROCK_ADMIN_CODE` env-override
+- `endpoints.rules_bp`:
+  - `GET /admin/rules` — instrument-liste
+  - `GET /admin/rules/<id>` — rå YAML
+  - `PUT /admin/rules/<id>` — validere + atomic write
+  - X-Admin-Code header-auth
+  - Regex `^[a-zA-Z0-9_-]+$` på id mot path-traversal
+  - URL-id må matche YAML-id (case-insensitive)
+- `tests/unit/test_signal_server_rules.py` (24 tester)
+
+**Endret:**
+- `app.py`, `endpoints/__init__.py`: registrerer rules_bp
+- `ENDPOINTS.md`: 3 nye endepunkter implementert
+- `test_signal_server_app.py`: /status-test fikset
+
+**Design-valg:**
+- Auth via header (ikke session): admin-UI har ikke login-flow
+- admin_code=None → 503: secure-by-default; endepunktene av før
+  admin konfigurerer passord
+- Strikt id-regex: fanger path-traversal før filsystem-operasjon
+- URL-id vs YAML-id-match: hindrer filnavn ↔ innhold-divergens
+- Public `load_instrument_from_yaml_string` istedenfor å dra inn
+  private `_parse_instrument_dict`
+
+**Bevisst utsatt fra PLAN § 8.3:**
+- Dry-run-diff (krever orchestrator + snapshot-kobling)
+- Auto git-commit i PUT-responsen (ops-tung integrasjon)
+- UI-side (HTML/JS) — Fase 9
+
+**Commits:** `2274faa`.
+
+**Tester:** 672/672 grønne på 28.2 sek (fra 648 session 37, +24).
+
+**Fase 7 leveranse-sum (sessions 33-38):**
+- Session 33: app-factory, ServerConfig, /health, /status, ENDPOINTS.md
+- Session 34: /signals + /agri-signals (read)
+- Session 35: /push-alert + /push-agri-alert (skriv, atomic)
+- Session 36: /kill + /kills + /clear_kills + /invalidate
+- Session 37: /push-prices + /prices + /upload
+- Session 38: /admin/rules GET list/detail + PUT
+
+Alle kjerne-endepunkter fra 974-linjers `scalp_edge.signal_server`
++ ny rule-editor-funksjonalitet. Blueprints per gruppe.
+Pydantic-validering på alle skriv-endepunkter. Atomic write overalt.
+Port 5100 default (parallell-drift). Auth på admin-endepunkter.
+
+**Venter på:** bruker-bekreftelse av `v0.7.0-fase-7`-tag.
 
 ### 2026-04-24 — Session 37: /push-prices + /prices + /upload
 
