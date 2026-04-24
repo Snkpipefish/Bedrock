@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 7 — **klar for closure**. Session 38 FERDIG: `/admin/rules` GET list + detail + PUT validate+write, X-Admin-Code auth, path-traversal-beskyttelse. Alle PLAN § 8.1/8.2/8.3-subseksjoner dekket. Dry-run-diff + git-commit (resten av § 8.3) bevisst utsatt — krever orchestrator-snapshot-kobling og UI-side.
+- **Phase:** 7 **CLOSED** (tag `v0.7.0-fase-7`). Alle 12 kjerne-endepunkter fra 974-linjers `scalp_edge.signal_server` portert. Sessions 33-38. Modulstruktur, Pydantic-validering, atomic write, X-Admin-Code auth på admin-endepunkter.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
-- **Blocked:** nei — venter på bruker-bekreftelse av Fase 7-tag.
-- **Next task:** Bruker bekrefter `v0.7.0-fase-7`-tag → åpne Fase 8 (Bot-refaktor) per PLAN § 9. Bot-arbeidet inkluderer: modulsplitt fra 974-linjers trading_bot.py, **fjerning av agri-ATR-override-bug** (trading_bot.py:2665-2691, kjent siden Fase 0 invariants), config-ekstraksjon (per-instrument og per-horisont TP/SL-parametre til YAML), pricing/kill-switch/signal-henting mot ny signal_server (port 5100). Bot må fortsatt kunne kjøre i demo parallell med gammel bot (Fase 12 cutover). Første session: modul-inventar + migrasjonsplan uten å endre kjørende bot.
+- **Blocked:** nei
+- **Next task:** Session 39 — åpner **Fase 8: Bot-refaktor** per PLAN § 9. Scope: modulsplitt fra 974-linjers trading_bot.py (scalp_edge/), **fjerning av agri-ATR-override-bug** (trading_bot.py:2665-2691, kjent siden Fase 0 invariants), config-ekstraksjon (per-instrument og per-horisont TP/SL-parametre til YAML), pricing/kill-switch/signal-henting mot ny signal_server (port 5100). Bot må fortsatt kunne kjøre i demo parallell med gammel bot (Fase 12 cutover). **Første session** (39): modul-inventar av eksisterende trading_bot.py + migrasjonsplan-dokument uten å røre kjørende bot. Dette er research/planning — kode kommer fra session 40.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -141,7 +141,7 @@ Alle kjerne-endepunkter fra 974-linjers `scalp_edge.signal_server`
 Pydantic-validering på alle skriv-endepunkter. Atomic write overalt.
 Port 5100 default (parallell-drift). Auth på admin-endepunkter.
 
-**Venter på:** bruker-bekreftelse av `v0.7.0-fase-7`-tag.
+**Tag:** `v0.7.0-fase-7` opprettet og pushet.
 
 ### 2026-04-24 — Session 37: /push-prices + /prices + /upload
 
