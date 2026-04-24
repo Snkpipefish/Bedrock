@@ -6,15 +6,16 @@
   - **Runde 1 (session 47-50):** minimal data-wiring per fane, funksjonelt null polish
   - **Runde 2 (session 51-53):** styling, flyt, filtrering, detaljmodaler
   - **Runde 3 (session 54-55):** admin-rule-editor på separat URL med kode-gate
-- Session 47 lukket — Fane 1 Skipsloggen levert. `ui_bp` i signal_server med `/` + `/assets/*` + `/api/ui/trade_log` + `/api/ui/trade_log/summary`. `web/index.html` har full 4-fane-struktur med vanilla JS; kun Skipsloggen er wired (de andre er placeholders). 15 nye tester. UI lese-flow: ExitEngine skriver til `~/bedrock/data/bot/signal_log.json` → `ui_bp` leser samme fil → `web/assets/app.js` fetcher og rendrer tabell + KPI med 30-sek auto-refresh.
+- Session 47 lukket — Fane 1 Skipsloggen levert (KPI + trade-log-tabell).
+- Session 48 lukket — Fane 2 Financial setups levert (kort-grid med grade/score-sortering).
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** **Session 48 — Fane 2 Financial setups** (runde 1). Scope:
-  1. Kartlegg datakilde: `data/setups/active.json` (fra orchestrator) eller orchestrator-snapshot-API. Hvis ingen eksisterer: legg til write-point i orchestrator.
-  2. `GET /api/ui/setups/financial` i `ui_bp` — filtrerer `asset_class ∈ {fx, metals, energy, indices, crypto}`
-  3. `web/index.html` financial-fane: 5 topp-kort per PLAN § 10.2 (instrument/retning/horisont/grade/stjerner/entry-SL-TP/6 familie-badges). Null styling utover struktur.
-  4. Vanilla JS rendrer kort-grid
-  5. Tester: filtrering, manglende fil → tom liste, KPI hvis relevant
+- **Next task:** **Session 49 — Fane 3 Soft commodities** (runde 1). Backend-endepunkt `/api/ui/setups/agri` er allerede lagt til i session 48 (lest `config.agri_signals_path`). Scope for session 49:
+  1. Wire agri-fanen i `web/index.html` + `app.js` — samme kort-grid-komponent som financial kan gjenbrukes
+  2. Hvis setup-dict inneholder agri-spesifikke felt (weather_stress, enso_status, conab_flag, yield_score per PLAN § 10.3), render dem som ekstra badges/rader i kort
+  3. Hvis ikke: bare minimal visning matching financial (samme renderSetupCards)
+  4. Tester: bare frontend-JS-koden (logisk uten backend-tester siden endepunkt allerede testet)
+  5. Nøkkel-beslutning session 49: gjenbruke `renderSetupCards` som fellesfunksjon, eller lage egen `renderAgriCards` hvis agri har unike felt å vise
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -96,6 +97,79 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 48: Fase 9 runde 1 — Financial setups
+
+**Scope:** Andre fane. Leser `config.signals_path` og viser setups som
+kort-grid. Null styling utover struktur — polish i runde 2.
+
+**Kartlagt:** Ingen eksisterende `data/setups/active.json` — setups
+flyter allerede via `signals_path`/`agri_signals_path` (satt av
+orchestrator via `/push-alert`-endepunkt). Bruker dermed eksisterende
+transport istedenfor å introdusere ny fil.
+
+**Opprettet:**
+- `GET /api/ui/setups/financial` i `ui_bp`:
+  - Leser `config.signals_path` (rå dict-liste; ikke Pydantic-
+    validert — UI-laget er graceful på valgfrie felt)
+  - Sortering: grade A+ > A > B > C via `_GRADE_RANK`, så score
+    descending innen samme grade
+  - Invalidated-signaler skjules (caller kan ikke handle dem)
+  - `?limit=N`-query-param kutter topp N
+  - Feil-tilfeller: fraværende fil / korrupt JSON / non-list top-
+    level / ikke-dict-rader → graceful tom liste + warning-log
+- `GET /api/ui/setups/agri` — samme kontrakt mot `agri_signals_path`
+  (brukes av session 49; backend landes her for å holde setup-
+  logikken samlet i én PR)
+
+- `web/index.html` financial-fane:
+  - Meta-linje: `visible_count` synlige (`total_count` totalt)
+  - `setups-grid`-container for kort-grid
+
+- `web/assets/app.js`:
+  - `loadFinancialSetups()` fetcher og rendrer via
+    `renderSetupCards(containerId, setups)` (gjenbrukbar for agri
+    session 49)
+  - Kort-innhold: instrument/direction/grade + horizon+score-row +
+    entry/stop/t1/rr-tabell. Grade-chip styles per A+/A/B/C.
+    Retnings-border (venstre kant grønn=buy, rød=sell)
+  - `loaders`-dict mapper tab-id → fetch-funksjon. Tab-klikk
+    trigger `activateTab()` → lazy-load. Skipsloggen fortsatt
+    auto-refresh hver 30s; financial lades kun ved tab-skift
+
+- `web/assets/style.css`:
+  - `.setups-grid` med `repeat(auto-fit, minmax(240px, 1fr))`
+  - `.setup-card` med border-left som direction-indikator
+  - Grade-chip-klasser for A+/A/B/C
+  - Level-tabell i monospace for pris-alignment
+
+**Design-valg:**
+- Gjenbruke `signals_path` (allerede testet + populert av orchestrator)
+  istedenfor å introdusere ny `data/setups/active.json`. Reduserer
+  scope og data-konsistens-risiko
+- Rå dict-liste fra backend, ikke Pydantic-validert — UI skal være
+  robust på valgfrie felt som `setup.entry`/`setup.stop_loss` (noen
+  signals har `setup: null` hvis generator returnerte None)
+- Setup-dict har inkonsistent feltnavn i eksisterende kode (`stop_loss`
+  vs `sl` vs `stop`; `target_1` vs `t1`). `app.js:renderSetupCards`
+  er graceful med `?? `-fallback. Runde 2 kan normalisere i backend
+- Lazy-load per fane: Skipsloggen auto-refresher, setup-faner lades
+  kun ved klikk. Reduserer unødig HTTP når bruker bare ser på
+  trade-logg
+- Agri-endepunkt landet her (ikke session 49) fordi koden er identisk
+  — sparer en separat Edit i session 49
+
+**Ikke endret:**
+- Backend-tester: ingen endring utenfor `test_endpoints_ui.py`
+- Orchestrator/bot: uendret
+
+**Commits:** `fa5359a`.
+
+**Tester:** 971/971 grønne (fra 959 + 12 nye) på 33.9 sek.
+
+**Neste session:** 49 — Fane 3 Soft commodities. Backend allerede
+klar; kun frontend-wire + eventuelle agri-spesifikke badges (weather/
+ENSO/Conab) hvis de finnes i `setup`-dict.
 
 ### 2026-04-24 — Session 47: Fase 9 runde 1 — Skipsloggen
 
