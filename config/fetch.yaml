@@ -1,0 +1,54 @@
+# Fetch-cadence-config per PLAN § 7.2.
+#
+# Fase 6 session 28: YAML-lasting + staleness-sjekker.
+# Full scheduler (cron-daemon/systemd) kommer i senere session.
+#
+# stale_hours: hvor gammel siste observasjon kan være før fetcher må
+# re-kjøres. Burde matche fetch-cadencen — f.eks. daglig fetch har
+# stale_hours ≈ 24-30.
+#
+# on_failure:
+#   log_and_skip         — logg og fortsett neste fetcher
+#   retry_with_backoff   — tenacity-retry før opp-gi
+#   raise                — kast exception, stopp pipeline
+
+fetchers:
+  prices:
+    module: bedrock.fetch.prices
+    cron: "40 * * * 1-5"       # hverdager hver time :40
+    stale_hours: 30            # EOD-priser aksepterer ~1 dag forsinkelse
+    on_failure: retry_with_backoff
+    table: prices
+    ts_column: ts
+
+  cot_disaggregated:
+    module: bedrock.fetch.cot_cftc
+    cron: "0 22 * * 5"         # fredag 22:00 UTC (etter CFTC-publisering)
+    stale_hours: 168           # ukentlig
+    on_failure: log_and_skip
+    table: cot_disaggregated
+    ts_column: report_date
+
+  cot_legacy:
+    module: bedrock.fetch.cot_cftc
+    cron: "0 22 * * 5"
+    stale_hours: 168
+    on_failure: log_and_skip
+    table: cot_legacy
+    ts_column: report_date
+
+  fundamentals:
+    module: bedrock.fetch.fred
+    cron: "30 2 * * *"          # daglig 02:30 UTC
+    stale_hours: 48             # FRED-data har 1-3 dagers publiserings-lag
+    on_failure: retry_with_backoff
+    table: fundamentals
+    ts_column: date
+
+  weather:
+    module: bedrock.fetch.weather
+    cron: "0 3 * * *"           # daglig 03:00 UTC
+    stale_hours: 30
+    on_failure: retry_with_backoff
+    table: weather
+    ts_column: date

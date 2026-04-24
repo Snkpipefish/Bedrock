@@ -476,3 +476,34 @@ class DataStore:
                 (region,),
             )
             return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # Generisk staleness-accessor (fase 6 session 28)
+    # ------------------------------------------------------------------
+
+    def latest_observation_ts(self, table: str, ts_column: str = "ts") -> str | None:
+        """Returner `MAX(ts_column)` fra `table` som rå-streng, eller None
+        hvis tabellen er tom/ikke finnes.
+
+        Brukes av `bedrock.config.fetch` for staleness-sjekker. Caller
+        ansvar for å parse resultatet til datetime.
+        """
+        with self._connect() as conn:
+            # Sjekk at tabellen finnes (unngår SQL-feil)
+            exists = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                (table,),
+            ).fetchone()
+            if exists is None:
+                return None
+
+            # Tabell/kolonne-identifikatorer må interpoleres (sqlite
+            # param-binding er kun for verdier). Verdier stammer fra
+            # Pydantic-validert YAML, ikke request-input.
+            row = conn.execute(
+                f"SELECT MAX({ts_column}) FROM {table}"  # noqa: S608
+            ).fetchone()
+
+        if row is None or row[0] is None:
+            return None
+        return row[0]
