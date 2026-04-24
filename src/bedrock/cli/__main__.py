@@ -13,6 +13,7 @@ import logging
 import click
 
 from bedrock.cli.backfill import backfill
+from bedrock.cli.instruments import instruments
 
 
 @click.group()
@@ -27,6 +28,7 @@ def cli(verbose: bool) -> None:
 
 
 cli.add_command(backfill)
+cli.add_command(instruments)
 
 
 if __name__ == "__main__":

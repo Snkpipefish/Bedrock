@@ -67,7 +67,9 @@ def test_backfill_fundamentals_with_cli_api_key(runner: CliRunner, tmp_path: Pat
         )
 
     assert result.exit_code == 0, result.output
-    assert "Wrote 3" in result.output
+    assert "OK" in result.output
+    assert "DGS10" in result.output
+    assert "3 row" in result.output
 
     store = DataStore(db)
     out = store.get_fundamentals("DGS10")
@@ -276,7 +278,8 @@ def test_backfill_fundamentals_empty_result_ok(runner: CliRunner, tmp_path: Path
         )
 
     assert result.exit_code == 0, result.output
-    assert "No rows to write" in result.output
+    # Tom fetch → OK med 0 rader, ingen DB-fil opprettes (lat DataStore)
+    assert "0 row" in result.output
     assert not db.exists()
 
 
