@@ -2,14 +2,10 @@
 
 ## Current state
 
-- **Phase:** 3 — åpen. Session 11 FERDIG: `bedrock backfill cot-disaggregated` via CFTC Socrata. To fetchere (Stooq + CFTC), to CLI-subkommandoer.
+- **Phase:** 3 — åpen. Session 12 FERDIG: `bedrock backfill cot-legacy`. COT-dekning komplett. Tre fetchere (Stooq + CFTC disagg + CFTC legacy), tre CLI-subkommandoer, delt Socrata-helper.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Fase 3 session 12 — velg mellom:
-  (a) `backfill cot-legacy` (samme mønster som disaggregated, annet datasett 6dca-aqww, enkel videreføring)
-  (b) `backfill fundamentals` (FRED, krever `FRED_API_KEY` fra `~/.bedrock/secrets.env` + secrets-håndtering)
-  (c) `backfill weather` (Open-Meteo, ingen auth)
-  Forslag: (a) først for å fullføre COT-dekning, deretter (c) som no-auth-kilde, deretter (b) som introduserer secrets-lasting.
+- **Next task:** Fase 3 session 13 — `backfill weather` via Open-Meteo (no auth). Endepunkt: `https://archive-api.open-meteo.com/v1/archive`. Krever `latitude`, `longitude`, `start_date`, `end_date`, `daily=temperature_2m_max,temperature_2m_min,precipitation_sum`. Region-mapping (`us_cornbelt` → lat/lon) hører til Fase 5 instrument-config; Fase 3 tar lat/lon/region som CLI-args. Etter session 13: FRED fundamentals (secrets-håndtering).
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -57,6 +53,49 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 12: `backfill cot-legacy`, delt Socrata-helper
+
+Tredje backfill-subkommando + refaktor for å unngå duplikasjon mellom
+disaggregated- og legacy-fetcherne.
+
+**Endret:**
+- `src/bedrock/fetch/cot_cftc.py`:
+  - Ny `CFTC_LEGACY_URL` (dataset `6dca-aqww`)
+  - Ny `_LEGACY_FIELD_MAP` (Socrata → Bedrock legacy-schema)
+  - Refaktor: `_fetch_cot_socrata(url, field_map, contract, ...)` +
+    `_normalize_cot(rows, contract, field_map)` er de felles private
+    helperne. Begge offentlige fetchere er nå tynne wrappere (~5 linjer hver)
+  - Ny `fetch_cot_legacy(contract, from_date, to_date)`
+- `src/bedrock/cli/backfill.py`: ny `cot_legacy_cmd` — samme mønster som
+  `cot_disaggregated_cmd`, treffer legacy-URL
+
+**Opprettet:**
+- `tests/unit/test_fetch_cot_legacy.py` (6 tester — legacy-kolonneskjema,
+  korrekt URL, e2e mot `DataStore.append_cot_legacy`, tabell-isolasjon
+  fra disagg, empty-response, string-to-int, missing-fields med
+  legacy-specific error)
+- `tests/unit/test_cli_backfill_cot_legacy.py` (5 tester — normal flow
+  inkl. isolasjon fra disagg-tabellen, --dry-run viser 6dca-aqww ikke
+  72hh-3qpy, empty-result, argument-validering, parent-help)
+
+**Design-valg:**
+- Refaktor nå, ikke senere: 2 nesten-identiske fetchere er den kanoniske
+  grensen der DRY lønner seg. 3 (hvis ICE eller Euronext COT legges til)
+  ville vært umulig uten dette
+- Helperne er private (`_fetch_cot_socrata`, `_normalize_cot`) — ikke
+  re-eksportert for eksterne brukere
+
+**Commits:** `<hash kommer>`.
+
+**Tester:** 157/157 grønne på 9.3 sek.
+
+**Bevisste utsettelser:**
+- `backfill weather` — session 13 (Open-Meteo, no auth)
+- `backfill fundamentals` — senere session (FRED, secrets)
+- ICE/Euronext COT — hvis noensinne; ikke i PLAN-scope for Fase 3
+
+**Neste session:** Fase 3 session 13 — weather via Open-Meteo.
 
 ### 2026-04-24 — Session 11: `backfill cot-disaggregated`
 
