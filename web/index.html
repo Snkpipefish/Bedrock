@@ -2,16 +2,71 @@
 <html lang="no">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bedrock</title>
-    <!--
-      Placeholder. Full UI implementeres i Fase 8.
-      4 faner: Skipsloggen / Financial setups / Soft commodities / Kartrommet.
-      + kode-beskyttet gate før UI vises + skjult killswitch.
-      Se PLAN.md § 10.
-    -->
+    <link rel="stylesheet" href="/assets/style.css">
 </head>
 <body>
-    <h1>Bedrock</h1>
-    <p>UI ikke implementert ennå. Se <code>PLAN.md § 10</code>.</p>
+    <header class="app-header">
+        <h1>Bedrock</h1>
+        <nav class="tabs" role="tablist">
+            <button class="tab active" data-tab="skipsloggen" role="tab">Skipsloggen</button>
+            <button class="tab" data-tab="financial" role="tab">Financial setups</button>
+            <button class="tab" data-tab="agri" role="tab">Soft commodities</button>
+            <button class="tab" data-tab="kartrom" role="tab">Kartrommet</button>
+        </nav>
+    </header>
+
+    <main>
+        <!-- Fane 1: Skipsloggen (session 47) -->
+        <section id="skipsloggen" class="tab-panel active" role="tabpanel">
+            <div class="kpi-row" id="kpi-row">
+                <div class="kpi-card"><span class="kpi-label">Trades</span><span class="kpi-value" data-kpi="total">–</span></div>
+                <div class="kpi-card"><span class="kpi-label">Åpne</span><span class="kpi-value" data-kpi="open">–</span></div>
+                <div class="kpi-card"><span class="kpi-label">Wins</span><span class="kpi-value" data-kpi="wins">–</span></div>
+                <div class="kpi-card"><span class="kpi-label">Losses</span><span class="kpi-value" data-kpi="losses">–</span></div>
+                <div class="kpi-card"><span class="kpi-label">Win-rate</span><span class="kpi-value" data-kpi="win_rate">–</span></div>
+                <div class="kpi-card"><span class="kpi-label">Total PnL (USD)</span><span class="kpi-value" data-kpi="total_pnl_usd">–</span></div>
+            </div>
+
+            <div class="table-wrapper">
+                <table class="trade-log">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Signal</th>
+                            <th>Instrument</th>
+                            <th>Retning</th>
+                            <th>Horisont</th>
+                            <th>Entry</th>
+                            <th>Stop</th>
+                            <th>T1</th>
+                            <th>Closed</th>
+                            <th>Resultat</th>
+                            <th>Grunn</th>
+                            <th class="align-right">PnL (USD)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trade-log-body">
+                        <tr><td colspan="12" class="empty">Laster…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="meta">Sist oppdatert: <span id="last-updated">–</span></p>
+        </section>
+
+        <!-- Fane 2-4: placeholders (sessions 48-50) -->
+        <section id="financial" class="tab-panel" role="tabpanel">
+            <p class="placeholder">Financial setups — implementeres i session 48.</p>
+        </section>
+        <section id="agri" class="tab-panel" role="tabpanel">
+            <p class="placeholder">Soft commodities — implementeres i session 49.</p>
+        </section>
+        <section id="kartrom" class="tab-panel" role="tabpanel">
+            <p class="placeholder">Kartrommet — implementeres i session 50.</p>
+        </section>
+    </main>
+
+    <script src="/assets/app.js"></script>
 </body>
 </html>

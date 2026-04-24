@@ -10,6 +10,7 @@ from bedrock.signal_server.endpoints.kills import kills_bp
 from bedrock.signal_server.endpoints.prices import prices_bp
 from bedrock.signal_server.endpoints.rules import rules_bp
 from bedrock.signal_server.endpoints.signals import signals_bp
+from bedrock.signal_server.endpoints.ui import ui_bp
 from bedrock.signal_server.endpoints.uploads import uploads_bp
 
 __all__ = [
@@ -18,5 +19,6 @@ __all__ = [
     "prices_bp",
     "rules_bp",
     "signals_bp",
+    "ui_bp",
     "uploads_bp",
 ]

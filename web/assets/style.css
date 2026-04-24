@@ -1,0 +1,143 @@
+/* Bedrock UI — Fase 9 runde 1. Minimum for lesbarhet. Polish i runde 2. */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  color: #222;
+  background: #f7f7f8;
+}
+
+.app-header {
+  background: #1a1f2c;
+  color: #f0f0f0;
+  padding: 12px 20px;
+  border-bottom: 2px solid #000;
+}
+.app-header h1 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.tabs { display: flex; gap: 4px; }
+.tab {
+  background: transparent;
+  color: #a8b0bd;
+  border: 1px solid transparent;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: 4px 4px 0 0;
+}
+.tab:hover { color: #fff; }
+.tab.active {
+  background: #f7f7f8;
+  color: #1a1f2c;
+  border-color: #000;
+  border-bottom-color: #f7f7f8;
+}
+
+main { padding: 20px; }
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+.placeholder {
+  padding: 40px;
+  text-align: center;
+  color: #888;
+  font-style: italic;
+  background: #fff;
+  border-radius: 4px;
+  border: 1px dashed #ccc;
+}
+
+/* KPI-kort */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.kpi-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+}
+.kpi-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #888;
+  letter-spacing: 0.5px;
+}
+.kpi-value {
+  font-size: 20px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+.kpi-value.pos { color: #1f7a3a; }
+.kpi-value.neg { color: #b33030; }
+
+/* Trade-tabell */
+.table-wrapper {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  overflow: auto;
+}
+.trade-log {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.trade-log th, .trade-log td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+  white-space: nowrap;
+}
+.trade-log th {
+  background: #f0f0f2;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+}
+.trade-log tbody tr:hover { background: #fafafa; }
+.align-right { text-align: right; }
+
+.empty {
+  text-align: center;
+  padding: 20px;
+  color: #888;
+  font-style: italic;
+}
+
+/* Result-pills */
+.pill {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.pill.win { background: #d4edda; color: #1f7a3a; }
+.pill.loss { background: #f8d7da; color: #b33030; }
+.pill.managed { background: #fff3cd; color: #856404; }
+.pill.open { background: #e2e3e5; color: #555; }
+
+.pos { color: #1f7a3a; }
+.neg { color: #b33030; }
+
+.meta {
+  margin-top: 10px;
+  font-size: 11px;
+  color: #888;
+}

@@ -17,6 +17,8 @@ from pydantic import BaseModel, ConfigDict, Field
 DEFAULT_PORT = 5100
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_DATA_ROOT = Path("data")
+DEFAULT_TRADE_LOG_PATH = Path.home() / "bedrock" / "data" / "bot" / "signal_log.json"
+DEFAULT_WEB_ROOT = Path("web")
 
 
 class ServerConfig(BaseModel):
@@ -51,6 +53,10 @@ class ServerConfig(BaseModel):
     # Admin / rule-editor
     instruments_dir: Path = Field(default=Path("config/instruments"))
     admin_code: str | None = None  # None => /admin/rules-endepunkter deaktivert
+
+    # UI-fane Skipsloggen (Fase 9 runde 1)
+    trade_log_path: Path = Field(default=DEFAULT_TRADE_LOG_PATH)
+    web_root: Path = Field(default=DEFAULT_WEB_ROOT)
 
     # Feature-flagge (sanity-check for at vi er i bedrock-versjonen,
     # ikke i gammel scalp_edge)
