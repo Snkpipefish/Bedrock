@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 7 — åpen. Session 33 FERDIG: `bedrock.signal_server`-skeleton (app-factory + ServerConfig + `/health` + `/status`). Endepunkt-inventar i `ENDPOINTS.md` med session-plan for sessions 34-38. Port 5100 default (forskjellig fra gammel scalp_edge 5000) for parallell-drift.
+- **Phase:** 7 — åpen. Session 34 FERDIG: `/signals` + `/agri-signals` (read-only). `PersistedSignal` Pydantic-schema med extra='allow' (forward-compat), `storage.load_signals` med 500-ved-korrupt-fil semantikk, separat financial/agri-filer. Session 33 FERDIG: skeleton (app-factory + /health + /status).
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Session 34 — `endpoints/signals.py`: `/signals` + `/agri-signals` (GET, read-only først). Pydantic-model for signal-output-schema. `current_app.extensions["bedrock_config"].signals_path` som kilde; hvis fil mangler eller er tom, returner `[]` med 200. `/invalidate` utsettes til session 36 (skriv-path). Logiske tester med kurert JSON-fil og tom-fil-edge-case.
+- **Next task:** Session 35 — `endpoints/alerts.py`: `/push-alert` + `/push-agri-alert` (POST, skriv-path). Pydantic-validering av innkommende body (instrument, direction, horizon, score, grade + valgfrie setup-felter), atomic write til `cfg.signals_path` / `cfg.agri_signals_path`. Ved validering-feil: 400 + error-detalj. Append-semantikk (ikke overwrite). Kan brukes av orchestrator og av push-fra-backtest. Storage-laget utvider `load_signals` med `append_signal(path, signal)`-helper med atomic .tmp+rename for rase-fri skriving.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -87,6 +87,46 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 34: /signals + /agri-signals read-endepunkter
+
+**Opprettet:**
+- `bedrock.signal_server.schemas.PersistedSignal`:
+  - Pydantic `extra='allow'` → forward-compat mot orchestrator-
+    schema-evolusjon
+  - Validerer direction (BUY/SELL), horizon (SCALP/SWING/MAKRO),
+    score >= 0
+  - `SignalStoreError` for korrupt fil
+- `bedrock.signal_server.storage.load_signals(path)`:
+  - Tom/manglende/whitespace-only fil → `[]`
+  - Ugyldig JSON, non-array root, non-object rad, feilet Pydantic
+    → `SignalStoreError` med index-info
+- `bedrock.signal_server.endpoints.signals_bp`:
+  - `GET /signals` fra `cfg.signals_path`
+  - `GET /agri-signals` fra `cfg.agri_signals_path`
+  - Korrupt fil → 500 + `{error}` (bevisst ikke stille svikt)
+- `tests/unit/test_signal_server_signals.py` (23 tester)
+
+**Endret:**
+- `app.py`: registrerer signals_bp
+- `ENDPOINTS.md`: markert /signals + /agri-signals implementert
+- `test_signal_server_app.py`: oppdatert /status-test
+
+**Design-valg:**
+- Eget schema framfor å gjenbruke `SignalEntry`: serveren og
+  orchestrator kan utvikles uavhengig. `extra='allow'` sikrer at
+  ukjente felt passer gjennom HTTP-laget urørt
+- 500 på korrupt fil (ikke []): ops-synlighet > tom-liste-lure-UI
+- Tom/manglende fil = [] @ 200: helt normalt før første orchestrator-
+  kjøring
+- To separate filer (signals.json + agri_signals.json): matcher
+  gammel scalp_edge og gjør UI-fanene uavhengige
+
+**Commits:** `c9e9193`.
+
+**Tester:** 576/576 grønne på 23.5 sek (fra 553 session 33, +23).
+
+**Neste session:** 35 — `/push-alert` + `/push-agri-alert` (skriv).
 
 ### 2026-04-24 — Session 33: Fase 7 åpnet, signal-server-skeleton
 
