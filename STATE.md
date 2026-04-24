@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 6 — åpen. Session 28 FERDIG: config-drevet fetch-cadence — `config/fetch.yaml` + Pydantic-schema + `bedrock.config.fetch` staleness-modul + `bedrock fetch status` CLI.
+- **Phase:** 6 — åpen. Session 29 FERDIG: `bedrock fetch run [name]` dispatcher med 5 innebygde runners (prices, cot disagg/legacy, weather, fundamentals). Per-item resiliens + --stale-only + --instrument-filter. Fetch-workflow nå komplett uten ekstern scheduler.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Session 29 — `bedrock fetch run [--stale-only]`-subkommando som faktisk kjører fetchere basert på config. Bygger på session 28's FetcherSpec + check_staleness. Krever en dispatcher: gitt `module: bedrock.fetch.prices`, kjør tilsvarende fetch-funksjon. Enklest approach: mapping `module → (fetcher, required_params)` siden hver fetcher har forskjellig signatur. Instrument-config brukes for params (allerede støttet i backfill). Begrunnelse for rekkefølge: run er naturlig neste skritt etter status (status viser HVA som er stale, run kjører dem). Cron-daemon/systemd-integrasjon kommer etter run fungerer.
+- **Next task:** Session 30 — cron-basert scheduler. `bedrock fetch schedule`-kommando + en liten daemon (eller systemd-timer-genererer) som kan kjøre fetch.yaml-cronene i bakgrunnen. Bygger på session 29's runner-registry. Alternativt (hvis bruker foretrekker): generere systemd-timer-unit-filer fra fetch.yaml i stedet for egen daemon — renere integrering med OS men krever skriving til /etc/systemd. Min rekkefølge-beslutning: start med en enkel Python-daemon (APScheduler eller ren stdlib) som leser fetch.yaml og kjører; systemd-genereringen kan komme i Fase 11 som en del av deployment-arbeidet.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -87,6 +87,62 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 29: bedrock fetch run — runner-dispatcher
+
+Tredje Fase 6-leveranse. Session 28 ga schema + status; session 29
+legger til faktisk fetcher-kjøring. Fetch-workflow er nå praktisk
+uten ekstern scheduler.
+
+**Opprettet:**
+- `bedrock.config.fetch_runner`:
+  - `@register_runner(name)` + `get_runner` + `all_runner_names` —
+    samme mønster som gates-registry fra session 25
+  - `FetchRunResult` dataclass + `ItemOutcome` per item
+  - `run_fetcher_by_name(name, store, spec, *, from_date, to_date,
+    instruments_dir, defaults_dir, instrument_filter)`
+  - 5 innebygde runners: prices, cot_disaggregated, cot_legacy,
+    weather, fundamentals
+  - `default_from_date(spec, now, buffer_multiplier=2.0)` — lookback
+    basert på stale_hours
+- `bedrock fetch run [name]`:
+  - Valgfri positional: én fetcher-navn, eller alle hvis tom
+  - Flagge: --config, --db, --instruments-dir, --defaults-dir,
+    --from, --to, --stale-only, --instrument
+- `tests/unit/test_fetch_runner.py` (13 tester)
+
+**Endret:**
+- `bedrock.cli.fetch` utvidet med `run`-subkommando
+- `.gitignore`: ignorer `data/*.db` (tester genererte en tom DB som
+  snek seg inn i commit, ryddet i separat chore-commit)
+
+**Design-valg:**
+- Runner-registry lar nye fetchere plugge inn uten CLI-endring
+- Per-runner instrument-filtrering: prices krever stooq_ticker,
+  cot_disaggregated krever cot_contract + cot_report=disaggregated,
+  weather krever region/lat/lon, fundamentals krever fred_series_ids
+- fundamentals de-dupes serier på tvers av instrumenter — hvis to
+  instrumenter deler DGS10, hentes den én gang
+- Per-item resiliens: én fetch-feil stopper ikke resten; summary med
+  ok/fail-tall på slutten, exit 1 ved minst én feil
+- --stale-only sjekker check_staleness FØR run, skipper fetchere
+  med fersk data i DB. Exit 0 med "Ingen stale" hvis alt er fersk
+- --instrument filter gjelder alle runners — brukbart for å kjøre
+  akkurat en ticker/kontrakt/region i isolert test
+
+**Commits:** `88eff6d` (runner), `c2476ed` (gitignore-fix).
+
+**Tester:** 492/492 grønne på 18.1 sek (fra 479 session 28, +13).
+
+**Bevisste utsettelser:**
+- Cron-basert scheduler (APScheduler eller systemd-timer) — session 30
+- Retry-backoff for `on_failure: retry_with_backoff` — `tenacity`
+  finnes allerede i fetch.base; legges på per-runner-nivå når
+  scheduler skrives
+- Logging til fil/strukturert format — Fase 11 deployment
+- `raise` on_failure-variant — enkel å legge til i run_fetcher_by_name
+
+**Neste session:** 30 — scheduler-daemon eller systemd-timer-generator.
 
 ### 2026-04-24 — Session 28: config-drevet fetch-cadence (schema + status)
 
