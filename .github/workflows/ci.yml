@@ -21,6 +21,10 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
+          # Repoet har ikke uv.lock committed (reproducerbare builds via
+          # pyproject.toml + resolver er akseptabelt her). Uten denne
+          # setup-uv@v3 feiler hardt ved cache-søk på default **/uv.lock.
+          cache-dependency-glob: "pyproject.toml"
 
       - name: Set up Python 3.12
         run: uv python install 3.12
