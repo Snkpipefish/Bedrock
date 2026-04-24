@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 6 — åpen. Fase 5 lukket med tag `v0.5.0-fase-5` (session 27). Session 27 FERDIG: USDA-kalender-loader + `usda_blackout` gate (Prospective Plantings, YAML-basert, ±3h).
+- **Phase:** 6 — åpen. Session 28 FERDIG: config-drevet fetch-cadence — `config/fetch.yaml` + Pydantic-schema + `bedrock.config.fetch` staleness-modul + `bedrock fetch status` CLI.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Fase 6 fortsetter. PLAN § 7 / § 13 gir scope: (a) config-drevet fetch-cadence (automatisk kjøring av backfill-CLI-kommandoer via cron/systemd + YAML-config per instrument); (b) BRL-driver for Brazil-agri; (c) Baltic Dry Index-fetcher for agri-cross-family; (d) utvide `usda.yaml` med flere rapport-typer når behov oppstår. Min rekkefølge-beslutning for neste session: (a) config-drevet cadence først fordi det unblocker automatisering og eksponerer fetch-API-gaps før nye fetchere legges til. BRL og Baltic kan komme i påfølgende sessions.
+- **Next task:** Session 29 — `bedrock fetch run [--stale-only]`-subkommando som faktisk kjører fetchere basert på config. Bygger på session 28's FetcherSpec + check_staleness. Krever en dispatcher: gitt `module: bedrock.fetch.prices`, kjør tilsvarende fetch-funksjon. Enklest approach: mapping `module → (fetcher, required_params)` siden hver fetcher har forskjellig signatur. Instrument-config brukes for params (allerede støttet i backfill). Begrunnelse for rekkefølge: run er naturlig neste skritt etter status (status viser HVA som er stale, run kjører dem). Cron-daemon/systemd-integrasjon kommer etter run fungerer.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -87,6 +87,61 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 28: config-drevet fetch-cadence (schema + status)
+
+Andre Fase 6-leveranse (etter usda-kalenderen i session 27). PLAN § 7.2
+skisserer `config/fetch.yaml` som erstatter shell-if/else i update.sh.
+Denne sessionen bygger grunnlaget; neste session kjører faktisk fetchere.
+
+**Opprettet:**
+- `bedrock.config.fetch`:
+  - `FetcherSpec` Pydantic: module, cron, stale_hours, on_failure,
+    table, ts_column. `on_failure` som Literal(log_and_skip |
+    retry_with_backoff | raise)
+  - `FetchConfig` med `fetchers: dict[str, FetcherSpec]`
+  - `load_fetch_config(path)` + `FetchConfigError`
+  - `latest_observation_ts(store, table, ts_column)` — wrapper som
+    parser ts-streng fra DataStore til timezone-aware datetime
+    (håndterer ISO, date-only, unix-ts)
+  - `check_staleness(name, spec, store, now) -> FetcherStatus`
+  - `status_report(config, store, now)` — batch for alle fetchere
+- `config/fetch.yaml` — cadence for de 5 eksisterende fetcherne med
+  fornuftige stale_hours-terskler
+- `bedrock.cli.fetch.fetch`:
+  - `status`-subkommando med `--config`, `--db`, `--json`
+  - Human-readable tabell: navn | fresh/STALE/NO_DATA | last_obs |
+    age_h | stale_h
+- `tests/unit/test_fetch_config.py` (18 tester)
+
+**Endret:**
+- `DataStore.latest_observation_ts(table, ts_column) -> str | None` —
+  ny generisk accessor. Returnerer rå-streng (caller parser). Håndterer
+  manglende tabell med None istedenfor SQL-error.
+- `bedrock.cli.__main__`: registrerer fetch-gruppen
+
+**Design-valg:**
+- `cron`-felt lagres kun som streng i session 28 — ingen evaluering
+  ennå. Croniter-integrasjon skjer i scheduler-session
+- Staleness per tabell (ikke per instrument) i første runde. Per-
+  instrument kan utvides ved å legge `key_columns` på FetcherSpec
+  senere — ikke-breaking endring
+- `--json`-modus undertrykker NO_DATA-advarselen på stderr for å
+  bevare parsbar output
+- `_DummyStore` i CLI for manglende DB — null-data stand-in unngår
+  at DataStore oppretter fil bare for å vise status
+
+**Commits:** `dd189c8`.
+
+**Tester:** 479/479 grønne på 17.1 sek (fra 461 session 27, +18).
+
+**Bevisste utsettelser:**
+- Faktisk kjøring av fetchere (`bedrock fetch run`) — neste session
+- Cron-evaluering + scheduler-daemon — session 30+
+- Per-instrument-stale (ikke bare per tabell) — utvides ved behov
+- systemd-unit-filer for deployment — Fase 11
+
+**Neste session:** 29 — `bedrock fetch run` med dispatcher-mapping.
 
 ### 2026-04-24 — Session 27: Fase 5 lukket + USDA-kalender + usda_blackout
 
