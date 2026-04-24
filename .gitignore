@@ -58,3 +58,5 @@ tests/**/htmlcov/
 # DuckDB working files
 *.duckdb
 *.duckdb.wal
+data/bedrock.db
+data/*.db
