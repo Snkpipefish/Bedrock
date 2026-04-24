@@ -146,10 +146,30 @@ function renderSetupCards(containerId, setups) {
   }).join('');
 }
 
+// ─── Soft commodities setups (session 49) ─────────────────────
+// Gjenbruker renderSetupCards — ingen agri-spesifikke felt i setup-
+// dict enda. Runde 2 / Fase 10 legger til weather/ENSO/Conab-badges
+// når fetch-lagene er ferdige.
+async function loadAgriSetups() {
+  try {
+    const res = await fetch('/api/ui/setups/agri').then(r => r.json());
+    renderSetupCards('agri-cards', res.setups);
+    const visEl = document.getElementById('agri-count');
+    const totEl = document.getElementById('agri-total');
+    if (visEl) visEl.textContent = res.visible_count;
+    if (totEl) totEl.textContent = res.total_count;
+  } catch (err) {
+    console.error('Agri setups load feilet:', err);
+    const el = document.getElementById('agri-cards');
+    if (el) el.innerHTML = `<p class="empty">Fetch feilet: ${err.message}</p>`;
+  }
+}
+
 // ─── Lazy-load per fane ───────────────────────────────────────
 const loaders = {
   skipsloggen: loadSkipsloggen,
   financial: loadFinancialSetups,
+  agri: loadAgriSetups,
 };
 
 function activateTab(tabId) {
