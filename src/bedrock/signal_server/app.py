@@ -11,9 +11,10 @@ test-klient.
 
 from __future__ import annotations
 
-from flask import Flask, jsonify
+from flask import Flask
 
 from bedrock.signal_server.config import ServerConfig
+from bedrock.signal_server.endpoints import signals_bp
 
 
 def create_app(config: ServerConfig | None = None) -> Flask:
@@ -29,6 +30,7 @@ def create_app(config: ServerConfig | None = None) -> Flask:
     app.extensions["bedrock_config"] = cfg
 
     _register_meta_endpoints(app, cfg)
+    app.register_blueprint(signals_bp)
     return app
 
 

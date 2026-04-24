@@ -151,12 +151,12 @@ def test_status_lists_registered_endpoints() -> None:
     with app.test_client() as client:
         response = client.get("/status")
     endpoints = response.get_json()["endpoints_registered"]
-    # Kun meta-endepunkter er registrert i session 33
+    # Meta-endepunkter fra session 33
     assert "/health" in endpoints
     assert "/status" in endpoints
     # Disse kommer i senere sessions — sjekk at de IKKE er her ennå
     assert "/push-alert" not in endpoints
-    assert "/signals" not in endpoints
+    assert "/kill" not in endpoints
 
 
 # ---------------------------------------------------------------------------
