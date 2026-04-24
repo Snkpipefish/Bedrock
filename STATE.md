@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 6 — åpen. Session 29 FERDIG: `bedrock fetch run [name]` dispatcher med 5 innebygde runners (prices, cot disagg/legacy, weather, fundamentals). Per-item resiliens + --stale-only + --instrument-filter. Fetch-workflow nå komplett uten ekstern scheduler.
+- **Phase:** 6 — åpen. Session 30 FERDIG: systemd-unit-generator + `bedrock systemd generate/install/list` CLI. 10 unit-filer generert og sjekket inn i `systemd/`. Ingen Python-daemon — systemd tar jobben per bruker-direktiv.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Session 30 — cron-basert scheduler. `bedrock fetch schedule`-kommando + en liten daemon (eller systemd-timer-genererer) som kan kjøre fetch.yaml-cronene i bakgrunnen. Bygger på session 29's runner-registry. Alternativt (hvis bruker foretrekker): generere systemd-timer-unit-filer fra fetch.yaml i stedet for egen daemon — renere integrering med OS men krever skriving til /etc/systemd. Min rekkefølge-beslutning: start med en enkel Python-daemon (APScheduler eller ren stdlib) som leser fetch.yaml og kjører; systemd-genereringen kan komme i Fase 11 som en del av deployment-arbeidet.
+- **Next task:** Session 31 — bruker-valg står fritt. Fase 6-kandidater som gjenstår fra PLAN § 7.3: (a) BRL/USD aktiv driver for softs; (b) Baltic Dry Index → agri-cross-driver; (c) utvide `usda.yaml` med WASDE/Crop Progress/Grain Stocks når bruker ønsker bredere dekning. Alternativt kan Fase 6 lukkes med tag `v0.6.0-fase-6` nå og neste fase (PLAN § 8 signal-server eller § 9 bot-refaktor) åpnes. Min anbefaling: start BRL/USD-driveren (a) fordi den er den minste leveransen som gir konkret verdi (kommer inn i scoring for softs). Så lukk Fase 6 etter 1-2 sessions til.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -87,6 +87,67 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 30: systemd-unit-generator
+
+Fjerde Fase 6-leveranse. Bruker-direktiv: systemd (PLAN § 3.1 + § 13),
+ingen APScheduler. Sessions 28-29 bygde fetch-workflowet; session 30
+plugger det inn i systemd slik at cron-kjøring skjer utenfor Python.
+
+**Opprettet:**
+- `bedrock.systemd.generator`:
+  - `cron_to_oncalendar(expr)` — 5-felt cron → OnCalendar-streng.
+    Støttet undersett: `*`, heltall, `A-B`/`A,B,C` i dow. Søndag
+    som både `0` og `7`
+  - `generate_service_unit(name, *, working_dir, bedrock_executable,
+    module_hint)` og `generate_timer_unit(name, cron, *, persistent)`
+  - `generate_units(fetch_config, ...)` — batch-mapping
+  - `write_units(units, output_dir)` — skriver til disk
+  - `CronConversionError` for ikke-støttet syntaks (step, navn)
+- `bedrock.cli.systemd`:
+  - `generate` — leser fetch.yaml, skriver unit-filer. Flagge:
+    --config, --output, --working-dir, --executable
+  - `install` — `systemctl --user link` per genererte unit.
+    --dry-run, fail-propagering, systemctl-detection
+  - `list` — viser OnCalendar-tider uten å installere
+- `systemd/` fylt med 10 auto-genererte unit-filer (5 fetchere × 2
+  filer). Checked in slik at installasjon fungerer umiddelbart
+- `systemd/README.md` omskrevet for `--user`-flyt (erstatter gammel
+  `sudo systemctl link`-guide)
+- `tests/unit/test_systemd_generator.py` (28 tester)
+
+**Endret:**
+- `bedrock.cli.__main__`: registrerer systemd-gruppen
+
+**Design-valg:**
+- `systemctl --user` (ikke system-wide): ingen sudo nødvendig,
+  brukeren styrer egen deployment
+- `Persistent=true` på timer: systemd kjører unit etter boot hvis
+  maskinen var av på planlagt tid — kritisk for stale_hours-budsjettet
+- `Type=oneshot` på service: riktig for batch-fetchere som avslutter
+  når ferdig, ikke long-running daemon
+- `install` gjør KUN `link`, ikke `enable --now`. Brukeren må eksplisitt
+  aktivere etter inspeksjon — tryggere første-gang-setup
+- Auto-detect av `bedrock`-CLI via `<sys.prefix>/bin/bedrock` først,
+  fallback til PATH, siste utvei `python -m bedrock.cli`
+- Unit-filene sjekket inn som kilde-kontrollert output: gjør diff-ene
+  leselige ved fetch.yaml-endringer og lar install fungere uten
+  generate først
+
+**Commits:** `ee65765`.
+
+**Tester:** 520/520 grønne på 18.9 sek (fra 492 session 29, +28).
+
+**Bevisste utsettelser:**
+- `*/N` step-values og navngitte cron-felter — kommer hvis fetch.yaml
+  noensinne trenger dem. For session 30 er dette ikke tilfelle
+- `enable --now`-automatisering — UX-valg; bruker ønsker kontroll
+- Timere for signal-pipeline/bot/server — Fase 11 (PLAN § 8-9 må
+  refaktoreres først)
+- Generering av system-wide units — ikke nødvendig i nåværende scope
+
+**Neste session:** 31 — BRL/USD driver (PLAN § 7.3) eller annen
+Fase 6-oppgave etter brukers valg.
 
 ### 2026-04-24 — Session 29: bedrock fetch run — runner-dispatcher
 
