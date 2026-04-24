@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 5 — nær komplett. Session 26 FERDIG: `bedrock signals <id>` CLI-wrapper eksponerer full orchestrator fra kommandolinjen. Menneskelesbar + JSON-output, horisont/retnings-filter, snapshot-bryter.
+- **Phase:** 6 — åpen. Fase 5 lukket med tag `v0.5.0-fase-5` (session 27). Session 27 FERDIG: USDA-kalender-loader + `usda_blackout` gate (Prospective Plantings, YAML-basert, ±3h).
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Session 27 — lukk Fase 5 med tag `v0.5.0-fase-5` og start Fase 6 (fetch-laget per PLAN § 7, § 13). `usda_blackout`-gaten (PLAN § 4.3) implementeres i Fase 6 siden den krever USDA-kalender-fetcher. Begrunnelse for å lukke nå: sessions 21-26 dekker PLAN § 4.1-4.2 + § 5 + orchestrator + CLI-demo; det er en stabil milepæl. Å holde Fase 5 åpen for én kalender-gate ville blandet arbeid med Fase 6.
+- **Next task:** Fase 6 fortsetter. PLAN § 7 / § 13 gir scope: (a) config-drevet fetch-cadence (automatisk kjøring av backfill-CLI-kommandoer via cron/systemd + YAML-config per instrument); (b) BRL-driver for Brazil-agri; (c) Baltic Dry Index-fetcher for agri-cross-family; (d) utvide `usda.yaml` med flere rapport-typer når behov oppstår. Min rekkefølge-beslutning for neste session: (a) config-drevet cadence først fordi det unblocker automatisering og eksponerer fetch-API-gaps før nye fetchere legges til. BRL og Baltic kan komme i påfølgende sessions.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -87,6 +87,66 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 27: Fase 5 lukket + USDA-kalender + usda_blackout
+
+Session 27 startet med å lukke Fase 5 via tag `v0.5.0-fase-5` (sessions
+21-26 oppsummert) og åpnet Fase 6 (fetch-laget per PLAN § 7 / § 13).
+
+Første Fase 6-leveranse: USDA-rapport-kalender og `usda_blackout`-gate
+som bruker den. Dette lukker det siste utestående elementet fra
+PLAN § 4.3-eksempelet (Corn).
+
+**Bruker-valg (AskUserQuestion ved session-start):**
+- USDA-scope: kun Prospective Plantings (årlig ca 30. mars)
+- Data-kilde: hardkodet YAML per år (brukeren oppdaterer manuelt)
+- Vindu: ±3h (fra PLAN-eksempelet)
+
+**Opprettet:**
+- `config/calendars/usda.yaml` — 2024, 2025, 2026 Prospective Plantings
+  som UTC-tidsstempler. Flere rapport-typer (grain_stocks, WASDE,
+  crop_progress) kan legges til uten kode-endring
+- `bedrock.fetch.usda_calendar`:
+  - `load_usda_calendar(path)` — pyyaml + datetime-parsing, sortert,
+    timezone-aware (naiv → UTC). Cache per absolutt sti
+  - `clear_usda_calendar_cache()` for reload
+  - `UsdaCalendarError` for ugyldig YAML-format
+  - `@gate_register("usda_blackout")`-gate med params
+    `{calendar_path, report_types, hours, hours_before, hours_after}`
+  - Asymmetrisk vindu støttet (hours_before/hours_after overstyrer
+    symmetrisk hours)
+- `tests/unit/test_usda_calendar.py` (16 tester)
+
+**Endret:**
+- `bedrock.fetch.__init__` + `bedrock.orchestrator.__init__`: side-
+  effekt-import av `bedrock.fetch.usda_calendar` slik at gate er
+  registrert i alle normale entry-points
+
+**Design-valg:**
+- Gate leser kalenderen selv via loader (ikke via GateContext): holder
+  GateContext smal som session 25 ADR-003 krevde. Caching gjør
+  gjentatte kall billige
+- Naive datetimes tolkes som UTC både i YAML og i `context.now` —
+  konsistent policy, unngår silent-bug ved manglende timezone
+- Side-effekt-import istedenfor eksplisitt `load_gates()`-kall:
+  matcher mønsteret fra `bedrock.engine.drivers`-pakken (trend-
+  modulen importeres for side-effekt)
+
+**Commits:** `f2e4263`.
+**Tag:** `v0.5.0-fase-5` (lukker sessions 21-26).
+
+**Tester:** 461/461 grønne på 17.3 sek (fra 445 session 26, +16).
+
+**Bevisste utsettelser:**
+- Flere USDA-rapport-typer (WASDE, Crop Progress, Grain Stocks) —
+  legges til når bruker trenger dem; struktur støtter det allerede
+- USDA NASS API-integrasjon — bruker valgte hardkodet YAML; kan
+  senere bygges som valgfri validator/auto-oppdaterer
+- `usda_blackout`-gate i checked-in corn.yaml — kan legges til når
+  bruker ønsker at Corn-signaler faktisk skal kappes under
+  Prospective Plantings
+
+**Neste session:** 28 — config-drevet fetch-cadence (PLAN § 7.2).
 
 ### 2026-04-24 — Session 26: bedrock signals CLI-wrapper
 
