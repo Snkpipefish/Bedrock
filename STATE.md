@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 3 — åpen. Session 12 FERDIG: `bedrock backfill cot-legacy`. COT-dekning komplett. Tre fetchere (Stooq + CFTC disagg + CFTC legacy), tre CLI-subkommandoer, delt Socrata-helper.
+- **Phase:** 3 — åpen. Session 13 FERDIG: `bedrock backfill weather` via Open-Meteo Archive. Fire fetchere (Stooq, CFTC disagg, CFTC legacy, Open-Meteo), fire CLI-subkommandoer. Alle no-auth kilder dekket.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Fase 3 session 13 — `backfill weather` via Open-Meteo (no auth). Endepunkt: `https://archive-api.open-meteo.com/v1/archive`. Krever `latitude`, `longitude`, `start_date`, `end_date`, `daily=temperature_2m_max,temperature_2m_min,precipitation_sum`. Region-mapping (`us_cornbelt` → lat/lon) hører til Fase 5 instrument-config; Fase 3 tar lat/lon/region som CLI-args. Etter session 13: FRED fundamentals (secrets-håndtering).
+- **Next task:** Fase 3 session 14 — `backfill fundamentals` via FRED. Dette er første kilde som krever **secrets** (FRED_API_KEY). Introduserer `bedrock.config.secrets`-modul som leser `~/.bedrock/secrets.env` (per PLAN § 2 prinsipp 10). FRED-endepunkt: `https://api.stlouisfed.org/fred/series/observations` med `series_id`, `api_key`, `observation_start`, `observation_end`, `file_type=json`. Bruker må ha nøkkel registrert før live-kjøring; tester mocker bort auth-lasting.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -53,6 +53,52 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 13: `backfill weather` (Open-Meteo, no auth)
+
+Fjerde backfill-subkommando. Siste no-auth kilde før FRED-secrets.
+
+**Opprettet:**
+- `src/bedrock/fetch/weather.py`:
+  - `OPEN_METEO_ARCHIVE_URL` + `_DAILY_VARS` konstant
+  - `fetch_weather(region, lat, lon, from_date, to_date)` — returnerer
+    DataFrame matching `DataStore.append_weather` (region, date, tmax,
+    tmin, precip, gdd)
+  - `gdd` lagres som NULL — base-temperatur er crop-spesifikk og
+    beregnes i driver med context
+  - `build_open_meteo_params` eksponert for `--dry-run`
+  - `WeatherFetchError` for permanente feil
+- `bedrock.cli.backfill.weather_cmd`:
+  - Obligatoriske: `--region`, `--lat`, `--lon`, `--from`
+  - Defaults: `--db data/bedrock.db`, `--to i dag`
+  - `--dry-run` viser URL + alle query-params uten HTTP eller DB
+- `tests/unit/test_fetch_weather.py` (11 tester — param-bygging, mocked
+  HTTP success+feil, empty-time-array, missing-daily-block, missing-
+  daily-field, gdd=NULL-verifikasjon, e2e mot DataStore, correct URL)
+- `tests/unit/test_cli_backfill_weather.py` (7 tester — normal flow,
+  --dry-run, empty-result, default-to-today, required-args,
+  invalid-lat-type, parent-help)
+
+**Design-valg:**
+- region-navnet lagres som-er i DB; (lat, lon) brukes kun som query-
+  param. Region→koordinat-mapping utsatt til Fase 5 instrument-config
+- Ingen GDD-beregning i fetcher: base-temp er crop-spesifikk (10°C mais,
+  8°C hvete, etc.). Hører i driver med crop-context
+- Ingen aggregering fra GPS-punkt til region: Open-Meteo tar ett
+  (lat, lon)-punkt som representativt. Ekte region-aggregering fra
+  flere punkt hører til Fase 5 hvis påkrevd
+
+**Commits:** `<hash kommer>`.
+
+**Tester:** 175/175 grønne på 9.3 sek.
+
+**Bevisste utsettelser:**
+- `backfill fundamentals` — session 14 (FRED, secrets-håndtering)
+- Region→koordinat-mapping — Fase 5
+- GDD-beregning — driver i senere fase
+
+**Neste session:** Fase 3 session 14 — FRED fundamentals, introduserer
+`bedrock.config.secrets` (`~/.bedrock/secrets.env`).
 
 ### 2026-04-24 — Session 12: `backfill cot-legacy`, delt Socrata-helper
 
