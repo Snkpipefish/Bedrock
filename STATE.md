@@ -2,18 +2,19 @@
 
 ## Current state
 
-- **Phase:** 8 **LUKKET** (Bot-refaktor). Tag `v0.8.0-fase-8` pushet. Session 46 leverte `bot/__main__.py` + wire-up + `docs/bot_running.md` + 18 nye tester. **Alle ni bot-moduler portert** fra `~/scalp_edge/trading_bot.py` (~3000 linjer) til `bedrock.bot/` (~4000 linjer inkl. tester). Botport kan kjøres parallelt: `python -m bedrock.bot --demo`.
+- **Phase:** 9 **ÅPEN** (UI: 4 faner + admin-editor). Struktureres som tre runder per bruker-beslutning 2026-04-24:
+  - **Runde 1 (session 47-50):** minimal data-wiring per fane, funksjonelt null polish
+  - **Runde 2 (session 51-53):** styling, flyt, filtrering, detaljmodaler
+  - **Runde 3 (session 54-55):** admin-rule-editor på separat URL med kode-gate
+- Session 47 lukket — Fane 1 Skipsloggen levert. `ui_bp` i signal_server med `/` + `/assets/*` + `/api/ui/trade_log` + `/api/ui/trade_log/summary`. `web/index.html` har full 4-fane-struktur med vanilla JS; kun Skipsloggen er wired (de andre er placeholders). 15 nye tester. UI lese-flow: ExitEngine skriver til `~/bedrock/data/bot/signal_log.json` → `ui_bp` leser samme fil → `web/assets/app.js` fetcher og rendrer tabell + KPI med 30-sek auto-refresh.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** **Fase 9** per PLAN-tabell § 16 — admin-UI for YAML-config-editering. Scope vurderes av neste session:
-  1. Admin-auth (WTForms CSRF, session-basert login med `ADMIN_PASSWORD`-env-var)
-  2. Read-view: liste alle `config/instruments/*.yaml`-filer med full innhold
-  3. Edit-view: form per YAML-nivå (ikke free-tekst) — Pydantic-schema dikterer felter
-  4. Dry-run-validering: parse + validate Pydantic før save
-  5. Atomisk save + auto-commit + auto-push (bruker auto-push-hook)
-  6. Killswitch-knapp i UI når logget inn (flipper aktuell bot til pause)
-  7. Audit-log: hvem endret hvilken fil når (enkelt — bare timestamp + auth)
-- Alternativt: Fase 10 (UI-oppdateringer for bot-logg + setups-tabell) — avgjøres i neste session basert på hva bruker prioriterer.
+- **Next task:** **Session 48 — Fane 2 Financial setups** (runde 1). Scope:
+  1. Kartlegg datakilde: `data/setups/active.json` (fra orchestrator) eller orchestrator-snapshot-API. Hvis ingen eksisterer: legg til write-point i orchestrator.
+  2. `GET /api/ui/setups/financial` i `ui_bp` — filtrerer `asset_class ∈ {fx, metals, energy, indices, crypto}`
+  3. `web/index.html` financial-fane: 5 topp-kort per PLAN § 10.2 (instrument/retning/horisont/grade/stjerner/entry-SL-TP/6 familie-badges). Null styling utover struktur.
+  4. Vanilla JS rendrer kort-grid
+  5. Tester: filtrering, manglende fil → tom liste, KPI hvis relevant
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -95,6 +96,84 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 47: Fase 9 runde 1 — Skipsloggen
+
+**Scope:** Første fane av fire i Fase 9 runde 1 (minimal data-wiring).
+Leser `~/bedrock/data/bot/signal_log.json` skrevet av ExitEngine.
+
+**Opprettet:**
+- `src/bedrock/signal_server/endpoints/ui.py` (~140 linjer) — `ui_bp`:
+  - `GET /` serverer `web/index.html` via `send_from_directory`
+  - `GET /assets/<path>` serverer statiske JS/CSS-filer
+  - `GET /api/ui/trade_log` returnerer `{entries, last_updated,
+    total_count}`. `?limit=N`-query-param kutter listen (entries er
+    allerede nyeste-først fra log-writer)
+  - `GET /api/ui/trade_log/summary` returnerer KPI-aggregat:
+    `{total, open, closed, wins, losses, managed, total_pnl_usd,
+    win_rate, last_updated}`. PnL summerer både positive og negative;
+    win_rate regnes på closed-trades
+
+- `web/index.html` — full 4-fane-struktur:
+  - Tab-bar: Skipsloggen / Financial setups / Soft commodities /
+    Kartrommet. Tab-skifte via `data-tab`-attributt + klassetoggle
+  - Skipsloggen: 6-KPI-grid + trade-tabell (12 kolonner: timestamp,
+    signal_id, instrument, direction, horizon, entry, stop, t1,
+    closed_at, result, exit_reason, pnl). Placeholder-rad ved
+    "Laster…"/"Ingen trades". `last_updated`-meta nederst
+  - Financial/Agri/Kartrom: placeholder-seksjoner for sessions 48-50
+
+- `web/assets/app.js` — vanilla JS (per PLAN § 15):
+  - Tab-navigasjon
+  - `loadSkipsloggen()` fetcher begge endepunkter i parallell via
+    `Promise.all`, rendrer KPI + tabell
+  - `renderKpi(summary)` — formaterer win_rate som prosent,
+    total_pnl_usd med fortegn og pos/neg-klasse
+  - `renderTradeTable(entries)` — HTML-stringtemplates (ingen
+    rammeverk), result-pills via `fmtResult()`, pnl-farger via
+    `fmtPnl()` (`✓` suffix hvis `pnl_real`)
+  - 30-sek auto-refresh via `setInterval`. Fetch-feil logges og viser
+    feilmelding i tabell-body
+
+- `web/assets/style.css` — minimum for lesbarhet:
+  - Mørk header-bar med tab-row
+  - KPI-grid med `grid-template-columns: repeat(auto-fit, minmax(140px, 1fr))`
+  - Sticky tabell-header, pos/neg-farger for PnL
+  - Result-pills (win=grønn, loss=rød, managed=gul, open=grå)
+  - Polish kommer i runde 2
+
+**Endret:**
+- `src/bedrock/signal_server/config.py` — nye felt på `ServerConfig`:
+  - `trade_log_path: Path` (default `~/bedrock/data/bot/signal_log.json`)
+  - `web_root: Path` (default `Path("web")`)
+- `src/bedrock/signal_server/app.py` — registrerer `ui_bp`
+- `src/bedrock/signal_server/endpoints/__init__.py` — eksport `ui_bp`
+
+**Design-valg:**
+- Graceful håndtering av fraværende/ugyldig fil: tom liste, aldri 500.
+  Første gangs oppstart (før bot har kjørt første trade) må ikke
+  breake UI-en. Logger warning ved JSON-decode-feil
+- Vanilla JS uten Alpine.js-sprinkling ennå — holder runde 1 så
+  enkel som mulig. Alpine legges evt. inn i runde 2 hvis
+  detaljmodaler krever reaktiv state
+- KPI + trade-log hentes som to separate endepunkter (ikke én
+  aggregert) for å gi runde 2 mulighet til å cache KPI uavhengig av
+  hele loggen når log blir stor
+- 30-sek polling er hardkodet i JS. Runde 2 kan flytte til
+  `/api/ui/config` hvis nødvendig
+
+**Ikke endret:**
+- `~/scalp_edge/` — READ-ONLY
+- Ingen endring i `bedrock.bot` — UI leser kun fra samme fil bot
+  allerede skriver til
+
+**Commits:** `e54123f`.
+
+**Tester:** 959/959 grønne (fra 944 + 15 nye) på 32.9 sek.
+
+**Neste session:** 48 — Fane 2 Financial setups (runde 1). Krever
+kartlegging av `data/setups/active.json` eller orchestrator-
+snapshot. Hvis ikke eksisterer: legg til write-point.
 
 ### 2026-04-24 — Session 46: bot/__main__.py + FASE 8 LUKKET
 
