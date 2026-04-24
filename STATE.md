@@ -6,16 +6,18 @@
   - **Runde 1 (session 47-50):** minimal data-wiring per fane, funksjonelt null polish
   - **Runde 2 (session 51-53):** styling, flyt, filtrering, detaljmodaler
   - **Runde 3 (session 54-55):** admin-rule-editor på separat URL med kode-gate
-- Session 47 lukket — Fane 1 Skipsloggen levert (KPI + trade-log-tabell).
-- Session 48 lukket — Fane 2 Financial setups levert (kort-grid med grade/score-sortering).
+- Session 47 lukket — Fane 1 Skipsloggen (KPI + trade-log-tabell).
+- Session 48 lukket — Fane 2 Financial setups (kort-grid med grade/score-sortering).
+- Session 49 lukket — Fane 3 Soft commodities (samme kort-grid; backend klar fra 48, kun frontend-wire).
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** **Session 49 — Fane 3 Soft commodities** (runde 1). Backend-endepunkt `/api/ui/setups/agri` er allerede lagt til i session 48 (lest `config.agri_signals_path`). Scope for session 49:
-  1. Wire agri-fanen i `web/index.html` + `app.js` — samme kort-grid-komponent som financial kan gjenbrukes
-  2. Hvis setup-dict inneholder agri-spesifikke felt (weather_stress, enso_status, conab_flag, yield_score per PLAN § 10.3), render dem som ekstra badges/rader i kort
-  3. Hvis ikke: bare minimal visning matching financial (samme renderSetupCards)
-  4. Tester: bare frontend-JS-koden (logisk uten backend-tester siden endepunkt allerede testet)
-  5. Nøkkel-beslutning session 49: gjenbruke `renderSetupCards` som fellesfunksjon, eller lage egen `renderAgriCards` hvis agri har unike felt å vise
+- **Next task:** **Session 50 — Fane 4 Kartrommet** (siste i runde 1). Pipeline-helse per fetch-kilde. Scope:
+  1. Kartlegg `data/_meta/` — hvilke filer/format skriver fetch-lag (generated_at, row_count, source-navn)
+  2. `GET /api/ui/pipeline_health` i `ui_bp` — iterer `data/_meta/*.json`, klassifiser hver kilde som fresh/aging/stale/missing basert på `fetch.yaml`-cadence + current time, returner gruppert liste (Core / Bot-priser / CFTC / Ekstern COT / Fundamentals / Sektor / Geo per PLAN § 10.4)
+  3. `web/index.html` kartrom-fane: tabell/kort per gruppe med status-farge
+  4. `app.js` rendrer + 60-sek auto-refresh
+  5. Tester: klassifisering ved forskjellige alder-verdier, manglende _meta-fil → "missing", gruppering
+- Etter session 50: runde 1 ferdig. Runde 2 (sessions 51-53) gir styling/flyt/filtrering/detaljmodaler.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -97,6 +99,41 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 49: Fase 9 runde 1 — Soft commodities
+
+**Scope:** Tredje fane. Ren frontend-wire — backend `/api/ui/setups/agri`
+ble landet i session 48 (samme kontrakt som financial mot
+`agri_signals_path`).
+
+**Endret:**
+- `web/index.html` — agri-fanen har samme struktur som financial
+  (meta-linje + setups-grid-container)
+- `web/assets/app.js`:
+  - `loadAgriSetups()` gjenbruker `renderSetupCards('agri-cards', ...)`
+    + oppdaterer `visible_count`/`total_count` i meta-linjen
+  - Wired i `loaders`-dict → tab-klikk trigger lazy-fetch
+
+**Design-valg:**
+- Gjenbrukte `renderSetupCards` i stedet for egen `renderAgriCards`.
+  Agri-spesifikke felt (weather_stress, enso_status, conab_flag,
+  yield_score per PLAN § 10.3) eksisterer ikke i setup-dict enda —
+  fetch-lagene for vær/ENSO/Conab er ikke ferdige. Legges i runde 2
+  eller Fase 10 når data er tilgjengelig
+- Ingen nye tester — backend-endepunkt allerede testet i session 48,
+  frontend-wire er ikke kompleks nok til å rettferdiggjøre JS-
+  testramme i runde 1
+
+**Ikke endret:**
+- Backend: uendret (endepunkt landet session 48)
+- CSS: uendret (gjenbruker financial-styling)
+
+**Commits:** `e7cdf86`.
+
+**Tester:** 971/971 grønne (ingen nye).
+
+**Neste session:** 50 — Fane 4 Kartrommet (siste i runde 1).
+Pipeline-helse per fetch-kilde.
 
 ### 2026-04-24 — Session 48: Fase 9 runde 1 — Financial setups
 
