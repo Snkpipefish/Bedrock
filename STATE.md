@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 5 — åpen. Session 25 FERDIG: gates/cap_grade implementert via named-function-registry (ADR-003). Engine kapper nå grade og populerer `GroupResult.gates_triggered`. Standard-bibliotek: `min_active_families`, `score_below`, `family_score_below`.
+- **Phase:** 5 — nær komplett. Session 26 FERDIG: `bedrock signals <id>` CLI-wrapper eksponerer full orchestrator fra kommandolinjen. Menneskelesbar + JSON-output, horisont/retnings-filter, snapshot-bryter.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Fase 5 session 26 — CLI-wrapper `bedrock signals <instrument_id>` som eksponerer orchestrator via CLI for manuell testing. Viser score + grade + gates_triggered + setup per (direction, horizon). Begrunnelse: gates nå synlige i GroupResult; CLI-demo gjør dem testbare manuelt UTEN å bygge web-UI. Etter det gjenstår (c) `usda_blackout` som konkret gate — krever USDA-kalender-fetcher (`bedrock.fetch.usda_calendar`).
+- **Next task:** Session 27 — lukk Fase 5 med tag `v0.5.0-fase-5` og start Fase 6 (fetch-laget per PLAN § 7, § 13). `usda_blackout`-gaten (PLAN § 4.3) implementeres i Fase 6 siden den krever USDA-kalender-fetcher. Begrunnelse for å lukke nå: sessions 21-26 dekker PLAN § 4.1-4.2 + § 5 + orchestrator + CLI-demo; det er en stabil milepæl. Å holde Fase 5 åpen for én kalender-gate ville blandet arbeid med Fase 6.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -87,6 +87,55 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 26: bedrock signals CLI-wrapper
+
+Sjette komponent i Fase 5 (cross-cutting). Orchestrator fra session 24
+eksponeres nå via `bedrock signals <instrument_id>`.
+
+**Opprettet:**
+- `bedrock.cli.signals.signals_cmd`:
+  - Argument: `INSTRUMENT_ID` (positional)
+  - Flagge: `--horizon` (multiple), `--direction` (multiple),
+    `--db`, `--instruments-dir`, `--defaults-dir`, `--snapshot`,
+    `--price-tf`, `--price-lookback`, `--json`, `--no-snapshot-write`
+  - Human-readable output: én blokk per entry med score/grade/published/
+    setup-felter/gates_triggered/skip_reason
+  - JSON-output via `OrchestratorResult.model_dump(mode="json")` for
+    programatisk forbruk
+- `tests/unit/test_cli_signals.py` (9 tester)
+
+**Endret:**
+- `SignalEntry.gates_triggered: list[str]` — ny felt; propagert fra
+  `GroupResult.gates_triggered`. Gjør gates direkte synlige i
+  orchestrator-resultatet uten ekstra lookup
+- `bedrock.cli.__main__`: registrerer `signals`-kommandoen
+
+**Design-valg:**
+- `--json` foretrekkes for scripting/pipe-bruk; human-output er default
+- Direction-casing: CLI tar uppercase (BUY/SELL); Direction-enum er
+  lowercase; mapping i `signals_cmd`. JSON eksponerer enum-value
+  (lowercase) for konsistens med andre Pydantic-dumps
+- `--no-snapshot-write` for dry-run-lignende kjøringer uten å endre
+  snapshot-fil (viktig for debug/utforsking)
+
+**Commits:** `739a542`.
+
+**Tester:** 445/445 grønne (fra 436 session 25, +9).
+
+**Bevisste utsettelser:**
+- `usda_blackout` (PLAN § 4.3) — krever USDA-kalender-fetcher.
+  Flyttes naturlig til Fase 6 (fetch-laget) per PLAN § 13
+- Explain-kommando `bedrock explain <signal_id>` (PLAN § 4.5) —
+  krever signal-lagring først (Fase 6 signal-server)
+
+**Neste session:** 27 — lukk Fase 5 med tag `v0.5.0-fase-5` og start
+på Fase 6 (fetch-laget). `usda_blackout` hører naturlig i Fase 6 siden
+den krever USDA-kalender-fetcher (som PLAN § 13 plasserer der).
+Begrunnelse for min rekkefølge-beslutning: Fase 5 dekker nå scoring-
+motor-utvidelsene (instrument-config + inherits + gates + orchestrator
++ signals CLI) og er en stabil milepæl. Å holde Fase 5 åpen for én
+kalender-gate ville blandet arbeidet.
 
 ### 2026-04-24 — Session 25: gates / cap_grade (ADR-003)
 
