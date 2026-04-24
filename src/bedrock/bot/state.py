@@ -68,6 +68,8 @@ class TradeState:
     horizon_config: dict = field(default_factory=dict)
     correlation_group: Optional[str] = None
     order_id: Optional[int] = None  # for limit orders
+    lots_used: Optional[float] = None  # ønsket lot-størrelse ved entry (før stepVolume)
+    risk_pct_used: Optional[float] = None  # risk-% tier brukt (0.25/0.5/1.0)
     # ── Exit-tracking (P3.5 / P3.6) ───────────────────────────────
     peak_progress: float = 0.0  # høyeste urealisert fremgang mot T1 (0–1+)
     trail_level: Optional[float] = None  # nåværende trailing stop-nivå

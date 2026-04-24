@@ -60,13 +60,17 @@ from ctrader_open_api.messages.OpenApiCommonMessages_pb2 import (
 from ctrader_open_api.messages.OpenApiMessages_pb2 import (
     ProtoOAAccountAuthReq,
     ProtoOAAccountAuthRes,
+    ProtoOAAmendPositionSLTPReq,
     ProtoOAApplicationAuthReq,
     ProtoOAApplicationAuthRes,
+    ProtoOACancelOrderReq,
+    ProtoOAClosePositionReq,
     ProtoOAErrorRes,
     ProtoOAExecutionEvent,
     ProtoOAGetAccountListByAccessTokenRes,
     ProtoOAGetTrendbarsReq,
     ProtoOAGetTrendbarsRes,
+    ProtoOANewOrderReq,
     ProtoOAOrderErrorEvent,
     ProtoOAReconcileReq,
     ProtoOAReconcileRes,
@@ -83,6 +87,8 @@ from ctrader_open_api.messages.OpenApiMessages_pb2 import (
     ProtoOATraderRes,
 )
 from ctrader_open_api.messages.OpenApiModelMessages_pb2 import (
+    ProtoOAOrderType,
+    ProtoOATradeSide,
     ProtoOATrendbarPeriod,
 )
 from twisted.internet import reactor, task
@@ -400,6 +406,90 @@ class CtraderClient:
         req.fromTimestamp = from_ms
         req.toTimestamp = now_ms
         self.send(req)
+
+    # ─────────────────────────────────────────────────────────
+    #  Ordre-APIs (transport-only; state bor i entry/exit-laget)
+    # ─────────────────────────────────────────────────────────
+
+    def send_new_order(
+        self,
+        *,
+        symbol_id: int,
+        trade_side: str,
+        volume: int,
+        label: str = "",
+        comment: str = "",
+        order_type: str = "MARKET",
+        limit_price: Optional[float] = None,
+        stop_loss: Optional[float] = None,
+        take_profit: Optional[float] = None,
+        expiration_ms: Optional[int] = None,
+    ) -> Any:
+        """Send ProtoOANewOrderReq. MARKET eller LIMIT.
+
+        `trade_side` er "BUY" | "SELL"; `order_type` er "MARKET" | "LIMIT".
+        SL/TP settes direkte på request for LIMIT; MARKET må bruke
+        `amend_sl_tp` etter fill (cTrader tillater ikke SL/TP på
+        ProtoOANewOrderReq for MARKET).
+
+        `limit_price` er påkrevd for LIMIT; `expiration_ms` valgfri
+        (unix ms). Caller er ansvarlig for å avrunde priser til riktig
+        digits via `symbol_price_digits`.
+        """
+        if order_type == "LIMIT" and limit_price is None:
+            raise ValueError("send_new_order: LIMIT-ordre krever limit_price")
+        req = ProtoOANewOrderReq()
+        req.ctidTraderAccountId = self._creds.account_id
+        req.symbolId = symbol_id
+        req.tradeSide = ProtoOATradeSide.Value(trade_side)
+        req.volume = volume
+        if label:
+            req.label = label
+        if comment:
+            req.comment = comment
+        req.orderType = ProtoOAOrderType.Value(order_type)
+        if order_type == "LIMIT":
+            assert limit_price is not None  # håndheves over
+            req.limitPrice = limit_price
+            if stop_loss is not None:
+                req.stopLoss = stop_loss
+            if take_profit is not None:
+                req.takeProfit = take_profit
+            if expiration_ms is not None:
+                req.expirationTimestamp = expiration_ms
+        return self.send(req)
+
+    def amend_sl_tp(
+        self,
+        *,
+        position_id: int,
+        stop_loss: Optional[float] = None,
+        take_profit: Optional[float] = None,
+    ) -> Any:
+        """Endre SL og/eller TP på åpen posisjon."""
+        req = ProtoOAAmendPositionSLTPReq()
+        req.ctidTraderAccountId = self._creds.account_id
+        req.positionId = position_id
+        if stop_loss is not None:
+            req.stopLoss = stop_loss
+        if take_profit is not None:
+            req.takeProfit = take_profit
+        return self.send(req)
+
+    def close_position(self, *, position_id: int, volume: int) -> Any:
+        """Lukk posisjon helt eller delvis."""
+        req = ProtoOAClosePositionReq()
+        req.ctidTraderAccountId = self._creds.account_id
+        req.positionId = position_id
+        req.volume = volume
+        return self.send(req)
+
+    def cancel_order(self, *, order_id: int) -> Any:
+        """Kanseller pending (typisk LIMIT) ordre."""
+        req = ProtoOACancelOrderReq()
+        req.ctidTraderAccountId = self._creds.account_id
+        req.orderId = order_id
+        return self.send(req)
 
     # ─────────────────────────────────────────────────────────
     #  Autentisering

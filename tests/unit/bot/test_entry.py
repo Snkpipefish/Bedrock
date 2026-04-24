@@ -781,3 +781,515 @@ def test_server_frozen_still_manages_positions(
     )
     engine._on_candle_closed(1, candle)
     manage.assert_called_once()
+
+
+# ─────────────────────────────────────────────────────────────
+# _execute_trade_impl — ordre-sending, gates, sizing
+# ─────────────────────────────────────────────────────────────
+
+
+def _make_state(
+    *,
+    signal_id: str = "sig-1",
+    symbol_id: int = 1,
+    instrument: str = "EURUSD",
+    direction: str = "buy",
+    stop: float = 1.0780,
+    t1: float = 1.0850,
+    phase: TradePhase = TradePhase.AWAITING_CONFIRMATION,
+) -> TradeState:
+    return TradeState(
+        signal_id=signal_id,
+        symbol_id=symbol_id,
+        instrument=instrument,
+        direction=direction,
+        stop_price=stop,
+        t1_price=t1,
+        phase=phase,
+    )
+
+
+def _make_signal(
+    *,
+    sig_id: str = "sig-1",
+    instrument: str = "EURUSD",
+    direction: str = "buy",
+    alert: float = 1.0800,
+    stop: float = 1.0780,
+    t1: float = 1.0850,
+    horizon: str = "SWING",
+    base_risk: int = 40,
+    character: str = "A",
+) -> dict:
+    return {
+        "id": sig_id,
+        "instrument": instrument,
+        "direction": direction,
+        "alert_level": alert,
+        "stop": stop,
+        "t1": t1,
+        "horizon": horizon,
+        "character": character,
+        "horizon_config": {"sizing_base_risk_usd": base_risk},
+    }
+
+
+def _exec_engine(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    *,
+    tmp_path: Path,
+    client: MagicMock,
+) -> EntryEngine:
+    """Engine uten execute_trade-callback → default = _execute_trade_impl."""
+    return EntryEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        stats_path=tmp_path / "s.json",
+        trade_log_path=tmp_path / "trade_log.json",
+    )
+
+
+def test_execute_trade_sends_market_order(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    client = _make_client_stub(
+        symbol_map={"EURUSD": 1},
+        last_bid={1: 1.0799},
+        last_ask={1: 1.0801},
+        account_balance=100_000.0,
+    )
+    client.symbol_info = {
+        1: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}
+    }
+    client.symbol_price_digits = {1: 5}
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    state = _make_state()
+    active_states.append(state)
+    sig = _make_signal()
+    candle = Candle(
+        open=1.08, high=1.0805, low=1.0798, close=1.0801, volume=1,
+        timestamp=datetime.now(timezone.utc),
+    )
+    engine._execute_trade_impl(sig, state, candle)
+
+    # MARKET-ordre sendt med forventet parametre
+    client.send_new_order.assert_called_once()
+    kwargs = client.send_new_order.call_args.kwargs
+    assert kwargs["symbol_id"] == 1
+    assert kwargs["trade_side"] == "BUY"
+    assert kwargs["volume"] == 2000  # 0.02 lot (SWING) × 100000 = 2000
+    assert kwargs["order_type"] == "MARKET"
+    assert "stop_loss" not in kwargs  # MARKET: SL settes via amend etter fill
+    # State oppdatert
+    assert state.full_volume == 2000
+    assert state.entry_price == 1.0801  # ask for buy
+    assert state.lots_used == 0.02
+    assert state.risk_pct_used == 1.0
+    assert state.horizon == "SWING"
+
+
+def test_execute_trade_sends_limit_order_when_rule_set(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    client = _make_client_stub(
+        symbol_map={"GOLD": 2},
+        last_bid={2: 2050.00},
+        last_ask={2: 2050.50},
+        account_balance=100_000.0,
+    )
+    client.symbol_info = {
+        2: {"lot_size": 100, "min_volume": 1, "step_volume": 1}
+    }
+    client.symbol_price_digits = {2: 2}
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    state = _make_state(signal_id="gold-1", symbol_id=2, instrument="GOLD",
+                        stop=2040.0, t1=2070.0)
+    active_states.append(state)
+    sig = _make_signal(sig_id="gold-1", instrument="GOLD", alert=2050.25,
+                      stop=2040.0, t1=2070.0, base_risk=40)
+    engine.signal_data = {
+        "signals": [],
+        "global_state": {},
+        "rules": {"use_limit_orders": True},
+    }
+    candle = Candle(
+        open=2050.0, high=2050.5, low=2049.9, close=2050.3, volume=1,
+        timestamp=datetime.now(timezone.utc),
+    )
+    engine._execute_trade_impl(sig, state, candle)
+
+    kwargs = client.send_new_order.call_args.kwargs
+    assert kwargs["order_type"] == "LIMIT"
+    assert kwargs["limit_price"] == 2050.25
+    assert kwargs["stop_loss"] == 2040.0
+    assert kwargs["take_profit"] == 2070.0
+    assert "expiration_ms" in kwargs
+
+
+def test_execute_trade_blocks_on_zero_risk(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """entry_price == stop → risk_per_unit=0 → avvis + fjern state."""
+    client = _make_client_stub(
+        symbol_map={"EURUSD": 1},
+        last_bid={1: 1.0800}, last_ask={1: 1.0800},
+    )
+    client.symbol_info = {1: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}}
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    state = _make_state(stop=1.0800)
+    active_states.append(state)
+    sig = _make_signal(stop=1.0800)
+    candle = Candle(open=1.08, high=1.081, low=1.079, close=1.08, volume=1,
+                   timestamp=datetime.now(timezone.utc))
+    engine._execute_trade_impl(sig, state, candle)
+    client.send_new_order.assert_not_called()
+    assert state not in active_states
+
+
+def test_execute_trade_blocks_on_daily_loss(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Daily-loss over grense → ordre ikke sendt, state fjernet."""
+    client = _make_client_stub(
+        symbol_map={"EURUSD": 1},
+        last_bid={1: 1.0799}, last_ask={1: 1.0801},
+        account_balance=100_000.0,
+    )
+    client.symbol_info = {1: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}}
+    safety.add_loss(10_000.0)  # Over pct=2% × 100k = 2000
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    state = _make_state()
+    active_states.append(state)
+    sig = _make_signal()
+    candle = Candle(open=1.08, high=1.081, low=1.079, close=1.08, volume=1,
+                   timestamp=datetime.now(timezone.utc))
+    engine._execute_trade_impl(sig, state, candle)
+    client.send_new_order.assert_not_called()
+    assert state not in active_states
+
+
+def test_execute_trade_blocks_oil_geo_warning_with_tight_sl(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Oil + geo-advarsel + SL smalere enn min_sl_pips × 0.01 → blokkert."""
+    client = _make_client_stub(
+        symbol_map={"OIL BRENT": 3},
+        last_bid={3: 85.00}, last_ask={3: 85.05},
+        account_balance=100_000.0,
+    )
+    client.symbol_info = {3: {"lot_size": 100, "min_volume": 1, "step_volume": 1}}
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    state = _make_state(signal_id="oil-1", symbol_id=3, instrument="OIL BRENT",
+                       stop=85.04)  # SL 1 cent = under 25×0.01 = 0.25
+    active_states.append(state)
+    sig = _make_signal(sig_id="oil-1", instrument="OIL BRENT", alert=85.05, stop=85.04, t1=85.40)
+    engine.signal_data = {
+        "signals": [],
+        "global_state": {"oil_geo_warning": True},
+        "rules": {},
+    }
+    candle = Candle(open=85.03, high=85.06, low=85.01, close=85.04, volume=1,
+                   timestamp=datetime.now(timezone.utc))
+    engine._execute_trade_impl(sig, state, candle)
+    client.send_new_order.assert_not_called()
+
+
+def test_execute_trade_blocks_total_correlation_limit(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """max_total posisjoner aktive → ny ordre blokkert."""
+    client = _make_client_stub(
+        symbol_map={"EURUSD": 1, "USDJPY": 2},
+        last_bid={1: 1.0799}, last_ask={1: 1.0801},
+        account_balance=100_000.0,
+    )
+    client.symbol_info = {1: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}}
+    # Fyll 6 IN_TRADE states (default max_total)
+    for i in range(6):
+        active_states.append(TradeState(
+            signal_id=f"other-{i}", symbol_id=99+i, instrument="USDJPY",
+            phase=TradePhase.IN_TRADE, direction="buy",
+        ))
+    new_state = _make_state(signal_id="new-1")
+    active_states.append(new_state)
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    sig = _make_signal(sig_id="new-1")
+    engine.signal_data = {
+        "signals": [],
+        "global_state": {"correlation_config": {"max_total": 6}},
+        "rules": {},
+    }
+    candle = Candle(open=1.08, high=1.081, low=1.079, close=1.08, volume=1,
+                   timestamp=datetime.now(timezone.utc))
+    engine._execute_trade_impl(sig, new_state, candle)
+    client.send_new_order.assert_not_called()
+    assert new_state not in active_states
+
+
+def test_execute_trade_agri_size_halved_and_corn_blocked_out_of_session(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Corn utenfor session (f.eks. kl. 05:00 CET) → blokkert."""
+    from bedrock.bot import entry as entry_mod
+
+    class _FrozenDT(datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            return datetime(2026, 4, 24, 5, 0, 0, tzinfo=tz)
+    monkeypatch.setattr(entry_mod, "datetime", _FrozenDT)
+
+    client = _make_client_stub(
+        symbol_map={"Corn": 10},
+        last_bid={10: 4.50}, last_ask={10: 4.52},
+        account_balance=100_000.0,
+    )
+    client.symbol_info = {10: {"lot_size": 5000, "min_volume": 100, "step_volume": 100}}
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    state = _make_state(signal_id="corn-1", symbol_id=10, instrument="Corn",
+                       stop=4.40, t1=4.90)
+    active_states.append(state)
+    sig = _make_signal(sig_id="corn-1", instrument="Corn", alert=4.51,
+                      stop=4.40, t1=4.90, base_risk=40)
+    candle = Candle(open=4.51, high=4.52, low=4.50, close=4.515, volume=1,
+                   timestamp=datetime.now(timezone.utc))
+    engine._execute_trade_impl(sig, state, candle)
+    client.send_new_order.assert_not_called()
+
+
+def test_execute_trade_agri_in_session_sends_order(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Corn innenfor session (14:00 CET) → ordre sendt med halv lot."""
+    from bedrock.bot import entry as entry_mod
+
+    class _FrozenDT(datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            return datetime(2026, 4, 24, 14, 0, 0, tzinfo=tz)
+    monkeypatch.setattr(entry_mod, "datetime", _FrozenDT)
+
+    client = _make_client_stub(
+        symbol_map={"Corn": 10},
+        last_bid={10: 4.50}, last_ask={10: 4.52},
+        spread_history={10: deque([0.01] * 15, maxlen=20)},
+        account_balance=100_000.0,
+    )
+    client.symbol_info = {10: {"lot_size": 5000, "min_volume": 100, "step_volume": 100}}
+    client.symbol_price_digits = {10: 2}
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    # Populate ATR14 for spreadfilter: må ikke være None, og spread/atr skal passere
+    engine.atr14[10] = [0.10] * 15  # ATR14 = 0.10 → maks spread 0.04 > faktisk 0.02
+    state = _make_state(signal_id="corn-ok", symbol_id=10, instrument="Corn",
+                       stop=4.40, t1=4.90)
+    active_states.append(state)
+    sig = _make_signal(sig_id="corn-ok", instrument="Corn", alert=4.51,
+                      stop=4.40, t1=4.90, base_risk=40)
+    candle = Candle(open=4.51, high=4.52, low=4.50, close=4.515, volume=1,
+                   timestamp=datetime.now(timezone.utc))
+    engine._execute_trade_impl(sig, state, candle)
+    client.send_new_order.assert_called_once()
+    kwargs = client.send_new_order.call_args.kwargs
+    # Corn = agri, SWING: 0.02 × 0.5 = 0.01 lot × 5000 = 50, min_vol=100 → 100
+    assert kwargs["volume"] == 100
+
+
+# ─────────────────────────────────────────────────────────────
+# _is_monday_gap
+# ─────────────────────────────────────────────────────────────
+
+
+def test_monday_gap_blocks_when_gap_large(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from bedrock.bot import entry as entry_mod
+
+    class _FrozenDT(datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            # Mandag 2026-04-20 kl. 00:30 CET
+            return datetime(2026, 4, 20, 0, 30, 0, tzinfo=tz)
+    monkeypatch.setattr(entry_mod, "datetime", _FrozenDT)
+
+    client = _make_client_stub(symbol_map={"EURUSD": 1}, last_bid={1: 1.100})
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    # H1 buffer med en "fredag"-close på 1.080 og ATR14_h1 = 0.005
+    buf = CandleBuffer()
+    buf.candles.append(Candle(open=1.080, high=1.081, low=1.079, close=1.080,
+                              volume=0, timestamp=datetime.now(timezone.utc)))
+    engine.h1_candle_buffers[1] = buf
+    engine.atr14_h1[1] = [0.005] * 5  # ATR = 0.005
+    # Gap = abs(1.100 - 1.080) = 0.020 > 2.0 × 0.005 = 0.010
+    assert engine._is_monday_gap(1) is True
+
+
+def test_monday_gap_false_outside_first_hour(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from bedrock.bot import entry as entry_mod
+
+    class _FrozenDT(datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            # Mandag kl. 02:00 → utenfor første time
+            return datetime(2026, 4, 20, 2, 0, 0, tzinfo=tz)
+    monkeypatch.setattr(entry_mod, "datetime", _FrozenDT)
+
+    client = _make_client_stub(symbol_map={"EURUSD": 1}, last_bid={1: 1.100})
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    engine.atr14_h1[1] = [0.005]
+    assert engine._is_monday_gap(1) is False
+
+
+def test_monday_gap_false_when_not_monday(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from bedrock.bot import entry as entry_mod
+
+    class _FrozenDT(datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            return datetime(2026, 4, 21, 0, 30, 0, tzinfo=tz)  # Tirsdag
+    monkeypatch.setattr(entry_mod, "datetime", _FrozenDT)
+
+    client = _make_client_stub(symbol_map={"EURUSD": 1}, last_bid={1: 1.100})
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    engine.atr14_h1[1] = [0.005]
+    assert engine._is_monday_gap(1) is False
+
+
+# ─────────────────────────────────────────────────────────────
+# _agri_session_ok
+# ─────────────────────────────────────────────────────────────
+
+
+def test_agri_session_ok_within_hours(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from bedrock.bot import entry as entry_mod
+
+    class _FrozenDT(datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            return datetime(2026, 4, 24, 12, 0, 0, tzinfo=tz)
+    monkeypatch.setattr(entry_mod, "datetime", _FrozenDT)
+
+    client = _make_client_stub(symbol_map={"Corn": 10})
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    assert engine._agri_session_ok("Corn") is True
+
+
+def test_agri_session_ok_outside_hours(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from bedrock.bot import entry as entry_mod
+
+    class _FrozenDT(datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            return datetime(2026, 4, 24, 4, 0, 0, tzinfo=tz)
+    monkeypatch.setattr(entry_mod, "datetime", _FrozenDT)
+
+    client = _make_client_stub(symbol_map={"Corn": 10})
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    assert engine._agri_session_ok("Corn") is False
+
+
+def test_agri_session_unknown_instrument_allowed(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Ukjent instrument → True (ikke blokkér)."""
+    client = _make_client_stub(symbol_map={})
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    assert engine._agri_session_ok("UNKNOWN_THING") is True
+
+
+# ─────────────────────────────────────────────────────────────
+# _log_trade_opened
+# ─────────────────────────────────────────────────────────────
+
+
+def test_log_trade_opened_writes_json(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    import json
+    client = _make_client_stub(symbol_map={"EURUSD": 1})
+    client.symbol_info = {1: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}}
+    log_path = tmp_path / "signal_log.json"
+    engine = EntryEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        stats_path=tmp_path / "s.json",
+        trade_log_path=log_path,
+    )
+    state = TradeState(
+        signal_id="trade-1", symbol_id=1, instrument="EURUSD",
+        direction="buy", entry_price=1.0800, stop_price=1.0780, t1_price=1.0850,
+        full_volume=2000, position_id=42, horizon="SWING", risk_pct_used=1.0,
+    )
+    engine._log_trade_opened(state)
+    assert log_path.exists()
+    data = json.loads(log_path.read_text())
+    assert data["entries"][0]["signal"]["id"] == "trade-1"
+    assert data["entries"][0]["signal"]["instrument"] == "EURUSD"
+    assert data["entries"][0]["signal"]["direction"] == "BUY"
+    assert data["entries"][0]["signal"]["lots"] == 0.02
+    assert data["entries"][0]["signal"]["position_id"] == 42
+    assert data["entries"][0]["closed_at"] is None

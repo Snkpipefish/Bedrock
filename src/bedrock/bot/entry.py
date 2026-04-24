@@ -1,9 +1,9 @@
-"""Entry-lag: candle-handling, indikatorer, filters, confirmation.
+"""Entry-lag: candle-handling, indikatorer, filters, confirmation, execute.
 
-Portert fra `~/scalp_edge/trading_bot.py` session 43 per migrasjons-
-plan (`docs/migration/bot_refactor.md § 3.2 + 8 punkt 4`).
+Portert fra `~/scalp_edge/trading_bot.py` session 43-44 per migrasjons-
+plan (`docs/migration/bot_refactor.md § 3.2 + 8 punkt 4-5`).
 
-**KRITISK BUG-FIX I DENNE SESSION:** `_recalibrate_agri_levels` er SLETTET
+**KRITISK BUG-FIX (SESSION 43):** `_recalibrate_agri_levels` er SLETTET
 og kall-stedet i `_on_candle_closed` er fjernet. Agri-signaler passerer
 nå uendret gjennom bot-pipelinen — setup-generator-ens reelt-nivå-baserte
 SL/T1/T2/entry_zone respekteres. Se `docs/migration/bot_refactor.md § 4`
@@ -14,19 +14,23 @@ Ansvaret:
 - Populere buffere fra historical-bars ved oppstart
 - Route spot-events → candle-handler
 - Ved lukket 15m-candle: evaluere watchlist-signaler → filters →
-  confirmation → execute_trade-callback
+  confirmation → execute (gates + sizing + ordre-send)
 - Evaluere `active_states`-liste (exit-logikken fyres via callback)
 
 Scope NOT i denne session:
-- `_execute_trade` (ordre-sending) — session 44 (wirer CtraderClient
-  send_new_order)
-- `_manage_open_positions` (P1-P5 exit) — session 44
+- `_manage_open_positions` (P1-P5 exit) — session 45
+- Execution-event-handlere (`_on_execution`, `_on_reconcile`,
+  `_on_order_error`) — session 45 wirer disse til ExitEngine
 
-Wire-up i `bot/__main__.py` (session 45):
+Wire-up i `bot/__main__.py` (session 46):
     entry = EntryEngine(client=..., safety=..., config=..., ...)
+    exit_engine = ExitEngine(...)  # session 45
     client.callbacks.on_spot = entry.on_spot
     client.callbacks.on_historical_bars = entry.on_historical_bars
     client.callbacks.on_symbols_ready = entry.on_symbols_ready
+    client.callbacks.on_execution = exit_engine.on_execution
+    client.callbacks.on_reconcile = exit_engine.on_reconcile
+    client.callbacks.on_order_error = exit_engine.on_order_error
     comms.on_signals = entry.on_signals
 """
 
@@ -42,16 +46,28 @@ from pathlib import Path
 from threading import Lock
 from typing import Any, Callable, Optional
 
+from zoneinfo import ZoneInfo
+
 from bedrock.bot.config import ReloadableConfig
 from bedrock.bot.ctrader_client import CtraderClient, H1_PERIOD, M15_PERIOD, M5_PERIOD
 from bedrock.bot.instruments import (
     AGRI_INSTRUMENTS,
+    AGRI_SUBGROUPS,
     FX_USD_DIRECTION,
+    INSTRUMENT_GROUP,
     looks_like_fx_pair,
     net_usd_direction,
 )
 from bedrock.bot.safety import SafetyMonitor
+from bedrock.bot.sizing import (
+    compute_desired_lots,
+    get_risk_pct,
+    lots_to_volume_units,
+    volume_to_lots,
+)
 from bedrock.bot.state import Candle, CandleBuffer, TradePhase, TradeState
+
+CET = ZoneInfo("Europe/Oslo")
 
 log = logging.getLogger("bedrock.bot.entry")
 
@@ -59,6 +75,8 @@ log = logging.getLogger("bedrock.bot.entry")
 DEFAULT_CONFIRMATION_STATS_PATH = (
     Path.home() / "bedrock" / "data" / "bot" / "confirmation_stats.json"
 )
+
+DEFAULT_TRADE_LOG_PATH = Path.home() / "bedrock" / "data" / "bot" / "signal_log.json"
 
 
 def _noop(*_args: Any, **_kwargs: Any) -> None:  # pragma: no cover
@@ -94,17 +112,23 @@ class EntryEngine:
         safety: SafetyMonitor,
         config: ReloadableConfig,
         active_states: list[TradeState],
-        execute_trade: ExecuteTradeCallback = _noop,
+        execute_trade: Optional[ExecuteTradeCallback] = None,
         manage_open_positions: ManagePositionsCallback = _noop,
         stats_path: Optional[Path] = None,
+        trade_log_path: Optional[Path] = None,
     ) -> None:
         self._client = client
         self._safety = safety
         self._config = config
         self._active_states = active_states
-        self._execute_trade = execute_trade
+        # Default: bruk intern _execute_trade_impl. Callback-slot beholdes
+        # slik at tester kan stubbe ordre-flyten uten å patch-e metoden.
+        self._execute_trade: ExecuteTradeCallback = (
+            execute_trade if execute_trade is not None else self._execute_trade_impl
+        )
         self._manage_open_positions = manage_open_positions
         self._stats_path = stats_path or DEFAULT_CONFIRMATION_STATS_PATH
+        self._trade_log_path = trade_log_path or DEFAULT_TRADE_LOG_PATH
 
         # Candle-buffere (ikke ctrader_client.symbol-state — de bor der)
         self.candle_buffers: dict[int, CandleBuffer] = {}
@@ -882,6 +906,441 @@ class EntryEngine:
         return {"SCALP": rr_cfg.scalp, "SWING": rr_cfg.swing, "MAKRO": rr_cfg.makro}.get(
             horizon, rr_cfg.makro
         )
+
+    # ─────────────────────────────────────────────────────────
+    # Monday-gap og agri-session (brukes av _execute_trade_impl)
+    # ─────────────────────────────────────────────────────────
+
+    def _is_monday_gap(self, symbol_id: int) -> bool:
+        """Mandag-gap-gate: blokker entry hvis gap > N×ATR fra fredags close.
+
+        Portert fra `trading_bot.py:_is_monday_gap` (1775-1793). Bruker
+        `config.monday_gap.atr_multiplier` i stedet for hardkodet 2.0.
+        Gjelder kun første time etter åpning (CET).
+        """
+        now = datetime.now(CET)
+        if now.weekday() != 0 or now.hour >= 1:
+            return False
+        atr = self.get_atr14_h1(symbol_id) or self.get_atr14(symbol_id)
+        if not atr:
+            return False
+        h1_buf = self.h1_candle_buffers.get(symbol_id)
+        if not h1_buf or not h1_buf.candles:
+            return False
+        friday_close = h1_buf.candles[-1].close
+        bid = self._client.last_bid.get(symbol_id, 0)
+        if bid and friday_close:
+            gap = abs(bid - friday_close)
+            mult = self._config.monday_gap.atr_multiplier
+            if gap > mult * atr:
+                return True
+        return False
+
+    def _agri_session_ok(self, instrument: str) -> bool:
+        """Sjekk om nåværende CET-tid er innenfor agri-sessionens åpningstider.
+
+        Portert fra `trading_bot.py:_agri_session_ok` (308-321). Session-
+        tider hentes fra `config.agri.session_times_cet` — lowercase-
+        nøkler (corn/wheat/...) mot capitalized-instrument-navn.
+        Ukjent instrument → True (ikke blokkér).
+        """
+        sessions = self._config.agri.session_times_cet
+        session = sessions.get(instrument.lower())
+        if session is None:
+            return True
+        try:
+            h_o, m_o = [int(x) for x in session.start.split(":")]
+            h_c, m_c = [int(x) for x in session.end.split(":")]
+        except (ValueError, AttributeError):
+            return True  # Graceful: malformert config → ikke blokkér
+        now = datetime.now(CET)
+        open_mins = h_o * 60 + m_o
+        close_mins = h_c * 60 + m_c
+        now_mins = now.hour * 60 + now.minute
+        return open_mins <= now_mins <= close_mins
+
+    # ─────────────────────────────────────────────────────────
+    # _execute_trade — gates + sizing + ordre-sending
+    # ─────────────────────────────────────────────────────────
+
+    def _execute_trade_impl(
+        self, sig: dict[str, Any], state: TradeState, candle: Candle
+    ) -> None:
+        """Gater, sizer og sender ordre.
+
+        Portert fra `trading_bot.py:_execute_trade` (1491-1732) per
+        migrasjons-plan § 3.4. Ingen logikk-endring utover:
+        - daily-loss leses fra `SafetyMonitor` + `DailyLossConfig` (ikke
+          rules-dict)
+        - oil-gate leses fra `config.oil` (ikke rules-dict hardkodet)
+        - agri-grenser leses fra `config.agri` (ikke modul-konstanter)
+        - sizing delegert til `bedrock.bot.sizing`
+        - korrelasjonsgrenser leses fra `global_state.correlation_config`
+          (uendret)
+        - ordre-send delegert til `CtraderClient.send_new_order`
+        - `_log_trade_opened` skriver til `~/bedrock/data/bot/signal_log.json`
+          UTEN git-push (gammel bot pushet logg til cot-explorer; Bedrock
+          skal ikke gjøre git i hot-path)
+        """
+        gs = (self.signal_data or {}).get("global_state", {})
+        rules = (self.signal_data or {}).get("rules", {})
+
+        # Entry-pris basert på side
+        entry_price = (
+            self._client.last_ask.get(state.symbol_id, candle.close)
+            if sig["direction"] == "buy"
+            else self._client.last_bid.get(state.symbol_id, candle.close)
+        )
+
+        # ── Monday gap-gate ───────────────────────────────────
+        if self._is_monday_gap(state.symbol_id):
+            log.info(
+                "[MONDAY GAP] %s — gap > %.1f×ATR, venter på 1H close.",
+                sig["id"],
+                self._config.monday_gap.atr_multiplier,
+            )
+            self._remove_state(state)
+            return
+
+        risk_per_unit = abs(entry_price - sig["stop"])
+        if risk_per_unit <= 0:
+            log.error("[FEIL] %s — risk_per_unit=0. Avbryter.", sig["id"])
+            self._remove_state(state)
+            return
+
+        # ── Oil geo-spread-sjekk ──────────────────────────────
+        instr_name = sig.get("instrument", "")
+        is_oil = instr_name in ("OIL BRENT", "OIL WTI")
+        if is_oil and gs.get("oil_geo_warning", False):
+            oil_cfg = self._config.oil
+            min_sl_pips = rules.get("oil_min_sl_pips", oil_cfg.min_sl_pips)
+            max_spread_m = rules.get("oil_max_spread_mult", oil_cfg.max_spread_mult)
+            spread = self._client.last_ask.get(
+                state.symbol_id, 0
+            ) - self._client.last_bid.get(state.symbol_id, 0)
+            if risk_per_unit < min_sl_pips * 0.01:
+                log.warning(
+                    "[GEO-OLJE BLOKKERT] %s — SL for smal (%.3f < %d pips) "
+                    "under geo-advarsel.",
+                    sig["id"],
+                    risk_per_unit,
+                    min_sl_pips,
+                )
+                self._remove_state(state)
+                return
+            if spread > 0 and risk_per_unit < max_spread_m * spread:
+                log.warning(
+                    "[GEO-OLJE BLOKKERT] %s — SL (%.3f) < %.1f× spread (%.3f) "
+                    "under geo-advarsel.",
+                    sig["id"],
+                    risk_per_unit,
+                    max_spread_m,
+                    spread,
+                )
+                self._remove_state(state)
+                return
+
+        # ── Daglig tapsgrense ─────────────────────────────────
+        balance = self._client.account_balance
+        if balance > 0 and self._safety.daily_loss_exceeded(
+            balance, self._config.daily_loss
+        ):
+            limit = self._safety.daily_loss_limit(balance, self._config.daily_loss)
+            log.warning(
+                "[DAGLIG TAP] Grense nådd (%.0f ≥ %.0f). "
+                "Ingen nye trades i dag.",
+                self._safety.daily_loss,
+                limit,
+            )
+            self._remove_state(state)
+            return
+
+        # ── Sizing ───────────────────────────────────────────
+        risk_pct = get_risk_pct(sig, gs, rules, self._config.risk_pct)
+        risk_amount = balance * (risk_pct / 100.0)
+        desired_lots = compute_desired_lots(sig, risk_pct)
+        symbol_info = self._client.symbol_info.get(state.symbol_id)
+        if symbol_info is None:
+            log.warning(
+                "[VOLUM] Symbol info mangler for %s — bruker 1000",
+                state.symbol_id,
+            )
+        volume_units = lots_to_volume_units(desired_lots, symbol_info)
+        lot_size_str = str(symbol_info["lot_size"]) if symbol_info else "?"
+        log.info(
+            "[VOLUM] %s: %s lot × lotSize=%s = %s enheter",
+            instr_name,
+            desired_lots,
+            lot_size_str,
+            volume_units,
+        )
+
+        # ── Agri-spesifikke sjekker ───────────────────────────
+        if instr_name in AGRI_INSTRUMENTS:
+            agri_cfg = self._config.agri
+            # 1) Maks samtidige agri-posisjoner
+            agri_active = sum(
+                1
+                for s in self._active_states
+                if s.phase == TradePhase.IN_TRADE
+                and getattr(s, "instrument", "") in AGRI_INSTRUMENTS
+            )
+            if agri_active >= agri_cfg.max_concurrent:
+                log.info(
+                    "[AGRI] %s blokkert — %d/%d agri-posisjoner aktive.",
+                    sig["id"],
+                    agri_active,
+                    agri_cfg.max_concurrent,
+                )
+                self._remove_state(state)
+                return
+
+            # 1b) Sub-gruppe korrelasjon
+            this_subgroup = AGRI_SUBGROUPS.get(instr_name, "")
+            if this_subgroup:
+                subgroup_active = sum(
+                    1
+                    for s in self._active_states
+                    if s.phase == TradePhase.IN_TRADE
+                    and AGRI_SUBGROUPS.get(getattr(s, "instrument", ""), "")
+                    == this_subgroup
+                )
+                if subgroup_active >= agri_cfg.max_per_subgroup:
+                    log.info(
+                        "[AGRI] %s blokkert — subgroup '%s' full (%d/%d).",
+                        sig["id"],
+                        this_subgroup,
+                        subgroup_active,
+                        agri_cfg.max_per_subgroup,
+                    )
+                    self._remove_state(state)
+                    return
+
+            # 2) Session-filter
+            if not self._agri_session_ok(instr_name):
+                sess = agri_cfg.session_times_cet.get(instr_name.lower())
+                sess_str = f"{sess.start}–{sess.end}" if sess else "?"
+                log.info(
+                    "[AGRI] %s blokkert — utenfor session (%s CET).",
+                    sig["id"],
+                    sess_str,
+                )
+                self._remove_state(state)
+                return
+
+            # 3) Spreadfilter — spread > max_ratio × ATR14
+            atr = self.get_atr14(state.symbol_id)
+            if atr:
+                bid = self._client.last_bid.get(state.symbol_id, 0)
+                ask = self._client.last_ask.get(state.symbol_id, 0)
+                spread = ask - bid if ask > bid else 0.0
+                if spread > agri_cfg.max_spread_atr_ratio * atr:
+                    log.info(
+                        "[AGRI] %s blokkert — spread for vid: %.5f > "
+                        "%.0f%%×ATR (%.5f).",
+                        sig["id"],
+                        spread,
+                        agri_cfg.max_spread_atr_ratio * 100,
+                        atr,
+                    )
+                    self._remove_state(state)
+                    return
+
+        # ── Korrelasjonsgating ────────────────────────────────
+        this_group = sig.get("correlation_group") or INSTRUMENT_GROUP.get(
+            instr_name, ""
+        )
+        corr_cfg = gs.get("correlation_config", {})
+        if this_group:
+            group_count = 0
+            for s in self._active_states:
+                s_group = getattr(s, "correlation_group", None) or INSTRUMENT_GROUP.get(
+                    getattr(s, "instrument", ""), ""
+                )
+                if (
+                    s_group == this_group
+                    and s.phase == TradePhase.IN_TRADE
+                    and s.signal_id != state.signal_id
+                ):
+                    group_count += 1
+            max_per_grp = corr_cfg.get("max_per_group", {})
+            default_per_group = {
+                "precious_metals": 2,
+                "us_indices": 1,
+                "energy": 1,
+                "usd_pairs": 2,
+            }.get(this_group, 1)
+            max_in_group = max_per_grp.get(this_group, default_per_group)
+            if group_count >= max_in_group:
+                log.info(
+                    "[KORRELASJON] %s blokkert — %d/%d i %s allerede aktiv "
+                    "(regime=%s).",
+                    sig["id"],
+                    group_count,
+                    max_in_group,
+                    this_group,
+                    gs.get("correlation_regime", "normal"),
+                )
+                self._remove_state(state)
+                return
+
+        # Total posisjonsgrense
+        max_total = corr_cfg.get("max_total", 6)
+        total_active = sum(
+            1 for s in self._active_states if s.phase == TradePhase.IN_TRADE
+        )
+        if total_active >= max_total:
+            log.info(
+                "[KORRELASJON] %s blokkert — %d/%d total posisjoner aktive "
+                "(regime=%s).",
+                sig["id"],
+                total_active,
+                max_total,
+                gs.get("correlation_regime", "normal"),
+            )
+            self._remove_state(state)
+            return
+
+        # ── Ordre-sending ─────────────────────────────────────
+        trade_side = "SELL" if sig["direction"] == "sell" else "BUY"
+        use_limit = rules.get("use_limit_orders", False)
+        hcfg = sig.get("horizon_config", {})
+        price_digits = self._client.symbol_price_digits.get(state.symbol_id, 5)
+
+        order_kwargs: dict[str, Any] = {
+            "symbol_id": state.symbol_id,
+            "trade_side": trade_side,
+            "volume": volume_units,
+            "label": f"SE-{sig['id']}",
+            "comment": sig["id"],
+        }
+        if use_limit:
+            tf_map = {"5min": 5, "15min": 15, "1H": 60, "D1": 1440}
+            tf_min = tf_map.get(hcfg.get("confirmation_tf", "5min"), 5)
+            max_c = hcfg.get("confirmation_max_candles", 6)
+            import time as _time
+
+            expiration_ms = int(_time.time() * 1000) + (max_c * tf_min * 60 * 1000)
+            limit_price = round(sig["alert_level"], price_digits)
+            order_kwargs.update(
+                {
+                    "order_type": "LIMIT",
+                    "limit_price": limit_price,
+                    "stop_loss": round(sig["stop"], price_digits),
+                    "expiration_ms": expiration_ms,
+                }
+            )
+            if sig.get("t1") and sig["t1"] > 0:
+                order_kwargs["take_profit"] = round(sig["t1"], price_digits)
+            log.info(
+                "[LIMIT] %s — limit order @ %s SL=%s expiry=%d×%dmin",
+                sig["id"],
+                limit_price,
+                order_kwargs["stop_loss"],
+                max_c,
+                tf_min,
+            )
+        else:
+            order_kwargs["order_type"] = "MARKET"
+            # SL/TP settes via amend_sl_tp etter fill — ikke tillatt
+            # på MARKET i ProtoOANewOrderReq
+
+        state.entry_price = entry_price
+        state.full_volume = volume_units
+        state.instrument = instr_name or sig.get("id", "")
+        state.lots_used = desired_lots
+        state.risk_pct_used = risk_pct
+        state.horizon = sig.get("horizon", "SWING")
+        state.grade = sig.get("character", "B")
+        state.horizon_config = sig.get("horizon_config", {})
+        state.correlation_group = sig.get("correlation_group")
+        if use_limit:
+            state.order_id = -1  # placeholder — settes fra execution event
+        # Phase settes til IN_TRADE kun etter bekreftelse i on_execution
+
+        log.info(
+            "[ORDRE] %s | %s %d enheter @ %.5f | SL=%.5f | T1=%.5f | "
+            "Risk=%.2f (%s%%)",
+            sig["id"],
+            sig["direction"].upper(),
+            volume_units,
+            entry_price,
+            sig["stop"],
+            sig.get("t1") or 0.0,
+            risk_amount,
+            risk_pct,
+        )
+
+        self._client.send_new_order(**order_kwargs)
+
+    # ─────────────────────────────────────────────────────────
+    # Helpers: remove_state + trade-logging
+    # ─────────────────────────────────────────────────────────
+
+    def _remove_state(self, state: TradeState) -> None:
+        """Fjern state fra active_states hvis den finnes. Trygt å kalle flere ganger."""
+        try:
+            self._active_states.remove(state)
+        except ValueError:
+            pass
+
+    def _log_trade_opened(self, state: TradeState) -> None:
+        """Skriv en åpnet trade til `~/bedrock/data/bot/signal_log.json`.
+
+        Portert fra `trading_bot.py:_log_trade_opened` (1805-1835), men
+        UTEN `_git_push_log`-kall — Bedrock gjør ikke git-operasjoner
+        i hot-path. Atomisk via tempfile + os.replace.
+
+        Kalles fra session 45 (ExitEngine.on_execution ved ORDER_FILLED).
+        Inkludert her allerede for at modulen skal eie trade-log-IO.
+        """
+        try:
+            if self._trade_log_path.exists():
+                data = json.loads(self._trade_log_path.read_text(encoding="utf-8"))
+            else:
+                data = {"entries": []}
+            now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            entry = {
+                "timestamp": now,
+                "closed_at": None,
+                "result": None,
+                "exit_reason": None,
+                "signal": {
+                    "id": state.signal_id,
+                    "instrument": getattr(state, "instrument", state.signal_id),
+                    "direction": state.direction.upper(),
+                    "entry": round(state.entry_price, 5),
+                    "stop": round(state.stop_price, 5),
+                    "t1": round(state.t1_price, 5) if state.t1_price else None,
+                    "position_id": state.position_id,
+                    "lots": volume_to_lots(
+                        state.full_volume,
+                        self._client.symbol_info.get(state.symbol_id),
+                    ),
+                    "risk_pct": getattr(state, "risk_pct_used", None),
+                    "horizon": getattr(state, "horizon", "SCALP"),
+                    "grade": getattr(state, "grade", None),
+                },
+            }
+            data["entries"] = [entry] + data.get("entries", [])
+            data["last_updated"] = now
+            self._trade_log_path.parent.mkdir(parents=True, exist_ok=True)
+            fd, tmp = tempfile.mkstemp(
+                prefix="tradelog_", suffix=".json", dir=self._trade_log_path.parent
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                os.replace(tmp, self._trade_log_path)
+            except Exception:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                raise
+            log.info("[TRADE-LOG] %s åpnet", state.signal_id)
+        except Exception as exc:
+            log.warning("[TRADE-LOG] Åpning feilet: %s", exc)
 
 
 def _group_key(instrument: str, _config: ReloadableConfig) -> str:

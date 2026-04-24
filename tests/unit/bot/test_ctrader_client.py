@@ -495,3 +495,89 @@ def test_request_historical_bars_h1_uses_h1_period(client: CtraderClient) -> Non
         client.request_historical_bars(symbol_id=7, period=H1_PERIOD, bars_back=50)
     req = send.call_args.args[0]
     assert req.period == H1_PERIOD
+
+
+# ─────────────────────────────────────────────────────────────
+# Ordre-APIs (session 44)
+# ─────────────────────────────────────────────────────────────
+
+
+def test_send_new_order_market(client: CtraderClient) -> None:
+    with patch.object(client, "send") as send:
+        client.send_new_order(
+            symbol_id=11,
+            trade_side="BUY",
+            volume=1000,
+            label="SE-foo",
+            comment="foo",
+            order_type="MARKET",
+        )
+    assert send.called
+    req = send.call_args.args[0]
+    assert req.symbolId == 11
+    assert req.volume == 1000
+    assert req.label == "SE-foo"
+    assert req.comment == "foo"
+    assert req.ctidTraderAccountId == 12345
+    # MARKET: ingen limitPrice / stopLoss satt
+    # (protobuf har default 0.0 for unset float, men vi verifiserer at
+    # limitPrice/stopLoss ikke blir truthy)
+
+
+def test_send_new_order_limit_with_sl_tp_and_expiry(client: CtraderClient) -> None:
+    with patch.object(client, "send") as send:
+        client.send_new_order(
+            symbol_id=22,
+            trade_side="SELL",
+            volume=500,
+            order_type="LIMIT",
+            limit_price=1.2345,
+            stop_loss=1.2400,
+            take_profit=1.2200,
+            expiration_ms=1_700_000_000_000,
+        )
+    req = send.call_args.args[0]
+    assert abs(req.limitPrice - 1.2345) < 1e-9
+    assert abs(req.stopLoss - 1.2400) < 1e-9
+    assert abs(req.takeProfit - 1.2200) < 1e-9
+    assert req.expirationTimestamp == 1_700_000_000_000
+
+
+def test_send_new_order_limit_without_price_raises(client: CtraderClient) -> None:
+    with pytest.raises(ValueError, match="limit_price"):
+        client.send_new_order(
+            symbol_id=22, trade_side="BUY", volume=500, order_type="LIMIT"
+        )
+
+
+def test_amend_sl_tp(client: CtraderClient) -> None:
+    with patch.object(client, "send") as send:
+        client.amend_sl_tp(position_id=999, stop_loss=1.0700, take_profit=1.0900)
+    req = send.call_args.args[0]
+    assert req.positionId == 999
+    assert abs(req.stopLoss - 1.0700) < 1e-9
+    assert abs(req.takeProfit - 1.0900) < 1e-9
+
+
+def test_amend_sl_only(client: CtraderClient) -> None:
+    """Kun SL gitt — TP skal ikke settes (protobuf default 0)."""
+    with patch.object(client, "send") as send:
+        client.amend_sl_tp(position_id=42, stop_loss=1.05)
+    req = send.call_args.args[0]
+    assert req.positionId == 42
+    assert abs(req.stopLoss - 1.05) < 1e-9
+
+
+def test_close_position(client: CtraderClient) -> None:
+    with patch.object(client, "send") as send:
+        client.close_position(position_id=123, volume=500)
+    req = send.call_args.args[0]
+    assert req.positionId == 123
+    assert req.volume == 500
+
+
+def test_cancel_order(client: CtraderClient) -> None:
+    with patch.object(client, "send") as send:
+        client.cancel_order(order_id=77)
+    req = send.call_args.args[0]
+    assert req.orderId == 77
