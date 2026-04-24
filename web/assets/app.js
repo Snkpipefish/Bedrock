@@ -95,6 +95,74 @@ function renderTradeTable(entries) {
   }).join('');
 }
 
+// ─── Financial setups (session 48) ────────────────────────────
+async function loadFinancialSetups() {
+  try {
+    const res = await fetch('/api/ui/setups/financial').then(r => r.json());
+    renderSetupCards('financial-cards', res.setups);
+    const visEl = document.getElementById('financial-count');
+    const totEl = document.getElementById('financial-total');
+    if (visEl) visEl.textContent = res.visible_count;
+    if (totEl) totEl.textContent = res.total_count;
+  } catch (err) {
+    console.error('Financial setups load feilet:', err);
+    const el = document.getElementById('financial-cards');
+    if (el) el.innerHTML = `<p class="empty">Fetch feilet: ${err.message}</p>`;
+  }
+}
+
+function renderSetupCards(containerId, setups) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!setups || setups.length === 0) {
+    el.innerHTML = '<p class="empty">Ingen aktive setups.</p>';
+    return;
+  }
+  el.innerHTML = setups.map(s => {
+    const setup = s.setup || {};
+    const entry = setup.entry;
+    const sl = setup.stop_loss ?? setup.sl ?? setup.stop;
+    const t1 = setup.target_1 ?? setup.t1;
+    const rr = setup.rr_t1 ?? setup.rr;
+    const dirCls = (s.direction || '').toLowerCase() === 'sell' ? 'dir-sell' : 'dir-buy';
+    const gradeCls = `grade-${(s.grade || 'x').replace('+', 'plus').toLowerCase()}`;
+    return `<article class="setup-card ${dirCls}">
+      <header>
+        <span class="instrument">${s.instrument || '–'}</span>
+        <span class="direction">${s.direction || '–'}</span>
+        <span class="grade ${gradeCls}">${s.grade || '?'}</span>
+      </header>
+      <div class="card-row">
+        <span class="horizon">${s.horizon || '–'}</span>
+        <span class="score">score: ${fmt(s.score, 2)}</span>
+      </div>
+      <table class="levels">
+        <tr><th>Entry</th><td>${fmt(entry)}</td></tr>
+        <tr><th>Stop</th><td>${fmt(sl)}</td></tr>
+        <tr><th>T1</th><td>${fmt(t1)}</td></tr>
+        <tr><th>R:R</th><td>${fmt(rr, 2)}</td></tr>
+      </table>
+    </article>`;
+  }).join('');
+}
+
+// ─── Lazy-load per fane ───────────────────────────────────────
+const loaders = {
+  skipsloggen: loadSkipsloggen,
+  financial: loadFinancialSetups,
+};
+
+function activateTab(tabId) {
+  const fn = loaders[tabId];
+  if (fn) fn();
+}
+
+// Re-wire tab-klikk til å trigge lazy-load (uten å duplisere handleren fra
+// override-et tab-handleren over er det enklere å lytte på klikk her i tillegg):
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => activateTab(btn.dataset.tab));
+});
+
 // ─── Start ────────────────────────────────────────────────────
 loadSkipsloggen();
 setInterval(loadSkipsloggen, REFRESH_INTERVAL_MS);

@@ -1,22 +1,30 @@
-"""Web-UI endpoints (Fase 9 runde 1 session 47: Skipsloggen).
+"""Web-UI endpoints (Fase 9 runde 1 sessions 47-50).
 
 Serverer `web/index.html` + `web/assets/*` + JSON-APIer som UI-et
 fetcher. Inngang:
 
-    GET /                        → index.html
-    GET /assets/<path>           → static asset
-    GET /api/ui/trade_log        → liste av trade-entries
-    GET /api/ui/trade_log/summary → KPI-aggregat (trades/wins/pnl/win-rate)
+    GET /                          → index.html
+    GET /assets/<path>             → static asset
 
-Fremtidige sessions (runde 1):
-    GET /api/ui/setups/financial  → Fase 2 setups (session 48)
-    GET /api/ui/setups/agri       → Fase 3 setups (session 49)
-    GET /api/ui/pipeline_health   → Kartrommet (session 50)
+    # Session 47 — Skipsloggen
+    GET /api/ui/trade_log          → liste av trade-entries
+    GET /api/ui/trade_log/summary  → KPI-aggregat (trades/wins/pnl/win-rate)
 
-Data-kilde for Skipsloggen: `config.trade_log_path`. Filen skrives av
-`bedrock.bot.exit.ExitEngine._log_trade_closed` og `_log_reconcile_opened`
-(og `entry._log_trade_opened`). Fraværende fil behandles graceful som
-tom liste.
+    # Session 48 — Financial setups
+    GET /api/ui/setups/financial   → setups fra signals.json, score-sortert
+
+    # Fremtidige (runde 1):
+    GET /api/ui/setups/agri        → agri_signals.json (session 49)
+    GET /api/ui/pipeline_health    → Kartrommet (session 50)
+
+Data-kilder:
+- Skipsloggen: `config.trade_log_path` (ExitEngine-skrevet)
+- Financial setups: `config.signals_path` (orchestrator via /push-alert)
+- Agri setups: `config.agri_signals_path` (samme men agri)
+
+Fraværende fil behandles graceful som tom liste. Ugyldig JSON logges
+som warning og returnerer tom liste — UI må ikke breake ved første
+gangs oppstart.
 """
 
 from __future__ import annotations
@@ -169,3 +177,89 @@ def trade_log_summary() -> Response:
             "last_updated": data["last_updated"],
         }
     )
+
+
+# ─────────────────────────────────────────────────────────────
+# Setups-endepunkter (sessions 48-49)
+# ─────────────────────────────────────────────────────────────
+
+
+# Sortering: grade A+ > A > B > C > D+, så score desc. Ukjente grades
+# havner bakerst.
+_GRADE_RANK = {"A+": 0, "A": 1, "B": 2, "C": 3, "D": 4}
+
+
+def _grade_key(entry: dict) -> int:
+    return _GRADE_RANK.get(entry.get("grade") or "", 99)
+
+
+def _read_signals_list(path: Path) -> list[dict]:
+    """Les en signals.json-liste (financial eller agri).
+
+    Returnerer rå dict-liste (ikke Pydantic-validert — UI-laget
+    behandler felt som valgfrie). Fraværende eller korrupt fil →
+    tom liste + warning-log.
+    """
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, list):
+            log.warning("[UI] %s top-level ikke list: %r", path, type(data))
+            return []
+        return [row for row in data if isinstance(row, dict)]
+    except (json.JSONDecodeError, OSError) as exc:
+        log.warning("[UI] %s lese-feil: %s", path, exc)
+        return []
+
+
+def _setups_response(entries: list[dict], *, limit_str: str | None) -> Response:
+    """Filter invalidated + sorter på (grade, score desc) + valgfri limit.
+
+    Invalidated-signaler skjules alltid fra UI — brukere skal ikke
+    kunne handle dem. Sortering: grade-rank asc (A+ først), så score
+    desc. Limit default = alle.
+    """
+    visible = [e for e in entries if not e.get("invalidated")]
+    visible.sort(key=lambda e: (_grade_key(e), -float(e.get("score") or 0.0)))
+
+    if limit_str:
+        try:
+            limit = int(limit_str)
+            if limit > 0:
+                visible = visible[:limit]
+        except ValueError:
+            pass
+
+    return jsonify(
+        {
+            "setups": visible,
+            "total_count": len(entries),
+            "visible_count": len(visible),
+        }
+    )
+
+
+@ui_bp.get("/api/ui/setups/financial")
+def setups_financial() -> Response:
+    """Financial setups (fx/metals/energy/indices/crypto).
+
+    Leser `config.signals_path` — orchestrator pusher hit via
+    `/push-alert`. Hverken filtrering på asset_class eller tidsvindu
+    i runde 1 — UI kan sortere/filtrere klientside. Invalidated-
+    signaler skjules alltid.
+    """
+    from flask import request
+
+    entries = _read_signals_list(_config().signals_path)
+    return _setups_response(entries, limit_str=request.args.get("limit"))
+
+
+@ui_bp.get("/api/ui/setups/agri")
+def setups_agri() -> Response:
+    """Agri setups (grains/softs). Samme kontrakt som financial,
+    leser `config.agri_signals_path`."""
+    from flask import request
+
+    entries = _read_signals_list(_config().agri_signals_path)
+    return _setups_response(entries, limit_str=request.args.get("limit"))

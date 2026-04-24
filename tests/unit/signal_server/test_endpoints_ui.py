@@ -44,8 +44,28 @@ def trade_log_path(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def app_with_config(web_root: Path, trade_log_path: Path):
-    cfg = ServerConfig(web_root=web_root, trade_log_path=trade_log_path)
+def signals_path(tmp_path: Path) -> Path:
+    return tmp_path / "signals.json"
+
+
+@pytest.fixture
+def agri_signals_path(tmp_path: Path) -> Path:
+    return tmp_path / "agri_signals.json"
+
+
+@pytest.fixture
+def app_with_config(
+    web_root: Path,
+    trade_log_path: Path,
+    signals_path: Path,
+    agri_signals_path: Path,
+):
+    cfg = ServerConfig(
+        web_root=web_root,
+        trade_log_path=trade_log_path,
+        signals_path=signals_path,
+        agri_signals_path=agri_signals_path,
+    )
     return create_app(cfg)
 
 
@@ -228,3 +248,176 @@ def test_summary_ignores_non_numeric_pnl(
     r = client.get("/api/ui/trade_log/summary")
     data = r.get_json()
     assert data["total_pnl_usd"] == 3.0
+
+
+# ─────────────────────────────────────────────────────────────
+# /api/ui/setups/financial (session 48)
+# /api/ui/setups/agri (session 49 — endepunktet finnes allerede)
+# ─────────────────────────────────────────────────────────────
+
+
+def _write_signals(path: Path, entries: list[dict]) -> None:
+    path.write_text(json.dumps(entries))
+
+
+def test_setups_financial_empty_when_file_missing(client: FlaskClient) -> None:
+    r = client.get("/api/ui/setups/financial")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["setups"] == []
+    assert data["total_count"] == 0
+    assert data["visible_count"] == 0
+
+
+def test_setups_financial_returns_entries(
+    client: FlaskClient, signals_path: Path,
+) -> None:
+    _write_signals(signals_path, [
+        {"instrument": "EURUSD", "direction": "BUY", "horizon": "SWING",
+         "score": 3.5, "grade": "B"},
+        {"instrument": "GOLD", "direction": "BUY", "horizon": "SWING",
+         "score": 4.2, "grade": "A"},
+    ])
+    r = client.get("/api/ui/setups/financial")
+    data = r.get_json()
+    assert data["total_count"] == 2
+    assert data["visible_count"] == 2
+    assert len(data["setups"]) == 2
+
+
+def test_setups_financial_sorts_by_grade_then_score(
+    client: FlaskClient, signals_path: Path,
+) -> None:
+    """A+ før A før B; innen samme grade: høyere score først."""
+    _write_signals(signals_path, [
+        {"instrument": "X1", "direction": "BUY", "horizon": "SWING",
+         "score": 3.0, "grade": "B"},
+        {"instrument": "X2", "direction": "BUY", "horizon": "SWING",
+         "score": 4.5, "grade": "A+"},
+        {"instrument": "X3", "direction": "BUY", "horizon": "SWING",
+         "score": 4.0, "grade": "A"},
+        {"instrument": "X4", "direction": "BUY", "horizon": "SWING",
+         "score": 5.0, "grade": "A"},
+    ])
+    r = client.get("/api/ui/setups/financial")
+    setups = r.get_json()["setups"]
+    assert [s["instrument"] for s in setups] == ["X2", "X4", "X3", "X1"]
+
+
+def test_setups_financial_hides_invalidated(
+    client: FlaskClient, signals_path: Path,
+) -> None:
+    _write_signals(signals_path, [
+        {"instrument": "EURUSD", "direction": "BUY", "horizon": "SWING",
+         "score": 3.0, "grade": "A", "invalidated": True},
+        {"instrument": "GOLD", "direction": "BUY", "horizon": "SWING",
+         "score": 2.5, "grade": "B"},
+    ])
+    r = client.get("/api/ui/setups/financial")
+    data = r.get_json()
+    assert data["total_count"] == 2
+    assert data["visible_count"] == 1
+    assert data["setups"][0]["instrument"] == "GOLD"
+
+
+def test_setups_financial_limit_truncates(
+    client: FlaskClient, signals_path: Path,
+) -> None:
+    _write_signals(signals_path, [
+        {"instrument": f"X{i}", "direction": "BUY", "horizon": "SWING",
+         "score": float(10 - i), "grade": "A"}
+        for i in range(10)
+    ])
+    r = client.get("/api/ui/setups/financial?limit=3")
+    data = r.get_json()
+    assert data["visible_count"] == 3
+    # Høyeste score først → X0, X1, X2
+    assert [s["instrument"] for s in data["setups"]] == ["X0", "X1", "X2"]
+
+
+def test_setups_financial_invalid_limit_returns_all(
+    client: FlaskClient, signals_path: Path,
+) -> None:
+    _write_signals(signals_path, [
+        {"instrument": "X", "direction": "BUY", "horizon": "SWING",
+         "score": 3.0, "grade": "A"}
+    ])
+    r = client.get("/api/ui/setups/financial?limit=abc")
+    assert len(r.get_json()["setups"]) == 1
+
+
+def test_setups_financial_corrupt_file_returns_empty(
+    client: FlaskClient, signals_path: Path,
+) -> None:
+    signals_path.write_text("{ not valid json")
+    r = client.get("/api/ui/setups/financial")
+    assert r.status_code == 200
+    assert r.get_json()["setups"] == []
+
+
+def test_setups_financial_non_list_toplevel(
+    client: FlaskClient, signals_path: Path,
+) -> None:
+    signals_path.write_text(json.dumps({"foo": "bar"}))
+    r = client.get("/api/ui/setups/financial")
+    assert r.get_json()["setups"] == []
+
+
+def test_setups_financial_skips_non_dict_rows(
+    client: FlaskClient, signals_path: Path,
+) -> None:
+    """Ugyldige rader (ikke-dict) filtreres ut."""
+    signals_path.write_text(json.dumps([
+        "not a dict",
+        {"instrument": "OK", "direction": "BUY", "horizon": "SWING",
+         "score": 3.0, "grade": "A"},
+        None,
+    ]))
+    r = client.get("/api/ui/setups/financial")
+    data = r.get_json()
+    assert data["total_count"] == 1
+    assert len(data["setups"]) == 1
+
+
+def test_setups_agri_reads_agri_path(
+    client: FlaskClient, agri_signals_path: Path, signals_path: Path,
+) -> None:
+    """Agri-endepunktet leser fra agri_signals_path, ikke signals_path."""
+    _write_signals(signals_path, [
+        {"instrument": "EURUSD", "direction": "BUY", "horizon": "SWING",
+         "score": 3.0, "grade": "A"}
+    ])
+    _write_signals(agri_signals_path, [
+        {"instrument": "Corn", "direction": "BUY", "horizon": "MAKRO",
+         "score": 4.0, "grade": "A"},
+        {"instrument": "Wheat", "direction": "SELL", "horizon": "SWING",
+         "score": 2.5, "grade": "B"},
+    ])
+    r = client.get("/api/ui/setups/agri")
+    data = r.get_json()
+    assert data["total_count"] == 2
+    assert [s["instrument"] for s in data["setups"]] == ["Corn", "Wheat"]
+
+
+def test_setups_agri_empty_when_file_missing(client: FlaskClient) -> None:
+    r = client.get("/api/ui/setups/agri")
+    assert r.status_code == 200
+    assert r.get_json()["setups"] == []
+
+
+def test_setups_passes_through_setup_dict(
+    client: FlaskClient, signals_path: Path,
+) -> None:
+    """`setup`-dict passerer uendret til frontend."""
+    _write_signals(signals_path, [
+        {"instrument": "GOLD", "direction": "BUY", "horizon": "SWING",
+         "score": 4.0, "grade": "A",
+         "setup": {"entry": 2050.25, "stop_loss": 2040.0, "target_1": 2070.0,
+                   "rr_t1": 2.5}},
+    ])
+    r = client.get("/api/ui/setups/financial")
+    setup = r.get_json()["setups"][0]["setup"]
+    assert setup["entry"] == 2050.25
+    assert setup["stop_loss"] == 2040.0
+    assert setup["target_1"] == 2070.0
+    assert setup["rr_t1"] == 2.5
