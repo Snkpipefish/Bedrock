@@ -249,17 +249,25 @@ def test_inherits_key_ignored_silently(tmp_path: Path) -> None:
     assert cfg.instrument.id == "Test"
 
 
-def test_gates_key_ignored_silently(tmp_path: Path) -> None:
+def test_gates_key_parsed_into_rules(tmp_path: Path) -> None:
+    """Session 25: gates parses nå inn i rules (ikke stille-skipped).
+
+    Ny syntaks: `{name, params, cap_grade}`. Gammel PLAN-syntaks
+    `{when: "..."}` feiler nå tydelig (se ADR-003)."""
     yaml_txt = _minimal_financial_yaml() + dedent(
         """\
         gates:
-          - {when: "event_distance < 3h", cap_grade: A}
+          - {name: min_active_families, params: {min_count: 3}, cap_grade: A}
         """
     )
     path = tmp_path / "ok.yaml"
     path.write_text(yaml_txt)
     cfg = load_instrument_config(path)
     assert cfg.instrument.id == "Test"
+    assert len(cfg.rules.gates) == 1
+    assert cfg.rules.gates[0].name == "min_active_families"
+    assert cfg.rules.gates[0].cap_grade == "A"
+    assert cfg.rules.gates[0].params == {"min_count": 3}
 
 
 def test_usda_blackout_ignored_silently(tmp_path: Path) -> None:

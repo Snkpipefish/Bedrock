@@ -29,6 +29,12 @@ from typing import Any, Literal, TypeAlias
 from pydantic import BaseModel, ConfigDict, Field
 
 from bedrock.engine import aggregators, drivers, grade
+from bedrock.engine.gates import (
+    GateContext,
+    GateSpec,
+    apply_gates,
+    cap_grade,
+)
 
 # ---------------------------------------------------------------------------
 # Felles modeller
@@ -74,6 +80,7 @@ class FinancialRules(BaseModel):
     horizons: dict[str, HorizonSpec]
     families: dict[str, FinancialFamilySpec]
     grade_thresholds: grade.GradeThresholds
+    gates: list[GateSpec] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -103,6 +110,7 @@ class AgriRules(BaseModel):
     min_score_publish: float = Field(ge=0.0)
     families: dict[str, AgriFamilySpec]
     grade_thresholds: grade.AgriGradeThresholds
+    gates: list[GateSpec] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -211,6 +219,16 @@ class Engine:
             thresholds=rules.grade_thresholds,
         )
 
+        ctx = GateContext(
+            instrument=instrument,
+            score=total_score,
+            max_score=horizon_spec.max_score,
+            active_families=active_families,
+            family_scores=dict(family_scores),
+        )
+        cap, triggered = apply_gates(rules.gates, ctx)
+        g = cap_grade(g, cap)
+
         return GroupResult(
             instrument=instrument,
             horizon=horizon,
@@ -220,6 +238,7 @@ class Engine:
             max_score=horizon_spec.max_score,
             active_families=active_families,
             families=family_results,
+            gates_triggered=triggered,
         )
 
     # -- agri ---------------------------------------------------------------
@@ -241,6 +260,16 @@ class Engine:
             thresholds=rules.grade_thresholds,
         )
 
+        ctx = GateContext(
+            instrument=instrument,
+            score=total_score,
+            max_score=rules.max_score,
+            active_families=active_families,
+            family_scores=dict(family_scores),
+        )
+        cap, triggered = apply_gates(rules.gates, ctx)
+        g = cap_grade(g, cap)
+
         return GroupResult(
             instrument=instrument,
             horizon=None,
@@ -250,6 +279,7 @@ class Engine:
             max_score=rules.max_score,
             active_families=active_families,
             families=family_results,
+            gates_triggered=triggered,
         )
 
     # -- felles -------------------------------------------------------------

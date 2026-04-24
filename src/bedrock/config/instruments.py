@@ -247,6 +247,7 @@ _RULES_KEYS: frozenset[str] = frozenset(
         "grade_thresholds",
         "max_score",
         "min_score_publish",
+        "gates",
     }
 )
 
@@ -257,10 +258,17 @@ _RULES_KEYS: frozenset[str] = frozenset(
 # ignoreres `horizons` helt; for financial ignoreres `max_score`/
 # `min_score_publish` (lever per-horisont i HorizonSpec).
 _FINANCIAL_RULES_KEYS: frozenset[str] = frozenset(
-    {"aggregation", "horizons", "families", "grade_thresholds"}
+    {"aggregation", "horizons", "families", "grade_thresholds", "gates"}
 )
 _AGRI_RULES_KEYS: frozenset[str] = frozenset(
-    {"aggregation", "max_score", "min_score_publish", "families", "grade_thresholds"}
+    {
+        "aggregation",
+        "max_score",
+        "min_score_publish",
+        "families",
+        "grade_thresholds",
+        "gates",
+    }
 )
 
 # Nøkler som er bevisst utsatt til senere session — vi ignorerer dem nå
@@ -269,7 +277,6 @@ _AGRI_RULES_KEYS: frozenset[str] = frozenset(
 # eksisterer ikke lenger på tidspunkt for `_parse_instrument_dict`.
 _DEFERRED_KEYS: frozenset[str] = frozenset(
     {
-        "gates",  # PLAN § 4.2 cap_grade-regler — fase 5 senere session
         "usda_blackout",  # agri-spesifikk kalender-gate — fase 5 senere
         "data_quality",  # base.yaml default — brukes ikke av engine enda
         "hysteresis",  # base.yaml default — forbruk av setups-modulen

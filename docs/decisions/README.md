@@ -51,3 +51,4 @@ Nøytrale (men verdt å nevne):
 |---|---|---|---|
 | [001](001-one-engine-two-aggregators.md) | Én Engine, to aggregatorer | accepted | 1 |
 | [002](002-sqlite-instead-of-duckdb.md) | SQLite + pandas som storage-backend | accepted | 2 |
+| [003](003-gates-via-named-registry-not-dsl.md) | Gates via named-function registry, ikke string-DSL | accepted | 5 |
