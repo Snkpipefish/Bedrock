@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 6 **CLOSED** (tag `v0.6.0-fase-6`). Sessions 27-31 leverte fetch-laget komplett: USDA-kalender + `usda_blackout`-gate, config-drevet `fetch.yaml` + status-CLI, `bedrock fetch run <name>`-dispatcher med per-item resiliens, systemd-unit-generator (generate/install/list), og `currency_cross_trend`-driver. PLAN § 13 omnummerert for å reflektere faktisk leveranse (ny Fase 5 lagt inn, senere faser skjøvet ett hakk).
+- **Phase:** 7 — åpen. Session 33 FERDIG: `bedrock.signal_server`-skeleton (app-factory + ServerConfig + `/health` + `/status`). Endepunkt-inventar i `ENDPOINTS.md` med session-plan for sessions 34-38. Port 5100 default (forskjellig fra gammel scalp_edge 5000) for parallell-drift.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Session 32 — åpner **Fase 7: Signal-server refaktor** per PLAN § 8. Dagens `~/scalp_edge/signal_server.py` er 974 linjer som må splittes i modul-struktur. Scope: start med `bedrock.signal_server`-pakken (init), endepunkt-inventar, så én endepunkt-gruppe per session. Første sub-task er å mappe dagens endepunkter (push-alert, signals, kill, upload, prices, health osv.) til moduler og lage en tom Flask-app-skeleton med helse-endepunkt som smoke-testes. Schema-validering (Pydantic for signal-body) og /admin/rules-endepunktet kommer senere i fasen. Fase 7 er PLAN-estimert til 3-5 dager.
+- **Next task:** Session 34 — `endpoints/signals.py`: `/signals` + `/agri-signals` (GET, read-only først). Pydantic-model for signal-output-schema. `current_app.extensions["bedrock_config"].signals_path` som kilde; hvis fil mangler eller er tom, returner `[]` med 200. `/invalidate` utsettes til session 36 (skriv-path). Logiske tester med kurert JSON-fil og tom-fil-edge-case.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -87,6 +87,59 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 33: Fase 7 åpnet, signal-server-skeleton
+
+Første Fase 7-leveranse. PLAN § 8-refaktor av 974-linjers
+scalp_edge/signal_server.py til modul-struktur.
+
+**Opprettet:**
+- `bedrock.signal_server`-pakke:
+  - `create_app(config=None) -> Flask` — app-factory, fresh
+    instans per kall
+  - `config.ServerConfig` — Pydantic frozen, extra=forbid.
+    Defaults: port 5100 (ikke 5000), host 127.0.0.1, data_root
+    data/, server_name "bedrock-signal-server"
+  - `config.load_from_env(env)` — BEDROCK_-prefiks
+  - `/health` (GET) — liveness-check
+  - `/status` (GET) — config-dump + liste over registrerte
+    endepunkter
+- `src/bedrock/signal_server/ENDPOINTS.md` — inventar av alle 12
+  endepunkter fra gammel server + status-kolonne + session-plan
+  (34-38)
+- `tests/unit/test_signal_server_app.py` (16 tester)
+
+**Endret:**
+- flask installert i `.venv` (var i pyproject, bare ikke installert)
+
+**Design-valg:**
+- Port 5100: avviker fra gammel 5000 slik at begge kan kjøre samtidig
+  under parallell-drift (Fase 12). Cutover i Fase 13 flytter bot+UI
+- App-factory + ingen global `app`-variabel: tester kan lage
+  isolerte instanser; multi-worker-deploy kan konfigurere pr worker
+- Pydantic-config (ikke dict): type-safe, frozen hindrer at
+  endepunkter muterer runtime-config
+- `app.extensions["bedrock_config"]` som config-kanal: unngår
+  Flask-globals-magi
+- `/status` lister faktiske endepunkter: selv-dokumenterende;
+  bryter hvis ENDPOINTS.md ikke oppdateres når ny gruppe
+  registreres
+- Ingen CLI-kommando ennå (`bedrock server run`): venter til det
+  er minst én reell skriv-endepunkt
+
+**Commits:** `cd385f1`.
+
+**Tester:** 553/553 grønne på 22.2 sek (fra 537 session 31, +16).
+
+**Bevisste utsettelser (planlagt per ENDPOINTS.md):**
+- Session 34: `/signals` + `/agri-signals` (read)
+- Session 35: `/push-alert` + `/push-agri-alert` (write)
+- Session 36: `/kill` + `/clear_kills` + `/invalidate`
+- Session 37: `/push-prices` + `/prices` + `/upload`
+- Session 38: `/admin/rules` (ny per PLAN § 8.3)
+
+**Neste session:** 34 — `/signals` + `/agri-signals` med Pydantic
+response-schema.
 
 ### 2026-04-24 — Session 32: Fase 6 CLOSED + PLAN-nummerering sync
 
