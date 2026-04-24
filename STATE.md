@@ -2,10 +2,15 @@
 
 ## Current state
 
-- **Phase:** 8 **ÅPEN** (Bot-refaktor). Session 42 lukket — `bot/safety.py` + `bot/comms.py` + 64 tester. Fem av åtte bot/-moduler portert (__init__, state, instruments, config, ctrader_client, safety, comms). Gjenstår: `entry`, `sizing`, `exit`, `__main__`. Gammel `~/scalp_edge/trading_bot.py` uendret i parallell-drift.
+- **Phase:** 8 **ÅPEN** (Bot-refaktor). Session 43 lukket — `bot/entry.py` (~630 linjer, inkl. **agri-ATR-override-bug-fix**) + `bot/sizing.py` + 39 tester. Syv av åtte bot/-moduler portert (__init__, state, instruments, config, ctrader_client, safety, comms, entry, sizing). Gjenstår: `exit`, `__main__`, og `_execute_trade` (deferred til session 44 sammen med exit for å gruppere cTrader-ordre-sending).
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Session 43 — `bot/entry.py` + `bot/sizing.py` per migrasjonsplan § 8 punkt 4. **Kritisk: slett `_recalibrate_agri_levels` og all kall til den — dette er Fase 8s hovedbug-fix.** Port fra `~/scalp_edge/trading_bot.py`: `_on_spot` route (etter transport-callback), `_handle_trendbar*`, indikator-oppdaterings-metoder (`_update_indicators`/`_h1`, `_update_atr14_5m`), `_on_candle_closed`, `_process_watchlist_signal` (224 linjer hovedlogikk), `_passes_filters` (spread/RR/session/correlation), `_check_confirmation` (3-punkt), `_execute_trade`, `_save_confirmation_stats`. Splitt ut `size_volume(rules, balance, sl_dist, ...)` til `sizing.py`. Tester: `test_agri_signal_not_overridden` (kritisk regresjonstest), confirmation score-matrise, R:R-gate per horisont, cold-start spread-vern, daily-loss-block.
+- **Next task:** Session 44 — `bot/exit.py` + `_execute_trade` per migrasjonsplan § 8 punkt 5 (merkelappet § 3.4 + 3.3). Scope:
+  1. `_execute_trade` (trading_bot.py:1491-1733, ~240 linjer) — ordre-sending via CtraderClient.send_new_order. Splitt ut `size_volume(rules, balance, sl_dist, instrument, char, vix, geo, outside) -> int` til sizing.py. _volume_to_lots lot-tier/step-volume-logikk. Log-trade-opened.
+  2. `bot/exit.py` — _manage_open_positions (P1-P5 exit-prioritet, ~208 linjer), _update_trail, _set_break_even, _calc_pnl, _calc_close_volume, _compute_progress, _weekend_action, _compute_weekend_sl, _is_monday_gap, _log_trade_closed, _on_execution-handler (fill/partial/reject), _on_reconcile (recover åpne posisjoner), _on_order_error.
+  3. Expose send_new_order / amend_sl_tp / close_position / cancel_order på CtraderClient (kunne vært i session 41; legges til nå som consumere trenger dem).
+  4. Wire CtraderClient.callbacks.on_execution = exit-handler, on_reconcile = exit-handler.
+  5. Tester: P1-P5-prioritering, trail-ratchet, break-even, partial-close volum, weekend-gate, monday-gap, reconcile-recovery.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -87,6 +92,99 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 43: bot/entry + bot/sizing + AGRI-BUG FIX
+
+**═══ KRITISK BUG-FIX (Fase 8 hovedleveranse) ═══**
+
+`_recalibrate_agri_levels` (gammel trading_bot.py:2665-2693) er IKKE
+portert. Kall-stedet i `_on_candle_closed` er fjernet. Gammel bot
+overstyrte agri-signalers stop/t1/t2_informational/entry_zone med
+1.5/2.5/3.5×live_atr uansett hva setup-generatoren hadde beregnet på
+reelle støtte/motstand-nivåer. Ny `entry.py:_on_candle_closed` lar
+agri-signal passere uendret til `_process_watchlist_signal`, som
+setter `TradeState.stop_price/t1_price` fra `sig['stop']/sig['t1']`
+direkte.
+
+Regresjonstest: `test_agri_signal_not_overridden` i
+`tests/unit/bot/test_entry.py`.
+
+**Opprettet:**
+- `src/bedrock/bot/entry.py` (~630 linjer) — `EntryEngine`:
+  - Eier candle-buffere (15m/5m/1h) + indikator-state (EMA9, ATR14,
+    ATR14-5m) per sid
+  - Callbacks ut: `on_symbols_ready(client)`, `on_spot(event)`,
+    `on_historical_bars(res)`, `on_signals(data)`
+  - `_on_candle_closed`: daily-loss-reset, bot-lock-sjekk, server-
+    frozen-guard, signal-fil-expiry, watchlist-iterasjon → filters →
+    confirmation → `execute_trade`-callback → `manage_open_positions`-
+    callback
+  - `_process_watchlist_signal`: USD-dir-mapping-varsel, tidlig
+    daily-loss-gate, per-signal TTL (fra config), duplikat-blokk,
+    TradeState-oppretting ved in-zone, confirmation-candle-limit
+  - `_passes_filters`: USDA blackout (agri), spread cold-start,
+    spread-grense (agri_multiplier / non_agri_multiplier × stop_mult),
+    R:R-gate (config.horizon_min_rr + geo-override)
+  - `_check_confirmation`: 3-punkt scoring (body/wick/EMA-gradient),
+    strict_score ved motstridende FX USD-retning, stats akkumuleres,
+    persist hver 20. evaluering via atomic write
+  - Helpers: `get_ema9`, `get_atr14`, `get_atr14_h1`, `get_normal_spread`
+
+- `src/bedrock/bot/sizing.py` (~55 linjer) — `get_risk_pct` ren
+  funksjon. Full/half/quarter basert på geo/VIX/character/outside.
+  `rules.get("risk_pct_*")` overstyrer `cfg`-defaults slik at per-
+  instrument YAML-override fortsatt virker
+
+- `tests/unit/bot/test_entry.py` (26 tester):
+  - `test_agri_signal_not_overridden` (KRITISK regresjonstest)
+  - `test_technical_signal_also_unchanged`
+  - Daily-loss-gate, TTL (stale SCALP / fresh SWING), duplikat-blokk
+  - `_passes_filters`: cold-start, wide spread, R:R, USDA blackout
+  - `_check_confirmation`: body ok, small-body-fails-strict, no-EMA,
+    stats-persist-every-20
+  - Indikatorer, on_symbols_ready, on_signals, execute_trade-callback
+    full-flyt, manage_open_positions-callback uten signaler / frozen
+
+- `tests/unit/bot/test_sizing.py` (13 tester): full matrise av
+  geo/VIX/character/outside + rules-override + cfg-defaults
+
+**Design-valg:**
+- Scope-splitt: session 43 er candle-handling + signal-evaluering +
+  confirmation. `_execute_trade` (ordre-sending) defer til session 44
+  sammen med `bot/exit.py` fordi begge trenger CtraderClient-
+  ordre-APIs (`send_new_order`, `amend_sl_tp`, `close_position`)
+  som også legges til session 44. Dette grupperer cTrader-skrivende
+  operasjoner logisk
+- `EntryEngine` mottar `CtraderClient` som stub som leser
+  symbol_map/last_bid/last_ask/spread_history/account_balance.
+  Ingen ordre-sending ennå
+- `execute_trade` og `manage_open_positions` injiseres som callbacks
+  — stubbet til no-op i denne session. Session 44 wirer faktiske
+  handlers
+- `signal_data` settes via `on_signals`-callback (fra SignalComms),
+  ikke direkte attributt-mutasjon — matcher dependency-injection-
+  mønsteret resten av bot/
+- TTL, min_rr, spread-min-samples, confirmation-terskler leses fra
+  `ReloadableConfig` — SIGHUP-reload aktiverer nye verdier uten
+  restart
+- Confirmation-stats persistet atomisk (tempfile + os.replace) til
+  `~/bedrock/data/bot/confirmation_stats.json`
+- Spam-vern-set (`_usd_dir_missing_logged`, `_spread_cold_logged`,
+  `_ttl_logged`, `_daily_loss_logged`) er instans-state, nullstilles
+  ved restart — bevisst så ny instans får full-volum-logging
+
+**Ikke endret:**
+- `~/scalp_edge/` — READ-ONLY gjennom hele session
+- Ingen prosesser rørt
+- Ingen kode-endring i eksisterende Bedrock-moduler
+
+**Commits:** `dcf415a`.
+
+**Tester:** 850/850 grønne (fra 811 + 39 nye) på 30.1 sek.
+
+**Neste session:** 44 — `bot/exit.py` + `_execute_trade` +
+CtraderClient-ordre-APIs. Dette er session 43s naturlige fortsettelse
+som gjenforener cTrader-ordre-skrivende-operasjoner.
 
 ### 2026-04-24 — Session 42: bot/safety + bot/comms
 
