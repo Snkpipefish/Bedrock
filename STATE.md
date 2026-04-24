@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 4 — åpen. Session 18 FERDIG: hysterese + snapshot-persistens. Tre av fire komponenter i setup-generator på plass (detektor, bygger, hysterese); gjenstår horisont-klassifisering (§ 5.5).
+- **Phase:** 4 — åpen. Session 19 FERDIG: horisont-klassifisering + score-gate + horisont-hysterese. Alle fire komponenter i setup-generator på plass. Klar for Fase 4 closure.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Fase 4 session 19 — horisont-klassifisering (§ 5.5). PLAN beskriver: SCALP hvis entry_tf=15m, SWING hvis 4h/D1 + expected_hold 7-21d, MAKRO hvis D1/W + 30-90d. Inkluderer score-hysterese på horisont-terskler (±5% buffer mot flip-flopping). Output: `classify_horizon(setup_context) -> Horizon`. Kan avslutte Fase 4 etter dette med tag `v0.4.0-fase-4`.
+- **Next task:** Avslutt Fase 4 i neste session — tag `v0.4.0-fase-4`, verifiser at alt dekker PLAN § 5 kravene. Deretter Fase 5 (fetch-refactor + instrument-config) eller Fase 6 (signal-server). PLAN-rekkefølge er Fase 5 neste.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -61,6 +61,51 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 19: horisont-klassifisering
+
+Siste komponent i Fase 4. PLAN § 5.5 + § 5.4.2 dekket.
+
+**Opprettet:**
+- `bedrock.setups.horizon`:
+  - `estimate_expected_hold_days(entry, tp, atr, atr_per_day=1.0)` —
+    grov hold-estimat fra TP-distanse i ATR-enheter. Defensiv mot
+    `atr<=0` og returnerer `None` for MAKRO (tp=None)
+  - `classify_horizon(entry_tf, expected_hold_days)` — rule-based per
+    PLAN § 5.5. Håndterer intraday/mid-TF/daily-plus, hold-bånd
+    <1/7-21/>21 dager, edge cases (hold=None → MAKRO)
+  - `is_score_sufficient(score, horizon, min_score_publish)` — score-
+    gate. Defensiv ved manglende terskel
+  - `apply_horizon_hysteresis(candidate, previous, score, thresholds,
+    buffer_pct=0.05)` — ±5% buffer rundt alle terskler per PLAN § 5.4.2.
+    Symmetrisk hysterese (dempes både ved opp- og nedgang)
+- `tests/unit/test_setups_horizon.py` (31 tester) — estimerings-edge,
+  classify-rule-kombinasjoner, gate-edge, hysterese-scenarier inkl.
+  multi-threshold + negative-threshold-ignorering + end-to-end 3-run
+
+**Design-valg:**
+- `_INTRADAY_TFS` inkluderer M1-M30; `_MID_TFS` H1-H4; daily+
+  inkluderer D/W. 4H behandles som daily-plus (ikke intraday) per
+  vår 30m-grense
+- Hysterese sjekker ALLE terskler — hvis score er i buffer rundt
+  f.eks. MAKRO-terskelen (3.5) og previous=SWING → keep SWING
+  selv om candidate er MAKRO. Dette matcher intensjonen om å
+  hindre flip-flopping uansett retning
+- `_ = Direction` i slutten av modulen er en no-op for å indikere
+  at Horizon/Direction hører til samme setup-domene — signaliserer
+  intensjon til lesere uten å lage public-API
+
+**Commits:** `<hash kommer>`.
+
+**Tester:** 330/330 grønne på 11.2 sek.
+
+**Bevisste utsettelser:**
+- YAML-drevet horisont-thresholds og buffer_pct per instrument — Fase 5
+- Top-level orchestrator som kombinerer detektor → bygger → hysterese →
+  klassifisering → score-gate — kan lages i Fase 5 når instrument-
+  config finnes
+
+**Neste session:** Fase 4 CLOSED + tag `v0.4.0-fase-4`.
 
 ### 2026-04-24 — Session 18: hysterese + snapshot
 
