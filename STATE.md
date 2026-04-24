@@ -2,16 +2,16 @@
 
 ## Current state
 
-- **Phase:** 8 **ÅPEN** (Bot-refaktor). Session 44 lukket — CtraderClient ordre-APIs (`send_new_order`/`amend_sl_tp`/`close_position`/`cancel_order`) + `sizing.py`-utvidelser (`compute_desired_lots`/`lots_to_volume_units`/`volume_to_lots`) + `EntryEngine._execute_trade_impl` (~240 linjer med gates + sizing + ordre-send) + `_is_monday_gap` + `_agri_session_ok` + `_log_trade_opened` + 40 nye tester. Alle entry-side-moduler er nå portert. Gjenstår: `bot/exit.py` (session 45) + `bot/__main__.py` (session 46).
+- **Phase:** 8 **ÅPEN** (Bot-refaktor). Session 45 lukket — `bot/exit.py` med `ExitEngine` (P1-P5 exit-prioritet + cTrader event-handlere + trade-close-logging) + `EntryEngine.set_manage_open_positions` + `get_ema9_h1` + 36 nye tester. **Åtte av åtte bot-logikkmoduler er nå portert.** Gjenstår: `bot/__main__.py` + wire-up i session 46.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Session 45 — `bot/exit.py` med `ExitEngine`. Scope:
-  1. `_manage_open_positions` (P1-P5 exit-prioritet, ~208 linjer i trading_bot.py) — P1 SL-hit, P2 T1-hit (partial), P3 trail-stop, P3.5 peak-progress-giveback, P4 EMA9-exit, P5 expiry-candles.
-  2. Helpers: `_update_trail`, `_set_break_even`, `_calc_pnl`, `_calc_close_volume`, `_compute_progress`, `_weekend_action`, `_compute_weekend_sl`, `_log_trade_closed`.
-  3. cTrader execution-handlere: `on_execution` (ORDER_FILLED/PARTIAL_FILL/REJECTED), `on_reconcile` (recover åpne posisjoner ved oppstart), `on_order_error`.
-  4. Wire `CtraderClient.callbacks.on_execution/on_reconcile/on_order_error = ExitEngine.*`.
-  5. Bruk eksisterende `CtraderClient.amend_sl_tp/close_position/cancel_order` (lagt til session 44).
-  6. Tester: P1-P5-prioritering, trail-ratchet (monotont i trade-retningen), break-even-aktivering, partial-close volum-beregning, weekend-gate (fredag 20:00 CET lukker SCALP), reconcile-recovery (matcher position_id mot signal).
+- **Next task:** Session 46 — `bot/__main__.py` og full integrasjon. Scope:
+  1. `__main__.py` entry-point: credentials-lasting via `load_credentials_from_env`, BotConfig-lasting via `load_bot_config`, SIGHUP-handler som kaller `reload_bot_config` og logger startup_only-diffs, SIGTERM-handler som lukker cleanly.
+  2. Wire-up: instansier SafetyMonitor, CtraderClient, SignalComms, EntryEngine, ExitEngine. Wire `entry.set_manage_open_positions(exit.manage_open_positions)`. Wire client.callbacks (on_spot/on_historical_bars/on_symbols_ready → entry; on_execution/on_order_error/on_reconcile → exit). Wire comms.on_signals → entry.on_signals.
+  3. Start-sekvens: comms-polling-loop, client.start() blokkerer i reactor.
+  4. Dokumentasjon: `docs/bot_running.md` med credentials-format, SIGHUP-flyt, systemd-unit-eksempel.
+  5. Tester: smoke-test som kjører `bot/__main__.py` med alle env-vars satt men uten ekte cTrader-connection (mock Client).
+  6. Etter session 46 kan bot-porten kjøres parallelt med gammel `trading_bot.py`. Fase 8 avsluttes da og vi går videre til Fase 9.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -93,6 +93,145 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 45: bot/exit.py med ExitEngine
+
+**Scope:** Portert hele exit-laget fra `trading_bot.py` per migrasjons-
+plan § 3.4 + 8 punkt 5. Åttende av åtte bot-logikkmoduler — hele
+bot-refaktoren er nå portert (kun `__main__.py` + wire-up gjenstår).
+
+**Opprettet:**
+- `src/bedrock/bot/exit.py` (~700 linjer) — `ExitEngine`:
+  - `manage_open_positions(symbol_id, candle)` — P1-P5 exit-prioritet
+  - cTrader-event-handlere:
+    - `on_execution(event)`: fill → `IN_TRADE` + amend SL/TP for
+      MARKET; partial-fill justerer `full_volume`/`remaining_volume`
+      til faktisk filled; `closePositionDetail` lagres som
+      `state._real_pnl`/`_real_commission`; LIMIT-fills skipper
+      amend (SL/TP allerede på ordren)
+    - `on_order_error(event)`: `POSITION_NOT_FOUND` detekterer TP vs
+      SL basert på siste kjente pris (avstand til t1 vs stop);
+      andre errors rydder stuck AWAITING-states (aldri fikk pos)
+    - `on_reconcile(res)`: tar over åpne SE-posisjoner ved oppstart,
+      oppretter `TradeState(reconciled=True)` + `reconciled_sl/tp`
+      for M10-divergens-advarsler ved senere trail/BE-override
+  - Trade-close-logging til `~/bedrock/data/bot/signal_log.json`
+    atomisk via tempfile + os.replace, UTEN git-push (gammel bot
+    pushet til cot-explorer; Bedrock skal ikke gjøre git i hot-path)
+  - Akkumulerer daily_loss via `SafetyMonitor.add_loss(abs(pnl))`
+    ved negativ PnL, persistert via eksisterende mekanisme
+  - PnL-beregning: USD-quote (EURUSD/GOLD/...) vs USD-base (USDJPY/...),
+    halv-spread-fratrekk, commission integrert fra cTrader-deals
+
+- **Exit-prioritet (P1 → P5b)** implementert i manage_open_positions:
+  - P1   Geo-spike: `move_against > geo_mult × ATR` → STENG
+  - P2   Kill-switch: `state.kill_switch` → STENG
+  - P2.5 Weekend (CET): fredag ≥20 lukker SCALP; ≥19 strammer SWING/
+         MAKRO SL til `config.weekend.sl_atr_mult × ATR`
+  - P3   T1 nådd → partial close (`exit_t1_close_pct`) + BE + trail-aktiv.
+         `_calc_close_volume` forced_full hvis remaining < min_volume
+  - P3.5 Trailing stop (ratchet): `close < trail_level` (eller > for sell)
+  - P3.6 Give-back (pre-T1): `peak_progress ≥ gb_peak` og
+         `progress ≤ gb_exit` → STENG
+  - P4   EMA9-kryss (post-T1, SWING/MAKRO bruker 1H EMA9):
+         disabled hvis `gp.ema9_exit=False` eller `exit_ema_tf="D1"`;
+         3-candle grace-period for reconciled states
+  - P5a  Timeout (`candles_since_entry ≥ expiry_candles`):
+         progress > partial_pct → aktiver trail med 2/3 mult;
+         progress > 0 → "8-CANDLE-MARGINAL"; ellers "8-CANDLE-LOSS"
+  - P5b  Hard close ved `candles_since_entry ≥ 2 × expiry`
+
+- **Helpers** (ExitEngine-metoder):
+  - `_weekend_action() -> {close_scalp, tighten_sl}` — kun-CET-tid
+  - `_compute_weekend_sl(state, close, atr)` — returnerer None hvis
+    ny SL ikke er strammere enn nåværende
+  - `_compute_progress(state, close)` — 0.0=entry, 1.0=T1, negativ=mot SL
+  - `_update_trail(state, close, sid, mult)` — ratchet-logikk +
+    `client.amend_sl_tp`; SWING/MAKRO bruker 1H ATR
+  - `_set_break_even(state, sid)` — buffer = spread + ratio × ATR,
+    sikkerhetssperre mot SL ≥ bid (buy) eller SL ≤ ask (sell),
+    flytter kun hvis bedre enn nåværende SL. M10-advarsel ved
+    reconciled-SL-override > 1×ATR
+  - `_calc_close_volume(state, fraction)` — step-rounded + min_volume-
+    floor, forced_full hvis remaining < min_volume
+  - `_resolve_trail_mult` — `horizon_config.exit_trail_atr_mult[group]`
+    > `rules.trail_atr_multiplier` > `gp.trail_atr`
+  - `_close_all(state, close_price, reason)` — lukk resten + logg
+  - `_calc_pnl(state, close_price)` — estimert PnL i USD + pips;
+    overstyres av `state._real_pnl` i `_log_trade_closed` hvis satt
+  - `_log_trade_closed(state, reason, close_price)` — oppdaterer
+    siste åpne entry for signal_id med close-data + PnL; akkumulerer
+    daily_loss ved negativ PnL
+  - `_log_reconcile_opened(state)` — idempotent (skipper hvis
+    signal_id allerede har åpen entry)
+  - `_atomic_write_json(data)` — tempfile + os.replace
+
+**Endret:**
+- `src/bedrock/bot/entry.py`:
+  - `get_ema9_h1(sid, offset=0)` — trengs av ExitEngine P4 for
+    SWING/MAKRO-exits
+  - `set_manage_open_positions(callback)` — post-construction wiring
+    for å løse sirkulær dep (EntryEngine → manage-callback,
+    ExitEngine → EntryEngine-ref for indikatorer)
+
+**Design-valg:**
+- ExitEngine tar `entry: EntryEngine`-referanse (TYPE_CHECKING-import
+  for å unngå runtime circular dep). Leser indikatorer via
+  `entry.get_atr14/atr14_h1/ema9/ema9_h1`, trade-log-opening via
+  `entry._log_trade_opened(state)` (entry eier hot-path IO)
+- Autouse-fixture `_freeze_to_thursday` i test_exit.py hindrer at
+  dagens ukedag (fredag 2026-04-24) trigger weekend-gate utilsiktet.
+  Weekend-spesifikke tester monkeypatche'r selv — test-lokal patch
+  vinner over autouse
+- Sirkulær dep løst via `set_manage_open_positions`: `bot/__main__.py`
+  instansierer EntryEngine først (uten callback), så ExitEngine med
+  entry-ref, så `entry.set_manage_open_positions(exit.manage_open_positions)`
+- ExitEngine.on_execution kaller `self._entry._log_trade_opened(state)`
+  (ikke `self._log_reconcile_opened`) — trade-log-eierskap blir dermed:
+  entry eier "åpnet via fill"-loggin, exit eier "stengt + reconcile"
+- PnL-beregning: `_real_pnl` (fra cTrader closePositionDetail) vinner
+  over estimert `_calc_pnl`. Commission fra intermediate deals
+  akkumulerer i `state._real_commission` og integreres i estimert PnL
+
+**Tester (36 nye):**
+- P-tester: P1 close_buy (triggs), P1 no-op-in-favor,
+  P2 kill-switch, P3 T1 partial (50%) + forced_full,
+  P3.6 give-back, P5a timeout negative/positive progress,
+  P5b hard close
+- Helpers: compute_progress (buy/sell/missing-t1),
+  calc_close_volume (partial + forced_full),
+  weekend_action (fredag kveld/sen-ettermiddag/torsdag),
+  compute_weekend_sl (tightens/none),
+  set_break_even (amend kalt + ny SL i riktig rekkefølge),
+  update_trail (ratchet — monoton i trade-retningen)
+- `_calc_pnl`: USD-quote buy (10.0 USD for 100k vol × 0.01 diff),
+  USD-base USDJPY (pnl_usd ≈ 6.62 for 1 JPY × 100k / 151),
+  empty ved missing entry
+- `_log_trade_closed`: oppdaterer entry + akkumulerer daily_loss
+  (loss → safety.daily_loss > 0); no-op ved fil-mangel
+- `_log_reconcile_opened`: oppretter entry med reconciled=True;
+  idempotent når signal_id allerede er logget
+- `on_execution`: full fill + amend SL/TP (MARKET),
+  partial fill (state.full_volume justert til faktisk),
+  duplikat-event ignorert (IN_TRADE),
+  non-SE-label ignorert
+- `on_order_error`: POSITION_NOT_FOUND → TP-detektering via
+  last_price-avstand; andre errors → stuck-rydd
+- `on_reconcile`: oppretter SE-state med reconciled=True +
+  reconciled_sl/tp; skipper duplikate position_id
+
+**Ikke endret:**
+- `~/scalp_edge/` — READ-ONLY gjennom hele session
+- Ingen prosesser rørt
+
+**Commits:** `7879750`.
+
+**Tester:** 926/926 grønne (fra 890 + 36 nye) på 32.4 sek.
+
+**Neste session:** 46 — `bot/__main__.py` entry-point + SIGHUP/SIGTERM-
+handlers + full wire-up av alle bot/-moduler. Etter dette er hele
+bot-porten komplett og kan kjøres parallelt med gammel
+`~/scalp_edge/trading_bot.py`. Fase 8 avsluttes.
 
 ### 2026-04-24 — Session 44: _execute_trade + cTrader ordre-APIs
 
