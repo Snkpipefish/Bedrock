@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 7 **CLOSED** (tag `v0.7.0-fase-7`). Alle 12 kjerne-endepunkter fra 974-linjers `scalp_edge.signal_server` portert. Sessions 33-38. Modulstruktur, Pydantic-validering, atomic write, X-Admin-Code auth på admin-endepunkter.
+- **Phase:** 8 **ÅPEN** (Bot-refaktor). Session 39 lukket research-leveranse: `docs/migration/bot_refactor.md` med full modul-inventar, metode-kart (66 metoder på ScalpEdgeBot), agri-override-bug-lokalisering, og refaktor-rekkefølge session 40-47.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Session 39 — åpner **Fase 8: Bot-refaktor** per PLAN § 9. Scope: modulsplitt fra 974-linjers trading_bot.py (scalp_edge/), **fjerning av agri-ATR-override-bug** (trading_bot.py:2665-2691, kjent siden Fase 0 invariants), config-ekstraksjon (per-instrument og per-horisont TP/SL-parametre til YAML), pricing/kill-switch/signal-henting mot ny signal_server (port 5100). Bot må fortsatt kunne kjøre i demo parallell med gammel bot (Fase 12 cutover). **Første session** (39): modul-inventar av eksisterende trading_bot.py + migrasjonsplan-dokument uten å røre kjørende bot. Dette er research/planning — kode kommer fra session 40.
+- **Next task:** Session 40 — åpne refaktoreringen per `docs/migration/bot_refactor.md § 8 punkt 1`: opprett `src/bedrock/bot/__init__.py`, `bot/state.py` (flytt TradePhase/Candle/TradeState/CandleBuffer dataclasses uendret), `bot/instruments.py` (INSTRUMENT_MAP, PRICE_FEED_MAP, FX_USD_DIRECTION etc. som ren data-lookup), `bot/config.py` (Pydantic-modell for bot.yaml) og første versjon av `config/bot.yaml` med defaults fra migrasjonsdokument § 5.1+5.2. Tester: roundtrip YAML → Pydantic → dict. Null logikk-endring; gammel `~/scalp_edge/trading_bot.py` røres ikke.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -87,6 +87,78 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 39: Fase 8 åpnet, migrasjonsplan for bot-refaktor
+
+**Opprettet:**
+- `docs/migration/` (ny katalog for Fase 8-dokumentasjon)
+- `docs/migration/bot_refactor.md` (633 linjer) — research-leveranse:
+  - Fil-metadata for `~/scalp_edge/trading_bot.py` (2977 linjer,
+    4 top-level klasser + ScalpEdgeBot med 66 metoder)
+  - Topp-nivå struktur-mapping (imports, env-config, logging,
+    modul-konstanter, dataclasses, `ScalpEdgeBot`, `check_env`)
+  - Metode-kart per målmodul (ctrader_client, entry, sizing, exit,
+    state, safety, comms, __main__) med eksakte linjenumre
+  - Eksakt kode-sitat av agri-ATR-override-bugen: metode er
+    `_recalibrate_agri_levels` (linje 2665-2693), ikke
+    `_calibrate_agri_signal` som PLAN § 9.1 sier. Overstyrer stop/t1/
+    t2_informational/entry_zone med 1.5/2.5/3.5×live_atr uansett
+    setup-generator-nivå
+  - Hardkodede terskler delt i:
+    (a) allerede parametrisert via `rules.get()` — kun default
+    flyttes til `bot.yaml`
+    (b) ikke-parametrisert — legges til `bot.yaml` (MIN_SPREAD_SAMPLES,
+    HORIZON_TTL_SECONDS, AGRI_SESSION, GROUP_PARAMS, body-threshold,
+    EMA-gradient-grenser, weekend-SL-mult, monday-gap-mult, osv.)
+    (c) skal IKKE i YAML (protobuf-enums, auth-error-koder,
+    instrument-lookup-dicts)
+  - Target-modul-struktur (10 filer, ikke 8 som PLAN § 9.4 foreslår —
+    avvik begrunnet: `bot/instruments.py` for data-lookup og
+    `bot/config.py` for SIGHUP-reload)
+  - Avhengighetsgraf uten sirkulære imports
+  - Refaktor-rekkefølge session 40-47 med konkrete leveranser per session
+  - Test-strategi (logiske primær, enhets sekundær)
+  - Risiko + åpne spørsmål (Twisted-singleton i pytest,
+    reconcile-recovery under cutover, SIGHUP-reload-scope,
+    `_git_push_log`-fjerning)
+
+**Endret:**
+- (ingen kode endret — research/planning only per Fase 8 session 1-kontrakt)
+
+**Prosess-avtale fra bruker (session 39):**
+- Under refaktoren er `~/scalp_edge/` READ-ONLY
+- Alle output-filer går til Bedrock-repoet (`docs/migration/`,
+  `src/bedrock/bot/`, `config/bot.yaml`, etc.)
+- Gammel bot-prosess og gammel signal_server-prosess røres ikke
+- Selve refaktoreringen starter fra session 40 i Bedrock-repoet;
+  gammel bot fortsetter uendret i demo-parallell til Fase 11-12 cutover
+
+**Design-valg dokumentert:**
+- 10 moduler i stedet for 8 (PLAN § 9.4): tillegg `instruments.py`
+  og `config.py`. Bestemt via CLAUDE.md beslutnings-retningslinje
+  (mappe-struktur = Claude bestemmer, trading-/UX-valg = bruker)
+- Agri-override-metode faktisk navn: `_recalibrate_agri_levels`.
+  PLAN.md kan rettes senere; ikke blokker Fase 8
+- `_git_push_log` fjernes i bot-refaktoren — dekkes av Bedrocks
+  `.githooks/post-commit`. Bekreftelse utsatt til session 42
+- `ProtoOATrendbarPeriod`-enums, `CET` ZoneInfo, heartbeat-intervall
+  25s, watchdog-intervall 30s beholdes i kode (ikke konfig)
+- `TradeState` forblir dataclass, ikke Pydantic (endring krever ADR)
+
+**Åpne spørsmål til bruker (ikke blokkerende før session 43-44):**
+- SIGHUP-reload scope: kun "myke" felter (trail_atr, giveback,
+  confirmation-terskler) eller all-or-nothing?
+- Bekreft at `.githooks/post-commit` auto-push dekker alt
+  `_git_push_log` gjør i dag, og at bot-loggene kan committes av
+  post-commit-hooken uten egne bot-side git-kall
+
+**Commits:** `b1bfa98` (docs-only).
+
+**Tester:** 672/672 uendret (ingen kode berørt).
+
+**Neste session:** 40 — skjelett + state + instruments + config, per
+`docs/migration/bot_refactor.md § 8 punkt 1`. Ingen kode-endring
+utenfor Bedrock-repoet.
 
 ### 2026-04-24 — Session 38: /admin/rules + Fase 7 klar for closure
 
