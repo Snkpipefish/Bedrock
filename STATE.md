@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 4 — åpen. Session 19 FERDIG: horisont-klassifisering + score-gate + horisont-hysterese. Alle fire komponenter i setup-generator på plass. Klar for Fase 4 closure.
+- **Phase:** 4 CLOSED (tagget `v0.4.0-fase-4`). Setup-generator komplett: nivå-detektor (3 av 7 typer), setup-bygger med clustering/ATR/asymmetri, hysterese + snapshot, horisont-klassifisering + score-gate. 330/330 tester grønne.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Avslutt Fase 4 i neste session — tag `v0.4.0-fase-4`, verifiser at alt dekker PLAN § 5 kravene. Deretter Fase 5 (fetch-refactor + instrument-config) eller Fase 6 (signal-server). PLAN-rekkefølge er Fase 5 neste.
+- **Next task:** Start **Fase 5 (fetch-refactor + instrument-config)** i NY session. PLAN § 7 + § 3 krever: (a) instrument-config YAML (per-instrument metadata: ticker, cot_contract, lat/lon, asset_class), (b) `config/fetch.yaml` med cadence, (c) migrering av fetch-moduler til samme signatur-kontrakt, (d) nye datakilder (USDA WASDE, Crop Progress, BRL-driver, Baltic-shipping). Scope for session 21 blir instrument-config først — uten den er CLI-backfill manuell per instrument.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -57,10 +57,59 @@
   `~/.bedrock/secrets.env` eller env-var via `bedrock.config.secrets`.
   Aldri hardkodet, aldri i YAML, aldri i UI. `--dry-run` masker secrets
   uansett om de er satt eller ikke.
+- **Setup-generator API låst** (fra Fase 4):
+  - `Level`, `LevelType`, `Setup`, `Direction`, `Horizon` Pydantic-
+    modeller (felles med scoring-engine der relevant)
+  - `detect_*`-funksjoner returnerer råliste; clustering hører i
+    setup-bygger
+  - `build_setup(instrument, direction, horizon, current_price, atr,
+    levels, config) -> Setup | None` — deterministisk, null state
+  - `stabilize_setup(new, previous, now, config) -> StableSetup` —
+    hysterese + ID-persistens via slot-hash (instrument+direction+horizon)
+  - `classify_horizon`, `is_score_sufficient`, `apply_horizon_hysteresis`
+    — rule-based horisont-tildeling
+  - Brytes kun med ADR.
 
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 20: Fase 4 CLOSED
+
+Verifisert at `src/bedrock/setups/` har null placeholders. 13 public
+funksjoner, 8 Pydantic-modeller, 4 enums + helpers. 330/330 grønne.
+
+**Tag:** `v0.4.0-fase-4` opprettet og pushet.
+
+**Fase 4 leveranse-sum:**
+- **Nivå-detektor** (`setups.levels`): 3 av 7 typer — `detect_swing_levels`
+  (fraktal, prominens-basert strength), `detect_prior_period_levels`
+  (W/D/M resample, fast 0.8 strength), `detect_round_numbers` (trailing-
+  zero-heuristikk). `rank_levels` uten dedup
+- **Setup-bygger** (`setups.generator`): `Direction`/`Horizon` enums,
+  `Setup`/`ClusteredLevel`/`SetupConfig` Pydantic. `compute_atr` (SMA),
+  `cluster_levels` (transitiv single-link + konfluens-bonus),
+  `build_setup` (deterministisk, per-horisont TP-logikk, asymmetri-gate)
+- **Hysterese** (`setups.hysteresis` + `setups.snapshot`): slot-basert
+  setup-ID (SHA1 av instrument+direction+horizon), `StableSetup` +
+  `SetupSnapshot` modeller, `stabilize_setup` + `apply_hysteresis_batch`,
+  `load_snapshot`/`save_snapshot` med atomic-write
+- **Horisont-klassifisering** (`setups.horizon`): rule-based fra
+  entry_tf + expected_hold_days, score-gate, ±5% symmetrisk hysterese
+  rundt horisont-terskler
+- **130+ nye tester** (fra 210 ved Fase 3-close → 330 nå)
+
+**Utsatt til senere faser (bevisst):**
+- Volume-profile POC/VAH/VAL — krever tick-data
+- COT-pivot-detektor — design-runde mangler
+- Top-level orchestrator som kombinerer alt — Fase 5 når
+  instrument-config finnes
+- Per-instrument YAML-overrides av `SetupConfig`/`HysteresisConfig` —
+  Fase 5
+- Backtest-evaluering av heuristikker (strength, clustering, hysterese-
+  parametre) — Fase 10
+
+**Neste:** Fase 5 i ny session.
 
 ### 2026-04-24 — Session 19: horisont-klassifisering
 
