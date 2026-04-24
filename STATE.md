@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 7 — åpen. Session 35 FERDIG: `/push-alert` + `/push-agri-alert` POST-skriv-path med Pydantic body-validering og atomic `append_signal`-helper (tmp + os.replace). Session 34 FERDIG: read-endepunkter. Session 33 FERDIG: skeleton.
+- **Phase:** 7 — åpen. Session 36 FERDIG: `/kill` + `/kills` + `/clear_kills` + `/invalidate`. KillSwitch Pydantic med dedupe på (instrument, horizon). InvalidationRequest markerer matchende signaler i både signals.json og agri_signals.json via `invalidated=True` + `invalidated_at` + `invalidated_reason`. 4 nye endepunkter, 29 nye tester.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Session 36 — `endpoints/kills.py` + `/invalidate` (i signals-bp). `/kill` (POST) setter en kill-switch på en instrument+horizon-kombinasjon, `/clear_kills` (POST) fjerner alle. Kill-switch persisteres i `cfg.kill_switch_path` (default `data/kills.json`), samme atomic write-mønster som signals. `/invalidate` (POST til signals-bp) markerer ett spesifikt signal som invalidated — ender ikke opp med en `invalidated_at`-felt og endrer state slik at bot ikke handler på det. Pydantic-modeller for Kill + InvalidationRequest. Les-endepunkt `/kills` (GET) bør kanskje også være med for UI-synlighet.
+- **Next task:** Session 37 — `endpoints/prices.py` + `endpoints/uploads.py`. `/push-prices` (POST) mottar pris-ticks fra bot og persisterer (fil-basert eller DataStore-backed; velges per implementasjon). `/prices` (GET) leser siste N priser for et instrument. `/upload` (POST) håndterer fil-uploads (setup-screenshots, backtest-rapporter). For scope: holde det enkelt — `/prices` leser eksisterende DataStore (`bedrock.data.store.DataStore`), `/push-prices` appender via `append_prices`. `/upload` lagrer til `cfg.data_root / "uploads" / <uuid>.<ext>` med size-limit 10MB og content-type-whitelist (png, jpg, pdf).
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -87,6 +87,44 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 36: /kill + /kills + /clear_kills + /invalidate
+
+**Opprettet:**
+- `schemas.KillSwitch` (instrument, horizon, killed_at auto, reason),
+  `.slot`-property for dedupe
+- `schemas.InvalidationRequest` (instrument, direction, horizon, reason)
+- `storage.load_kills(path)` — samme semantikk som load_signals
+- `storage.upsert_kill(path, kill)` — dedupe på (instrument, horizon),
+  nyeste vinner. Atomic write
+- `storage.clear_all_kills(path)` — returnerer antall fjernet
+- `storage.invalidate_matching(path, *, ...)` — marker matchende
+  signaler med `invalidated=True`, `invalidated_at`, `invalidated_reason`.
+  Atomic skriv kun hvis count > 0
+- `endpoints.kills_bp`:
+  - `POST /kill` — upsert
+  - `GET /kills` — liste
+  - `POST /clear_kills` — tøm
+- `/invalidate` i signals_bp — POST, sjekker BÅDE signals_path og
+  agri_signals_path, returnerer per-fil-count + total
+- `tests/unit/test_signal_server_kills.py` (29 tester)
+
+**Design-valg:**
+- Dedupe på slot: kill-switch er live-bryter uten historikk;
+  flere calls på samme slot er idempotent (nyeste vinner)
+- Invalidate sjekker begge filer: klienten trenger ikke vite
+  asset-class-fila; per-fil-count gir transparens
+- Match-nøkkel = (instrument, direction, horizon): naturlig slot-
+  nivå. setup_id-match ville krevd schema-bump av PersistedSignal
+- Invalidate-felter via `extra='allow'`: ingen schema-version-bump
+- `invalidate_matching` skriver kun hvis count > 0: preserver
+  fil-mtime ved ingen match
+
+**Commits:** `08b8531`.
+
+**Tester:** 626/626 grønne på 24.9 sek (fra 597 session 35, +29).
+
+**Neste session:** 37 — /push-prices + /prices + /upload.
 
 ### 2026-04-24 — Session 35: /push-alert + /push-agri-alert skriv-path
 
