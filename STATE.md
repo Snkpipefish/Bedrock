@@ -2,15 +2,16 @@
 
 ## Current state
 
-- **Phase:** 8 **ÅPEN** (Bot-refaktor). Session 43 lukket — `bot/entry.py` (~630 linjer, inkl. **agri-ATR-override-bug-fix**) + `bot/sizing.py` + 39 tester. Syv av åtte bot/-moduler portert (__init__, state, instruments, config, ctrader_client, safety, comms, entry, sizing). Gjenstår: `exit`, `__main__`, og `_execute_trade` (deferred til session 44 sammen med exit for å gruppere cTrader-ordre-sending).
+- **Phase:** 8 **ÅPEN** (Bot-refaktor). Session 44 lukket — CtraderClient ordre-APIs (`send_new_order`/`amend_sl_tp`/`close_position`/`cancel_order`) + `sizing.py`-utvidelser (`compute_desired_lots`/`lots_to_volume_units`/`volume_to_lots`) + `EntryEngine._execute_trade_impl` (~240 linjer med gates + sizing + ordre-send) + `_is_monday_gap` + `_agri_session_ok` + `_log_trade_opened` + 40 nye tester. Alle entry-side-moduler er nå portert. Gjenstår: `bot/exit.py` (session 45) + `bot/__main__.py` (session 46).
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Session 44 — `bot/exit.py` + `_execute_trade` per migrasjonsplan § 8 punkt 5 (merkelappet § 3.4 + 3.3). Scope:
-  1. `_execute_trade` (trading_bot.py:1491-1733, ~240 linjer) — ordre-sending via CtraderClient.send_new_order. Splitt ut `size_volume(rules, balance, sl_dist, instrument, char, vix, geo, outside) -> int` til sizing.py. _volume_to_lots lot-tier/step-volume-logikk. Log-trade-opened.
-  2. `bot/exit.py` — _manage_open_positions (P1-P5 exit-prioritet, ~208 linjer), _update_trail, _set_break_even, _calc_pnl, _calc_close_volume, _compute_progress, _weekend_action, _compute_weekend_sl, _is_monday_gap, _log_trade_closed, _on_execution-handler (fill/partial/reject), _on_reconcile (recover åpne posisjoner), _on_order_error.
-  3. Expose send_new_order / amend_sl_tp / close_position / cancel_order på CtraderClient (kunne vært i session 41; legges til nå som consumere trenger dem).
-  4. Wire CtraderClient.callbacks.on_execution = exit-handler, on_reconcile = exit-handler.
-  5. Tester: P1-P5-prioritering, trail-ratchet, break-even, partial-close volum, weekend-gate, monday-gap, reconcile-recovery.
+- **Next task:** Session 45 — `bot/exit.py` med `ExitEngine`. Scope:
+  1. `_manage_open_positions` (P1-P5 exit-prioritet, ~208 linjer i trading_bot.py) — P1 SL-hit, P2 T1-hit (partial), P3 trail-stop, P3.5 peak-progress-giveback, P4 EMA9-exit, P5 expiry-candles.
+  2. Helpers: `_update_trail`, `_set_break_even`, `_calc_pnl`, `_calc_close_volume`, `_compute_progress`, `_weekend_action`, `_compute_weekend_sl`, `_log_trade_closed`.
+  3. cTrader execution-handlere: `on_execution` (ORDER_FILLED/PARTIAL_FILL/REJECTED), `on_reconcile` (recover åpne posisjoner ved oppstart), `on_order_error`.
+  4. Wire `CtraderClient.callbacks.on_execution/on_reconcile/on_order_error = ExitEngine.*`.
+  5. Bruk eksisterende `CtraderClient.amend_sl_tp/close_position/cancel_order` (lagt til session 44).
+  6. Tester: P1-P5-prioritering, trail-ratchet (monotont i trade-retningen), break-even-aktivering, partial-close volum-beregning, weekend-gate (fredag 20:00 CET lukker SCALP), reconcile-recovery (matcher position_id mot signal).
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -92,6 +93,144 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 44: _execute_trade + cTrader ordre-APIs
+
+**Scope-splitt (brukerbeslutning):** Opprinnelig session 44-scope var
+`bot/exit.py` + `_execute_trade` + CtraderClient-ordre-APIs. For stort
+for én session — `_execute_trade` hører logisk i entry (confirm → gates
+→ size → execute), ikke i egen execution-modul. Splittet:
+- **Session 44 (denne):** CtraderClient ordre-APIs + sizing-utvidelser
+  + `_execute_trade_impl` i `EntryEngine` + tester
+- **Session 45 (neste):** `bot/exit.py` med `ExitEngine` + P1-P5 + helpers
+  + callback-wiring + tester
+
+**Opprettet/utvidet:**
+- `src/bedrock/bot/ctrader_client.py` (+90 linjer) — fire ordre-APIs
+  (transport-only, null state):
+  - `send_new_order(symbol_id, trade_side, volume, label, comment,
+    order_type, limit_price, stop_loss, take_profit, expiration_ms)`
+    — MARKET/LIMIT. LIMIT tillater SL/TP/expiry direkte; MARKET må
+    bruke `amend_sl_tp` etter fill (cTrader-API-begrensning).
+  - `amend_sl_tp(position_id, stop_loss, take_profit)` — patch åpen
+    posisjon
+  - `close_position(position_id, volume)` — full eller partial
+  - `cancel_order(order_id)` — pending LIMIT
+  - `ValueError` hvis `order_type="LIMIT"` uten `limit_price`
+
+- `src/bedrock/bot/sizing.py` (+96 linjer) — tre nye rene funksjoner
+  portert fra `_execute_trade`:
+  - `compute_desired_lots(sig, risk_pct) -> float` — lot-tier
+    (SCALP 0.01 / SWING 0.02 / MAKRO 0.03) fra
+    `horizon_config.sizing_base_risk_usd`, så VIX/geo-nedskalering
+    (`risk_pct < 0.5` → ×0.5, `< 1.0` → ×0.75), så agri-halvering,
+    minimum 0.01
+  - `lots_to_volume_units(desired_lots, symbol_info) -> int` —
+    stepVolume-rounding + min_volume-gulv; fallback 1000 enheter
+    hvis `symbol_info` mangler (matcher gammel bot)
+  - `volume_to_lots(volume, symbol_info) -> float | None` — invers
+    for trade-logging; FX-standard fallback (100 000 enheter = 1 lot)
+
+- `src/bedrock/bot/entry.py` (+481 linjer) — `EntryEngine._execute_trade_impl`:
+  - Monday-gap-gate (`config.monday_gap.atr_multiplier`)
+  - Oil geo-advarsel-gate (`config.oil.min_sl_pips` / `max_spread_mult`,
+    override via `rules["oil_min_sl_pips"]`/`oil_max_spread_mult`)
+  - Daily-loss-gate via `SafetyMonitor.daily_loss_exceeded`
+  - Agri: `max_concurrent` / `max_per_subgroup` / session-filter /
+    spread > `max_spread_atr_ratio × ATR14`
+  - Korrelasjon: per-gruppe + `max_total` fra
+    `global_state.correlation_config`, fallback til lokal
+    `INSTRUMENT_GROUP`-mapping hvis signal ikke har
+    `correlation_group`
+  - MARKET/LIMIT-ordre via `client.send_new_order`. MARKET setter
+    ikke SL/TP på request (amendes av ExitEngine etter fill);
+    LIMIT setter SL/TP/expiry direkte
+  - Skriver state før ordre-send (entry_price, full_volume,
+    lots_used, risk_pct_used, horizon, grade, horizon_config,
+    correlation_group). Phase forblir `AWAITING_CONFIRMATION`
+    til ExitEngine flipper til `IN_TRADE` på fill
+  - `_is_monday_gap(sid) -> bool` og `_agri_session_ok(instr) -> bool`
+    helpers — leser `h1_candle_buffers`, `atr14_h1`, `config.agri.
+    session_times_cet` (lowercase-key-mapping mot capitalized
+    instrument-navn)
+  - `_log_trade_opened(state)` — atomisk skriving til
+    `~/bedrock/data/bot/signal_log.json`. **UTEN git-push** — gammel
+    bot pushet til cot-explorer; Bedrock skal ikke gjøre git i
+    hot-path (confirmert i CLAUDE.md «ikke-gjør»)
+  - `_remove_state(state)` — trygg fjerning (swallow `ValueError`)
+
+- `src/bedrock/bot/state.py` (+2 linjer) — `TradeState` utvidet med
+  `lots_used: Optional[float]` og `risk_pct_used: Optional[float]`.
+  Gammel bot satte dem ad-hoc via attribute-assignment; nå formelle
+  felt slik at type-checker godtar dem
+
+**Design-valg:**
+- `EntryEngine.__init__`: `execute_trade`-callback er nå
+  `Optional[ExecuteTradeCallback] = None`. Hvis `None`: bruk
+  `self._execute_trade_impl`. Hvis gitt: bruk callbacken. Tester
+  kan fortsatt stubbe via `execute_trade=MagicMock()`, men i
+  produksjon (session 46 `bot/__main__.py`) kan callback utelates —
+  entry eier utførelsen
+- `EntryEngine._execute_trade_impl` er en **metode**, ikke egen
+  modul. Bruker-beslutning: «Flyten confirm → gates → size →
+  execute er alt entry-atferd. Ingen egen execution-modul.»
+- Sizing-funksjoner er rene; de leser kun `sig` og `symbol_info`.
+  Gjør dem trivielle å teste matrisebasert (13 nye tester)
+- Oil-gate i `_execute_trade_impl` bruker både rules-override og
+  config-default. Matcher gammel bots rekkefølge
+- `_log_trade_opened` skriver atomisk (tempfile + os.replace) og
+  svelger exceptions til log.warning. IO-feil skal ikke blokkere
+  trade. Kall-sted er session 45 (`ExitEngine.on_execution` ved
+  `ORDER_FILLED`) — modulen eier IO-en uansett
+- `_agri_session_ok` leser `config.agri.session_times_cet` med
+  `instrument.lower()` som key fordi config bruker «corn/wheat/…»
+  (lowercase) mens instrument-navn er «Corn/Wheat/…» (capitalized).
+  Ukjent instrument → True (ikke blokkér)
+- Ordre-API-ene er deliberate nøkkel-orderde (`*, symbol_id, ...`)
+  for å unngå positional-argument-forvirring i call-site
+
+**Tester (40 nye):**
+- `tests/unit/bot/test_sizing.py` (+13):
+  - `compute_desired_lots`: SCALP/SWING/MAKRO-tier, default base_risk,
+    VIX quarter/half nedskalering, floor 0.01, agri-halvering (SWING
+    → 0.01 / MAKRO → 0.015), agri+VIX kombinert (→ 0.01-gulv)
+  - `lots_to_volume_units`: exact match, step-down-rounding,
+    min_volume-enforcing, fallback 1000, agri step_volume=100
+  - `volume_to_lots`: med info, zero returns None, FX fallback
+- `tests/unit/bot/test_ctrader_client.py` (+8):
+  - `send_new_order` MARKET (verifiser label/volume/side)
+  - `send_new_order` LIMIT med SL/TP/expiry
+  - `send_new_order` LIMIT uten limit_price → `ValueError`
+  - `amend_sl_tp` med SL+TP
+  - `amend_sl_tp` med kun SL
+  - `close_position` (positionId + volume)
+  - `cancel_order` (orderId)
+- `tests/unit/bot/test_entry.py` (+19):
+  - `_execute_trade_impl`: MARKET-happy-path, LIMIT (rules=`use_limit_orders`),
+    zero risk blocked, daily-loss blocked, oil geo+tight SL blocked,
+    total-korrelasjon blocked, agri out-of-session blocked,
+    agri in-session sender ordre med halvert volum
+  - `_is_monday_gap`: gap > 2×ATR blokker, utenfor første time →
+    False, ikke mandag → False
+  - `_agri_session_ok`: innenfor timer / utenfor / ukjent instrument
+  - `_log_trade_opened`: skriver korrekt JSON (signal-id,
+    instrument, direction uppercase, lots, position_id, closed_at=None)
+
+**Ikke endret:**
+- `~/scalp_edge/` — READ-ONLY gjennom hele session
+- Ingen prosesser rørt
+- Ingen kode-endring i eksisterende Bedrock-moduler utenfor
+  bot/{ctrader_client,entry,sizing,state}.py
+
+**Commits:** `c201304`.
+
+**Tester:** 890/890 grønne (fra 850 + 40 nye) på 32.3 sek.
+
+**Neste session:** 45 — `bot/exit.py` med `ExitEngine`. Portere
+`_manage_open_positions` (P1-P5 exit-prioritet), trail/BE-helpers,
+weekend-gate, execution-handlere (on_execution/on_reconcile/
+on_order_error), callback-wiring. Session 46 = `bot/__main__.py`
++ signal-handlers + full integrasjon.
 
 ### 2026-04-24 — Session 43: bot/entry + bot/sizing + AGRI-BUG FIX
 
