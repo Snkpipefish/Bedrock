@@ -2,10 +2,10 @@
 
 ## Current state
 
-- **Phase:** 5 — åpen. Session 21 FERDIG: `bedrock.config.instruments` med `InstrumentConfig` Pydantic + YAML-lasting + gold.yaml + corn.yaml som eksempler.
+- **Phase:** 5 — åpen. Session 22 FERDIG: CLI-integrasjon av `InstrumentConfig`. `bedrock backfill *` har nytt `--instrument`-flagg som slår opp ticker/contract/region/lat/lon/fred-series fra YAML; `fundamentals --instrument X` itererer over alle FRED-serier med per-item resiliens + retry-oppsummering. Ny `bedrock instruments list/show` kommando-gruppe.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** Fase 5 session 22 — integrer `InstrumentConfig` med backfill-CLI. `bedrock backfill prices --instrument gold` skal automatisk slå opp `stooq_ticker` fra YAML; `bedrock backfill cot-disaggregated --instrument gold` slår opp `cot_contract`; `bedrock backfill weather --instrument corn` slår opp `weather_lat/lon`. Legg til valgfri `--instrument`-flag til hver subkommando; eksisterende eksplisitt CLI-args fortsatt støttet. Foreslår også `bedrock instruments list` og `bedrock instruments show <id>` subkommandoer for å inspisere config.
+- **Next task:** Fase 5 fortsetter. Kandidater: (a) `inherits: family_financial/family_agri`-defaults-inheritance mot `config/defaults/family_*.yaml` (stille-skippet i session 21, YAML-filene skrevet for det); (b) `gates: [...]` med `cap_grade` (PLAN § 4.2) — krever scoring-engine-utvidelse; (c) `usda_blackout` kalender-gate (PLAN § 4.3); (d) top-level orchestrator som knytter instrument-config + DataStore + setup-generator sammen til én `generate_setups(instrument_id)`-API for UI/signal_server. Bruker velger.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -73,6 +73,85 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-24 — Session 22: CLI-integrasjon av InstrumentConfig
+
+Andre komponent i Fase 5: YAML fra session 21 brukes nå av CLI-laget.
+Brukermønster: `bedrock backfill fundamentals --instrument Gold --from
+2016-01-01` henter alle FRED-serier Gold trenger; én feil stopper ikke
+jobben, og retry-kommandoer for failed items printes på slutten.
+
+**Opprettet:**
+- `src/bedrock/cli/_instrument_lookup.py`:
+  - `DEFAULT_INSTRUMENTS_DIR = Path("config/instruments")`
+  - `find_instrument(id, dir)` — case-insensitive fallback etter eksakt
+    match. `click.UsageError` ved ukjent ID eller manglende katalog
+- `src/bedrock/cli/_iteration.py`:
+  - `ItemResult` dataclass (item_id, ok, rows_written, error)
+  - `run_with_summary(items, process_fn, retry_command, label)` —
+    per-item progress (`[n/N] label=id`), fanger exceptions, samler
+    opp resultater, printer summary på slutten, gir exit-kode 1 ved
+    minst én feil. Failed items → stderr med ferdig-formattert
+    retry-kommando
+- `src/bedrock/cli/instruments.py`:
+  - `bedrock instruments list` — kolonne-tabell: id, asset_class,
+    ticker, cot_contract, weather, fred-count. Sortert alfabetisk
+  - `bedrock instruments show <id>` — metadata-dump + rules-oversikt.
+    FinancialRules viser horisont-liste + familie-sett på tvers;
+    AgriRules viser max_score + publish-gulv + familie-liste
+- `tests/unit/test_cli_instruments.py` (10 tester)
+- `tests/unit/test_cli_backfill_with_instrument.py` (15 tester)
+
+**Endret:**
+- `src/bedrock/cli/backfill.py`:
+  - Alle 5 subkommandoer fikk `--instrument <id>` + `--instruments-dir`
+  - `--ticker` (prices), `--contract` (cot), `--region/--lat/--lon`
+    (weather), `--series-id` (fundamentals) ble alle valgfrie —
+    eksplisitt arg vinner, ellers slås opp i YAML
+  - Per-subkommando `_resolve_*`-helpers håndterer oppslag + tydelige
+    feilmeldinger når YAML mangler nødvendige felter (f.eks. Gold
+    uten weather_region → "Instrument 'Gold' har ikke komplett
+    weather-metadata")
+  - `fundamentals_cmd` itererer via `run_with_summary`; DataStore
+    opprettes lat (ingen tom DB-fil ved 0-resultat)
+- `src/bedrock/cli/__main__.py`: `cli.add_command(instruments)`
+- `tests/unit/test_cli_backfill_fundamentals.py`: 2 tester oppdatert
+  til nytt output-format (`OK DGS10 → 3 row(s)` i stedet for
+  `Wrote 3 observation(s)`)
+
+**Design-valg:**
+- Case-insensitive instrument-lookup (f.eks. `--instrument gold` →
+  `Gold.yaml`) siden brukerne ofte skriver lowercase i CLI, men YAML-
+  ID-en er ofte kanonisk casing
+- DB-tag kommer alltid fra `cfg.instrument.id` (kanonisk) når YAML-
+  lookup brukes — gir konsistent DB-nøkkel uavhengig av hvordan
+  brukeren skriver ID-en
+- Resiliens-mønster generalisert via `run_with_summary`-helper slik at
+  fremtidige multi-item CLI-er (f.eks. multi-region weather, multi-
+  ticker prices) bare plugger inn
+- 1-item success undertrykker summary-header for å unngå støy i den
+  vanlige ett-ticker-for-ett-instrument-caset
+- Eksplisitte args bevart: `bedrock backfill prices --instrument Silver
+  --ticker xagusd` funker uten å kreve silver.yaml — lar brukere teste
+  før YAML er skrevet
+
+**Commits:** `398400b` — 8 filer, +1492/-68 linjer.
+
+**Tester:** 376/376 grønne på 11.8 sek (fra 351 i session 21 → +25).
+
+**Bevisste utsettelser:**
+- `inherits: family_financial`-inheritance — neste session
+- `gates: [...]` cap_grade-regler — trenger scoring-engine-utvidelse
+- `usda_blackout` kalender-integrering — egen session
+- Top-level orchestrator `generate_setups(instrument_id)` — når mer
+  av Fase 5-scaffolding er på plass
+
+**Invariant:** ingen endring i låste API-er (DataStore, Engine,
+Setup-generator, Backfill-CLI felles mønster fra Fase 3). CLI-er har
+additive endringer: nye flag, eksisterende signatur-usage uendret.
+
+**Neste session:** bruker velger mellom (a-d) listet over i "Next
+task".
 
 ### 2026-04-24 — Session 21: Fase 5 åpnet, instrument-config
 
