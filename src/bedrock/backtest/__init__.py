@@ -31,15 +31,18 @@ from bedrock.backtest.report import (
     summary_stats,
 )
 from bedrock.backtest.result import BacktestResult, BacktestSignal
-from bedrock.backtest.runner import run_outcome_replay
+from bedrock.backtest.runner import run_orchestrator_replay, run_outcome_replay
+from bedrock.backtest.store_view import AsOfDateStore
 
 __all__ = [
+    "AsOfDateStore",
     "BacktestConfig",
     "BacktestReport",
     "BacktestResult",
     "BacktestSignal",
     "format_json",
     "format_markdown",
+    "run_orchestrator_replay",
     "run_outcome_replay",
     "summary_stats",
 ]

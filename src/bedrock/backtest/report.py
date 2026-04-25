@@ -12,7 +12,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from bedrock.backtest.result import BacktestResult
+from bedrock.backtest.result import BacktestResult, BacktestSignal
 
 
 class BacktestReport(BaseModel):
@@ -74,6 +74,24 @@ def summary_stats(result: BacktestResult) -> BacktestReport:
         else None
     )
 
+    # Per-grade-breakdown — kun når grade-felt er populert (orchestrator-replay)
+    by_grade: dict[str, dict[str, float]] = {}
+    grade_buckets: dict[str, list[BacktestSignal]] = {}
+    for s in sigs:
+        if s.grade is None:
+            continue
+        grade_buckets.setdefault(s.grade, []).append(s)
+
+    for grade, bucket in grade_buckets.items():
+        bucket_returns = [s.forward_return_pct for s in bucket]
+        bucket_hits = sum(1 for s in bucket if s.hit)
+        by_grade[grade] = {
+            "n_signals": float(len(bucket)),
+            "n_hits": float(bucket_hits),
+            "hit_rate_pct": bucket_hits / len(bucket) * 100.0,
+            "avg_return_pct": mean(bucket_returns),
+        }
+
     return BacktestReport(
         n_signals=n,
         n_hits=hits,
@@ -85,7 +103,14 @@ def summary_stats(result: BacktestResult) -> BacktestReport:
         avg_drawdown_pct=avg_dd,
         worst_drawdown_pct=worst_dd,
         n_published=n_pub,
+        by_grade=_sorted_grade_dict(by_grade),
     )
+
+
+def _sorted_grade_dict(d: dict[str, dict[str, float]]) -> dict[str, dict[str, float]]:
+    """Sortér grade-dict etter rangering (A+ først, så A, B, C, D)."""
+    rank = {"A+": 0, "A": 1, "B": 2, "C": 3, "D": 4}
+    return dict(sorted(d.items(), key=lambda kv: rank.get(kv[0], 99)))
 
 
 # ---------------------------------------------------------------------------

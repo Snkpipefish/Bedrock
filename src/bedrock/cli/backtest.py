@@ -17,6 +17,7 @@ from bedrock.backtest import (
     BacktestConfig,
     format_json,
     format_markdown,
+    run_orchestrator_replay,
     run_outcome_replay,
     summary_stats,
 )
@@ -86,6 +87,47 @@ def backtest() -> None:
     type=click.Path(path_type=Path),
     help="Path til SQLite-databasen.",
 )
+@click.option(
+    "--mode",
+    type=click.Choice(["outcome", "orchestrator"], case_sensitive=False),
+    default="outcome",
+    show_default=True,
+    help=(
+        "Replay-modus. outcome=kun analog_outcomes-tabell (raskt). "
+        "orchestrator=full Engine-kjøring as-of-date per ref_date "
+        "(populerer score/grade, men tregt — sekunder per iterasjon)."
+    ),
+)
+@click.option(
+    "--step-days",
+    type=int,
+    default=1,
+    show_default=True,
+    help=(
+        "Steg mellom ref_dates (kun orchestrator-mode). 1=daglig, "
+        "5=ukentlig, 21=månedlig. Default 1."
+    ),
+)
+@click.option(
+    "--direction",
+    type=click.Choice(["buy", "sell"], case_sensitive=False),
+    default="buy",
+    show_default=True,
+    help="Direction å rapportere (kun orchestrator-mode).",
+)
+@click.option(
+    "--instruments-dir",
+    type=click.Path(path_type=Path),
+    default=Path("config/instruments"),
+    show_default=True,
+    help="Sti til instrument-YAML-katalog (kun orchestrator-mode).",
+)
+@click.option(
+    "--max-iterations",
+    type=int,
+    default=None,
+    help="Hard cap på antall iterasjoner (kun orchestrator-mode). Ingen default.",
+)
 def run_cmd(
     instrument: str,
     horizon_days: int,
@@ -95,6 +137,11 @@ def run_cmd(
     report_format: str,
     output: Path | None,
     db_path: Path,
+    mode: str,
+    step_days: int,
+    direction: str,
+    instruments_dir: Path,
+    max_iterations: int | None,
 ) -> None:
     """Kjør outcome-replay backtest mot analog_outcomes-tabellen.
 
@@ -125,7 +172,17 @@ def run_cmd(
     )
 
     store = DataStore(db_path)
-    result = run_outcome_replay(store, cfg)
+    if mode.lower() == "orchestrator":
+        result = run_orchestrator_replay(
+            store,
+            cfg,
+            instruments_dir=str(instruments_dir),
+            direction=direction.lower(),
+            step_days=step_days,
+            max_iterations=max_iterations,
+        )
+    else:
+        result = run_outcome_replay(store, cfg)
     report = summary_stats(result)
 
     if cfg.report_format == "json":
