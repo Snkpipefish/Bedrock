@@ -627,6 +627,33 @@ document.querySelectorAll('.tab').forEach(btn => {
   btn.addEventListener('click', () => activateTab(btn.dataset.tab));
 });
 
+// ─── Server-status (session 53) ────────────────────────────────
+// Polling /health for å vise live ok/down-pill i header. Endrer ikke
+// data-flyt — endpointet finnes allerede fra Fase 7.
+async function loadServerStatus() {
+  const pill = document.getElementById('server-status');
+  if (!pill) return;
+  const txt = pill.querySelector('.status-text');
+  try {
+    const t0 = performance.now();
+    const res = await fetch('/health', { cache: 'no-store' });
+    const latencyMs = Math.round(performance.now() - t0);
+    if (res.ok) {
+      pill.dataset.status = 'ok';
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      if (txt) txt.textContent = `online · ${hh}:${mm} · ${latencyMs}ms`;
+    } else {
+      pill.dataset.status = 'down';
+      if (txt) txt.textContent = `down · http ${res.status}`;
+    }
+  } catch (_) {
+    pill.dataset.status = 'down';
+    if (txt) txt.textContent = 'unreachable';
+  }
+}
+
 // ─── Start ────────────────────────────────────────────────────
 wireFilterBar('skipsloggen', renderTradeTableFiltered);
 wireFilterBar('financial',   renderFinancialFiltered);
@@ -635,4 +662,6 @@ _wireModalGlobal();
 _wireModalDelegation();
 
 loadSkipsloggen();
+loadServerStatus();
 setInterval(loadSkipsloggen, REFRESH_INTERVAL_MS);
+setInterval(loadServerStatus, REFRESH_INTERVAL_MS);
