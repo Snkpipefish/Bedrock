@@ -4,7 +4,12 @@
 
 - **Phase:** 10 **ÅPEN** (analog-matching + ubrukt-data-audit). Splittet i to spor per bruker-beslutning 2026-04-25:
   - **Spor B — ubrukt-data-audit (session 56):** dokumentasjon, ingen kode. **LUKKET 2026-04-25**
-  - **Spor A — analog-matching (sessions 57-60):** outcome-labels → `find_analog_cases` → `analog`-driver-familie → UI-rendering. **VENTER på beslutninger A-D fra audit-rapport.**
+  - **Spor A — analog-matching (sessions 57-61):** A-D besvart 2026-04-25 (M/B2/U/split). Re-numrert til 5 sessions etter D-splitt:
+    - **57:** ADR-005 + skjema + DataStore-utvidelse + ENSO-fetcher (pure kode). **LUKKET 2026-04-25**
+    - **58:** backfill-eksekvering (prices + cot + fundamentals + ENSO + agri_history-migrering)
+    - **59:** `find_analog_cases`-impl + asset-klasse-dim-mapping
+    - **60:** `analog`-driver-familie + YAML-integrasjon
+    - **61:** UI-rendering (modal-utvidelse + `analog`-felt på SignalEntry)
 - **Phase:** 9 **LUKKET 2026-04-25** (UI: 4 faner + admin-editor). Struktureres som tre runder per bruker-beslutning 2026-04-24:
   - **Runde 1 (session 47-50):** minimal data-wiring per fane, funksjonelt null polish
   - **Runde 2 (session 51-53):** styling, flyt, filtrering, detaljmodaler — **LUKKET 2026-04-25**
@@ -20,30 +25,13 @@
 - Session 54 lukket — Admin rule-editor (instrument-YAML). Ny `/admin`-route + `web/admin.html` med kode-gate (X-Admin-Code → sessionStorage/localStorage), to-pane editor (sidebar med instrument-liste + YAML-textarea), Reload + Lagre + Cmd/Ctrl+S. Bygger på eksisterende `/admin/rules`-endepunkter fra Fase 7 session 38.
 - Session 55 lukket — Admin-editor utvidet: (a) lightweight dry-run (`POST /admin/rules/<id>/dry-run` validerer Pydantic uten å skrive), (b) git-commit-on-save (subprocess `git -C <root>` add + commit; auto-push-hook pusher; respons har `git`-felt), (c) logs-viewer (`GET /admin/logs?tail=N` + UI-tab med monospace pre-output). **Runde 3 LUKKET** — admin-editor er funksjonell for instrument-regler med safe-edit-loop (validate → save → commit → push) og pipeline-log-viewer. **Fase 9 LUKKET** — alle tre runder (data-wiring + filter/modal/polish + admin-editor) er levert.
 - Session 56 lukket — Fase 10 spor B (audit). `docs/data_audit_2026-04.md` levert: kilde × leses-av-tabell + K-NN-feasibility per asset-klasse mot PLAN § 6.5. Hovedfunn: bedrock.db er tom (0 rader), 4 av 5 DataStore-getters har ingen konsument (kun get_prices brukes), 3 brudd mot § 6.5 flagget (energy backwardation/supply, grains/softs ENSO, softs UNICA). Fire beslutninger til bruker (A-D) blokkerer session 57.
+- Session 57 lukket — ADR-005 + skjema + DataStore-utvidelse + ENSO-fetcher. Pure kode + 45 nye tester (1038/1038 grønt). Ingen backfill-eksekvering (det er session 58). Beslutninger A-D besvart: A=M (NOAA ONI-fetcher), B=B2 (migrer agri_history månedlig, ny `weather_monthly`-tabell), C=U (utsett energy/softs), D=split (57=kode, 58=backfill).
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
-- **Blocked:** ja — Spor A (sessions 57-60) venter på beslutninger A-D fra audit (se Open questions).
-- **Next task:** **Session 57** = ADR-005 (DataStore-API for analog) + outcome-labels + backfill. Først må A-D besvares.
+- **Blocked:** nei
+- **Next task:** **Session 58** = backfill-eksekvering. Forventet 1-2 timer wall-time. Rekkefølge: prices (Stooq) → cot_disaggregated (Gold + Corn) → fundamentals (DGS10/DGS2/T10YIE/DTWEXBGS) → ENSO (NOAA ONI) → migrere agri_history månedlig fra `~/cot-explorer/data/agri_history/` til `weather_monthly`-tabellen → beregne `analog_outcomes` (forward_return + max_drawdown for 30d/90d horisonter) fra `prices`.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
-
-### Fase 10 — venter på A-D før session 57 starter
-
-- **A.** Brudd 2 (ENSO mangler kilde for grains + softs): legge inn
-  NOAA ONI-fetcher i Spor A som tillegg, eller utsette grains K-NN?
-  Anbefaling i audit: M (manuelt fyll, ~150 linjer ny fetcher).
-- **B.** Weather-form for grains/softs: Open-Meteo daglig backfill
-  via eksisterende `bedrock backfill weather` (beregne hot_days/
-  water_bal i driver) ELLER migrere `~/cot-explorer/agri_history/`
-  månedlig (krever ny `weather_monthly`-tabell + ADR)? Påvirker
-  session 57-scope.
-- **C.** Brudd 1 (energy backwardation + supply_disruption_level
-  mangler) + Brudd 3 (softs UNICA mangler): bekrefte utsett —
-  ingen K-NN for energy/softs i Fase 10? Anbefaling i audit: U.
-- **D.** Backfill-rekkefølge i session 57: prices → cot_disaggregated
-  (gold + corn) → fundamentals (DGS10, DGS2, T10YIE, DTWEXBGS) →
-  weather (avhenger av B). Forventet runtime 1-2 timer. OK å kjøre
-  ende-til-ende i session 57?
 
 ### Eldre, fortsatt åpne
 
@@ -78,11 +66,15 @@
 - **Engine API låst** (fra Fase 1): `Engine.score(instrument, store, rules, horizon=None) -> GroupResult`.
   `rules` er `FinancialRules | AgriRules`. Ingen breaking changes på
   `GroupResult` uten ADR.
-- **DataStore-API låst** (fra Fase 2): metoder `get_prices`, `get_cot`,
-  `get_fundamentals`, `get_weather` og tilsvarende `append_*` er
+- **DataStore-API låst** (fra Fase 2, utvidet ADR-005 Fase 10 session 57):
+  metoder `get_prices`, `get_cot`, `get_fundamentals`, `get_weather`,
+  `get_weather_monthly`, `get_outcomes` og tilsvarende `append_*` er
   kontrakten drivere + fetch-lag bygger på. Returner-typer låst
-  (`pd.Series` for prices/fundamentals, `pd.DataFrame` for cot/weather).
-  Schema-endring krever ADR + migrerings-plan.
+  (`pd.Series` for prices/fundamentals, `pd.DataFrame` for cot/weather/
+  weather_monthly/outcomes). Schema-endring krever ADR + migrerings-plan.
+  Nye additiver i ADR-005: `weather_monthly` + `analog_outcomes`-tabeller,
+  ENSO som `series_id="NOAA_ONI"` i `fundamentals`. `find_analog_cases`-
+  signatur designet (impl venter til session 59).
 - **SIMD-sensitive deps må pinnes** (fra ADR-002): numpy pinnet `>=2.2,<2.3`.
   Nye SIMD-tunge pakker (pyarrow, duckdb, fastparquet, scipy, numexpr) må
   avvises eller pinnes til versjon verifisert på produksjons-CPU.
@@ -124,6 +116,114 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 57: Fase 10 spor A — ADR-005 + skjema + DataStore-utvidelse + ENSO-fetcher (LUKKET)
+
+**Scope:** Første kode-session i Spor A. Etter D-splitten:
+**pure kode + tester, mockbart, ingen backfill-eksekvering**. Etablerer
+all skjema-/API-grunn for K-NN slik at session 58 kan fokusere på
+ren backfill og session 59 på K-NN-impl.
+
+**Endret denne session (commit `874998e`):**
+
+`docs/decisions/005-analog-data-schema.md` (ny, 235 linjer):
+- B1: ENSO i `fundamentals` med `series_id="NOAA_ONI"` (ikke ny tabell)
+- B2: ny `weather_monthly`-tabell (separat fra daglig `weather`)
+- B3: ny `analog_outcomes`-tabell (lagrer rå return + drawdown,
+  ikke binær hit — terskel er driver-config)
+- B4: `find_analog_cases`-API-kontrakt (impl venter session 59)
+- B5: eksempel-driver-skiss (`analog_hit_rate`, ikke implementert)
+- 5 forkastede alternativer dokumentert (A1-A5)
+
+`src/bedrock/data/schemas.py` (+120 linjer):
+- `WeatherMonthlyRow` Pydantic-modell + `_MONTH_RE`-validator for
+  'YYYY-MM'-format
+- `DDL_WEATHER_MONTHLY` + `TABLE_WEATHER_MONTHLY` + `WEATHER_MONTHLY_COLS`
+- `AnalogOutcomeRow` med påkrevd `forward_return_pct` + valgfri
+  `max_drawdown_pct`, `horizon_days > 0`-validator
+- `DDL_ANALOG_OUTCOMES` + `TABLE_ANALOG_OUTCOMES` + `ANALOG_OUTCOMES_COLS`
+
+`src/bedrock/data/store.py` (+220 linjer):
+- `_init_schema()` oppretter de to nye tabellene
+- `append_weather_monthly` + `get_weather_monthly` + `has_weather_monthly`
+  (NULL-safe int/float-konvertering, INSERT OR REPLACE på PK)
+- `append_outcomes` + `get_outcomes` (batch-lookup via `ref_dates`-
+  parameter med IN-clause; tomt sequence short-circuit-er DB-hit) +
+  `has_outcomes` (med valgfri horizon_days-filter)
+- `from datetime import date` lagt til i toppen
+
+`src/bedrock/fetch/enso.py` (ny, 130 linjer):
+- `NOAA_ONI_URL` (CPC ASCII-endepunkt)
+- `_SEAS_TO_MONTH`-mapping (DJF→1, JFM→2, ..., NDJ→12)
+- `parse_noaa_oni_text(text)` — rein parser, eksponert for
+  test-fixture; skipper header, blanke linjer, missing-marker
+  (-99.9), unparseable verdier
+- `fetch_noaa_oni()` — wrapper med HTTP-feilhåndtering →
+  `NoaaOniFetchError`
+- Output matcher `DataStore.append_fundamentals`-skjema
+  (series_id/date/value)
+
+`config/fetch.yaml`:
+- Ny `enso`-entry: cron `0 6 12 * *` (12. i mnd 06:00 UTC),
+  `stale_hours: 720`, `on_failure: log_and_skip`,
+  `table: fundamentals`
+
+`tests/unit/test_store_weather_monthly.py` (ny, 11 tester):
+- Pydantic: minimal/full/bad-month/negative-precip/extra-field
+- Round-trip + idempotens + last_n + KeyError + has-helper
+- NULL-håndtering for valgfrie kolonner
+- Multi-region-isolering
+
+`tests/unit/test_store_outcomes.py` (ny, 14 tester):
+- Pydantic: minimal/full/zero-horizon-rejected/extra-field-rejected
+- Append/get + idempotens + horizon-filter
+- Batch-lookup på ref_dates (incl. Timestamp-objekter, tomt sequence)
+- max_drawdown valgfri
+- PK inkluderer horizon (samme dato to horisonter = to rader)
+
+`tests/unit/test_fetch_enso.py` (ny, 12 tester):
+- Parser: SEAS→month-mapping, value-konvertering, header-skip,
+  blank/short-line-skip, -99.9-skip, unparseable-skip + warn,
+  empty/header-only → empty frame
+- Output kompatibel med `FredSeriesRow` Pydantic
+- HTTP-mock: success / 503 / nettverks-feil
+- Integrasjon: fetcher → store.append_fundamentals → get_fundamentals
+
+**Designvalg (utover ADR):**
+
+- **`from datetime import date` i store.py** ble nødvendig for
+  `Sequence[str | date | pd.Timestamp]`-type-hint på `get_outcomes`.
+  Ruff fanget det som F821; bedre å fikse ved import enn å bruke
+  `"date"`-string-form.
+- **Empty-`ref_dates`-short-circuit** i `get_outcomes`: returnerer
+  tom DataFrame uten DB-hit. Caller (K-NN) kan trygt sende inn
+  `neighbors["ref_date"].tolist()` selv når neighbors er tom.
+- **Test-fixture er hard-kodet ASCII-utdrag** fra ekte NOAA-format
+  (DJF 1950, NDJ 1950 for å verifisere mnd-konvensjon, DJF/JFM 2024
+  for moderne-tilfelle). Ingen ekte HTTP i CI; matcher
+  bedrock-konvensjon for fetch-tester.
+- **`http_get_with_retry` monkey-patches på modul-attributtet**
+  (`bedrock.fetch.enso.http_get_with_retry`), ikke på base-modulen.
+  Sikrer at re-importer gir riktig dispatch.
+
+**Verifisert:**
+- pytest full → 1038/1038 (var 993, +45 nye)
+- ruff check + format → grønt på alle nye filer
+- Pre-commit hook → grønt
+- Auto-push → `origin/main`
+
+**Neste session (58 — backfill-eksekvering):**
+- prices: `bedrock backfill prices --instruments Gold Corn --from 2010`
+- cot_disaggregated: Gold + Corn contracts
+- fundamentals: DGS10, DGS2, T10YIE, DTWEXBGS (alle FRED, 2010-)
+- ENSO: ny `bedrock backfill enso`-CLI (eller ad-hoc-script i
+  første versjon, formaliseres senere)
+- weather_monthly: migrere `~/cot-explorer/data/agri_history/<14 regioner>.json`
+- analog_outcomes: beregne fra prices for begge horisonter (30d/90d)
+- Wall-time forventet 1-2 timer; backfill-CLI-kommandoer er
+  idempotent så trygg å re-kjøre.
+
+---
 
 ### 2026-04-25 — Session 56: Fase 10 spor B — fetch-data-audit + K-NN-feasibility (LUKKET)
 
