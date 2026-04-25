@@ -12,9 +12,10 @@
 - Session 50 lukket — Fane 4 Kartrommet (pipeline-helse, gruppert per PLAN § 10.4). **Runde 1 LUKKET** — alle fire faner har funksjonell data-wiring.
 - **Pre-runde-2 cleanup (2026-04-25):** Python 3.10-baseline (ADR-004), CI bumpet til 3.10, pre-commit aktivert lokalt via `.githooks/pre-commit`-delegering, datetime.UTC reverted til timezone.utc i 20 filer. Pyright-step non-blocking i CI inntil 162 akkumulerte type-errors er ryddet (egen task).
 - Session 51 lukket — Filter-bar (horizon/grade/instrument/direction) på Skipsloggen + Financial + Soft commodities. Pure filter-logikk i `web/assets/filter.js`; 18 logiske tester (`tests/web/test_filter.test.mjs`).
+- Session 52 lukket — Modal med explain-trace. SignalEntry utvidet med `families: dict[str, FamilyResult]` + `active_families: int` (persisterer driver-trace fra Engine til JSON). Klikk på setup-kort eller trade-rad åpner modal med score-bar/driver-tabell/setup-detaljer. Trade-modal har disclaimer om at trace ikke lagres per trade enda.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** **Session 52 (Option C — modal)**. Først kartlegg hva backend eksponerer av explain-trace (Fase 5 orchestrator skal allerede ha trace-strukturen), så implementer modal som åpnes ved klikk på trade-rad og setup-kort. Etter session 52: session 53 = Option A (polish — typografi/farger/hierarki/header).
+- **Next task:** **Session 53 (Option A — polish)**. Typografi, farger, visuell hierarki, header-design. Dashboard er nå funksjonelt komplett: 4 faner + filter + modal + persistert explain-trace. Polish-sessionen tuner det visuelle uten å endre data-flyt.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -96,6 +97,133 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 52: Fase 9 runde 2 — modal + persistert explain-trace (Option C)
+
+**Scope:** Klikk på setup-kort / trade-rad åpner modal. Setup-modal
+viser per-familie + per-driver explain-trace direkte fra Engine.
+Trade-modal viser entry/setup/PnL/posisjons-data.
+
+**Kartlegging avdekte at backend droppet trace:**
+
+`GroupResult` (Engine) bærer `families: dict[str, FamilyResult]` +
+`gates_triggered` + `active_families`. Men `_build_entry` i
+orchestrator kopierte kun `score`/`grade`/`max_score`/`gates_triggered`
+inn i `SignalEntry` — `families` ble droppet på vei til JSON.
+`signal_server` er pass-through på filer; den kaller ikke Engine.
+`PersistedSignal` har `extra='allow'` så ekstra felt round-tripper
+transparent.
+
+Bruker valgte Option B-utvidet (mot A-lett / C-hybrid): persister
+families nå, lever modal med ekte forklaring, ikke et tomt stillas.
+
+**Backend (orchestrator):**
+
+`src/bedrock/orchestrator/signals.py`:
+- Importerer `FamilyResult` fra `engine.engine`
+- `SignalEntry` får to nye felt:
+  - `families: dict[str, FamilyResult] = Field(default_factory=dict)`
+  - `active_families: int = 0`
+- Begge har defaults så eksisterende tester/fixtures som instansierer
+  SignalEntry direkte ikke brekker (additivt, ikke breaking)
+- `_build_entry` populerer begge fra `group_result.families` og
+  `group_result.active_families` i begge return-stier (skip_reason +
+  stable-setup)
+
+`tests/logical/test_orchestrator_signals.py`:
+- Ny test `test_generate_signals_persists_explain_trace_families`
+  verifiserer at families er populert med min ett driver per familie,
+  og at `model_dump(mode='json')` produserer JSON med
+  `families.<name>.drivers[*]` med `{name, value, weight, contribution}`.
+- Test passerer på første kjøring; resten av suite (979 tester) er
+  uberørt → totalt 980/980.
+
+**Frontend:**
+
+`web/index.html`:
+- `<dialog id='modal' class='modal'>` rett før `<script>`-taggene.
+  Nytt globalt modal-element brukt av begge klikk-typer.
+
+`web/assets/app.js` (+325):
+- `openSetupModal(entry)` — bygger header (instrument + direction +
+  horizon med farget border-bottom), score-bar (med publish-floor-
+  tick), driver-trace-section med collapsible `<details>` per familie
+  (drivers sortert på |contribution| desc, vises som tabell name/value/
+  weight/bidrag), setup-tabell, persistens-tabell, gates_triggered-
+  liste, skip_reason-tekst hvis present.
+- `openTradeModal(entry)` — header + Tidslinje/Setup/Posisjon/PnL
+  med pos/neg-fargekoding på pnl_usd. Disclaimer i bunn: "Driver-
+  trace lagres ikke per trade enda — se setup-modalen via
+  Financial / Soft commodities for full forklaring."
+- `closeModal()` + `_wireModalGlobal` (klikk på dialog-elementet
+  utenfor `.modal-content` lukker; klikk på `.modal-close` lukker;
+  ESC håndteres av `<dialog>` native).
+- `_wireModalDelegation()` — én listener per container
+  (`#financial-cards`, `#agri-cards`, `#trade-log-body`). Bruker
+  `el.__bedrockSetups`/`__bedrockEntries` som cache av filtrert
+  subset (filter-aware lookup). Klikk på `[data-modal-idx]` slår opp
+  riktig entry. Tastatur (Enter/Space) på fokuserte kort/rader virker
+  også (role='button', tabindex='0' på kort/rader).
+- `renderSetupCards`/`renderTradeTable` setter
+  `el.__bedrockSetups`/`__bedrockEntries` etter innerHTML, og legger
+  `class='clickable' data-modal-idx=N tabindex='0' role='button'`
+  på hver kort/rad.
+
+`web/assets/style.css` (+217):
+- `.modal` + `::backdrop` (rgba 0.55-overlay)
+- `.modal-head` med farget border-bottom (grønn buy / rød sell) og
+  farget direction-pill matching headers
+- `.modal-scorebar` (lineær gradient 0→100%) + `.modal-scorebar-mark`
+  (rød 2px-tick på publish-floor-prosenten)
+- `.modal-family` (collapsible card-style) + `.modal-driver-table`
+  (kompakt 4-kolonne med tabular-nums)
+- `.modal-kv` (key/value-tabell), `.modal-disclaimer` (italic, sentrert,
+  border-top)
+- `.setup-card.clickable` + `tr.clickable` med subtil hover-løft
+
+**Designvalg:**
+
+- **Persister hele FamilyResult**, ikke en flatere shape. Pydantic-
+  modellen er allerede definert i Engine; gjenbruk den i SignalEntry
+  gir round-trip uten nye konverteringssteg.
+- **Ikke breaking** — defaults på nye felt + `extra='allow'` i
+  `PersistedSignal` betyr at gamle SignalEntry-fixtures og signal-
+  server-konsumenter fortsetter å funke uten endring.
+- **Driver-trace bak `<details>`-collapse** — fane 2 har 2-6 familier
+  med 1-5 drivere hver. Modalen kan vise alle åpent men hver familie
+  blir ~80px → 480px tre-skjerm. Default lukket gir oversikt; bruker
+  åpner det de bryr seg om.
+- **Trade-modal _ikke_ trace-utvidet** — det krever signal_id-lookup
+  mot signals.json (fersk på publish-tidspunkt, ikke nødvendigvis nå).
+  Disclaimer dokumenterer dette eksplisitt; egen senere session.
+- **`__bedrockSetups`/`__bedrockEntries` på containerelementet**
+  (ikke globalt) — etter filter-endring re-renderer vi cards, og
+  cachen følger med. Indeksbasert oppslag over filtrert liste virker
+  umiddelbart.
+
+**Verifisert:**
+- `pytest` (full suite) → 980/980 grønne (var 979 før, +1 ny test)
+- `node --test tests/web/test_filter.test.mjs` → 18/18 grønne
+  (filter-tester uberørt)
+- Browser preview med mock-data:
+  - Setup-modal: GOLD/BUY/SWING header, score-bar 3.20/5.00 med
+    publish-tick på 2.50, families {trend, positioning, macro},
+    expand → sma200_align 1.00 × 0.60 = 0.60 første rad (sortert på
+    |bidrag|)
+  - Trade-modal: EURUSD/SELL/SCALP header, WIN-pill, +280.50 USD ✓
+    realisert (grønn), disclaimer-tekst i bunn
+  - Backdrop-click lukker; closeModal() lukker
+- `<dialog>`-native ESC virker i ekte browser (synthetic
+  KeyboardEvent treffer ikke browser-internal ESC-handler — confirmed
+  ikke-bug)
+
+**Commit:** `b4a7ce9 feat(ui): modal med explain-trace + persisterte
+families i SignalEntry`. Auto-pushet til origin/main.
+
+**Neste:** Session 53 = Option A (polish — typografi/farger/hierarki/
+header). Dashboard er nå funksjonelt komplett (4 faner + filter +
+modal + persistert trace) → polish-sessionen tuner det visuelle uten
+å røre data-flyt eller backend.
 
 ### 2026-04-25 — Session 51: Fase 9 runde 2 — filter-bar (Option B)
 
