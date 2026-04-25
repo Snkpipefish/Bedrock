@@ -6,7 +6,7 @@
   - **Spor B — ubrukt-data-audit (session 56):** dokumentasjon, ingen kode. **LUKKET 2026-04-25**
   - **Spor A — analog-matching (sessions 57-61):** A-D besvart 2026-04-25 (M/B2/U/split). Re-numrert til 5 sessions etter D-splitt:
     - **57:** ADR-005 + skjema + DataStore-utvidelse + ENSO-fetcher (pure kode). **LUKKET 2026-04-25**
-    - **58:** backfill-eksekvering (prices + cot + fundamentals + ENSO + agri_history-migrering)
+    - **58:** backfill-eksekvering (3 nye CLI + Yahoo-port + full backfill). **LUKKET 2026-04-25**
     - **59:** `find_analog_cases`-impl + asset-klasse-dim-mapping
     - **60:** `analog`-driver-familie + YAML-integrasjon
     - **61:** UI-rendering (modal-utvidelse + `analog`-felt på SignalEntry)
@@ -26,9 +26,10 @@
 - Session 55 lukket — Admin-editor utvidet: (a) lightweight dry-run (`POST /admin/rules/<id>/dry-run` validerer Pydantic uten å skrive), (b) git-commit-on-save (subprocess `git -C <root>` add + commit; auto-push-hook pusher; respons har `git`-felt), (c) logs-viewer (`GET /admin/logs?tail=N` + UI-tab med monospace pre-output). **Runde 3 LUKKET** — admin-editor er funksjonell for instrument-regler med safe-edit-loop (validate → save → commit → push) og pipeline-log-viewer. **Fase 9 LUKKET** — alle tre runder (data-wiring + filter/modal/polish + admin-editor) er levert.
 - Session 56 lukket — Fase 10 spor B (audit). `docs/data_audit_2026-04.md` levert: kilde × leses-av-tabell + K-NN-feasibility per asset-klasse mot PLAN § 6.5. Hovedfunn: bedrock.db er tom (0 rader), 4 av 5 DataStore-getters har ingen konsument (kun get_prices brukes), 3 brudd mot § 6.5 flagget (energy backwardation/supply, grains/softs ENSO, softs UNICA). Fire beslutninger til bruker (A-D) blokkerer session 57.
 - Session 57 lukket — ADR-005 + skjema + DataStore-utvidelse + ENSO-fetcher. Pure kode + 45 nye tester (1038/1038 grønt). Ingen backfill-eksekvering (det er session 58). Beslutninger A-D besvart: A=M (NOAA ONI-fetcher), B=B2 (migrer agri_history månedlig, ny `weather_monthly`-tabell), C=U (utsett energy/softs), D=split (57=kode, 58=backfill).
+- Session 58 lukket — full backfill kjørt. To kilder krevde fix underveis: (a) Stooq begynte å kreve API-nøkkel → port av cot-explorers `build_price_history.py` til ny `bedrock/fetch/yahoo.py`, Yahoo nå default for prices; (b) CFTC endret feltnavn `m_money_positions_long` → `..._long_all` → `_DISAGG_FIELD_MAP` rebased. 3 nye CLI-er: `bedrock backfill enso/weather-monthly/outcomes`. DB vokste fra 0 → 3.54 MB med 46 569 rader. 1085/1085 tester grønne (+47 nye). Se `docs/backfill_2026-04.md` for full statistikk.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** **Session 58** = backfill-eksekvering. Forventet 1-2 timer wall-time. Rekkefølge: prices (Stooq) → cot_disaggregated (Gold + Corn) → fundamentals (DGS10/DGS2/T10YIE/DTWEXBGS) → ENSO (NOAA ONI) → migrere agri_history månedlig fra `~/cot-explorer/data/agri_history/` til `weather_monthly`-tabellen → beregne `analog_outcomes` (forward_return + max_drawdown for 30d/90d horisonter) fra `prices`.
+- **Next task:** **Session 59** = `find_analog_cases`-impl + asset-klasse-dim-mapping. Per ADR-005 B4: weighted Euclidean K-NN over normaliserte dim-verdier per asset-klasse (per § 6.5-tabellen). Drivere skrives ikke i 59 (det er 60), men feature-extractor som henter `query_dims` fra DataStore for ferskeste observasjoner per asset-klasse. Test-feedback-loop: ekte naboer for Gold med (DGS10, DTWEXBGS, T10YIE-DGS10, COT mm-pct) over 4071 ref-datoer.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -116,6 +117,117 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 58: Fase 10 spor A — full backfill + 3 nye CLI + Yahoo-port + CFTC-fix (LUKKET)
+
+**Scope:** Ekseksvere full backfill for K-NN, etter at session 57
+leverte skjema/API. Per D-splitt: backfill-eksekvering. Faktisk scope
+ble utvidet med 3 nye CLI-er (uten dem kan ikke backfill kjøres) og
+to fetcher-fixes oppdaget under eksekvering.
+
+**Endret denne session (commits `e0d67d4` + `015988d`):**
+
+`src/bedrock/fetch/yahoo.py` (ny, 180 linjer):
+- Port av cot-explorers `build_price_history.py` (verifisert
+  produksjons-kode for 15 års historikk)
+- `urllib`-basert (ikke `requests`) for å matche bevist mønster
+- User-Agent "Mozilla/5.0" + Accept "application/json" — Yahoo
+  returnerer 403 uten dem
+- `parse_yahoo_chart` eksponert separat for testing
+- `--interval 1d/1wk/1mo`-støtte; default daglig
+
+`src/bedrock/cli/backfill.py` (+260 linjer):
+- `prices`-CLI utvidet med `--source yahoo|stooq` (default yahoo) +
+  `--interval`. Stooq beholdt som fallback.
+- `_resolve_prices` velger ticker-felt (yahoo_ticker vs stooq_ticker)
+  basert på source.
+- 3 nye subkommandoer:
+  - `enso`: kaller `fetch_noaa_oni` → `append_fundamentals`
+  - `weather-monthly`: leser `agri_history/<region>.json`-filer,
+    dropper `days`-felt, skriver via `append_weather_monthly`
+  - `outcomes`: beregner forward_return + max_drawdown fra `prices`-
+    tabellen, multi-instrument + multi-horizon support
+
+`src/bedrock/config/instruments.py` (+1 linje):
+- `yahoo_ticker: str | None` i InstrumentMetadata
+
+`src/bedrock/fetch/cot_cftc.py` (+1 felt, kommentar):
+- `_DISAGG_FIELD_MAP`: `m_money_positions_long_all` (var
+  `m_money_positions_long`). CFTC splittet i `_all/_old/_other` for
+  hyphenert termin-struktur. Kun `_all` er ekvivalent.
+
+`config/instruments/{gold,corn}.yaml`:
+- Ny `yahoo_ticker`: `GC=F` (Gold), `ZC=F` (Corn)
+
+Tester (+47 nye → 1085/1085):
+- `test_fetch_yahoo.py` (14 tester): URL-bygging, parse-edge-cases
+  (None-close, missing-volume, empty-result, error-blokk),
+  HTTP-mock + URLError-håndtering
+- `test_cli_backfill_enso.py` (3 tester)
+- `test_cli_backfill_weather_monthly.py` (10 tester): loader-helper
+  + CLI-flow + idempotens
+- `test_cli_backfill_outcomes.py` (16 tester): _parse_horizons +
+  _compute_outcomes + CLI-flow + idempotens
+- Eksisterende prices-tester: rebased med `--source stooq` for å
+  matche ny default
+- `test_fetch_cot_cftc.py`: m_money-fixture-felt `_all`-suffiks via
+  sed
+
+**Backfill-resultat** (DB: 0 → 3.54 MB, 46 569 rader):
+
+| Kilde | Tabell | Rader | Range |
+|---|---|---:|---|
+| Yahoo daglig | `prices` | 8 200 | Gold + Corn 2010 → 2026-04-24 |
+| CFTC Socrata | `cot_disaggregated` | 1 702 | 851 hver, 2010 → 2026-04-21 |
+| FRED (4 serier) | `fundamentals` | 17 017 | DGS10/DGS2/T10YIE/DTWEXBGS |
+| NOAA ONI | `fundamentals` | 914 | 1950-01 → 2026-02 |
+| agri_history-migrering | `weather_monthly` | 2 576 | 14 regioner × 184 mnd |
+| Beregnet fra prices | `analog_outcomes` | 16 160 | Gold + Corn × {30d, 90d} |
+
+Outcomes-baseline (sanity for K-NN-driver-utvikling):
+- Gold 30d: avg +1.21%, hit-rate(≥3%)=34.5%, avg_dd=−3.07%
+- Gold 90d: avg +3.72%, hit-rate(≥3%)=52.5%, avg_dd=−4.97%
+- Corn 30d: avg +0.58%, hit-rate(≥3%)=36.6%, avg_dd=−5.67%
+- Corn 90d: avg +1.84%, hit-rate(≥3%)=40.4%, avg_dd=−10.21%
+
+**Designvalg:**
+
+- **Yahoo som default** for prices framover (ikke som flag-fallback):
+  Stooq er nå tregere å onboarde (krever captcha + API-nøkkel) og
+  cot-explorers Yahoo-port er allerede produksjons-verifisert.
+  Stooq-pathen beholdes for fremtid.
+- **Sekvensiell henting + 2s sleep mellom kall** (per bruker-instruks):
+  gratis API-er feiler med parallelle requests. Eksisterende cot-
+  explorer kjører også sekvensielt.
+- **`days`-felt fra agri_history droppes ved migrering** (det 9. JSON-
+  feltet, ikke i § 6.5, kan beregnes fra `month`-string).
+- **Hit-rate IKKE pre-beregnet** — kun rå `forward_return_pct` lagres.
+  Driver beregner hit on-the-fly fra config-terskel (per ADR-005 B3),
+  slik at terskel kan justeres uten re-backfill.
+- **Wall-time totalt: ~7 min** (mot 1-2 t-estimat). Yahoo og FRED
+  håndterte 16-års-vinduer i én request — ingen pagination nødvendig.
+
+**Pre-conditions verifisert før eksekvering:**
+- `~/.bedrock/secrets.env` med `FRED_API_KEY` (32 tegn) ✓
+- `~/cot-explorer/data/agri_history/` med 14 region-filer ✓
+
+**Verifisert:**
+- pytest full → 1085/1085 (var 1038, +47)
+- ruff check + format → grønt
+- Pre-commit hook → grønt
+- Auto-push → `origin/main`
+- Manuell sanity: bedrock.db row counts + sample queries (siste
+  Gold COT mm_long=123 681 mot 2026-04-21)
+
+**Neste session (59):**
+- `find_analog_cases`-impl per ADR-005 B4-signatur
+- Asset-klasse-til-dim-mapping (hardcoded constant per § 6.5-tabell)
+- Feature-extractor: hent ferskeste obs per dim fra DataStore
+  (DGS10 chg5d, DTWEXBGS chg5d, T10YIE-DGS10 (real-yield), COT mm-pct)
+- Z-score-normalisering over hele historikken (ikke pre-cached)
+- Logical tester: gitt mock-DB med kjente naboer, K=5 returneres riktig
+
+---
 
 ### 2026-04-25 — Session 57: Fase 10 spor A — ADR-005 + skjema + DataStore-utvidelse + ENSO-fetcher (LUKKET)
 
