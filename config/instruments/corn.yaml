@@ -30,13 +30,23 @@ families:
     drivers:
       - {name: sma200_align, weight: 1.0, params: {tf: D1}}
   weather:
+    # Sub-fase 12.5 session 72: ekte vær-stress-driver fra weather_monthly.
+    # Høy stress (varmt + tørt + vann-underskudd) er bull for Corn (lavere
+    # yield-forventning → høyere pris).
     weight: 2
     drivers:
-      - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+      - name: weather_stress
+        weight: 1.0
+        params:
+          lookback_months: 1
   enso:
+    # ENSO-regime fra NOAA ONI. La Niña gir typisk US-drought-risk
+    # for us_cornbelt → bull for Corn (default-mapping).
     weight: 2
     drivers:
-      - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+      - name: enso_regime
+        weight: 1.0
+        params: {}
   conab:
     weight: 2
     drivers:
