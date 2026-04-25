@@ -2,14 +2,14 @@
 
 ## Current state
 
-- **Phase:** 10 **ÅPEN** (analog-matching + ubrukt-data-audit). Splittet i to spor per bruker-beslutning 2026-04-25:
+- **Phase:** 10 **LUKKET 2026-04-25** (tag `v0.10.0-fase-10`). Analog-matching + ubrukt-data-audit. Splittet i to spor per bruker-beslutning 2026-04-25:
   - **Spor B — ubrukt-data-audit (session 56):** dokumentasjon, ingen kode. **LUKKET 2026-04-25**
   - **Spor A — analog-matching (sessions 57-61):** A-D besvart 2026-04-25 (M/B2/U/split). Re-numrert til 5 sessions etter D-splitt:
     - **57:** ADR-005 + skjema + DataStore-utvidelse + ENSO-fetcher (pure kode). **LUKKET 2026-04-25**
     - **58:** backfill-eksekvering (3 nye CLI + Yahoo-port + full backfill). **LUKKET 2026-04-25**
     - **59:** `find_analog_cases`-impl + asset-klasse-dim-mapping. **LUKKET 2026-04-25**
     - **60:** `analog`-driver-familie + YAML-integrasjon. **LUKKET 2026-04-25**
-    - **61:** UI-rendering (modal-utvidelse + `analog`-felt på SignalEntry)
+    - **61:** UI-rendering (modal-utvidelse + `analog`-felt på SignalEntry). **LUKKET 2026-04-25**
 - **Phase:** 9 **LUKKET 2026-04-25** (UI: 4 faner + admin-editor). Struktureres som tre runder per bruker-beslutning 2026-04-24:
   - **Runde 1 (session 47-50):** minimal data-wiring per fane, funksjonelt null polish
   - **Runde 2 (session 51-53):** styling, flyt, filtrering, detaljmodaler — **LUKKET 2026-04-25**
@@ -29,9 +29,10 @@
 - Session 58 lukket — full backfill kjørt. To kilder krevde fix underveis: (a) Stooq begynte å kreve API-nøkkel → port av cot-explorers `build_price_history.py` til ny `bedrock/fetch/yahoo.py`, Yahoo nå default for prices; (b) CFTC endret feltnavn `m_money_positions_long` → `..._long_all` → `_DISAGG_FIELD_MAP` rebased. 3 nye CLI-er: `bedrock backfill enso/weather-monthly/outcomes`. DB vokste fra 0 → 3.54 MB med 46 569 rader. 1085/1085 tester grønne (+47 nye). Se `docs/backfill_2026-04.md` for full statistikk.
 - Session 59 lukket — `find_analog_cases`-impl. Ny modul `bedrock/data/analog.py` (320 linjer) med ASSET_CLASS_DIMS (§ 6.5 slavisk), 6 implementerte DIM_EXTRACTORS, `extract_query_from_latest`, og K-NN (weighted Euclidean over z-normaliserte verdier). ADR-005-avvik dokumentert: funksjonen ble frittstående (ikke DataStore-metode) for å unngå data → config-kobling. Sanity mot ekte Gold/Corn-data: topp-5 sims 0.88-0.95 (Gold), 0.70-0.72 (Corn). 1129/1129 tester (+44 nye fordelt på 3 filer).
 - Session 60 lukket — analog-driver-familie + YAML-integrasjon. Ny `bedrock/engine/drivers/analog.py` med `analog_hit_rate` + `analog_avg_return` (registrert via `@register`). Felles `_knn`-helper med defensive exception-håndtering (alle feil → 0.0 + log). Sirkulær import (cli → config → engine → drivers → drivers.analog) løst med lat import av `find_instrument` inne i `_knn`. Gold + Corn-YAML utvidet med `analog`-familie (Gold: family_weights 0.3/0.8/1.2 per horizon; Corn: weight 2). Engine end-to-end-verifisert mot ekte data: Gold scorer 0.45 i analog-familien, Corn 0.0. 1145/1145 tester (+16 nye).
+- Session 61 lukket — UI-rendering + SignalEntry-utvidelse. Nye `AnalogNeighbor` + `AnalogTrace` Pydantic-modeller. `SignalEntry.analog: AnalogTrace | None = None` (additiv, bakoverkompatibel). `_build_analog_trace` plukker driver-params fra første driver i analog-familien, kaller `find_analog_cases`, bygger trace med narrative-felter (n_neighbors, hit_rate_pct, avg_return_pct, dims_used, neighbors[]). UI-modal får `_analogHtml`-helper som rendrer "X av N steg ≥Y% innen Hd"-narrative + neighbor-mini-tabell. CSS for analog-tabell + pos/neg-fargekoder. End-to-end-verifisert: Gold MAKRO-signal har 5 naboer (topp: 2022-03-23 sim=0.955), JSON-roundtrip OK. 1155/1155 tester (+10 nye). **Fase 10 LUKKET — tag `v0.10.0-fase-10`.**
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** **Session 61** (siste i Spor A/Fase 10) = UI-rendering. Modal-utvidelse for setup-kort med `analog`-seksjon: narrative ("N matcher, Y/N steg ≥3% innen 30d, snitt +X%") + neighbor-mini-tabell (ref_date + similarity + outcomes). SignalEntry får `analog`-felt persistert til JSON (analogt med session 52 sin `families`-utvidelse). Kjøretid: orchestrator må kalle `find_analog_cases` per signal og inkludere resultatet i `_build_entry`. Tester: snapshot + logical (analog-blokk i JSON, modal rendrer riktig).
+- **Next task:** **Fase 11** per PLAN-tabellen = backtest-rammeverk + 12 mnd historikk-replay. Output: rapport over signal-performance. Tag `v0.11.0-fase-11` ved fase-slutt. Etter Fase 11: Fase 12 (2 uker demo-parallell-drift) + Fase 13 (cutover). PLAN nevner også overgang til Nivå 3 git-modus (feature-branches + PR + branch-protection) ved Fase 11-12.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -119,6 +120,124 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 61: Fase 10 spor A — UI-rendering + SignalEntry-analog (LUKKET, FASE 10 LUKKET)
+
+**Scope:** Siste session i Spor A og Fase 10. Bind K-NN-resultater
+fra session 59-60 til UI-modal via persistert `analog`-felt på
+SignalEntry. Tagger `v0.10.0-fase-10` etter session.
+
+**Endret denne session (commit `a017944`):**
+
+`src/bedrock/orchestrator/signals.py` (+150 linjer):
+- Ny `AnalogNeighbor`-modell (ref_date, similarity,
+  forward_return_pct, max_drawdown_pct)
+- Ny `AnalogTrace`-modell (asset_class, horizon_days,
+  outcome_threshold_pct, n_neighbors, hit_rate_pct, avg_return_pct,
+  avg_drawdown_pct, dims_used, neighbors[])
+- `SignalEntry.analog: AnalogTrace | None = None` — additiv felt,
+  bakoverkompatibelt for eldre tester og fixtures
+- `_build_analog_trace(cfg, store) -> AnalogTrace | None`:
+  - Plukker driver-params fra første driver i analog-familien
+    (asset_class, k, horizon_days, outcome_threshold_pct,
+    min_history_days, dim_weights)
+  - Kaller `find_analog_cases` via lat import (unngår sirkulær)
+  - Bygger trace med beregnet hit_rate + avg_return + avg_drawdown
+  - Defensive — alle exceptions → None (UI viser "ingen analog
+    tilgjengelig")
+- `pd_is_na`-helper for safe NaN-håndtering på max_drawdown
+- `_build_entry` tar nå `store: Any | None = None`-arg og kaller
+  `_build_analog_trace` hvis store gitt
+- `generate_signals` passerer store til `_build_entry`
+
+`web/assets/app.js` (+45 linjer):
+- Ny `_analogHtml(analog)` med:
+  - Narrative: "X av N steg ≥Y% innen Hd" + snitt-return
+  - Pos/neg-farger basert på avg_return-fortegn
+  - Note om manglende dim ("X av 4 § 6.5-dim mangler data")
+  - Neighbor-mini-tabell: ref_date, similarity, fwd ret, max DD
+- `openSetupModal` rendrer nå `_analogHtml(entry.analog)` etter
+  driver-trace-seksjonen
+
+`web/assets/style.css` (+38 linjer):
+- `.modal-analog-narrative` med pos/neg-fargekode
+- `.modal-analog-table` matchende eksisterende driver-tabell-stil
+
+`tests/logical/test_orchestrator_analog.py` (ny, 10 tester):
+- Pydantic round-trip for AnalogNeighbor + AnalogTrace (full +
+  minimal)
+- SignalEntry default analog=None (bakoverkompat)
+- `_build_analog_trace` populerer riktig fra fixture-DB
+- Defensive: ingen analog-familie / tom store / ukjent
+  asset_class → None
+- `generate_signals` end-to-end inkluderer analog
+- JSON-serialisering for UI-konsumering
+
+**Designvalg:**
+
+- **`_build_analog_trace` plukker params fra første driver** istedenfor
+  å re-iterere alle. Hit-rate-driveren har alle nødvendige params;
+  avg-return-driveren bruker samme asset_class/horizon/k. Hvis vi
+  senere har 3+ ulike analog-drivere, kan vi vurdere mer sofistikert
+  parameter-merging.
+- **Lat import av `find_analog_cases`** for å unngå sirkulær
+  (data.analog → engine → orchestrator). Samme mønster som driver-
+  laget i session 60.
+- **`store: Any | None = None`** på `_build_entry` (ikke krevd):
+  bakoverkompat for direkte instansieringer i tester. Når store er
+  None, hopper vi over analog-trace.
+- **Ingen `analog` på `SignalEntry` for `setup is None`-grenen?**
+  Jo — analog skrives uansett om setup ble bygd. Hvis setup mislyktes
+  pga manglende OHLC, kan vi fortsatt vise historisk K-NN-narrative
+  som kontekst. (Kanskje ikke trenger UI-rendering da, men det er en
+  separat sak.)
+- **Pos/neg-farger i UI** følger `--c-pos`/`--c-neg`-CSS-tokens
+  hvis definert, fallback til hard-coded grønn/rød.
+- **Neighbor-tabell viser kun topp-K** (samme antall som K-NN
+  returnerte). Ingen pagination — modal er kompakt nok.
+
+**End-to-end-verifisert** (mot `data/bedrock.db`):
+- Gold MAKRO buy/sell: analog populert med 5 naboer
+- Topp nabo: 2022-03-23 sim=0.955 fwd=-3.23% dd=-3.86%
+- hit_rate_pct=40.0% avg_return_pct=+1.02%
+- dims_used=['cot_mm_pct', 'dxy_chg5d', 'real_yield_chg5d']
+  (vix_regime mangler → flagget i UI)
+
+**Verifisert:**
+- pytest full → 1155/1155 (var 1145, +10 nye)
+- ruff check + format → grønt
+- Pre-commit hook → grønt
+- Auto-push → `origin/main`
+- Manuell sanity: orchestrator end-to-end mot ekte Gold-data,
+  full SignalEntry-JSON inkluderer korrekt analog-blokk
+
+**Fase 10 LUKKET** — `v0.10.0-fase-10` tag opprettes etter denne
+session-loggen. Spor B + Spor A levert i 6 sessions (56-61):
+- Audit-rapport (`docs/data_audit_2026-04.md`)
+- ADR-005 (`docs/decisions/005-analog-data-schema.md`)
+- 4 nye database-tabeller (`weather_monthly`, `analog_outcomes`)
+  + ENSO i `fundamentals`
+- 4 nye fetcher/CLI-er (NOAA ONI, weather-monthly migrering,
+  outcomes-beregning, Yahoo prices)
+- K-NN-modul (`bedrock/data/analog.py`) med ASSET_CLASS_DIMS,
+  6 extractors, `find_analog_cases`
+- 2 nye drivere (`analog_hit_rate`, `analog_avg_return`)
+- YAML-integrasjon i Gold + Corn
+- UI-rendering: SignalEntry-utvidelse + modal-narrative + tabell
+- Backfill-rapport (`docs/backfill_2026-04.md`)
+- Total: 1155/1155 tester grønne (var 993, +162 nye fordelt på
+  ~12 nye filer)
+- Total kode: ~2 300 linjer ny implementasjon + ~1 700 linjer
+  tester + ~1 200 linjer dokumentasjon
+
+**Neste fase (11):**
+- Backtest-rammeverk + 12 mnd historikk-replay
+- Output: rapport over signal-performance
+- Vurdere overgang til Nivå 3 git-modus (feature-branches + PR +
+  branch-protection)
+- Tag `v0.11.0-fase-11` ved fase-slutt
+
+---
 
 ### 2026-04-25 — Session 60: Fase 10 spor A — analog-driver-familie + YAML-integrasjon (LUKKET)
 
