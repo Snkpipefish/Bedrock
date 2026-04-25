@@ -17,7 +17,7 @@ instrument:
   weather_lon: -96.75
 
 aggregation: additive_sum
-max_score: 18
+max_score: 20   # var 18, +2 for analog-familien
 min_score_publish: 7
 
 families:
@@ -46,6 +46,26 @@ families:
     weight: 2
     drivers:
       - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+  analog:
+    weight: 2
+    # K-NN per § 6.5 grains: weather_stress + enso + dxy_chg5d
+    # (conab_yoy mangler kilde, hoppes over via skip_missing).
+    drivers:
+      - name: analog_hit_rate
+        weight: 0.5
+        params:
+          asset_class: grains
+          k: 5
+          horizon_days: 30
+          outcome_threshold_pct: 3.0
+          min_history_days: 365
+      - name: analog_avg_return
+        weight: 0.5
+        params:
+          asset_class: grains
+          k: 5
+          horizon_days: 30
+          min_history_days: 365
 
 grade_thresholds:
   A_plus:
