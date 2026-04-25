@@ -29,6 +29,8 @@
                 <div class="kpi-card"><span class="kpi-label">Total PnL (USD)</span><span class="kpi-value" data-kpi="total_pnl_usd">–</span></div>
             </div>
 
+            <div class="filter-bar-mount" data-flt-scope="skipsloggen"></div>
+
             <div class="table-wrapper">
                 <table class="trade-log">
                     <thead>
@@ -61,6 +63,7 @@
                 <span id="financial-count">–</span> setups synlige
                 (<span id="financial-total">–</span> totalt)
             </div>
+            <div class="filter-bar-mount" data-flt-scope="financial"></div>
             <div id="financial-cards" class="setups-grid">
                 <p class="empty">Laster…</p>
             </div>
@@ -71,6 +74,7 @@
                 <span id="agri-count">–</span> setups synlige
                 (<span id="agri-total">–</span> totalt)
             </div>
+            <div class="filter-bar-mount" data-flt-scope="agri"></div>
             <div id="agri-cards" class="setups-grid">
                 <p class="empty">Laster…</p>
             </div>
@@ -82,6 +86,7 @@
         </section>
     </main>
 
+    <script src="/assets/filter.js"></script>
     <script src="/assets/app.js"></script>
 </body>
 </html>

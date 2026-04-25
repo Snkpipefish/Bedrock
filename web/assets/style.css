@@ -264,3 +264,80 @@ main { padding: 20px; }
 .status-aging { background: #fff3cd; color: #856404; }
 .status-stale { background: #f8d7da; color: #b33030; }
 .status-missing { background: #e2e3e5; color: #555; }
+
+/* Filter-bar (session 51, runde 2) */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+.filter-bar .flt-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.filter-bar .flt-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #888;
+  letter-spacing: 0.4px;
+  margin-right: 2px;
+}
+.filter-bar .flt-pill {
+  background: #f5f5f7;
+  border: 1px solid #d4d4d8;
+  border-radius: 3px;
+  padding: 3px 9px;
+  font-size: 11px;
+  cursor: pointer;
+  color: #444;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.filter-bar .flt-pill:hover { background: #ebebef; border-color: #b8b8bd; }
+.filter-bar .flt-pill.active {
+  background: #1a1f2c;
+  color: #fff;
+  border-color: #1a1f2c;
+}
+.filter-bar .flt-pill.active[data-val="BUY"] { background: #1f7a3a; border-color: #1f7a3a; }
+.filter-bar .flt-pill.active[data-val="SELL"] { background: #b33030; border-color: #b33030; }
+.filter-bar .flt-search {
+  border: 1px solid #d4d4d8;
+  border-radius: 3px;
+  padding: 3px 8px;
+  font-size: 12px;
+  width: 130px;
+  outline: none;
+}
+.filter-bar .flt-search:focus { border-color: #1a1f2c; }
+.filter-bar .flt-count {
+  font-size: 11px;
+  color: #666;
+  font-variant-numeric: tabular-nums;
+}
+.filter-bar .flt-reset {
+  margin-left: auto;
+  background: transparent;
+  border: 1px dashed #c0c0c5;
+  border-radius: 3px;
+  padding: 3px 9px;
+  font-size: 11px;
+  cursor: pointer;
+  color: #666;
+}
+.filter-bar .flt-reset:hover { color: #b33030; border-color: #b33030; }
+.filter-bar .flt-reset:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: #d4d4d8;
+  color: #999;
+}

@@ -1,5 +1,6 @@
 // Bedrock UI — Fase 9 runde 1 session 47: Skipsloggen
-// Vanilla JS (per PLAN § 15). Runde 2 legger til polish/filtrering.
+// Runde 2 session 51: filter-bar (horizon/grade/instrument/direction).
+// Vanilla JS (per PLAN § 15).
 
 const REFRESH_INTERVAL_MS = 30_000;
 
@@ -13,6 +14,86 @@ document.querySelectorAll('.tab').forEach(btn => {
     );
   });
 });
+
+// ─── Filter-modul (session 51) ─────────────────────────────────
+// Pure state + filter-funksjoner ligger i `filter.js` (lastet før denne
+// fila). Resten — DOM-bygging, event-wiring, treff-teller — bor her.
+// KPI-sammendrag (Skipsloggen) påvirkes ikke av filteret; det aggregeres
+// fortsatt over full logg på server-siden.
+
+function buildFilterBarHtml() {
+  return `
+    <div class="flt-group"><span class="flt-label">Retning</span>
+      <button class="flt-pill active" data-flt="dir" data-val="ALL">Alle</button>
+      <button class="flt-pill" data-flt="dir" data-val="BUY">Buy</button>
+      <button class="flt-pill" data-flt="dir" data-val="SELL">Sell</button>
+    </div>
+    <div class="flt-group"><span class="flt-label">Grade</span>
+      <button class="flt-pill active" data-flt="grade" data-val="ALL">Alle</button>
+      <button class="flt-pill" data-flt="grade" data-val="A+">A+</button>
+      <button class="flt-pill" data-flt="grade" data-val="A">A</button>
+      <button class="flt-pill" data-flt="grade" data-val="B">B</button>
+      <button class="flt-pill" data-flt="grade" data-val="C">C</button>
+    </div>
+    <div class="flt-group"><span class="flt-label">Horisont</span>
+      <button class="flt-pill active" data-flt="horizon" data-val="ALL">Alle</button>
+      <button class="flt-pill" data-flt="horizon" data-val="SCALP">Scalp</button>
+      <button class="flt-pill" data-flt="horizon" data-val="SWING">Swing</button>
+      <button class="flt-pill" data-flt="horizon" data-val="MAKRO">Makro</button>
+    </div>
+    <div class="flt-group"><span class="flt-label">Instrument</span>
+      <input class="flt-search" data-flt="instr" placeholder="filter…" autocomplete="off">
+    </div>
+    <span class="flt-count" data-flt-count></span>
+    <button class="flt-reset" data-flt="reset" disabled>Nullstill</button>
+  `;
+}
+
+function _syncBarUi(bar, scope) {
+  const f = FLT[scope];
+  bar.querySelectorAll('.flt-pill[data-flt]').forEach(p => {
+    if (p.dataset.flt === 'reset') return;
+    p.classList.toggle('active', p.dataset.val === f[p.dataset.flt]);
+  });
+  const inp = bar.querySelector('.flt-search');
+  if (inp && inp.value !== f.instr) inp.value = f.instr;
+  const reset = bar.querySelector('.flt-reset');
+  if (reset) reset.disabled = !fltActive(scope);
+}
+
+function wireFilterBar(scope, onChange) {
+  const mount = document.querySelector(`.filter-bar-mount[data-flt-scope="${scope}"]`);
+  if (!mount) return;
+  mount.innerHTML = `<div class="filter-bar">${buildFilterBarHtml()}</div>`;
+  const bar = mount.querySelector('.filter-bar');
+  bar.addEventListener('click', e => {
+    const t = e.target.closest('[data-flt]');
+    if (!t || t.tagName !== 'BUTTON') return;
+    const k = t.dataset.flt;
+    if (k === 'reset') {
+      FLT[scope] = { dir: 'ALL', grade: 'ALL', horizon: 'ALL', instr: '' };
+    } else {
+      FLT[scope][k] = t.dataset.val;
+    }
+    _syncBarUi(bar, scope);
+    onChange();
+  });
+  bar.querySelector('.flt-search').addEventListener('input', e => {
+    FLT[scope].instr = e.target.value.trim();
+    _syncBarUi(bar, scope);
+    onChange();
+  });
+  _syncBarUi(bar, scope);
+}
+
+function setFilterCount(scope, shown, total) {
+  const mount = document.querySelector(`.filter-bar-mount[data-flt-scope="${scope}"]`);
+  if (!mount) return;
+  const el = mount.querySelector('[data-flt-count]');
+  if (!el) return;
+  el.textContent = fltActive(scope) ? `${shown} av ${total}` : `${total}`;
+}
+
 
 // ─── Hjelpefunksjoner ─────────────────────────────────────────
 function fmt(v, digits = 5) {
@@ -35,6 +116,8 @@ function fmtResult(r) {
 }
 
 // ─── Skipsloggen: KPI + trade-tabell ──────────────────────────
+let TRADE_ENTRIES = [];
+
 async function loadSkipsloggen() {
   try {
     const [summary, log] = await Promise.all([
@@ -42,7 +125,8 @@ async function loadSkipsloggen() {
       fetch('/api/ui/trade_log?limit=100').then(r => r.json()),
     ]);
     renderKpi(summary);
-    renderTradeTable(log.entries);
+    TRADE_ENTRIES = log.entries || [];
+    renderTradeTableFiltered();
     const el = document.getElementById('last-updated');
     if (el) el.textContent = log.last_updated || '–';
   } catch (err) {
@@ -50,6 +134,12 @@ async function loadSkipsloggen() {
     const body = document.getElementById('trade-log-body');
     if (body) body.innerHTML = `<tr><td colspan="12" class="empty">Fetch feilet: ${err.message}</td></tr>`;
   }
+}
+
+function renderTradeTableFiltered() {
+  const filtered = applyFilter('skipsloggen', TRADE_ENTRIES, fltAxesFromTrade);
+  setFilterCount('skipsloggen', filtered.length, TRADE_ENTRIES.length);
+  renderTradeTable(filtered);
 }
 
 function renderKpi(summary) {
@@ -73,7 +163,10 @@ function renderTradeTable(entries) {
   const body = document.getElementById('trade-log-body');
   if (!body) return;
   if (!entries || entries.length === 0) {
-    body.innerHTML = '<tr><td colspan="12" class="empty">Ingen trades ennå.</td></tr>';
+    const msg = TRADE_ENTRIES.length === 0
+      ? 'Ingen trades ennå.'
+      : 'Ingen trades matcher filteret.';
+    body.innerHTML = `<tr><td colspan="12" class="empty">${msg}</td></tr>`;
     return;
   }
   body.innerHTML = entries.map(e => {
@@ -96,14 +189,17 @@ function renderTradeTable(entries) {
 }
 
 // ─── Financial setups (session 48) ────────────────────────────
+let FINANCIAL_SETUPS = [];
+
 async function loadFinancialSetups() {
   try {
     const res = await fetch('/api/ui/setups/financial').then(r => r.json());
-    renderSetupCards('financial-cards', res.setups);
+    FINANCIAL_SETUPS = res.setups || [];
     const visEl = document.getElementById('financial-count');
     const totEl = document.getElementById('financial-total');
     if (visEl) visEl.textContent = res.visible_count;
     if (totEl) totEl.textContent = res.total_count;
+    renderFinancialFiltered();
   } catch (err) {
     console.error('Financial setups load feilet:', err);
     const el = document.getElementById('financial-cards');
@@ -111,11 +207,20 @@ async function loadFinancialSetups() {
   }
 }
 
-function renderSetupCards(containerId, setups) {
+function renderFinancialFiltered() {
+  const filtered = applyFilter('financial', FINANCIAL_SETUPS, fltAxesFromSetup);
+  setFilterCount('financial', filtered.length, FINANCIAL_SETUPS.length);
+  renderSetupCards('financial-cards', filtered, FINANCIAL_SETUPS.length);
+}
+
+function renderSetupCards(containerId, setups, totalBeforeFilter) {
   const el = document.getElementById(containerId);
   if (!el) return;
   if (!setups || setups.length === 0) {
-    el.innerHTML = '<p class="empty">Ingen aktive setups.</p>';
+    const msg = (totalBeforeFilter && totalBeforeFilter > 0)
+      ? 'Ingen setups matcher filteret.'
+      : 'Ingen aktive setups.';
+    el.innerHTML = `<p class="empty">${msg}</p>`;
     return;
   }
   el.innerHTML = setups.map(s => {
@@ -150,19 +255,28 @@ function renderSetupCards(containerId, setups) {
 // Gjenbruker renderSetupCards — ingen agri-spesifikke felt i setup-
 // dict enda. Runde 2 / Fase 10 legger til weather/ENSO/Conab-badges
 // når fetch-lagene er ferdige.
+let AGRI_SETUPS = [];
+
 async function loadAgriSetups() {
   try {
     const res = await fetch('/api/ui/setups/agri').then(r => r.json());
-    renderSetupCards('agri-cards', res.setups);
+    AGRI_SETUPS = res.setups || [];
     const visEl = document.getElementById('agri-count');
     const totEl = document.getElementById('agri-total');
     if (visEl) visEl.textContent = res.visible_count;
     if (totEl) totEl.textContent = res.total_count;
+    renderAgriFiltered();
   } catch (err) {
     console.error('Agri setups load feilet:', err);
     const el = document.getElementById('agri-cards');
     if (el) el.innerHTML = `<p class="empty">Fetch feilet: ${err.message}</p>`;
   }
+}
+
+function renderAgriFiltered() {
+  const filtered = applyFilter('agri', AGRI_SETUPS, fltAxesFromSetup);
+  setFilterCount('agri', filtered.length, AGRI_SETUPS.length);
+  renderSetupCards('agri-cards', filtered, AGRI_SETUPS.length);
 }
 
 // ─── Kartrommet: pipeline-helse (session 50) ──────────────────
@@ -237,5 +351,9 @@ document.querySelectorAll('.tab').forEach(btn => {
 });
 
 // ─── Start ────────────────────────────────────────────────────
+wireFilterBar('skipsloggen', renderTradeTableFiltered);
+wireFilterBar('financial',   renderFinancialFiltered);
+wireFilterBar('agri',        renderAgriFiltered);
+
 loadSkipsloggen();
 setInterval(loadSkipsloggen, REFRESH_INTERVAL_MS);
