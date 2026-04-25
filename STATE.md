@@ -4,7 +4,7 @@
 
 - **Phase:** 9 **ÅPEN** (UI: 4 faner + admin-editor). Struktureres som tre runder per bruker-beslutning 2026-04-24:
   - **Runde 1 (session 47-50):** minimal data-wiring per fane, funksjonelt null polish
-  - **Runde 2 (session 51-53):** styling, flyt, filtrering, detaljmodaler
+  - **Runde 2 (session 51-53):** styling, flyt, filtrering, detaljmodaler — **LUKKET 2026-04-25**
   - **Runde 3 (session 54-55):** admin-rule-editor på separat URL med kode-gate
 - Session 47 lukket — Fane 1 Skipsloggen (KPI + trade-log-tabell).
 - Session 48 lukket — Fane 2 Financial setups (kort-grid med grade/score-sortering).
@@ -13,9 +13,10 @@
 - **Pre-runde-2 cleanup (2026-04-25):** Python 3.10-baseline (ADR-004), CI bumpet til 3.10, pre-commit aktivert lokalt via `.githooks/pre-commit`-delegering, datetime.UTC reverted til timezone.utc i 20 filer. Pyright-step non-blocking i CI inntil 162 akkumulerte type-errors er ryddet (egen task).
 - Session 51 lukket — Filter-bar (horizon/grade/instrument/direction) på Skipsloggen + Financial + Soft commodities. Pure filter-logikk i `web/assets/filter.js`; 18 logiske tester (`tests/web/test_filter.test.mjs`).
 - Session 52 lukket — Modal med explain-trace. SignalEntry utvidet med `families: dict[str, FamilyResult]` + `active_families: int` (persisterer driver-trace fra Engine til JSON). Klikk på setup-kort eller trade-rad åpner modal med score-bar/driver-tabell/setup-detaljer. Trade-modal har disclaimer om at trace ikke lagres per trade enda.
+- Session 53 lukket — UI-polish. Tokenbasert designsystem (--c-*/--sp-*/--fs-*/--r-*), system-fonter med tabular-nums for alle tall, header med gradient + accent + live `/health`-status-pill (online/down/unreachable), tettere KPI-kort, klarere tab-aktiv-tilstand, semantiske status-pills i Kartrommet. **Runde 2 LUKKET** — alle fire faner har filter, modal med explain-trace, og polert visuell stil.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** **Session 53 (Option A — polish)**. Typografi, farger, visuell hierarki, header-design. Dashboard er nå funksjonelt komplett: 4 faner + filter + modal + persistert explain-trace. Polish-sessionen tuner det visuelle uten å endre data-flyt.
+- **Next task:** **Runde 3 (sessions 54-55)** — admin-rule-editor på separat URL (`web/admin.html`) med kode-gate. PLAN § 10.5 + § 10.6 definerer scope: YAML-edit av instrument-regler/grade-terskler/horisont-vekter/fetch-cadence/bot-thresholds + dry-run + auto-commit. Backend trenger nye `/admin/*`-endepunkter med X-Admin-Code-header (SHA-256 hash mot ADMIN_CODE_HASH i env).
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -97,6 +98,138 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 53: Fase 9 runde 2 — UI-polish (Option A) + RUNDE 2 LUKKET
+
+**Scope:** Visuell polering av dashbordet. Funksjonelt komplett etter
+51 (filter) + 52 (modal + explain-trace) — denne sessionen tuner det
+visuelle uten å endre data-flyt eller backend.
+
+**Endret denne session (commit `1b796d8`):**
+
+`web/assets/style.css` (+579 / -273, full refaktor med tokens):
+- Nytt `:root`-token-sett:
+  - Color-skala: `--c-bg/surface/surface-alt/border/border-strong/
+    ink/ink-muted/ink-faint`, brand `#1a1f2c`, accent `#3554a8`
+    (dempet stålblå), semantisk `--c-pos/neg/warn/info` med soft +
+    sterk variant
+  - Spacing 4-pkt-skala: `--sp-1` (4px) til `--sp-8` (32px)
+  - Type: `--font-sans` (system stack med Inter-fallback) +
+    `--font-mono` (ui-monospace m/SF Mono fallback), `--fs-xs/sm/
+    md/lg/xl/2xl/num-md/num-lg`
+  - Radius: `--r-sm/md/lg`. Elevation: `--shadow-1/2/modal`.
+    Transition: `--t-fast` (120ms)
+- Hardkodet hex/px erstattet med tokens overalt — én senere endring
+  i `:root` propagerer
+- `tabular-nums` + monospace satt på alle numeriske felt (KPI-kort,
+  setup-tabeller, trade-log-celler, modal-driver-tabell, modal-kv,
+  filter-count, pipeline-tabell)
+
+`.app-header`:
+- Vertikal gradient `#1a1f2c → #131722` med tynn aksent-glow på
+  `::after` border-bottom
+- Wordmark `Bedrock` får 6×6 px aksent-firkant (visuell signatur)
+- Ny `.status-pill` (right-aligned i `.app-header-row`) med
+  pulsende dot. `data-status='ok'` → grønn pulserende, `'down'` →
+  rød. Tekst format: `online · HH:MM · Nms` eller `unreachable` /
+  `down · http NNN`
+
+`.tab` aktiv-state:
+- `background: var(--c-bg)` matcher main-bakgrunn → tab "kobler"
+  visuelt til panelet
+- `font-weight: 600` på aktiv (kontra 500 default)
+- `::after` overstyrer 1px border for sømløs overgang
+
+`.kpi-card`:
+- Padding `var(--sp-3) var(--sp-4)` (var: `10px 14px`)
+- Tall: `font-mono`, 22px, vekt 600, tabular-nums, semantic-pos/
+  neg-fargekoding for total_pnl_usd
+
+`.filter-bar` + `.flt-pill`:
+- `flt-pill` default: surface-alt + dempet ink-muted; hover
+  bytter til accent-soft
+- aktiv pill: `var(--c-brand)` (mørk navy) — BUY/SELL beholder
+  pos/neg-farge
+- search-input får aksent-fokus-ring `box-shadow 0 0 0 3px
+  accent-soft`
+
+`.setup-card`, `.trade-log tr`:
+- `.clickable:focus-visible { outline: 2px solid accent }` for
+  tastatur-navigasjon
+- Hover gir `var(--shadow-2)` + `translateY(-1px)`
+
+`.modal`:
+- Bruker tokens. `::backdrop` får `backdrop-filter: blur(2px)`
+  for litt mykere overgang
+- `.modal-scorebar-mark` utvidet over hele baren (top: -2px,
+  height: calc(100% + 4px)) for synlighet på kantene
+
+`.pipeline-group` (Kartrommet):
+- Kompaktere typografi, tabular-nums i alder/stale-celler
+- Status-pills bruker semantisk soft-palett (FRESH/AGING/STALE/
+  MISSING)
+
+`web/index.html`:
+- `.app-header` re-strukturert: `.app-header-row` (h1 + status-
+  pill) over `.tabs`
+- `<span class='status-pill' id='server-status' data-status=
+  'unknown'>` med dot + text-span
+
+`web/assets/app.js` (+25):
+- `loadServerStatus()` poller `/health` med `cache: 'no-store'`,
+  måler latency med `performance.now()`, setter `data-status` og
+  pill-tekst
+- 30s interval (samme rate som loadSkipsloggen)
+- Endpointet finnes allerede fra Fase 7; ingen backend-endring
+
+**Designvalg:**
+
+- **Tokens > globals:** Hard-kodede farger var spredt over 575
+  linjer; samling til `:root` gjør tema-bytte trivielt og
+  garanterer konsistens. Future dark-mode er nå ~30 linjer
+  override, ikke en omskriving
+- **Stålblå accent (#3554a8) ikke teal/orange:** Markedet er
+  fullt av neon-tradingdashboards. Bedrock signaliserer
+  "instrumentell, ikke leketøy" — dempet aksent bygger den
+  vibben uten å være kjedelig
+- **Status-pill polling 30s:** Matcher loadSkipsloggen-rate.
+  Performans-budsjett ubetydelig (1 HEAD-størrelse fetch). Hvis
+  signal_server går ned, ser brukeren det innen 30s
+- **Latency-tall i pillen:** Gir gratis observability. En sub-
+  10ms-stamp lokalt forteller alt — om den hopper til 200ms+, er
+  noe galt
+- **Mono-fonten valgt strengt for tall:** UI-tekst bruker sans-
+  serif. Numerics (entry/sl/pnl/score) bruker mono med tabular-
+  nums slik at alle tall i en kolonne har lik bredde — kritisk
+  for å skanne pris-rader
+
+**Verifisert:**
+- `pytest` (full suite) → 980/980 (uberørt — kun frontend-
+  endringer)
+- `node --test tests/web/test_filter.test.mjs` → 18/18 (filter-
+  tester uberørt)
+- Browser preview:
+  - Header: gradient + "Bedrock"-wordmark + aksent-firkant +
+    grønn pulserende status-pill ("online · 10:42 · 8ms")
+  - Tabs: aktiv har solid background-match med panel-bg
+  - KPI: bold monospace tall, grønn `+1247.30` for pos PnL
+  - Modal: GOLD-modal har fortsatt full driver-trace, nå med
+    bedre visuell spacing og tokens
+  - Pipeline: status-pills (FRESH/AGING/STALE/MISSING) i
+    semantisk soft-palett
+- Down-state: `data-status='down'` → rød dot uten pulse, tekst
+  "unreachable"
+
+**Commit:** `1b796d8 feat(ui): polish — design tokens, typografi,
+header med status-pill`. Auto-pushet til origin/main.
+
+**Runde 2 LUKKET.** Alle fire faner har:
+- Filter (horizon/grade/instrument/direction der relevant) — session 51
+- Modal med explain-trace per setup + trade-detaljer — session 52
+- Polert visuell stil + live system-status — session 53
+
+**Neste:** Runde 3 (sessions 54-55) — admin-rule-editor på `web/
+admin.html` med kode-gate. PLAN § 10.5 + § 10.6.
 
 ### 2026-04-25 — Session 52: Fase 9 runde 2 — modal + persistert explain-trace (Option C)
 
