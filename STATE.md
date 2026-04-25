@@ -5,7 +5,7 @@
 - **Phase:** 9 **ÅPEN** (UI: 4 faner + admin-editor). Struktureres som tre runder per bruker-beslutning 2026-04-24:
   - **Runde 1 (session 47-50):** minimal data-wiring per fane, funksjonelt null polish
   - **Runde 2 (session 51-53):** styling, flyt, filtrering, detaljmodaler — **LUKKET 2026-04-25**
-  - **Runde 3 (session 54-55):** admin-rule-editor på separat URL med kode-gate
+  - **Runde 3 (session 54-55):** admin-rule-editor på separat URL med kode-gate — **LUKKET 2026-04-25**
 - Session 47 lukket — Fane 1 Skipsloggen (KPI + trade-log-tabell).
 - Session 48 lukket — Fane 2 Financial setups (kort-grid med grade/score-sortering).
 - Session 49 lukket — Fane 3 Soft commodities (samme kort-grid; backend klar fra 48).
@@ -14,10 +14,11 @@
 - Session 51 lukket — Filter-bar (horizon/grade/instrument/direction) på Skipsloggen + Financial + Soft commodities. Pure filter-logikk i `web/assets/filter.js`; 18 logiske tester (`tests/web/test_filter.test.mjs`).
 - Session 52 lukket — Modal med explain-trace. SignalEntry utvidet med `families: dict[str, FamilyResult]` + `active_families: int` (persisterer driver-trace fra Engine til JSON). Klikk på setup-kort eller trade-rad åpner modal med score-bar/driver-tabell/setup-detaljer. Trade-modal har disclaimer om at trace ikke lagres per trade enda.
 - Session 53 lukket — UI-polish. Tokenbasert designsystem (--c-*/--sp-*/--fs-*/--r-*), system-fonter med tabular-nums for alle tall, header med gradient + accent + live `/health`-status-pill (online/down/unreachable), tettere KPI-kort, klarere tab-aktiv-tilstand, semantiske status-pills i Kartrommet. **Runde 2 LUKKET** — alle fire faner har filter, modal med explain-trace, og polert visuell stil.
-- Session 54 lukket — Admin rule-editor (instrument-YAML). Ny `/admin`-route + `web/admin.html` med kode-gate (X-Admin-Code → sessionStorage/localStorage), to-pane editor (sidebar med instrument-liste + YAML-textarea), Reload + Lagre + Cmd/Ctrl+S. Bygger på eksisterende `/admin/rules`-endepunkter fra Fase 7 session 38. Dry-run, git-commit-on-save, og flere YAML-editorer (fetch/bot/defaults) er utsatt til session 55.
+- Session 54 lukket — Admin rule-editor (instrument-YAML). Ny `/admin`-route + `web/admin.html` med kode-gate (X-Admin-Code → sessionStorage/localStorage), to-pane editor (sidebar med instrument-liste + YAML-textarea), Reload + Lagre + Cmd/Ctrl+S. Bygger på eksisterende `/admin/rules`-endepunkter fra Fase 7 session 38.
+- Session 55 lukket — Admin-editor utvidet: (a) lightweight dry-run (`POST /admin/rules/<id>/dry-run` validerer Pydantic uten å skrive), (b) git-commit-on-save (subprocess `git -C <root>` add + commit; auto-push-hook pusher; respons har `git`-felt), (c) logs-viewer (`GET /admin/logs?tail=N` + UI-tab med monospace pre-output). **Runde 3 LUKKET** — admin-editor er funksjonell for instrument-regler med safe-edit-loop (validate → save → commit → push) og pipeline-log-viewer. **Fase 9 LUKKET** — alle tre runder (data-wiring + filter/modal/polish + admin-editor) er levert.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** **Session 55 (siste i runde 3)** — utvid admin-editor: (a) dry-run-scoring (kjør orchestrator mot siste 7 dager, vis score-diff før commit), (b) git-commit-on-save (auto-push-hook tar resten), (c) `/admin/fetch` + `/admin/bot` + `/admin/defaults`-endepunkter + UI-tabs i admin.html, (d) pipeline-styringer (killswitch / pause / force-run), (e) logs-viewer.
+- **Next task:** **Fase 10** per PLAN-tabellen. Status-felt nullstilles ved start av Fase 10. Deferred admin-utvidelser (lever når brukeren ber): heavyweight dry-run (score-diff mot 7 dager), `/admin/fetch` + `/admin/bot` + `/admin/defaults`-editorer, pipeline-styringer (kill-all/pause/force-run + admin-auth på `/kill`).
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -99,6 +100,143 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 55: Fase 9 runde 3 — dry-run + git-commit + logs-viewer + RUNDE 3 LUKKET
+
+**Scope:** Siste session i runde 3. Lukker safe-edit-loopen
+(validate → save → commit → push) og legger til pipeline-log-viewer.
+Bevisst tett scope etter kartlegging — heavyweight dry-run, andre
+YAML-editorer, og pipeline-styringer er flagget som deferred.
+
+**Endret denne session (commit `2a1006d`):**
+
+`src/bedrock/signal_server/config.py`:
+- Nye felt `admin_git_root: Path | None` og `admin_log_path: Path | None`
+- env: BEDROCK_ADMIN_GIT_ROOT + BEDROCK_ADMIN_LOG_PATH
+- None-default ⇒ funksjonene deaktivert (no-op for git, 404 for logs)
+
+`src/bedrock/signal_server/endpoints/rules.py`:
+- `_git_commit_yaml(git_root, yaml_path, instrument_id)`:
+  - Bruker `git -C <root>` (subprocess) så cwd ikke endres
+  - Sjekker `git status --porcelain <path>` først; tom output = no
+    change → no commit
+  - Stage + commit med melding `config(<id>): admin-edit via /admin/rules`
+  - Returnerer dict {committed, sha?, error?, reason?}
+  - Auto-push-hook (`.githooks/post-commit`) håndterer push
+  - Time-out på alle git-kall (10-15s)
+- PUT integrerer git-commit. Respons får nytt `git`-felt når
+  `admin_git_root` er konfigurert.
+- Ny `POST /admin/rules/<id>/dry-run`: validate-only via
+  `load_instrument_from_yaml_string`. 200 med config_summary
+  (`{id, asset_class, families[]}`) eller 400 med Pydantic-loc-
+  detaljer. Heavyweight dry-run (score-diff mot 7 dager) er deferred
+  — krever DataStore-injeksjon + dobbelt Engine-kjøring.
+- Ny `GET /admin/logs?tail=N` (default 200, max 2000). Leser
+  `cfg.admin_log_path`, returnerer `{path, total_lines, returned,
+  lines: [...]}`. 404 hvis path None eller fil mangler. Auth via
+  X-Admin-Code som resten.
+
+`web/admin.html`:
+- Sidebar får nav-row med Rules / Logs-tabs
+- Editor-toolbar får Dry-run-knapp (mellom Reload og Lagre)
+- Ny logs-pane (`#logs-pane`) med header (path + tail-input +
+  Refresh-knapp) og `<pre>` for monospace log-output
+
+`web/assets/admin.css` (+74):
+- `.admin-nav-btn` (tab-stil pills, accent-soft når aktiv)
+- `.admin-tail-input` (number-input m/aksent-fokus-ring)
+- `.admin-logs-output` (monospace, max-height: calc(100vh - 200px),
+  pre-wrap + word-break for lange linjer)
+- `.admin-editor-feedback.dry-run-ok` (info-soft farge)
+
+`web/assets/admin.js` (+90):
+- `dryRunCurrent()`: POSTer til /dry-run, viser ✓-feedback med
+  family-summary eller error-detaljer
+- `showSection(name)`: toggler `[data-admin-section]`-elementer
+- `loadLogs()`: fetcher /admin/logs, viser path + linje-teller,
+  graceful 404-tilstand
+- `saveCurrent()` rendrer git-info i feedback når PUT-respons har
+  `git`-felt: "✓ git-commit abc1234: config(gold): admin-edit"
+- `setFeedback` ryddet til å bruke `el.className = 'admin-editor-
+  feedback ' + kind` (støtter alle varianter med samme logikk)
+
+`tests/unit/test_signal_server_rules.py` (+11 tester):
+- Dry-run: valid (no write), invalid (400 + details), auth, id-mismatch
+- Git: commits change, skips no-change, no git_root → no 'git'-felt
+  (test-fixture initialiserer eget tmp-repo med subprocess)
+- Logs: 404 unconfigured, returns tail (500-line fil → tail=10
+  returnerer linje 490-499), default 200, requires auth
+
+**Designvalg:**
+
+- **Lightweight dry-run** valgt over heavyweight: validate-only
+  endpoint er én forutsigelig ting. Heavyweight dry-run krever
+  DataStore + Engine + diff-struktur og fortjener en egen session
+  med 7-dagers-backtest-tenkning. Bruker får uansett trygghet:
+  Pydantic-validering finner 95% av feilene før de når disk.
+- **`git -C <root>` framfor `os.chdir`**: thread-safe, idempotent,
+  ingen sjanse for at server ender opp i feil cwd hvis exception
+  kastes mellom add og commit.
+- **Status-check før commit** for å unngå tomme commits når YAML
+  er identisk med disk. Rygger ikke ut noe ved feil — bare logger
+  warning og returnerer `committed: false`. Brukeren ser dette i
+  feedback-boksen.
+- **Logs som rules.py-blueprint, ikke ny admin_bp**: rules_bp har
+  allerede `_check_auth` + path-traversal-helpere. Splitting bare
+  pga URL-prefix gir mer kode uten verdi. Hvis vi senere får 5+
+  admin-endpoints utenfor /admin/rules, refaktorerer vi.
+- **Auth nominalt cleartext over loopback** — uendret fra session
+  54. SHA-256-oppgradering er separat task. Ikke verdt å koble inn
+  i session 55.
+
+**Verifisert:**
+- pytest full → 993/993 (var 982, +11 nye)
+- node --test (filter-tester uberørt) → 18/18
+- Browser preview med mock-fetch:
+  - Dry-run-knapp viser '✓ Dry-run OK · gold · Familier: trend,
+    positioning' i info-soft feedback
+  - Save → success med 'git-commit abc1234: config(gold): admin-edit
+    via /admin/rules'
+  - Logs-tab bytter pane via showSection('logs'), viser
+    '/var/log/bedrock/pipeline.log · viser 200/1500 linjer' i
+    header, monospace log-linjer i `<pre>`
+- Ruff-format kjørte og reformaterte to filer (rules.py +
+  test_signal_server_rules.py) — kun whitespace, semantisk
+  uendret. Etter format kjørte tester fortsatt 35/35 på rules-suiten.
+
+**Commit:** `2a1006d feat(server-admin): dry-run + git-commit-on-
+save + logs-viewer`. Auto-pushet til origin/main.
+
+**Runde 3 LUKKET. Fase 9 LUKKET.**
+
+Status etter Fase 9:
+- 4 faner (Skipsloggen / Financial / Soft commodities / Kartrommet)
+  med funksjonell data-wiring (runde 1)
+- Filter (horizon/grade/instrument/direction) på alle relevante
+  faner (runde 2 session 51)
+- Modal med explain-trace + persisterte families i SignalEntry
+  (runde 2 session 52)
+- Tokenbasert designsystem + live status-pill (runde 2 session 53)
+- Admin-editor med kode-gate + instrument-YAML CRUD + dry-run +
+  git-commit-on-save + logs-viewer (runde 3 sessions 54-55)
+
+**Deferred admin-utvidelser** (ikke blokkerende — lever når brukeren
+ber):
+1. Heavyweight dry-run: kjør orchestrator mot siste 7 dager med
+   proposed config, returner score/grade/active_families-diff per
+   instrument
+2. /admin/fetch (config/fetch.yaml-editor for cron + stale-terskler)
+3. /admin/bot (config/bot.yaml-editor for confirmation/trail/giveback-
+   thresholds)
+4. /admin/defaults (config/defaults/family_*.yaml + grade-terskler)
+5. Pipeline-styringer:
+   - Admin-auth på eksisterende `/kill`-endpoint (sikkerhets-gap)
+   - `/kill all` killswitch-knapp i UI
+   - `/pause` (deaktiver systemd-timer)
+   - `/force-run` (trigger systemd-service nå)
+
+**Neste:** **Fase 10** per PLAN-tabellen. Status-fortsettelse ved
+oppstart av Fase 10.
 
 ### 2026-04-25 — Session 54: Fase 9 runde 3 — admin rule-editor (instrument-YAML)
 
