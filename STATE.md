@@ -7,8 +7,9 @@
   - **67:** aktivert parallell-drift — alle 6 bedrock fetch-timere `enabled --now`. **LUKKET 2026-04-25**
   - **69:** prices-fetcher Stooq → Yahoo. **LUKKET 2026-04-25**
 - **Sub-fase 12.5 ÅPEN 2026-04-25** — debt-rydding før observasjonsvinduet kan gi mening. Roadmap: Block A drivere (~3-4 sessioner), Block B agri-drivere (~4-5), Block C instrumenter (~3-5), Block D polish (~2-3). Totalt 12-17 sessioner.
-  - **70:** Block A start — positioning-drivere (`positioning_mm_pct` + `cot_z_score`) port fra cot-explorers `cot_analytics.py`. Erstatter sma200_align placeholder i Gold YAML positioning-familien. End-to-end-verifisert: Gold positioning 0.385 (var 1.0 placeholder); MAKRO-grade fra A+ → A. **LUKKET 2026-04-25**
-  - **71 (neste):** Block A fortsetter — `real_yield` (DGS10−T10YIE), `dxy_chg5d`, `vix_regime` for macro-familien.
+  - **70:** Block A — positioning-drivere (`positioning_mm_pct` + `cot_z_score`). Erstatter placeholder i Gold positioning-familien. **LUKKET 2026-04-25**
+  - **71:** Block A — macro-drivere (`real_yield` + `dxy_chg5d` + `vix_regime`). Backfilt VIXCLS i fundamentals. Erstatter placeholder i Gold macro-familien. End-to-end: Gold MAKRO+SWING degradert fra A+ til A. **LUKKET 2026-04-25**
+  - **72 (neste):** Block A fortsetter — structure + risk-familier i Gold. Vurder om vi trenger ekte drivere her eller hopper direkte til Block B (Corn agri-drivere) siden Gold er ferdigstilt for trend/positioning/macro/analog.
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -46,9 +47,9 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `feat/positioning-cot-drivers` (Nivå 3 — session 70). PR #1 + #2 + #3 merget til main 2026-04-25. Branch-protection på `main` i GitHub UI er **ikke automatisert**.
-- **Blocked:** nei. Session 71 kan starte når som helst.
-- **Next task:** **Session 71 — Block A fortsettelse: macro-drivere.** Konkret: (a) legg `VIXCLS` til Gold/Corn `fred_series_ids`, kjør `bedrock backfill fundamentals` med ny serie; (b) implementer `real_yield`-driver (DGS10−T10YIE fra fundamentals-tabell); (c) implementer `dxy_chg5d` (DTWEXBGS 5-dager rolling pct change); (d) implementer `vix_regime` (VIXCLS classifies low/normal/high); (e) erstatt sma200_align placeholder i Gold YAML macro-familien; (f) end-to-end-verifisering.
+- **Branch:** `feat/macro-drivers` (Nivå 3 — session 71). PR #1-#4 merget. Branch-protection på `main` i GitHub UI er **ikke automatisert**.
+- **Blocked:** nei.
+- **Next task:** **Session 72 — Block A polish: structure + risk drivere.** Vurder om vi trenger ekte drivere her eller hopper direkte til Block B (Corn agri-drivere) siden Gold er ferdigstilt for trend/positioning/macro/analog.
 - **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
 ## Open questions to user
@@ -136,6 +137,81 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 71: Sub-fase 12.5 Block A — macro-drivere (LUKKET)
+
+**Scope:** Block A fortsettelse. Erstatter sma200_align placeholder i
+Gold macro-familien med ekte FRED-baserte drivere.
+
+**Endret denne session (feature-branch `feat/macro-drivers`):**
+
+`src/bedrock/engine/drivers/macro.py` (ny, ~250 linjer):
+- `@register("real_yield")`: DGS10 − T10YIE, mappet til 0..1 via
+  step-thresholds. ``bull_when`` param: ``"low"`` (default Gold) eller
+  ``"high"`` (USD-bonds).
+- `@register("dxy_chg5d")`: 5-dager pct change i DTWEXBGS, mappet
+  til 0..1. ``bull_when`` param: ``"negative"`` (default Gold/risk-on)
+  eller ``"positive"``. Window justerbar.
+- `@register("vix_regime")`: VIXCLS klassifikator (15/20/25/35-thresholds).
+  ``invert`` param for safe-haven-tolkning (Gold bull når VIX høy).
+- Asset-class-agnostic — interpretasjon styres av YAML-params.
+- Defensiv 0.0-retur ved manglende serier eller utilstrekkelig data.
+
+`src/bedrock/engine/drivers/__init__.py`:
+- Auto-import utvidet: `analog, currency, macro, positioning, trend`.
+
+`config/instruments/gold.yaml`:
+- `fred_series_ids`: lagt til `T10YIE` + `VIXCLS` (manglet for
+  real_yield/vix_regime-drivere).
+- macro-familie: sma200_align placeholder erstattet med
+  real_yield (0.4) + dxy_chg5d (0.4) + vix_regime invert (0.2).
+
+`tests/unit/test_drivers_macro.py` (ny, 22 tester):
+- real_yield: 7 tester (negativ/høy/bull_when/moderat/missing/no-overlap/custom)
+- dxy_chg5d: 7 tester (svakhet/styrke/bull_when/neutral/missing/short/window)
+- vix_regime: 7 tester (lav/ekstrem/invert/normal/missing/empty/custom)
+- 1 registry-test (alle 3 registrert)
+
+**Backfill kjørt under sessionen:**
+
+```
+$ bedrock backfill fundamentals --instrument Gold --from 2010-01-01
+[1/4] DGS10   → 4256 rows
+[2/4] T10YIE  → 4256 rows
+[3/4] DTWEXBGS → 4251 rows
+[4/4] VIXCLS  → 4255 rows
+Summary: 4/4 ok, 17017 rows
+```
+
+VIXCLS var ny serie — ble plukket opp av fetch_runner.run_fundamentals
+automatisk via gold.yaml-oppdateringen.
+
+**End-to-end mot ekte data:**
+
+```
+Gold scoring etter session 71:
+  makro buy:  total=3.526 grade=A   positioning=0.385 macro=0.450
+  scalp buy:  total=3.643 grade=A+  positioning=0.385 macro=0.450
+  swing buy:  total=3.945 grade=A   positioning=0.385 macro=0.450
+```
+
+Macro=0.450 dekomponerer som:
+- real_yield 0.25 × 0.4 = 0.10 (real yield 1.92pp moderat positiv → bear-ish for Gold)
+- dxy_chg5d 0.75 × 0.4 = 0.30 (USD svekket siste 5 dager → bull for Gold)
+- vix_regime 0.25 × 0.2 = 0.05 (VIX 19.3 rolig → invert til 0.25)
+
+Gold SWING degradert fra A+ til A (placeholder hadde 1.0 i macro;
+nå 0.45). Total scores ned ~1.0 punkt på tvers av horisontene.
+Realistisk reflektering av mixed makro-miljø.
+
+**Tester:** 1323/1323 grønne (+22 nye).
+
+**Beslutninger:**
+- ``bull_when``-param i alle 3 drivere — gjør drivere asset-class-
+  agnostic. Ingen hardkodet asset-klasse-logikk i driver-koden.
+- VIX-thresholds 15/20/25/35: konvensjonelle markedsverdier.
+- Default real_yield-mapping antar Gold-tolkning. Andre asset-
+  klasser må eksplisitt sette ``bull_when="high"``.
 
 ### 2026-04-25 — Session 70: Sub-fase 12.5 åpning — positioning-drivere (LUKKET)
 

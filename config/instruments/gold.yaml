@@ -12,8 +12,10 @@ instrument:
   cot_contract: "GOLD - COMMODITY EXCHANGE INC."
   cot_report: disaggregated
   fred_series_ids:
-    - DGS10    # 10Y treasury yield (real-yield-driver)
-    - DTWEXBGS # broad dollar index
+    - DGS10    # 10Y nominal treasury yield (real-yield-driver)
+    - T10YIE   # 10Y inflation expectation — DGS10 minus T10YIE = real yield
+    - DTWEXBGS # broad dollar index (dxy_chg5d-driver)
+    - VIXCLS   # VIX (vix_regime-driver, macro risk-regime)
 
 aggregation: weighted_horizon
 
@@ -69,8 +71,23 @@ families:
           metric: mm_net_pct
           lookback_weeks: 52
   macro:
+    # Sub-fase 12.5 session 71: ekte macro-drivere fra FRED.
+    # Gold som ikke-rentebærende metall får støtte når real-yield faller,
+    # USD svekkes, og når VIX viser stress (safe-haven via invert=true).
     drivers:
-      - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+      - name: real_yield
+        weight: 0.4
+        params:
+          bull_when: low   # låg/negativ real yield = bull for Gold
+      - name: dxy_chg5d
+        weight: 0.4
+        params:
+          bull_when: negative  # USD-svakhet = bull for Gold
+          window: 5
+      - name: vix_regime
+        weight: 0.2
+        params:
+          invert: true  # Gold er safe-haven; høy VIX er bull
   structure:
     drivers:
       - {name: sma200_align, weight: 1.0, params: {tf: D1}}
