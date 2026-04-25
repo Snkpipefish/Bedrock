@@ -63,6 +63,48 @@ from bedrock.setups.snapshot import load_snapshot, save_snapshot
 # ---------------------------------------------------------------------------
 
 
+class AnalogNeighbor(BaseModel):
+    """Én historisk nabo fra K-NN-resultatet, persistert i SignalEntry.
+
+    Per ADR-005 Fase 10 session 61: lagres på SignalEntry slik at UI
+    kan vise mini-tabell uten å re-kjøre K-NN.
+    """
+
+    ref_date: str  # ISO-dato 'YYYY-MM-DD'
+    similarity: float
+    forward_return_pct: float
+    max_drawdown_pct: float | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AnalogTrace(BaseModel):
+    """Sammendrag av K-NN-resultatet for ett signal, samlet for UI-modal.
+
+    `hit_rate_pct` er andelen naboer med `forward_return >= outcome_threshold_pct`,
+    beregnet samme måte som `analog_hit_rate`-driveren — repetert her
+    for narrative ("Y av N steg ≥X% innen Hd"). Tersklene som ble brukt
+    er med så UI kan vise dem uten at orchestrator-konsumenter må slå
+    opp YAML-config.
+
+    Per ADR-005 B5 + § 6.5: K-NN-output er additivt — tomt felt
+    (None på SignalEntry) betyr "ingen analog-config eller ingen data
+    tilgjengelig", ikke "K-NN var bevisst tomt".
+    """
+
+    asset_class: str
+    horizon_days: int
+    outcome_threshold_pct: float
+    n_neighbors: int  # antall faktiske naboer (k er bestilt antall)
+    hit_rate_pct: float  # 0..100
+    avg_return_pct: float
+    avg_drawdown_pct: float | None = None
+    dims_used: list[str] = Field(default_factory=list)  # navn på dim som var tilgjengelig
+    neighbors: list[AnalogNeighbor] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class SignalEntry(BaseModel):
     """Ett kandidat-signal for en (direction, horizon)-kombinasjon.
 
@@ -71,6 +113,10 @@ class SignalEntry(BaseModel):
     forklaring i modal (Fase 9 runde 2 session 52). Defaultet til tom
     dict / 0 så eldre fixtures og direkte instansieringer i tester ikke
     brekker — `_build_entry` populerer dem alltid fra GroupResult.
+
+    `analog` (Fase 10 session 61) er K-NN-trace fra `find_analog_cases`
+    samlet til UI-narrative. None hvis instrumentet ikke har en
+    `analog`-familie i YAML eller hvis K-NN feilet (skip_missing).
     """
 
     instrument: str
@@ -86,6 +132,7 @@ class SignalEntry(BaseModel):
     gates_triggered: list[str] = Field(default_factory=list)
     families: dict[str, FamilyResult] = Field(default_factory=dict)
     active_families: int = 0
+    analog: AnalogTrace | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -218,6 +265,7 @@ def generate_signals(
                 run_ts=run_ts,
                 setup_config=setup_config,
                 hysteresis_config=hysteresis_config,
+                store=store,
             )
             entries.append(entry)
             if entry.setup is not None:
@@ -340,6 +388,119 @@ def _get_min_score_publish(cfg: InstrumentConfig, horizon: Horizon) -> float:
     return cfg.rules.min_score_publish
 
 
+def _build_analog_trace(
+    cfg: InstrumentConfig,
+    store: Any,
+) -> AnalogTrace | None:
+    """Bygg AnalogTrace fra K-NN hvis instrumentet har en `analog`-familie.
+
+    Plukker driver-params fra første `analog`-driver i YAML for å bestemme
+    asset_class, k, horizon_days, outcome_threshold_pct, min_history_days,
+    dim_weights. Hvis K-NN returnerer empty (mangler outcomes / mangler
+    extractor), returnerer None — caller (modal-UI) viser "ingen analog
+    tilgjengelig".
+
+    Per ADR-005 + § 6.5: defensive — alle exceptions fanges, returnerer
+    None. Trace er sekundær til scoring.
+    """
+    families = getattr(cfg.rules, "families", None) or {}
+    analog_family = families.get("analog")
+    if analog_family is None:
+        return None
+
+    # Plukk parametre fra første driver i analog-familien
+    drivers = list(getattr(analog_family, "drivers", None) or [])
+    if not drivers:
+        return None
+    first = drivers[0]
+    params = dict(getattr(first, "params", None) or {})
+
+    asset_class = params.get("asset_class")
+    if not asset_class:
+        return None
+
+    k = int(params.get("k", 5))
+    horizon_days = int(params.get("horizon_days", 30))
+    outcome_threshold_pct = float(params.get("outcome_threshold_pct", 3.0))
+    min_history_days = int(params.get("min_history_days", 365))
+    dim_weights = params.get("dim_weights")
+
+    # Lat import for å unngå sirkulær (data.analog → engine → orchestrator)
+    from bedrock.data.analog import (
+        ASSET_CLASS_DIMS,
+        extract_query_from_latest,
+        find_analog_cases,
+    )
+
+    if asset_class not in ASSET_CLASS_DIMS:
+        return None
+
+    try:
+        query = extract_query_from_latest(store, cfg.instrument, asset_class, skip_missing=True)
+    except Exception:
+        return None
+
+    if not query:
+        return None
+
+    try:
+        result = find_analog_cases(
+            store,
+            cfg.instrument.id,
+            cfg.instrument,
+            asset_class,
+            query,
+            k=k,
+            dim_weights=dim_weights,
+            horizon_days=horizon_days,
+            min_history_days=min_history_days,
+        )
+    except Exception:
+        return None
+
+    if result.empty:
+        return None
+
+    n = len(result)
+    hits = int((result["forward_return_pct"] >= outcome_threshold_pct).sum())
+    hit_rate_pct = (hits / n) * 100.0
+    avg_return_pct = float(result["forward_return_pct"].mean())
+
+    drawdowns = result["max_drawdown_pct"].dropna()
+    avg_drawdown_pct = float(drawdowns.mean()) if not drawdowns.empty else None
+
+    neighbors = [
+        AnalogNeighbor(
+            ref_date=row.ref_date.strftime("%Y-%m-%d"),
+            similarity=float(row.similarity),
+            forward_return_pct=float(row.forward_return_pct),
+            max_drawdown_pct=(
+                None if pd_is_na(row.max_drawdown_pct) else float(row.max_drawdown_pct)
+            ),
+        )
+        for row in result.itertuples(index=False)
+    ]
+
+    return AnalogTrace(
+        asset_class=asset_class,
+        horizon_days=horizon_days,
+        outcome_threshold_pct=outcome_threshold_pct,
+        n_neighbors=n,
+        hit_rate_pct=hit_rate_pct,
+        avg_return_pct=avg_return_pct,
+        avg_drawdown_pct=avg_drawdown_pct,
+        dims_used=sorted(query),
+        neighbors=neighbors,
+    )
+
+
+def pd_is_na(v: Any) -> bool:
+    """Test om en verdi er pandas NaN (uten å kreve pandas-import på toppen)."""
+    import pandas as pd
+
+    return bool(pd.isna(v))
+
+
 def _build_entry(
     *,
     cfg: InstrumentConfig,
@@ -353,10 +514,18 @@ def _build_entry(
     run_ts: datetime,
     setup_config: SetupConfig | None,
     hysteresis_config: HysteresisConfig | None,
+    store: Any | None = None,
 ) -> SignalEntry:
-    """Bygg én SignalEntry — score + (kanskje) stabilisert setup."""
+    """Bygg én SignalEntry — score + (kanskje) stabilisert setup.
+
+    `store` brukes til å hente analog-trace (K-NN) hvis instrumentet
+    har en `analog`-familie i YAML. None → analog-trace skippes (matcher
+    eldre call-sites + tester som ikke trenger K-NN).
+    """
     min_publish = _get_min_score_publish(cfg, horizon)
     published = group_result.score >= min_publish
+
+    analog_trace = _build_analog_trace(cfg, store) if store is not None else None
 
     # Bygg rå setup
     raw_setup: Setup | None = build_setup(
@@ -384,6 +553,7 @@ def _build_entry(
             gates_triggered=list(group_result.gates_triggered),
             families=dict(group_result.families),
             active_families=group_result.active_families,
+            analog=analog_trace,
         )
 
     # Stabiliser hvis previous finnes
@@ -412,7 +582,14 @@ def _build_entry(
         gates_triggered=list(group_result.gates_triggered),
         families=dict(group_result.families),
         active_families=group_result.active_families,
+        analog=analog_trace,
     )
 
 
-__all__ = ["OrchestratorResult", "SignalEntry", "generate_signals"]
+__all__ = [
+    "AnalogNeighbor",
+    "AnalogTrace",
+    "OrchestratorResult",
+    "SignalEntry",
+    "generate_signals",
+]

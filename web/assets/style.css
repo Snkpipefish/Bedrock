@@ -706,6 +706,41 @@ main {
   font-variant-numeric: tabular-nums;
 }
 
+/* Analog-section (Fase 10 session 61) */
+.modal-analog-narrative {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--c-ink);
+}
+.modal-analog-narrative .pos { color: var(--c-pos, #2e7d32); font-weight: 500; }
+.modal-analog-narrative .neg { color: var(--c-neg, #c62828); font-weight: 500; }
+.modal-analog-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+  margin: var(--sp-2) 0 0;
+}
+.modal-analog-table th, .modal-analog-table td {
+  padding: 5px var(--sp-3);
+  border-top: 1px solid var(--c-border);
+}
+.modal-analog-table th {
+  background: var(--c-surface);
+  font-weight: 500;
+  text-align: left;
+  color: var(--c-ink-muted);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.modal-analog-table .num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.modal-analog-table .num.pos { color: var(--c-pos, #2e7d32); }
+.modal-analog-table .num.neg { color: var(--c-neg, #c62828); }
+
 .modal-kv {
   width: 100%;
   border-collapse: collapse;

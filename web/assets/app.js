@@ -117,6 +117,50 @@ function _scoreBarHtml(score, maxScore, minPublish) {
     </div>`;
 }
 
+function _analogHtml(analog) {
+  if (!analog) return '';
+  const n = analog.n_neighbors ?? 0;
+  const hits = Math.round((analog.hit_rate_pct ?? 0) / 100 * n);
+  const avg = analog.avg_return_pct ?? 0;
+  const avgClass = avg >= 0 ? 'pos' : 'neg';
+  const horizon = analog.horizon_days ?? 30;
+  const threshold = analog.outcome_threshold_pct ?? 3.0;
+  const dims = (analog.dims_used || []).join(', ') || '–';
+  const neighbors = analog.neighbors || [];
+  const dropped = (4 - (analog.dims_used || []).length); // §6.5 har 4 dim per asset-klasse
+  const dimNote = dropped > 0
+    ? `<span class="meta">(${dropped} av 4 § 6.5-dim mangler data)</span>`
+    : '';
+  return `
+    <section class="modal-section">
+      <h3>Analog-historikk</h3>
+      <p class="modal-analog-narrative">
+        <strong>${hits} av ${n}</strong> nærmeste historiske naboer steg
+        <strong>≥ ${_fmt1(threshold)}%</strong> innen ${horizon} dager.
+        Snitt-return: <span class="${avgClass}">${avg >= 0 ? '+' : ''}${_fmt2(avg)}%</span>.
+      </p>
+      <p class="meta">Dimensjoner brukt: ${dims} ${dimNote}</p>
+      ${neighbors.length ? `<table class="modal-analog-table">
+        <thead>
+          <tr><th>Ref-dato</th><th class="num">Sim</th><th class="num">Fwd ret</th><th class="num">Max DD</th></tr>
+        </thead>
+        <tbody>
+          ${neighbors.map(n => {
+            const fwd = n.forward_return_pct ?? 0;
+            const fwdCls = fwd >= 0 ? 'pos' : 'neg';
+            const dd = n.max_drawdown_pct;
+            return `<tr>
+              <td>${n.ref_date}</td>
+              <td class="num">${_fmt2(n.similarity)}</td>
+              <td class="num ${fwdCls}">${fwd >= 0 ? '+' : ''}${_fmt2(fwd)}%</td>
+              <td class="num">${dd == null ? '–' : `${_fmt2(dd)}%`}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>` : '<p class="meta">Ingen naboer funnet.</p>'}
+    </section>`;
+}
+
 function _familyHtml(name, fam) {
   const score = fam.score ?? 0;
   const drivers = (fam.drivers || []).slice().sort(
@@ -184,6 +228,8 @@ function openSetupModal(entry) {
       <h3>Driver-trace</h3>
       <p class="meta">Ingen driver-trace persistert. Re-kjør orchestrator etter session 52 for full trace.</p>
     </section>`}
+
+    ${_analogHtml(entry.analog)}
 
     ${setup ? `
     <section class="modal-section">
