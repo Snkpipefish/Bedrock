@@ -4,7 +4,8 @@
 
 - **Phase:** 11 **ÅPEN** (backtest-rammeverk + 12 mnd historikk-replay). Bruker-beslutning 2026-04-25: bli på Nivå 1 til Fase 11 ferdig, bytt til Nivå 3 ved Fase 12 start.
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
-  - **63+:** as-of-date orchestrator-replay (krever DataStore-view-clip), per-grade-breakdown, `compare_signals(v1, v2)`, evt. UI-fane
+  - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
+  - **64+:** `compare_signals(v1, v2)`, 12-mnd full-replay-rapport (Gold + Corn × 30/90d), evt. UI-fane, fase-tag `v0.11.0-fase-11`
 - **Phase:** 10 **LUKKET 2026-04-25** (tag `v0.10.0-fase-10`). Analog-matching + ubrukt-data-audit. Splittet i to spor per bruker-beslutning 2026-04-25:
   - **Spor B — ubrukt-data-audit (session 56):** dokumentasjon, ingen kode. **LUKKET 2026-04-25**
   - **Spor A — analog-matching (sessions 57-61):** A-D besvart 2026-04-25 (M/B2/U/split). Re-numrert til 5 sessions etter D-splitt:
@@ -34,9 +35,10 @@
 - Session 60 lukket — analog-driver-familie + YAML-integrasjon. Ny `bedrock/engine/drivers/analog.py` med `analog_hit_rate` + `analog_avg_return` (registrert via `@register`). Felles `_knn`-helper med defensive exception-håndtering (alle feil → 0.0 + log). Sirkulær import (cli → config → engine → drivers → drivers.analog) løst med lat import av `find_instrument` inne i `_knn`. Gold + Corn-YAML utvidet med `analog`-familie (Gold: family_weights 0.3/0.8/1.2 per horizon; Corn: weight 2). Engine end-to-end-verifisert mot ekte data: Gold scorer 0.45 i analog-familien, Corn 0.0. 1145/1145 tester (+16 nye).
 - Session 61 lukket — UI-rendering + SignalEntry-utvidelse. Nye `AnalogNeighbor` + `AnalogTrace` Pydantic-modeller. `SignalEntry.analog: AnalogTrace | None = None` (additiv, bakoverkompatibel). `_build_analog_trace` plukker driver-params fra første driver i analog-familien, kaller `find_analog_cases`, bygger trace med narrative-felter (n_neighbors, hit_rate_pct, avg_return_pct, dims_used, neighbors[]). UI-modal får `_analogHtml`-helper som rendrer "X av N steg ≥Y% innen Hd"-narrative + neighbor-mini-tabell. CSS for analog-tabell + pos/neg-fargekoder. End-to-end-verifisert: Gold MAKRO-signal har 5 naboer (topp: 2022-03-23 sim=0.955), JSON-roundtrip OK. 1155/1155 tester (+10 nye). **Fase 10 LUKKET — tag `v0.10.0-fase-10`.**
 - Session 62 lukket — Fase 11 åpning. Scaffold for backtest-rammeverket: ny modul `bedrock/backtest/` (config + result + report + runner) + ny CLI `bedrock backtest run` + demo-rapport `docs/backtest_2026-04_gold-corn.md` mot ekte data (Gold/Corn × 30d/90d). Outcome-replay leser pre-beregnet `analog_outcomes` — ingen as-of-date orchestrator-replay ennå (det er senere session). Hit-flag beregnes on-the-fly fra config-terskel slik at samme tabell kan re-aggregeres uten re-backfill. Sanity: Gold 2024 30d hit-rate 59.1%, avg +3.87% (matcher Gold-bull-året). 1183/1183 tester (+28 nye fordelt på 2 filer).
+- Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - **Branch:** `main` (jobber direkte på main, Nivå 1-modus). Bruker-beslutning 2026-04-25: bli på Nivå 1 til Fase 11 ferdig, bytt til Nivå 3 ved Fase 12 start.
 - **Blocked:** nei
-- **Next task:** **Session 63** = as-of-date orchestrator-replay. Krever `DataStoreView`-wrapper (eller equivalent) som klipper data ved en gitt ref_date slik at `Engine.score(...)` kun ser data ≤ ref_date. Så `run_orchestrator_replay` itererer ref_dates og samler full SignalEntry per dato → populerer score/grade/published på `BacktestSignal` + per_grade-breakdown på `BacktestReport`. Bevisst tett scope — `compare_signals(v1, v2)` og UI-fane hører i senere sessions etter as-of-date-replay er stabil.
+- **Next task:** **Session 64** = full 12-mnd-replay-rapport for Gold + Corn × 30d/90d (PLAN § 13 Fase 11 leveranse "rapport over signal-performance"). Wall-time-estimat: ~252 dager × 4 kombinasjoner × 2s = ~30 min med step_days=1. Med step_days=5 (ukentlig): ~50 dager × 4 × 2s = ~7 min. Output: oppdatert `docs/backtest_2026-04_orchestrator-replay.md` (eller ny `docs/backtest_fase11_full.md`) med per-instrument/horizon-tabeller. Etter dette: vurdere `compare_signals(v1, v2)` for regelsett-impact + evt. UI-fane (per § 11.5). Tag `v0.11.0-fase-11` ved fase-slutt.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) **ved Fase 12 start** per bruker-beslutning 2026-04-25.
 
 ## Open questions to user
@@ -124,6 +126,127 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 63: Fase 11 — orchestrator-replay + AsOfDateStore + per-grade-breakdown (LUKKET)
+
+**Scope:** Bygge på session 62-scaffold med full as-of-date Engine-
+kjøring per ref_date. Tre leveranser: AsOfDateStore-wrapper,
+run_orchestrator_replay, og per-grade-breakdown i rapporten.
+
+**Endret denne session (commit `5f71107`):**
+
+`src/bedrock/backtest/store_view.py` (ny, 240 linjer):
+- `AsOfDateStore(underlying, as_of_date)` — wrapper med samme interface
+  som DataStore for de getter-metodene orchestrator + Engine + analog
+  bruker
+- Implementert: get_prices, get_prices_ohlc, has_prices, get_cot,
+  get_fundamentals, get_weather_monthly, get_outcomes
+- as_of normaliseres til naive Timestamp (UTC midnatt) for konsistent
+  sammenligning med DB-data
+- **Outcomes look-ahead-strict**: clipper `ref_date + horizon_days ≤
+  as_of_date` slik at K-NN-naboer er kun datoer der vi faktisk visste
+  forward_return
+- TODO dokumentert i selve modulen: COT publication-lag (~3d),
+  weather_monthly publiserings-lag (~2 uker), prices-snapshot
+  (corporate actions kan endre historiske bars retrospektivt)
+
+`src/bedrock/backtest/runner.py` (+135 linjer):
+- `_HORIZON_DAYS_TO_NAME` mapping (30→SCALP, 60→SWING, 90→MAKRO)
+- `run_orchestrator_replay(store, config, *, instruments_dir,
+  direction, step_days, max_iterations)`:
+  - Itererer over ref_dates fra `analog_outcomes` (kun datoer med
+    faktisk outcome å sammenligne mot)
+  - Per ref_date: AsOfDateStore + generate_signals via lat import
+  - Plukker SignalEntry for ønsket direction (buy/sell)
+  - Bygger BacktestSignal med score/grade/published fra orchestrator
+    + forward_return/hit fra outcomes-tabellen (uclippet)
+  - Defensive: alle exceptions per ref_date → skip + log
+
+`src/bedrock/backtest/report.py` (+30 linjer):
+- summary_stats utvidet med per-grade-aggregat (n_signals, n_hits,
+  hit_rate_pct, avg_return_pct per grade)
+- `_sorted_grade_dict` sorterer A+ → A → B → C → D
+- format_markdown sin "## Per grade"-seksjon vises kun når
+  by_grade har innhold
+
+`src/bedrock/cli/backtest.py`:
+- Nye flagg: --mode outcome|orchestrator (default outcome),
+  --step-days, --direction buy|sell, --instruments-dir,
+  --max-iterations
+- run_cmd dispatcher mellom outcome- og orchestrator-replay
+
+**Tester (+29 nye → 1212/1212):**
+
+`test_backtest_store_view.py` (18 tester):
+- Construction + tz-stripping + dato-only-normalisering
+- Prices: clipped, lookback-after-clip, KeyError ved tom, OHLC-clip,
+  has_prices true/false
+- Fundamentals: clipped, KeyError unknown
+- COT: clipped, KeyError ved tom
+- Weather monthly: clipped, lookback
+- Outcomes: strict-clip 30d, per-rad horizon når horizon_days=None,
+  empty når før all data, unknown instrument
+
+`test_backtest_orchestrator_replay.py` (11 tester):
+- Score/grade/published populert fra orchestrator
+- step_days reduserer iterasjoner
+- max_iterations capper
+- Buy vs sell selekterer riktig entry
+- No-data / outside-window → empty
+- Per-grade: aggregat beregnet, n_published populert, sortering A+→D
+- format_markdown viser/skjuler "## Per grade" basert på by_grade
+
+**Bug fixet underveis:**
+- `str(Direction.BUY)` returnerer 'Direction.BUY' (med klassenavn),
+  ikke 'buy'. Fikset ved `getattr(e.direction, "value", str(e.direction))`
+  for safe enum-tilbøyelig sammenligning.
+
+**Demo-rapport (mot ekte data):**
+- `docs/backtest_2026-04_orchestrator-replay.md`
+- Gold 2024 ukentlig: 51 signaler / 42 publisert / hit 58.8% / avg +3.84%
+- Wall-time 98.8s (~2s per iterasjon), step_days=5
+- Per-grade: alle A+ (forventet — Gold scorer høyt med 3 av 4
+  metals-dim aktive)
+
+**Designvalg:**
+
+- **AsOfDateStore som wrapper, ikke mutering av DataStore**: holder
+  store-objektet trygt for parallell-bruk i fremtidige replay-iterasjoner
+  + samme DB-fil kan deles mellom flere backtest-konfigurasjoner.
+- **Outcomes-clip strict (`ref_date + horizon ≤ as_of`)**: kritisk for
+  K-NN-leak-prevention. Andre clips er bare på `≤ as_of` (ikke shifted),
+  fordi prices/fundamentals representerer punkt-i-tid-observasjoner.
+- **Lat import av generate_signals i runner.py**: orchestrator importerer
+  fra mange moduler; lat import unngår sirkulær på modul-load.
+- **`_HORIZON_DAYS_TO_NAME` hardkoder mapping**: 30→SCALP, 60→SWING,
+  90→MAKRO matcher Bedrock-konvensjonen i Gold-YAML. Kan utvides hvis
+  vi får andre horisonter.
+- **`direction`-arg på run_orchestrator_replay**: vi rapporterer kun
+  én direction per replay-kjør (ikke begge). Caller (CLI) velger.
+  Alternativ var å lagre begge, men det dobler signal-listen og
+  per-grade blir uklar (er en "A+ buy" ekvivalent en "A+ sell"?).
+- **`step_days` default 1 på funksjon, men CLI default 1 også**:
+  enkleste default. Bruker velger akselerasjon hvis nødvendig.
+- **TODO-flagg i store_view.py**: vi dokumenterer kjente begrensninger
+  (COT-lag, weather-lag, prices-snapshot) i koden + commit-meldingen
+  istedenfor å implementere dem nå. Disse er ikke trolig kritiske for
+  baseline-rapport.
+
+**Verifisert:**
+- pytest full → 1212/1212 (var 1183, +29)
+- ruff check + format → grønt
+- Pre-commit hook → grønt
+- Auto-push → `origin/main`
+- Demo-rapport produserer reelle tall mot data/bedrock.db
+
+**Neste session (64):**
+- Full 12-mnd-replay-rapport (Gold + Corn × 30d/90d) → leveranse for
+  PLAN § 13 Fase 11 ("rapport over signal-performance")
+- Wall-time ~7 min med step_days=5
+- Etter dette: `compare_signals(v1, v2)` for regelsett-impact-tester
+  per § 11.5; evt. UI-fane; tag `v0.11.0-fase-11`
+
+---
 
 ### 2026-04-25 — Session 62: Fase 11 åpning — backtest-scaffold + outcome-replay + rapport-format (LUKKET)
 
