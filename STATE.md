@@ -2,6 +2,9 @@
 
 ## Current state
 
+- **Phase:** 12 **ÅPEN 2026-04-25** — parallell-drift (PLAN § 12). Sub-sessions:
+  - **66:** infrastruktur for parallell-drift (compare-script + monitor-script + systemd-runbook). **LUKKET 2026-04-25**
+  - **67 (neste):** aktivere parallell-drift (faktisk `systemctl --user enable --now` + første compare/monitor-run mot ekte data).
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -39,10 +42,10 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `main` (Nivå 1-modus aktivt **frem til Fase 12 åpnes**). Per CLAUDE.md + bruker-beslutning 2026-04-25: bytte til Nivå 3 (feature-branches + PR + branch-protection) ved Fase 12 start. Se `docs/branch_strategy.md` for full oppsett.
-- **Blocked:** ja — Fase 12 åpning krever bruker-beslutninger om scope og rekkefølge før første session kan starte. Per PLAN § 13 er Fase 12 = "live-cutover": bot-rewrite, signal_server-bytt, prod-monitoring. Men det er en stor fase; hører naturlig oppdelt i flere sub-spor (bot-rewrite vs cutover vs rollback-plan). Trenger bruker-input på (a) hvilket sub-spor som starter først, (b) hvor parallell-drift mellom bedrock og scalp_edge skal være, (c) cutover-kriterier (når kan vi slå av gammel bot trygt?).
-- **Next task:** **Pre-Fase-12-planlegging.** Forslag: les PLAN § 13 Fase 12 + § 14 Fase 13, drøft sub-spor-rekkefølge + cutover-strategi med bruker, så start session 66 = Fase 12 åpning med Nivå 3-bytte (sett opp branch-protection på main, første feature-branch for bot-rewrite eller signal_server-bytt).
-- **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) **ved Fase 12 start** per bruker-beslutning 2026-04-25.
+- **Branch:** `feat/fase-12-parallel-setup` (Nivå 3 aktivert ved Fase 12 start, session 66). Branch-protection på `main` i GitHub UI er **ikke automatisert** — må settes opp manuelt av bruker, se `docs/branch_strategy.md` § "Main-beskyttelse". Inntil da kan main fortsatt motta direkte commits, men sessions 66+ jobber via feature-branches + PR.
+- **Blocked:** nei. Session 67 kan starte når som helst.
+- **Next task:** **Session 67 — aktivere parallell-drift.** Konkret: (a) `bedrock systemd generate` + `install` (faktisk, ikke dry-run) på prod-laptop; (b) `systemctl --user daemon-reload` + `enable --now` per fetcher-timer enkeltvis; (c) verifiser at hver fetcher kjører via `journalctl --user -u bedrock-fetch-<name>`; (d) sett opp daglig `bedrock-monitor.timer` per `docs/fase-12-runbook.md` § C.3; (e) første `compare_signals_daily.py`-baseline + `monitor_pipeline.py`-baseline; (f) IKKE skru av cot-explorer-timere. Cot-explorer fortsetter parallelt i hele Fase 12.
+- **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
 ## Open questions to user
 
@@ -129,6 +132,131 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 66: Fase 12 åpning — parallell-drift infrastruktur (LUKKET)
+
+**Scope:** PLAN § 12 (Fase 12) opening-session. Setup-arbeid for
+parallell-drift: (a) systemd-timer-installasjon-flyt verifisert,
+(b) compare-script (bedrock signals.json vs cot-explorer
+signals.json + agri_signals.json), (c) monitor-script (auto-sjekk av
+4 av 5 § 12.3 cutover-kriterier). Cot-explorer-timere skrus IKKE av
+ennå — begge systemer skal kjøre parallelt under hele Fase 12.
+
+**Endret denne session (feature-branch `feat/fase-12-parallel-setup`):**
+
+`src/bedrock/parallel/__init__.py` (ny):
+- Re-eksporterer `compare`, `CompareReport`, `DiffEntry`,
+  `NormalizedSignal`, `run_monitor`, `MonitorReport`, `CheckResult`,
+  + alle delsjekk-funksjoner.
+
+`src/bedrock/parallel/compare.py` (ny, ~310 linjer):
+- `NormalizedSignal` (frozen dataclass) — felles representasjon
+  for sammenligning på tvers av schema-versjoner.
+- `normalize_bedrock` / `normalize_old` — lowercaser
+  instrument/horizon/direction; gir entry/sl/grade/score/max_score.
+- `load_bedrock_signals(path)` (returnerer tom liste hvis fil
+  mangler; krever liste-format ellers ValueError).
+- `load_old_signals(path)` (håndterer både envelope-format
+  `{"signals": [...]}` og bare-liste).
+- `compare(bedrock_path, old_paths)` — join på
+  `(instrument, horizon, direction)`-nøkkel; klassifiserer hver
+  nøkkel som `only_old` / `only_new` / `changed` / `unchanged`.
+- Toleranser: 5pp på normalisert score (`score / max_score`),
+  0.1 % relativ på entry/sl.
+- `format_compare_markdown(report, max_rows=100)` — sammendrag-
+  tabell + diff-tabell med trunkering.
+- `format_compare_json(report)` — full audit via `asdict`.
+
+`src/bedrock/parallel/monitor.py` (ny, ~280 linjer):
+- 4 delsjekker som hver returnerer `CheckResult(name, ok, detail, data)`:
+  - `check_fetcher_freshness(fetch_yaml, db)` — bruker eksisterende
+    `bedrock.config.fetch.status_report`; ok når ingen fetchere er
+    `stale` eller `missing` (aging er warning, ikke fail).
+  - `check_pipeline_log_errors(log_path)` — skanner siste 1000
+    linjer av `logs/pipeline.log` etter feil-keywords (case-insensitive).
+    Manglende fil → ok=True (ingenting å klage på).
+  - `check_agri_tp_override(log_path)` — skanner siste 5000 linjer
+    av `~/scalp_edge/bot.log` etter "agri TP overridden". Bekrefter
+    at Fase 7 bot-fix holder seg.
+  - `check_signal_diff(bedrock_signals, old_signals)` — kaller
+    `compare()` og fail-er hvis grade-endrings-andel > 50 % av felles
+    signaler (terskel justerbar).
+- `run_monitor(...)` — kjører alle 4 og returnerer `MonitorReport`.
+- `format_monitor_text` (med eksplisitt manuell § 12.3 #5-reminder)
+  + `format_monitor_json`.
+
+`scripts/compare_signals_daily.py` (ny, tynn CLI-wrapper):
+- `--bedrock`, `--old` (kan gis flere ganger), `--report markdown|json`,
+  `--max-rows`, `--output`. Default-input matcher faktiske stier på
+  laptop (bedrock data/signals.json + cot-explorer's to filer).
+
+`scripts/monitor_pipeline.py` (ny, tynn CLI-wrapper):
+- Eksit-kode 0/1 basert på overall_ok. Egnet som systemd-timer-payload.
+
+`tests/unit/test_parallel_compare.py` (ny, 23 tester):
+- Normalisering (lowercasing, manglende felter), lasting (envelope vs
+  bare-liste, missing files, ugyldig format), diff-logikk (identical,
+  grade-endring, only_old/only_new, score-pct-toleranse, entry-pris-
+  toleranse, multi-old-files, direction-i-join-key), formatering
+  (markdown sammendrag, max_rows-trunkering, "ingen endringer", JSON-
+  validitet, asdict-roundtrip).
+
+`tests/unit/test_parallel_monitor.py` (ny, 16 tester):
+- pipeline-log (missing/clean/errors/tail-grense), agri-tp-override
+  (missing/clean/match/case-insensitive), signal-diff (bedrock-missing/
+  no-old-files/identical/under-terskel/over-terskel), run_monitor
+  end-to-end, format-text (manual-step-disclaimer), format-json (valid).
+
+`docs/fase-12-runbook.md` (ny, ~270 linjer):
+- A: aktivere fetch-timere (generate → dry-run install → ekte install
+  → daemon-reload → enable per fetcher → status-sjekker).
+- B: daglig signal-diff-prosedyre (kommandoer, tolknings-tabell, JSON).
+- C: monitor-script + ferdig systemd-timer-template for daglig kjøring
+  (bedrock-monitor.service + .timer kl 06:30 lokal).
+- D: rollback (disable + remove units; cot-explorer ikke berørt).
+- E: cutover-checklist for Fase 13.
+- F: status-kommandoer (list-timers + journalctl).
+
+**Eksplisitt utenfor scope (kommer i session 67+):**
+- Faktisk `systemctl --user enable --now` på prod-laptop.
+- Branch-protection på `main` i GitHub UI (manuell brukerhandling).
+- Daglig auto-kjøring av monitor + compare via systemd
+  (template ligger i runbook, men ikke aktivert).
+- Signals-publishing-pipeline (`bedrock signals` for alle instrumenter
+  som timer; nåværende fetch-timere skriver bare data, ikke signals.json).
+- Eventuell utvidelse av compare-script til å sammenligne på
+  navne-aliaser ("Cotton" vs "Bomull" osv.).
+
+**Tester:** 1273/1273 grønne (+39 nye fordelt på 2 filer).
+
+**Smoke-tests mot ekte filer:**
+- `compare_signals_daily.py`: 6 bedrock-signaler (kun Gold) vs 12
+  cot-explorer-signaler (agri-mix). Felles=0 (ingen overlap ennå
+  fordi bedrock kjører kun Gold lokalt). Skriver markdown som
+  forventet.
+- `monitor_pipeline.py`: 3 fresh + 1 aging (`prices`) + 2 missing
+  (`cot_legacy`, `weather`). pipeline-log + bot-log mangler → ok.
+  signal_diff: 0 felles → ok. Overall=FAIL pga fetcher-freshness.
+  Eksit 1.
+- `bedrock systemd generate` skriver 12 unit-filer (6 fetchere).
+- `bedrock systemd install --dry-run` viser `systemctl --user link`-
+  kommandoer korrekt.
+
+**Beslutninger som kom på plass denne sessionen:**
+- Logikk i `bedrock.parallel`-pakken (testbart) + tynne CLI-wrappers
+  i `scripts/`. Følger samme mønster som `scripts/backtest_fase11_full.py`.
+- Compare-script bruker `(instrument, horizon, direction)` lowercase
+  som join-nøkkel. Navne-mismatch ("Cotton" vs "Bomull") ender som
+  `only_old`/`only_new` — manuelt review fanger det. Aliasering
+  utsettes til faktisk overlap er observert i Fase 12.
+- Monitor-script flagger fail på exit-code (0/1) for å være enkel
+  systemd-payload. Manuelt § 12.3 #5-steg (siste 20 setups) er
+  dokumentert som tekst-output, ikke automatisert (krever menneske-
+  judgment).
+- Cutover-kriteriene i runbook bruker terskelen "5 dager på rad"
+  for monitor-OK + compare-grade-diff. Dette er en
+  implementasjons-beslutning per CLAUDE.md decision-guideline (rene
+  tooling-terskler, ikke trade-logikk).
 
 ### 2026-04-25 — Session 65: Fase 11 — compare_signals(v1, v2) + CLI compare (LUKKET)
 
