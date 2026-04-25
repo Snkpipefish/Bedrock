@@ -86,6 +86,228 @@ function wireFilterBar(scope, onChange) {
   _syncBarUi(bar, scope);
 }
 
+// ─── Modal (session 52) ────────────────────────────────────────
+// Klikk på setup-kort → openSetupModal med full explain-trace fra
+// `families` (persistert i SignalEntry fra Engine via _build_entry).
+// Klikk på trade-rad → openTradeModal (eksisterende felt; driver-trace
+// per trade kommer i senere session via signal_id-lookup).
+
+function _modalEl() { return document.getElementById('modal'); }
+
+function _fmt2(n) { return (n == null || isNaN(n)) ? '–' : Number(n).toFixed(2); }
+function _fmt5(n) { return (n == null || isNaN(n)) ? '–' : Number(n).toFixed(5); }
+function _fmt1(n) { return (n == null || isNaN(n)) ? '–' : Number(n).toFixed(1); }
+
+function _pctOf(score, max) {
+  if (!max || max <= 0) return 0;
+  return Math.max(0, Math.min(100, (score / max) * 100));
+}
+
+function _scoreBarHtml(score, maxScore, minPublish) {
+  const scorePct = _pctOf(score, maxScore);
+  const publishPct = _pctOf(minPublish || 0, maxScore);
+  return `
+    <div class="modal-scorebar">
+      <div class="modal-scorebar-fill" style="width:${scorePct.toFixed(1)}%"></div>
+      <div class="modal-scorebar-mark" style="left:${publishPct.toFixed(1)}%"></div>
+    </div>
+    <div class="modal-scorebar-label">
+      <span>score ${_fmt2(score)} / ${_fmt2(maxScore)}</span>
+      <span>publish-gulv ${_fmt2(minPublish)}</span>
+    </div>`;
+}
+
+function _familyHtml(name, fam) {
+  const score = fam.score ?? 0;
+  const drivers = (fam.drivers || []).slice().sort(
+    (a, b) => Math.abs(b.contribution || 0) - Math.abs(a.contribution || 0)
+  );
+  return `
+    <details class="modal-family" ${drivers.length ? '' : 'data-empty="1"'}>
+      <summary>
+        <span class="modal-family-name">${name}</span>
+        <span class="modal-family-score">${_fmt2(score)}</span>
+        <span class="modal-family-count">${drivers.length} driver${drivers.length === 1 ? '' : 'e'}</span>
+      </summary>
+      ${drivers.length ? `<table class="modal-driver-table">
+        <thead>
+          <tr><th>Driver</th><th class="num">Value</th><th class="num">Weight</th><th class="num">Bidrag</th></tr>
+        </thead>
+        <tbody>
+          ${drivers.map(d => `<tr>
+            <td>${d.name}</td>
+            <td class="num">${_fmt2(d.value)}</td>
+            <td class="num">${_fmt2(d.weight)}</td>
+            <td class="num"><strong>${_fmt2(d.contribution)}</strong></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : '<p class="meta" style="padding:0 12px 8px">Ingen aktive drivere i denne familien.</p>'}
+    </details>`;
+}
+
+function openSetupModal(entry) {
+  const m = _modalEl();
+  if (!m || !entry) return;
+  const setupWrap = entry.setup || null;
+  const setup = setupWrap ? (setupWrap.setup || setupWrap) : null;
+  const families = entry.families || {};
+  const familyKeys = Object.keys(families);
+  const dirCls = (entry.direction || '').toUpperCase() === 'SELL' ? 'dir-sell' : 'dir-buy';
+  const gradeCls = `grade-${(entry.grade || 'x').replace('+', 'plus').toLowerCase()}`;
+
+  m.querySelector('.modal-content').innerHTML = `
+    <button class="modal-close" type="button" aria-label="Lukk">×</button>
+    <header class="modal-head ${dirCls}">
+      <div>
+        <span class="modal-instrument" id="modal-title">${entry.instrument || '–'}</span>
+        <span class="modal-direction">${entry.direction || '–'}</span>
+        <span class="modal-horizon">${entry.horizon || '–'}</span>
+      </div>
+      <div>
+        <span class="grade ${gradeCls}">${entry.grade || '?'}</span>
+        <span class="modal-published-pill ${entry.published ? 'yes' : 'no'}">${entry.published ? 'published' : 'below floor'}</span>
+      </div>
+    </header>
+
+    <section class="modal-section">
+      <h3>Score</h3>
+      ${_scoreBarHtml(entry.score, entry.max_score, entry.min_score_publish)}
+      <p class="meta" style="margin-top:6px">Aktive familier: ${entry.active_families ?? '–'} av ${familyKeys.length || '–'}</p>
+    </section>
+
+    ${familyKeys.length ? `
+    <section class="modal-section">
+      <h3>Driver-trace</h3>
+      ${familyKeys.map(k => _familyHtml(k, families[k])).join('')}
+    </section>` : `
+    <section class="modal-section">
+      <h3>Driver-trace</h3>
+      <p class="meta">Ingen driver-trace persistert. Re-kjør orchestrator etter session 52 for full trace.</p>
+    </section>`}
+
+    ${setup ? `
+    <section class="modal-section">
+      <h3>Setup</h3>
+      <table class="modal-kv">
+        <tr><th>Entry</th><td>${_fmt5(setup.entry)}</td></tr>
+        <tr><th>Stop</th><td>${_fmt5(setup.sl ?? setup.stop_loss ?? setup.stop)}</td></tr>
+        <tr><th>T1 / TP</th><td>${_fmt5(setup.tp ?? setup.target_1 ?? setup.t1)}</td></tr>
+        <tr><th>R:R</th><td>${_fmt2(setup.rr ?? setup.rr_t1)}</td></tr>
+        <tr><th>ATR</th><td>${_fmt5(setup.atr)}</td></tr>
+      </table>
+      ${setup.entry_cluster_types ? `<p class="meta" style="margin-top:6px">Entry-nivå: ${(setup.entry_cluster_types || []).join(', ') || '–'}</p>` : ''}
+      ${setup.tp_cluster_types ? `<p class="meta">TP-nivå: ${(setup.tp_cluster_types || []).join(', ') || '–'}</p>` : ''}
+    </section>` : ''}
+
+    ${setupWrap && setupWrap.first_seen ? `
+    <section class="modal-section">
+      <h3>Persistens</h3>
+      <table class="modal-kv">
+        <tr><th>Setup-ID</th><td><code>${setupWrap.setup_id || '–'}</code></td></tr>
+        <tr><th>First seen</th><td>${setupWrap.first_seen}</td></tr>
+        <tr><th>Last updated</th><td>${setupWrap.last_updated}</td></tr>
+      </table>
+    </section>` : ''}
+
+    ${entry.gates_triggered && entry.gates_triggered.length ? `
+    <section class="modal-section">
+      <h3>Gates utløst</h3>
+      <ul class="modal-list">${entry.gates_triggered.map(g => `<li>${g}</li>`).join('')}</ul>
+    </section>` : ''}
+
+    ${entry.skip_reason ? `
+    <section class="modal-section">
+      <h3>Skip-grunn</h3>
+      <p>${entry.skip_reason}</p>
+    </section>` : ''}
+  `;
+  m.showModal();
+}
+
+function openTradeModal(entry) {
+  const m = _modalEl();
+  if (!m || !entry) return;
+  const sig = entry.signal || {};
+  const pnl = entry.pnl || null;
+  const open = !entry.closed_at;
+  const dirCls = (sig.direction || '').toUpperCase() === 'SELL' ? 'dir-sell' : 'dir-buy';
+  const gradeCls = `grade-${(sig.grade || 'x').replace('+', 'plus').toLowerCase()}`;
+  const result = (entry.result || '').toLowerCase();
+
+  m.querySelector('.modal-content').innerHTML = `
+    <button class="modal-close" type="button" aria-label="Lukk">×</button>
+    <header class="modal-head ${dirCls}">
+      <div>
+        <span class="modal-instrument" id="modal-title">${sig.instrument || '–'}</span>
+        <span class="modal-direction">${sig.direction || '–'}</span>
+        <span class="modal-horizon">${sig.horizon || '–'}</span>
+      </div>
+      <div>
+        ${sig.grade ? `<span class="grade ${gradeCls}">${sig.grade}</span>` : ''}
+        ${open ? '<span class="pill open">åpen</span>' : `<span class="pill ${result}">${entry.result || '–'}</span>`}
+      </div>
+    </header>
+
+    <section class="modal-section">
+      <h3>Tidslinje</h3>
+      <table class="modal-kv">
+        <tr><th>Åpnet</th><td>${entry.timestamp || '–'}</td></tr>
+        <tr><th>Lukket</th><td>${entry.closed_at || '(åpen)'}</td></tr>
+        ${entry.exit_reason ? `<tr><th>Exit-grunn</th><td>${entry.exit_reason}</td></tr>` : ''}
+      </table>
+    </section>
+
+    <section class="modal-section">
+      <h3>Setup</h3>
+      <table class="modal-kv">
+        <tr><th>Entry</th><td>${_fmt5(sig.entry)}</td></tr>
+        <tr><th>Stop</th><td>${_fmt5(sig.stop)}</td></tr>
+        <tr><th>T1</th><td>${_fmt5(sig.t1)}</td></tr>
+      </table>
+    </section>
+
+    <section class="modal-section">
+      <h3>Posisjon</h3>
+      <table class="modal-kv">
+        <tr><th>Signal-ID</th><td><code>${sig.id || '–'}</code></td></tr>
+        <tr><th>Position-ID</th><td><code>${sig.position_id ?? '–'}</code></td></tr>
+        <tr><th>Lots</th><td>${sig.lots ?? '–'}</td></tr>
+        <tr><th>Risiko</th><td>${sig.risk_pct != null ? sig.risk_pct + ' %' : '–'}</td></tr>
+      </table>
+    </section>
+
+    ${pnl ? `
+    <section class="modal-section">
+      <h3>PnL</h3>
+      <table class="modal-kv">
+        <tr><th>USD</th><td><span class="${pnl.pnl_usd > 0 ? 'pos' : pnl.pnl_usd < 0 ? 'neg' : ''}">${pnl.pnl_usd != null ? (pnl.pnl_usd >= 0 ? '+' : '') + _fmt2(pnl.pnl_usd) : '–'}${pnl.pnl_real ? ' ✓ realisert' : ''}</span></td></tr>
+        ${pnl.pips != null ? `<tr><th>Pips</th><td>${_fmt1(pnl.pips)}</td></tr>` : ''}
+        ${pnl.close_price != null ? `<tr><th>Close-pris</th><td>${_fmt5(pnl.close_price)}</td></tr>` : ''}
+      </table>
+    </section>` : ''}
+
+    <p class="meta modal-disclaimer">Driver-trace lagres ikke per trade enda — se setup-modalen via Financial / Soft commodities for full forklaring.</p>
+  `;
+  m.showModal();
+}
+
+function closeModal() {
+  const m = _modalEl();
+  if (m && m.open) m.close();
+}
+
+function _wireModalGlobal() {
+  const m = _modalEl();
+  if (!m) return;
+  m.addEventListener('click', e => {
+    // Klikk på selve dialog-elementet (utenfor .modal-content) ELLER
+    // på .modal-close → lukk
+    if (e.target === m || e.target.classList.contains('modal-close')) {
+      closeModal();
+    }
+  });
+}
+
 function setFilterCount(scope, shown, total) {
   const mount = document.querySelector(`.filter-bar-mount[data-flt-scope="${scope}"]`);
   if (!mount) return;
@@ -169,9 +391,11 @@ function renderTradeTable(entries) {
     body.innerHTML = `<tr><td colspan="12" class="empty">${msg}</td></tr>`;
     return;
   }
-  body.innerHTML = entries.map(e => {
+  // Filtrert subset blir oppslagskilde for trade-modal
+  body.__bedrockEntries = entries;
+  body.innerHTML = entries.map((e, i) => {
     const s = e.signal || {};
-    return `<tr>
+    return `<tr class="clickable" data-modal-idx="${i}" tabindex="0" role="button" aria-label="Vis trade-detaljer">
       <td>${e.timestamp || '–'}</td>
       <td>${s.id || '–'}</td>
       <td>${s.instrument || '–'}</td>
@@ -186,6 +410,55 @@ function renderTradeTable(entries) {
       <td class="align-right">${fmtPnl(e.pnl)}</td>
     </tr>`;
   }).join('');
+}
+
+// ─── Klikk-delegering for modal ────────────────────────────────
+function _wireModalDelegation() {
+  // Setup-kort (Financial + Agri) — hver container holder filtrert subset
+  // i `el.__bedrockSetups`. Klikk på `.setup-card[data-modal-idx]`
+  // \u00e5pner modal med riktig entry.
+  for (const id of ['financial-cards', 'agri-cards']) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.addEventListener('click', e => {
+      const card = e.target.closest('.setup-card[data-modal-idx]');
+      if (!card) return;
+      const setups = el.__bedrockSetups || [];
+      const idx = parseInt(card.dataset.modalIdx, 10);
+      if (!isNaN(idx) && setups[idx]) openSetupModal(setups[idx]);
+    });
+    // Tastatur: Enter / Space på fokusert kort
+    el.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const card = e.target.closest('.setup-card[data-modal-idx]');
+      if (!card) return;
+      e.preventDefault();
+      const setups = el.__bedrockSetups || [];
+      const idx = parseInt(card.dataset.modalIdx, 10);
+      if (!isNaN(idx) && setups[idx]) openSetupModal(setups[idx]);
+    });
+  }
+
+  // Trade-rad
+  const body = document.getElementById('trade-log-body');
+  if (body) {
+    body.addEventListener('click', e => {
+      const row = e.target.closest('tr[data-modal-idx]');
+      if (!row) return;
+      const entries = body.__bedrockEntries || [];
+      const idx = parseInt(row.dataset.modalIdx, 10);
+      if (!isNaN(idx) && entries[idx]) openTradeModal(entries[idx]);
+    });
+    body.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const row = e.target.closest('tr[data-modal-idx]');
+      if (!row) return;
+      e.preventDefault();
+      const entries = body.__bedrockEntries || [];
+      const idx = parseInt(row.dataset.modalIdx, 10);
+      if (!isNaN(idx) && entries[idx]) openTradeModal(entries[idx]);
+    });
+  }
 }
 
 // ─── Financial setups (session 48) ────────────────────────────
@@ -223,6 +496,9 @@ function renderSetupCards(containerId, setups, totalBeforeFilter) {
     el.innerHTML = `<p class="empty">${msg}</p>`;
     return;
   }
+  // setups (filtered subset) brukes til modal-oppslag — kortets index
+  // i denne lista er nøkkelen.
+  el.__bedrockSetups = setups;
   el.innerHTML = setups.map(s => {
     const setup = s.setup || {};
     const entry = setup.entry;
@@ -231,7 +507,8 @@ function renderSetupCards(containerId, setups, totalBeforeFilter) {
     const rr = setup.rr_t1 ?? setup.rr;
     const dirCls = (s.direction || '').toLowerCase() === 'sell' ? 'dir-sell' : 'dir-buy';
     const gradeCls = `grade-${(s.grade || 'x').replace('+', 'plus').toLowerCase()}`;
-    return `<article class="setup-card ${dirCls}">
+    const idx = setups.indexOf(s);
+    return `<article class="setup-card clickable ${dirCls}" data-modal-idx="${idx}" tabindex="0" role="button" aria-label="Vis detaljer">
       <header>
         <span class="instrument">${s.instrument || '–'}</span>
         <span class="direction">${s.direction || '–'}</span>
@@ -354,6 +631,8 @@ document.querySelectorAll('.tab').forEach(btn => {
 wireFilterBar('skipsloggen', renderTradeTableFiltered);
 wireFilterBar('financial',   renderFinancialFiltered);
 wireFilterBar('agri',        renderAgriFiltered);
+_wireModalGlobal();
+_wireModalDelegation();
 
 loadSkipsloggen();
 setInterval(loadSkipsloggen, REFRESH_INTERVAL_MS);

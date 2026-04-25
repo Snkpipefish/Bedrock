@@ -174,6 +174,50 @@ def test_generate_signals_financial_end_to_end(
         assert e.max_score == 5.0
 
 
+def test_generate_signals_persists_explain_trace_families(
+    store_with_wavy_prices: DataStore,
+    minimal_defaults: Path,
+    instruments_dir: Path,
+) -> None:
+    """Fase 9 runde 2 session 52: SignalEntry skal bære med seg families
+    + active_families fra GroupResult, og round-trippe gjennom
+    `model_dump(mode='json')` så signals.json kan eksponere driver-trace
+    til UI-modalen.
+    """
+    _write_gold(instruments_dir)
+    now = datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+    result = generate_signals(
+        "Gold",
+        store_with_wavy_prices,
+        now=now,
+        instruments_dir=instruments_dir,
+        defaults_dir=minimal_defaults,
+    )
+
+    # GOLD-config har én familie ("trend") → families-dict ikke tom
+    for entry in result.entries:
+        assert entry.families, "families skal være populert fra GroupResult"
+        assert "trend" in entry.families
+        fam = entry.families["trend"]
+        assert fam.name == "trend"
+        # Drivers-listen er populert (sma200_align er den eneste i config)
+        assert any(d.name == "sma200_align" for d in fam.drivers)
+        # active_families ≥ 0 og ≤ antall families totalt
+        assert 0 <= entry.active_families <= len(entry.families)
+
+    # Round-trip via model_dump(mode='json') — det formatet
+    # signal_server skriver til signals.json via PersistedSignal
+    # (extra='allow' fanger ekstra felt).
+    dump = result.entries[0].model_dump(mode="json")
+    assert "families" in dump
+    assert "active_families" in dump
+    assert "trend" in dump["families"]
+    drivers_dump = dump["families"]["trend"]["drivers"]
+    assert isinstance(drivers_dump, list)
+    assert all({"name", "value", "weight", "contribution"} <= d.keys() for d in drivers_dump)
+
+
 def test_generate_signals_with_snapshot_persists_stable_id(
     store_with_wavy_prices: DataStore,
     minimal_defaults: Path,

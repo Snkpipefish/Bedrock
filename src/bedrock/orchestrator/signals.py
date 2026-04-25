@@ -29,7 +29,7 @@ from bedrock.config.instruments import (
     InstrumentConfig,
     load_instrument_config,
 )
-from bedrock.engine.engine import AgriRules, Engine, FinancialRules, GroupResult
+from bedrock.engine.engine import AgriRules, Engine, FamilyResult, FinancialRules, GroupResult
 from bedrock.orchestrator.score import (
     DEFAULT_INSTRUMENTS_DIR,
     OrchestratorError,
@@ -64,7 +64,14 @@ from bedrock.setups.snapshot import load_snapshot, save_snapshot
 
 
 class SignalEntry(BaseModel):
-    """Ett kandidat-signal for en (direction, horizon)-kombinasjon."""
+    """Ett kandidat-signal for en (direction, horizon)-kombinasjon.
+
+    `families` og `active_families` er explain-trace-felt fra Engine,
+    persistert ut i signals.json så UI kan vise driver-by-driver
+    forklaring i modal (Fase 9 runde 2 session 52). Defaultet til tom
+    dict / 0 så eldre fixtures og direkte instansieringer i tester ikke
+    brekker — `_build_entry` populerer dem alltid fra GroupResult.
+    """
 
     instrument: str
     direction: Direction
@@ -77,6 +84,8 @@ class SignalEntry(BaseModel):
     setup: StableSetup | None = None  # None hvis build_setup returnerte None
     skip_reason: str | None = None  # hvorfor setup er None
     gates_triggered: list[str] = Field(default_factory=list)
+    families: dict[str, FamilyResult] = Field(default_factory=dict)
+    active_families: int = 0
 
     model_config = ConfigDict(extra="forbid")
 
@@ -373,6 +382,8 @@ def _build_entry(
             setup=None,
             skip_reason="build_setup returned None (no asymmetric setup found)",
             gates_triggered=list(group_result.gates_triggered),
+            families=dict(group_result.families),
+            active_families=group_result.active_families,
         )
 
     # Stabiliser hvis previous finnes
@@ -399,6 +410,8 @@ def _build_entry(
         setup=stable,
         skip_reason=None,
         gates_triggered=list(group_result.gates_triggered),
+        families=dict(group_result.families),
+        active_families=group_result.active_families,
     )
 
 
