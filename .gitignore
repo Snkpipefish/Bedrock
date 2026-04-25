@@ -60,3 +60,11 @@ tests/**/htmlcov/
 *.duckdb.wal
 data/bedrock.db
 data/*.db
+
+# Genererte systemd-unit-filer (lokal-spesifikke paths; re-genererbare
+# via `bedrock systemd generate`)
+systemd/bedrock-fetch-*.service
+systemd/bedrock-fetch-*.timer
+
+# Volatil signal-output (regeneres av orchestrator)
+data/signals.json
