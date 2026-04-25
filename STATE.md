@@ -4,7 +4,8 @@
 
 - **Phase:** 12 **ÅPEN 2026-04-25** — parallell-drift (PLAN § 12). Sub-sessions:
   - **66:** infrastruktur for parallell-drift (compare-script + monitor-script + systemd-runbook). **LUKKET 2026-04-25**
-  - **67 (neste):** aktivere parallell-drift (faktisk `systemctl --user enable --now` + første compare/monitor-run mot ekte data).
+  - **67:** aktivert parallell-drift — alle 6 bedrock fetch-timere `enabled --now` på user-systemd. Cot-explorer-timere uberørte (system-systemd). **LUKKET 2026-04-25**
+  - **68 (neste):** observasjons-vindu (~2 uker per PLAN § 12.1). Daglig: `compare_signals_daily.py` + `monitor_pipeline.py` for å fange drift. Open issue å adressere før Fase 13: prices-fetcher feiler (Stooq-fallback aktiv, Yahoo-port fra session 58 ikke fullt forrang) — krever egen fix-session.
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -42,9 +43,9 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `feat/fase-12-parallel-setup` (Nivå 3 aktivert ved Fase 12 start, session 66). Branch-protection på `main` i GitHub UI er **ikke automatisert** — må settes opp manuelt av bruker, se `docs/branch_strategy.md` § "Main-beskyttelse". Inntil da kan main fortsatt motta direkte commits, men sessions 66+ jobber via feature-branches + PR.
-- **Blocked:** nei. Session 67 kan starte når som helst.
-- **Next task:** **Session 67 — aktivere parallell-drift.** Konkret: (a) `bedrock systemd generate` + `install` (faktisk, ikke dry-run) på prod-laptop; (b) `systemctl --user daemon-reload` + `enable --now` per fetcher-timer enkeltvis; (c) verifiser at hver fetcher kjører via `journalctl --user -u bedrock-fetch-<name>`; (d) sett opp daglig `bedrock-monitor.timer` per `docs/fase-12-runbook.md` § C.3; (e) første `compare_signals_daily.py`-baseline + `monitor_pipeline.py`-baseline; (f) IKKE skru av cot-explorer-timere. Cot-explorer fortsetter parallelt i hele Fase 12.
+- **Branch:** `chore/fase-12-activate-parallel` (Nivå 3 — denne sessionen). PR #1 (session 66) merget til main 2026-04-25. Branch-protection på `main` i GitHub UI er **ikke automatisert** — må settes opp manuelt, se `docs/branch_strategy.md`.
+- **Blocked:** nei. Session 68 (observasjon) kan starte når som helst — det er primært å la timere kjøre + lese rapporter.
+- **Next task:** **Session 68 — observasjons-vindu (PLAN § 12.1, 2 uker).** Konkret: (a) la bedrock fetch-timere kjøre på schedule; (b) daglig kjør `compare_signals_daily.py` + `monitor_pipeline.py` (eller installer `bedrock-monitor.timer` per `docs/fase-12-runbook.md § C.3`); (c) inspiser monitor-output for drift/feil; (d) **fix-session før Fase 13:** Yahoo-fetcher må ta over fra Stooq i bedrock.fetch.prices (session 58 portet kode men dispatch-pri er fortsatt Stooq); (e) IKKE skru av cot-explorer-timere.
 - **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
 ## Open questions to user
@@ -132,6 +133,111 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 67: Fase 12 — aktivert parallell-drift (LUKKET)
+
+**Scope:** Fase 12 sub-session 67 — kjøre runbook-prosedyren fra
+session 66. Gjør faktisk `systemctl --user enable --now` per
+bedrock fetch-timer, verifiser systemd-eksekvering ende-til-ende,
+smoke-test compare + monitor mot fersk data. Cot-explorer-timerne
+skal IKKE skrus av.
+
+**Pre-flight verifisering:**
+- Cot-explorer-timere er **system-level** i `/etc/systemd/system/`
+  (`cot-explorer.timer` + `cot-prices.timer`), ikke user-level. Begge
+  enabled + active (waiting). Last run + neste trigger bekreftet OK.
+  Bedrock-timere blir user-level — ingen konflikt.
+- PR #1 (session 66) merget til main (commit `9f37985`).
+
+**Endret denne session (feature-branch `chore/fase-12-activate-parallel`):**
+
+`STATE.md`:
+- Phase 12 sub-session 67 markert LUKKET.
+- Sub-session 68 (observasjons-vindu) lagt til som neste task.
+- Open issue dokumentert: prices-fetcher bruker fortsatt Stooq som
+  feiler (Yahoo-port fra session 58 dispatcher ikke korrekt).
+- Branch-felt oppdatert til `chore/fase-12-activate-parallel`.
+
+**Eksekvert (ikke i diff, men permanent på maskinen):**
+1. `pip install -e .` i `.venv/` — opprettet `.venv/bin/bedrock`
+   entry-point per `pyproject.toml [project.scripts]`. Nødvendig
+   forutsetning for at systemd kan kjøre `bedrock fetch run <name>`.
+   (Dette er en miljø-endring som ikke rulles tilbake — entry-pointet
+   forblir installert.)
+2. `bedrock systemd generate --output systemd --working-dir
+   /home/pc/bedrock --executable /home/pc/bedrock/.venv/bin/bedrock`
+   → 12 unit-filer skrevet til `~/bedrock/systemd/`.
+3. `bedrock systemd install --units-dir systemd` → 12 symlinks i
+   `~/.config/systemd/user/`.
+4. `systemctl --user daemon-reload`.
+5. `systemctl --user enable --now bedrock-fetch-<name>.timer` for
+   alle 6 fetchere: prices, cot_disaggregated, cot_legacy,
+   fundamentals, weather, enso. Alle aktive (waiting) etterpå.
+6. Manuell verifisering via `systemctl --user start
+   bedrock-fetch-fundamentals.service`: SUCCESS, 2/2 series OK,
+   3 nye rader inn i db. Bekrefter at systemd-flyten fungerer.
+
+**Kjent issue (dokumentert, ikke fikset i denne sessionen):**
+- `bedrock-fetch-prices.service` feilet ved manuell start:
+  Stooq returnerer ingen data for `zc.f` (Corn) og parse-feil for
+  `xauusd` (Gold). Session 58 portet Yahoo som ny default, men
+  dispatcher i `bedrock.fetch.prices` ser ut til å fortsatt prøve
+  Stooq først / kun. Krever egen fix-session før Fase 13. Påvirker
+  ikke Fase 12-aktiveringen (timeren er enabled og vil re-fyre på
+  schedule; bedrock har eksisterende prisdata fra session 58
+  backfill å falle tilbake på).
+
+**Smoke-test mot fersk data:**
+
+`monitor_pipeline.py`:
+```
+Overall: FAIL
+[FAIL] fetcher_freshness: 4 fresh; 1 aging: prices; 1 missing: cot_legacy
+[OK  ] pipeline_log_errors: log mangler — ingen feil rapportert
+[OK  ] agri_tp_override: bot-log mangler — ingen overrides rapportert
+[OK  ] signal_diff: 0 felles, 0 endret, 0 grade-endring (0%)
+```
+Forbedring vs session 66 (3 fresh / 2 missing): fundamentals ble
+re-fetchet under session 67 og ble fresh; weather er ikke lenger
+missing (eksisterende data har age > stale_hours men finnes i db).
+Aging prices er konsekvens av Stooq-bug. Missing cot_legacy
+forventet — den fetcher kjører kun fredag 22:00 og det er ingen
+historikk fra før.
+
+`compare_signals_daily.py`:
+- 6 bedrock-signaler (kun Gold) vs 12 cot-explorer-signaler
+  (agri-mix). 0 felles — bedrock har ikke konfigurert agri-
+  instrumenter ennå, og cot-explorer har ikke Gold på samme
+  schedule.
+- Output identisk med session 66 — forventet siden bedrock
+  signals.json ikke regenereres av fetch-timerne (signals
+  lages av `bedrock signals <instrument>` som kjøres manuelt
+  per dato).
+
+**Baseline-rapporter** (lagret men gitignored — re-genererbare):
+- `data/_meta/compare_baseline_2026-04-25.md`
+- `data/_meta/monitor_baseline_2026-04-25.json`
+
+**Aktive bedrock-timere (post-aktivering):**
+
+| Timer | Cron | Neste trigger |
+|---|---|---|
+| prices | `40 * * * 1-5` | Mon 27.04 00:40 (helgepause) |
+| fundamentals | `30 2 * * *` | Sun 26.04 02:30 |
+| weather | `0 3 * * *` | Sun 26.04 03:00 |
+| cot_disaggregated | `0 22 * * 5` | Fri 01.05 22:00 |
+| cot_legacy | `0 22 * * 5` | Fri 01.05 22:00 |
+| enso | `0 6 12 * *` | Tue 12.05 06:00 |
+
+**Beslutninger denne sessionen:**
+- `pip install -e .` valgt over alternativer (python -m wrapper
+  eller bash-script-wrapper) per bruker-bekreftelse — standard
+  Python-mønster, reversibel.
+- Stopppet ikke ved første prices-feil; verifiserte via
+  fundamentals at systemd-flyten generelt fungerer. Konsekvent
+  med CLAUDE.md "Ikke brute-force; identifiser root-cause" —
+  prices-issue er en eksisterende fetcher-bug, ikke Fase 12-
+  aktiveringsfeil.
 
 ### 2026-04-25 — Session 66: Fase 12 åpning — parallell-drift infrastruktur (LUKKET)
 
