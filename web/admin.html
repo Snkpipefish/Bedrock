@@ -43,17 +43,24 @@
     <!-- Hovedinnhold: skjult inntil gate passert -->
     <main class="admin-main" id="admin-main" hidden>
         <aside class="admin-sidebar">
-            <div class="admin-sidebar-head">
+            <nav class="admin-nav">
+                <button class="admin-nav-btn active" data-admin-section="rules">Rules</button>
+                <button class="admin-nav-btn" data-admin-section="logs">Logs</button>
+            </nav>
+
+            <div class="admin-sidebar-head" data-admin-section="rules">
                 <h3>Instruments</h3>
                 <button class="btn btn-ghost btn-sm" id="reload-list" title="Reload-liste">↻</button>
             </div>
-            <ul class="admin-instr-list" id="instr-list">
+            <ul class="admin-instr-list" id="instr-list" data-admin-section="rules">
                 <li class="meta">Laster…</li>
             </ul>
+
             <button class="btn btn-ghost btn-sm" id="logout-btn" title="Glem koden">Logg ut</button>
         </aside>
 
-        <section class="admin-editor-pane" id="editor-pane">
+        <!-- Section: Rules-editor -->
+        <section class="admin-editor-pane" id="editor-pane" data-admin-section="rules">
             <div class="admin-editor-empty" id="editor-empty">
                 <p class="meta">Velg et instrument fra venstre for å redigere YAML.</p>
             </div>
@@ -66,6 +73,7 @@
                     </div>
                     <div class="admin-editor-actions">
                         <button class="btn btn-ghost" id="reload-btn" title="Forkast endringer">↻ Reload</button>
+                        <button class="btn btn-ghost" id="dry-run-btn" title="Validate uten å skrive">Dry-run</button>
                         <button class="btn btn-primary" id="save-btn" disabled>Lagre</button>
                     </div>
                 </header>
@@ -80,6 +88,24 @@
 
                 <div class="admin-editor-feedback" id="feedback" hidden></div>
             </div>
+        </section>
+
+        <!-- Section: Logs-viewer -->
+        <section class="admin-editor-pane" id="logs-pane" data-admin-section="logs" hidden>
+            <header class="admin-editor-head">
+                <div>
+                    <h2>Pipeline log</h2>
+                    <p class="meta" id="logs-path">–</p>
+                </div>
+                <div class="admin-editor-actions">
+                    <label class="admin-tail-input">
+                        Linjer:
+                        <input type="number" id="logs-tail" value="200" min="1" max="2000" step="50">
+                    </label>
+                    <button class="btn btn-ghost" id="logs-reload-btn">↻ Refresh</button>
+                </div>
+            </header>
+            <pre class="admin-logs-output" id="logs-output">Laster…</pre>
         </section>
     </main>
 

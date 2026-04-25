@@ -51,6 +51,15 @@ class ServerConfig(BaseModel):
     # Admin / rule-editor
     instruments_dir: Path = Field(default=Path("config/instruments"))
     admin_code: str | None = None  # None => /admin/rules-endepunkter deaktivert
+    # Fase 9 runde 3 session 55:
+    # Git-rot brukt til auto-commit etter PUT /admin/rules/<id>.
+    # None => ingen auto-commit (PUT skriver bare YAML). Auto-push-hook
+    # i `.githooks/post-commit` håndterer push hvis konfigurert.
+    admin_git_root: Path | None = None
+    # Fase 9 runde 3 session 55:
+    # Log-fil for /admin/logs?tail=N. None => endpoint returnerer 404.
+    # Typisk peker på `logs/pipeline.log` i prod, men er ikke etablert i dev.
+    admin_log_path: Path | None = None
 
     # UI-fane Skipsloggen (Fase 9 runde 1)
     trade_log_path: Path = Field(default=DEFAULT_TRADE_LOG_PATH)
@@ -84,5 +93,9 @@ def load_from_env(env: dict[str, str] | None = None) -> ServerConfig:
         payload["data_root"] = Path(source["BEDROCK_DATA_ROOT"])
     if "BEDROCK_ADMIN_CODE" in source:
         payload["admin_code"] = source["BEDROCK_ADMIN_CODE"]
+    if "BEDROCK_ADMIN_GIT_ROOT" in source:
+        payload["admin_git_root"] = Path(source["BEDROCK_ADMIN_GIT_ROOT"])
+    if "BEDROCK_ADMIN_LOG_PATH" in source:
+        payload["admin_log_path"] = Path(source["BEDROCK_ADMIN_LOG_PATH"])
 
     return ServerConfig(**payload)

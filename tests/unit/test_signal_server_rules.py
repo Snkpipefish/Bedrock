@@ -373,3 +373,226 @@ def test_put_appends_trailing_newline(app_with_admin) -> None:
         )
     written = (instruments_dir / "newsym.yaml").read_text()
     assert written.endswith("\n")
+
+
+# ---------------------------------------------------------------------------
+# Fase 9 runde 3 session 55: dry-run + git-commit + logs
+# ---------------------------------------------------------------------------
+
+
+def test_dry_run_valid_yaml_does_not_write(app_with_admin) -> None:
+    """Dry-run skal validere uten å røre disk."""
+    app, instruments_dir = app_with_admin
+    before = set(instruments_dir.iterdir())
+    with app.test_client() as client:
+        response = client.post(
+            "/admin/rules/newsym/dry-run",
+            headers=_headers(),
+            json={"yaml_content": _valid_yaml_for("newsym")},
+        )
+    after = set(instruments_dir.iterdir())
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["valid"] is True
+    assert body["instrument_id"] == "newsym"
+    assert body["config_summary"]["id"] == "newsym"
+    assert before == after  # ingenting skrevet
+
+
+def test_dry_run_invalid_yaml_returns_400_with_details(app_with_admin) -> None:
+    app, _ = app_with_admin
+    with app.test_client() as client:
+        response = client.post(
+            "/admin/rules/newsym/dry-run",
+            headers=_headers(),
+            json={"yaml_content": "instrument:\n  id: bad"},  # mangler resten
+        )
+    assert response.status_code == 400
+    body = response.get_json()
+    assert body["valid"] is False
+    assert "details" in body or "error" in body
+
+
+def test_dry_run_requires_auth(app_with_admin) -> None:
+    app, _ = app_with_admin
+    with app.test_client() as client:
+        response = client.post(
+            "/admin/rules/newsym/dry-run",
+            json={"yaml_content": "anything"},
+        )
+    assert response.status_code == 401
+
+
+def test_dry_run_id_mismatch_returns_400(app_with_admin) -> None:
+    """URL-id må matche config.instrument.id."""
+    app, _ = app_with_admin
+    with app.test_client() as client:
+        response = client.post(
+            "/admin/rules/foo/dry-run",
+            headers=_headers(),
+            json={"yaml_content": _valid_yaml_for("bar")},
+        )
+    assert response.status_code == 400
+
+
+# ─── Git-commit-on-save ────────────────────────────────────────
+
+
+@pytest.fixture
+def app_with_git(tmp_path: Path, instruments_dir: Path):
+    """ServerConfig med admin_git_root pekende på et lite test-repo."""
+    import subprocess as sp
+
+    # Initialiser git-repo i tmp_path og kommitt instruments-mappen
+    sp.run(["git", "init", "-q", str(tmp_path)], check=True)
+    sp.run(["git", "-C", str(tmp_path), "config", "user.email", "test@bedrock"], check=True)
+    sp.run(["git", "-C", str(tmp_path), "config", "user.name", "Test"], check=True)
+    sp.run(["git", "-C", str(tmp_path), "config", "commit.gpgsign", "false"], check=True)
+    # Flytt instruments-dir inn i repo-rota og symlink ikke krevd —
+    # vi konfigurerer cfg.instruments_dir til den nye stien.
+    repo_instruments = tmp_path / "config" / "instruments"
+    repo_instruments.mkdir(parents=True)
+    shutil.copy(instruments_dir / "gold.yaml", repo_instruments / "gold.yaml")
+    sp.run(["git", "-C", str(tmp_path), "add", "."], check=True)
+    sp.run(["git", "-C", str(tmp_path), "commit", "-q", "-m", "init"], check=True)
+
+    cfg = ServerConfig(
+        data_root=tmp_path,
+        instruments_dir=repo_instruments,
+        admin_code=ADMIN_CODE,
+        admin_git_root=tmp_path,
+    )
+    return create_app(cfg), repo_instruments, tmp_path
+
+
+def test_put_with_git_commits_change(app_with_git) -> None:
+    """Etter PUT skal det ligge en ny commit på HEAD med config(<id>)-melding."""
+    import subprocess as sp
+
+    app, repo_instruments, repo_root = app_with_git
+    new_yaml = _valid_yaml_for("gold")  # samme id, annet innhold
+    with app.test_client() as client:
+        response = client.put(
+            "/admin/rules/gold",
+            headers=_headers(),
+            json={"yaml_content": new_yaml},
+        )
+    assert response.status_code == 200
+    body = response.get_json()
+    assert "git" in body
+    assert body["git"]["committed"] is True
+    assert body["git"]["sha"]
+    # Verifiser via git log
+    log_msg = sp.run(
+        ["git", "-C", str(repo_root), "log", "-1", "--format=%s"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert log_msg == "config(gold): admin-edit via /admin/rules"
+
+
+def test_put_with_git_skips_commit_when_no_change(app_with_git) -> None:
+    """Hvis YAML er identisk med disk-versjon, ingen commit."""
+    import subprocess as sp
+
+    app, repo_instruments, repo_root = app_with_git
+    existing = (repo_instruments / "gold.yaml").read_text()
+    head_before = sp.run(
+        ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    with app.test_client() as client:
+        response = client.put(
+            "/admin/rules/gold",
+            headers=_headers(),
+            json={"yaml_content": existing},
+        )
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["git"]["committed"] is False
+    head_after = sp.run(
+        ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert head_before == head_after
+
+
+def test_put_without_git_root_skips_git(app_with_admin) -> None:
+    """admin_git_root=None → response har ikke `git`-felt."""
+    app, _ = app_with_admin
+    with app.test_client() as client:
+        response = client.put(
+            "/admin/rules/newsym",
+            headers=_headers(),
+            json={"yaml_content": _valid_yaml_for("newsym")},
+        )
+    assert response.status_code == 200
+    body = response.get_json()
+    assert "git" not in body
+
+
+# ─── Logs-endpoint ────────────────────────────────────────────
+
+
+def test_logs_404_when_not_configured(app_with_admin) -> None:
+    """admin_log_path=None → 404."""
+    app, _ = app_with_admin
+    with app.test_client() as client:
+        response = client.get("/admin/logs", headers=_headers())
+    assert response.status_code == 404
+
+
+def test_logs_returns_tail(tmp_path: Path, instruments_dir: Path) -> None:
+    log_path = tmp_path / "pipeline.log"
+    log_path.write_text("\n".join(f"line-{i}" for i in range(500)) + "\n")
+    cfg = ServerConfig(
+        data_root=tmp_path,
+        instruments_dir=instruments_dir,
+        admin_code=ADMIN_CODE,
+        admin_log_path=log_path,
+    )
+    app = create_app(cfg)
+    with app.test_client() as client:
+        response = client.get("/admin/logs?tail=10", headers=_headers())
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["total_lines"] == 500
+    assert body["returned"] == 10
+    assert body["lines"][0] == "line-490"
+    assert body["lines"][-1] == "line-499"
+
+
+def test_logs_default_tail_200(tmp_path: Path, instruments_dir: Path) -> None:
+    log_path = tmp_path / "pipeline.log"
+    log_path.write_text("\n".join(f"L{i}" for i in range(50)) + "\n")
+    cfg = ServerConfig(
+        data_root=tmp_path,
+        instruments_dir=instruments_dir,
+        admin_code=ADMIN_CODE,
+        admin_log_path=log_path,
+    )
+    app = create_app(cfg)
+    with app.test_client() as client:
+        response = client.get("/admin/logs", headers=_headers())
+    assert response.status_code == 200
+    body = response.get_json()
+    # Filen har bare 50 linjer; default tail=200 → returnerer alle 50
+    assert body["returned"] == 50
+
+
+def test_logs_requires_auth(tmp_path: Path, instruments_dir: Path) -> None:
+    cfg = ServerConfig(
+        data_root=tmp_path,
+        instruments_dir=instruments_dir,
+        admin_code=ADMIN_CODE,
+        admin_log_path=tmp_path / "any.log",
+    )
+    app = create_app(cfg)
+    with app.test_client() as client:
+        response = client.get("/admin/logs")
+    assert response.status_code == 401

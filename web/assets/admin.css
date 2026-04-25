@@ -307,6 +307,87 @@
   color: var(--c-neg);
 }
 
+/* ─── Sidebar nav (Rules / Logs) ──────────────────────── */
+.admin-nav {
+  display: flex;
+  gap: 2px;
+  margin-bottom: var(--sp-2);
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--c-border);
+}
+.admin-nav-btn {
+  flex: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  padding: 5px 10px;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--c-ink-muted);
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+  font-family: inherit;
+}
+.admin-nav-btn:hover { background: var(--c-surface-alt); color: var(--c-ink); }
+.admin-nav-btn.active {
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+  border-color: var(--c-accent);
+  font-weight: 600;
+}
+
+/* ─── Logs-viewer ─────────────────────────────────────── */
+.admin-tail-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--c-ink-muted);
+}
+.admin-tail-input input {
+  width: 80px;
+  padding: 3px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+.admin-tail-input input:focus {
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 3px var(--c-accent-soft);
+}
+
+.admin-logs-output {
+  flex-grow: 1;
+  margin: 0;
+  padding: var(--sp-3) var(--sp-5);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--c-ink);
+  background: var(--c-surface-alt);
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow: auto;
+  max-height: calc(100vh - 200px);
+  min-height: 400px;
+}
+.admin-logs-output.empty {
+  color: var(--c-ink-faint);
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Dry-run-result inline-feedback */
+.admin-editor-feedback.dry-run-ok {
+  background: var(--c-info-soft);
+  color: var(--c-info);
+}
+
 @media (max-width: 768px) {
   .admin-main { grid-template-columns: 1fr; }
   .admin-sidebar { position: static; }

@@ -253,13 +253,12 @@ function setFeedback(kind, msg) {
   if (!kind) {
     el.hidden = true;
     el.textContent = '';
-    el.classList.remove('success', 'error');
+    el.className = 'admin-editor-feedback';
     return;
   }
   el.hidden = false;
   el.textContent = msg;
-  el.classList.toggle('success', kind === 'success');
-  el.classList.toggle('error', kind === 'error');
+  el.className = 'admin-editor-feedback ' + kind;
 }
 
 async function safeJson(res) {
@@ -282,7 +281,17 @@ async function saveCurrent() {
     if (res.ok) {
       LAST_LOADED_YAML = yaml_content;
       setDirty(false);
-      setFeedback('success', `Lagret: ${data.written_to || CURRENT_INSTRUMENT}`);
+      let gitLine = '';
+      if (data.git) {
+        if (data.git.committed) {
+          gitLine = `\n✓ git-commit ${data.git.sha}: ${data.git.message}`;
+        } else if (data.git.error) {
+          gitLine = `\n⚠ git-commit feilet: ${data.git.error}`;
+        } else if (data.git.reason) {
+          gitLine = `\n(git: ${data.git.reason})`;
+        }
+      }
+      setFeedback('success', `Lagret: ${data.written_to || CURRENT_INSTRUMENT}${gitLine}`);
       // Refresh-liste-størrelser kan være endret
       loadInstrumentList();
     } else if (res.status === 400 && data.details) {
@@ -308,12 +317,99 @@ function reloadCurrent() {
   loadInstrument(id);
 }
 
+async function dryRunCurrent() {
+  if (!CURRENT_INSTRUMENT) return;
+  const yaml_content = document.getElementById('yaml-editor').value;
+  setFeedback(null);
+  try {
+    const res = await authFetch(`/admin/rules/${encodeURIComponent(CURRENT_INSTRUMENT)}/dry-run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ yaml_content }),
+    });
+    const data = await safeJson(res);
+    if (res.ok && data.valid) {
+      const families = (data.config_summary && data.config_summary.families) || [];
+      const summary = families.length
+        ? `Familier: ${families.join(', ')}`
+        : 'Ingen families i config';
+      setFeedback('dry-run-ok',
+        `✓ Dry-run OK · ${data.config_summary?.id || CURRENT_INSTRUMENT} · ${summary}\n` +
+        `(Lagre er trygg — YAML er validert mot Pydantic + inherits-resolver)`);
+    } else if (res.status === 400 && data.details) {
+      const details = (data.details || []).map(d =>
+        `  ${(d.loc || []).join('.')}: ${d.msg}`).join('\n');
+      setFeedback('error', `Dry-run feilet: ${data.error || 'validering feilet'}\n${details}`);
+    } else {
+      setFeedback('error', `Dry-run feilet: ${data.error || 'HTTP ' + res.status}`);
+    }
+  } catch (err) {
+    setFeedback('error', `Dry-run-feil: ${err.message}`);
+  }
+}
+
+
+// ─── Section-nav (Rules / Logs) ───────────────────────────────
+function showSection(name) {
+  document.querySelectorAll('.admin-nav-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.adminSection === name);
+  });
+  document.querySelectorAll('[data-admin-section]').forEach(el => {
+    if (el.classList.contains('admin-nav-btn')) return;
+    el.hidden = el.dataset.adminSection !== name;
+  });
+  if (name === 'logs') loadLogs();
+}
+
+function wireNav() {
+  document.querySelectorAll('.admin-nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => showSection(btn.dataset.adminSection));
+  });
+}
+
+// ─── Logs-viewer ──────────────────────────────────────────────
+async function loadLogs() {
+  const out = document.getElementById('logs-output');
+  const pathEl = document.getElementById('logs-path');
+  out.classList.remove('empty');
+  out.textContent = 'Laster…';
+  pathEl.textContent = '–';
+  const tail = Math.max(1, Math.min(2000, parseInt(document.getElementById('logs-tail').value, 10) || 200));
+  try {
+    const res = await authFetch(`/admin/logs?tail=${tail}`);
+    if (res.status === 404) {
+      const data = await safeJson(res);
+      out.classList.add('empty');
+      out.textContent = data.error || 'Log-fil ikke konfigurert. Sett BEDROCK_ADMIN_LOG_PATH og restart.';
+      return;
+    }
+    if (!res.ok) {
+      const data = await safeJson(res);
+      out.classList.add('empty');
+      out.textContent = `HTTP ${res.status}: ${data.error || 'ukjent feil'}`;
+      return;
+    }
+    const data = await res.json();
+    pathEl.textContent = `${data.path} · viser ${data.returned}/${data.total_lines} linjer`;
+    out.textContent = (data.lines || []).join('\n') || '(tom log)';
+  } catch (err) {
+    out.classList.add('empty');
+    out.textContent = `Feil: ${err.message}`;
+  }
+}
+
+function wireLogs() {
+  document.getElementById('logs-reload-btn').addEventListener('click', loadLogs);
+  document.getElementById('logs-tail').addEventListener('change', loadLogs);
+}
+
 // ─── Init ─────────────────────────────────────────────────────
 function wireEditor() {
   document.getElementById('yaml-editor').addEventListener('input', () => setDirty());
   document.getElementById('save-btn').addEventListener('click', saveCurrent);
   document.getElementById('reload-btn').addEventListener('click', reloadCurrent);
   document.getElementById('reload-list').addEventListener('click', loadInstrumentList);
+  document.getElementById('dry-run-btn').addEventListener('click', dryRunCurrent);
   // Cmd/Ctrl+S = lagre
   document.addEventListener('keydown', e => {
     if ((e.metaKey || e.ctrlKey) && e.key === 's') {
@@ -332,6 +428,8 @@ function wireEditor() {
 
 wireGate();
 wireEditor();
+wireNav();
+wireLogs();
 loadServerStatus();
 setInterval(loadServerStatus, 30000);
 bootGate();
