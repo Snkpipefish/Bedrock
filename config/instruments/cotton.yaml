@@ -1,0 +1,99 @@
+# Cotton — agri instrument (softs)
+# Sub-fase 12.5 Block C session 75: første instrument utover Gold + Corn.
+# Bruker eksisterende drivere (seasonal_stage, weather_stress, enso_regime,
+# dxy_chg5d, analog_*) med Cotton-spesifikke params (us_delta_cotton-region,
+# bloom-tid juli-aug, ICE Futures-COT-contract).
+
+inherits: family_agri  # ignorert i Fase 5 session 21
+
+instrument:
+  id: Cotton
+  asset_class: softs
+  ticker: CT
+  cfd_ticker: Cotton
+  yahoo_ticker: CT=F
+  cot_contract: "COTTON NO. 2 - ICE FUTURES U.S."
+  cot_report: disaggregated
+  weather_region: us_delta_cotton
+  weather_lat: 33.5  # mid-Mississippi delta
+  weather_lon: -90.5
+
+aggregation: additive_sum
+max_score: 16  # 5+3+2+2+2+2
+min_score_publish: 6   # ~37.5% av max
+
+families:
+  outlook:
+    # Cotton US-delta kalender: bloom/boll-set juli-august dominerer.
+    # Verdiendring i denne perioden påvirker hele crops outcome mest.
+    weight: 5
+    drivers:
+      - name: seasonal_stage
+        weight: 1.0
+        params:
+          # Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec
+          monthly_scores: [0.3, 0.3, 0.4, 0.5, 0.7, 0.8, 1.0, 1.0, 0.7, 0.5, 0.4, 0.3]
+  yield:
+    weight: 3
+    drivers:
+      - name: weather_stress
+        weight: 1.0
+        params:
+          lookback_months: 1
+  weather:
+    weight: 2
+    drivers:
+      - name: weather_stress
+        weight: 1.0
+        params:
+          lookback_months: 1
+  enso:
+    # Cotton i US-delta er ENSO-sensitiv: La Niña gir typisk varmere/
+    # tørrere — ulik effekt enn Corn (drought-bull). For Cotton kan
+    # tørke i bloom-perioden være bull (lavere yield), så default
+    # NOAA-mapping passer.
+    weight: 2
+    drivers:
+      - name: enso_regime
+        weight: 1.0
+        params: {}
+  cross:
+    # Cotton-eksport — USD-svakhet er bull globalt (US-cotton billigere).
+    weight: 2
+    drivers:
+      - name: dxy_chg5d
+        weight: 1.0
+        params:
+          bull_when: negative
+          window: 5
+  analog:
+    weight: 2
+    # K-NN per § 6.5 softs: weather_stress + enso + dxy_chg5d
+    # (unica_mix_change og brl_chg5d ikke implementert — utsatt).
+    drivers:
+      - name: analog_hit_rate
+        weight: 0.5
+        params:
+          asset_class: softs
+          k: 5
+          horizon_days: 30
+          outcome_threshold_pct: 3.0
+          min_history_days: 365
+      - name: analog_avg_return
+        weight: 0.5
+        params:
+          asset_class: softs
+          k: 5
+          horizon_days: 30
+          min_history_days: 365
+
+grade_thresholds:
+  A_plus:
+    min_score: 11        # ~69% av max=16 (matcher Corn-andel ~70%)
+    min_families_active: 4
+  A:
+    min_score: 8         # 50%
+    min_families_active: 3
+  B:
+    min_score: 6         # 37.5%
+    min_families_active: 2

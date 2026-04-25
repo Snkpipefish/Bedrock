@@ -11,8 +11,9 @@
   - **71:** Block A — macro-drivere (`real_yield` + `dxy_chg5d` + `vix_regime`). Backfilt VIXCLS. Erstatter placeholder i Gold macro-familien. **LUKKET 2026-04-25**
   - **72:** Block B start — agri-drivere (`weather_stress` + `enso_regime`). Erstatter placeholder i Corn weather + enso-familier. **LUKKET 2026-04-25**
   - **73:** Validering — Corn-backtest re-run etter session 72. **Funn: Corn FORTSATT INVERTERT**. **LUKKET 2026-04-25**.
-  - **74:** Block B fortsettelse — `seasonal_stage`-driver (kalenderbasert NH-grain). Erstattet sma200_align i Corn outlook (seasonal_stage), yield (weather_stress), cross (dxy_chg5d). conab beholdt placeholder (Conab-fetcher mangler). **Resultat: Corn-inversjonen er fjernet.** A+ helt eliminert; B dominerer. **LUKKET 2026-04-25**.
-  - **75 (neste):** Block C start — Cotton/Coffee/Soybean/Sugar/Wheat YAMLer + crop-spesifikke kalendere for seasonal_stage. Backfill av nye instrumenter hvis nødvendig.
+  - **74:** Block B fortsettelse — `seasonal_stage`-driver. Erstattet placeholders i Corn outlook/yield/cross. **Resultat: Corn-inversjonen er fjernet.** **LUKKET 2026-04-25**.
+  - **75:** Block C — 5 nye agri-instrumenter konfigurert (Cotton/Coffee/Soybean/Sugar/Wheat). Backfilt hver: ~4100 prices + 851 (eller 206 for Wheat) COT-rapporter. Crop-spesifikke seasonal_stage-kalendere. **Compare-rapport viser nå 6 felles signaler vs cot-explorer** (var 0). Observasjonsvinduet kan starte meningsfullt. **LUKKET 2026-04-25**.
+  - **76 (neste):** Block D start — `bedrock signals all`-CLI for å regenerere signals.json daglig som timer + pyright-cleanup (162 errors). Eller: gjenoppta Fase 12 observasjonsvindu nå som det er meningsfullt overlap.
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -50,9 +51,9 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `feat/agri-drivers-block-b` (Nivå 3 — session 74). PR #1-#7 merget. Corn er nå reelt scoret med 5 av 7 familier (outlook/yield/weather/enso/cross + analog real; conab fortsatt placeholder).
+- **Branch:** `feat/agri-instruments-block-c` (Nivå 3 — session 75). PR #1-#8 merget. 7 instrumenter konfigurert i bedrock (Gold, Corn, Cotton, Coffee, Soybean, Sugar, Wheat).
 - **Blocked:** nei.
-- **Next task:** **Session 75 — Block C start.** Cotton/Coffee/Soybean/Sugar/Wheat YAMLer + crop-spesifikke kalendere for seasonal_stage. Ev. backfill av disse instrumentenes prices + COT-data.
+- **Next task:** **Session 76.** To alternativer: (a) Block D start — `bedrock signals all`-CLI + orchestrator-timer som regenererer signals.json daglig, slik at Fase 12 obs får ferske signaler å sammenligne; (b) gjenoppta Fase 12 observasjonsvindu (sub-session 68) nå som compare-script har 6 felles signaler å analysere; (c) pyright-cleanup (162 errors).
 - **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
 ## Open questions to user
@@ -140,6 +141,111 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 75: Sub-fase 12.5 Block C — 5 nye agri-instrumenter (LUKKET)
+
+**Scope:** Konfigurere Cotton/Coffee/Soybean/Sugar/Wheat for å gi
+parallell-drift faktisk overlap mot cot-explorer's signal-output.
+
+**Endret denne session (feature-branch `feat/agri-instruments-block-c`):**
+
+Backfill av 5 nye instrumenter (alt via `bedrock backfill`):
+
+| Instrument | Yahoo ticker | CFTC contract | Prices | COT |
+|---|---|---|---:|---:|
+| Cotton | CT=F | COTTON NO. 2 - ICE FUTURES U.S. | 4102 | 851 |
+| Coffee | KC=F | COFFEE C - ICE FUTURES U.S. | 4101 | 851 |
+| Soybean | ZS=F | SOYBEANS - CHICAGO BOARD OF TRADE | 4101 | 851 |
+| Sugar | SB=F | SUGAR NO. 11 - ICE FUTURES U.S. | 4102 | 851 |
+| Wheat | ZW=F | WHEAT - CHICAGO BOARD OF TRADE | 4101 | 206 |
+
+(Wheat-COT er kortere fordi CBOT-contract ble omklassifisert til
+SRW historisk; nåværende reporting starter ~2021. 206 reports er
+nok for 26-week-min for percentile/z-score.)
+
+`config/instruments/cotton.yaml` (ny):
+- asset_class: softs
+- weather_region: us_delta_cotton
+- seasonal_stage-kalender: bloom/boll-set juli-august = 1.0
+- cross: dxy_chg5d (bull_when=negative — USD-svakhet bull cotton-eksport)
+- max_score: 16, min_score_publish: 6
+
+`config/instruments/coffee.yaml` (ny):
+- asset_class: softs
+- weather_region: brazil_coffee
+- Kalender: flowering Sep-Oct = 1.0, harvest Apr-Aug lavere
+- cross: dxy_chg5d (bull_when=positive — USD-styrke = BRL-svakhet
+  = bull brasiliansk-eksport)
+
+`config/instruments/soybean.yaml` (ny):
+- asset_class: grains
+- weather_region: us_cornbelt (samme som Corn)
+- Kalender: pod-set juli-august = 1.0
+- cross: dxy_chg5d (bull_when=negative)
+
+`config/instruments/sugar.yaml` (ny):
+- asset_class: softs
+- weather_region: brazil_mato_grosso
+- Kalender: zafra apr-nov = 1.0 (supply-pressure)
+- cross: dxy_chg5d (bull_when=positive — BRL-link)
+
+`config/instruments/wheat.yaml` (ny):
+- asset_class: grains
+- weather_region: us_great_plains
+- Kalender: heading apr-mai = 1.0 (winter wheat HRW/SRW)
+- cross: dxy_chg5d (bull_when=negative)
+
+Alle bruker eksisterende drivere: seasonal_stage, weather_stress,
+enso_regime, dxy_chg5d, analog_*. **Ingen ny driver-kode** — bare
+config-utvidelse via Block A/B-byggeklossene.
+
+**End-to-end (april 2026):**
+
+| Instrument | Total | Grade | Outlook | Yield | Weather | ENSO | Cross |
+|---|---:|:---:|---:|---:|---:|---:|---:|
+| Cotton | 6.17 | B | 0.50 | 0.23 | 0.23 | 0.50 | 0.75 |
+| Coffee | 3.95 | C | 0.40 | 0.09 | 0.09 | 0.50 | 0.25 |
+| Soybean | 5.52 | C | 0.50 | 0.10 | 0.10 | 0.50 | 0.75 |
+| Sugar | 6.30 | B | 0.90 | 0.06 | 0.06 | 0.50 | 0.25 |
+| Wheat | 8.19 | A | 0.90 | 0.24 | 0.24 | 0.50 | 0.75 |
+
+(Wheat scorer høyest fordi den er midt i jointing/heading-fasen
+i april — yield-determinerende periode.)
+
+**Compare-rapport mot cot-explorer (post-session-75):**
+
+```
+Felles (instrument+horizon+direction): 6
+Kun gammel: 0
+Kun bedrock: 36
+Endret: 6
+Grade-endring: 6
+```
+
+Var 0/6/6 før. Nå har vi ekte overlap. Eksempler:
+- Coffee swing sell: cot-explorer B → bedrock C
+- Corn makro buy: cot-explorer A → bedrock B
+
+Bedrock er strengere — krever mer fundamental-confirmation.
+
+**Tester:** 1352/1352 grønne (ingen nye tester — kun YAML-config).
+
+**Bedrock signals.json regenerert:** 42 entries (7 instrumenter × 3
+horisonter × 2 direksjoner) skrevet til data/signals.json.
+
+**Beslutninger:**
+- Coffee + Sugar bruker `bull_when=positive` på cross fordi de er
+  BRL-eksponert. Cotton/Soybean/Wheat bruker `bull_when=negative`
+  (USD-svakhet = bull US-eksport).
+- Sugar weather_region = brazil_mato_grosso er ikke perfekt (sukker
+  er mer SP enn MT), men nærmeste tilgjengelige region. Bytt til
+  ny region hvis weather_monthly utvides.
+- Wheat-kalender = winter wheat (HRW/SRW) som er CBOT-default.
+  Spring wheat har annen syklus men ikke separat instrument.
+- analog_hit_rate / analog_avg_return returnerer 0.0 for de nye
+  instrumentene fordi find_analog_cases mangler dim-extractors
+  for softs/grains-asset-klassene utover det som var konfigurert
+  for Corn/Gold tidligere. Utsatt — ikke kritisk for grading.
 
 ### 2026-04-25 — Session 74: Sub-fase 12.5 Block B fortsettelse — Corn-inversjon fjernet (LUKKET)
 
