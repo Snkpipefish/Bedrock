@@ -13,6 +13,7 @@ import logging
 import click
 
 from bedrock.cli.backfill import backfill
+from bedrock.cli.backtest import backtest
 from bedrock.cli.fetch import fetch
 from bedrock.cli.instruments import instruments
 from bedrock.cli.signals import signals_cmd
@@ -31,6 +32,7 @@ def cli(verbose: bool) -> None:
 
 
 cli.add_command(backfill)
+cli.add_command(backtest)
 cli.add_command(fetch)
 cli.add_command(instruments)
 cli.add_command(signals_cmd, name="signals")
