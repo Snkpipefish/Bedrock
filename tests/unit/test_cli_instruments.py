@@ -22,7 +22,7 @@ instrument:
   id: Gold
   asset_class: metals
   ticker: XAUUSD
-  stooq_ticker: xauusd
+  yahoo_ticker: GC=F
   cot_contract: "GOLD - COMMODITY EXCHANGE INC."
   cot_report: disaggregated
   fred_series_ids:

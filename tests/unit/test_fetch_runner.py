@@ -89,7 +89,7 @@ def configs_dir(tmp_path: Path) -> tuple[Path, Path]:
               id: Gold
               asset_class: metals
               ticker: XAUUSD
-              stooq_ticker: xauusd
+              yahoo_ticker: GC=F
               cot_contract: "GOLD - COMEX"
               cot_report: disaggregated
               fred_series_ids:
@@ -105,7 +105,7 @@ def configs_dir(tmp_path: Path) -> tuple[Path, Path]:
               id: Corn
               asset_class: grains
               ticker: ZC
-              stooq_ticker: zc.f
+              yahoo_ticker: ZC=F
               weather_region: us_cornbelt
               weather_lat: 40.75
               weather_lon: -96.75
@@ -176,8 +176,8 @@ def test_run_prices_iterates_all_instruments(store: DataStore, configs_dir) -> N
             defaults_dir=defaults,
         )
 
-    # Både Gold og Corn har stooq_ticker
-    assert set(calls) == {"xauusd", "zc.f"}
+    # Både Gold og Corn har yahoo_ticker
+    assert set(calls) == {"GC=F", "ZC=F"}
     assert result.ok_count == 2
     assert result.fail_count == 0
     assert result.total_rows == 4  # 2 instrumenter × 2 barer
@@ -202,7 +202,7 @@ def test_run_prices_instrument_filter(store: DataStore, configs_dir) -> None:
             instrument_filter="Gold",
         )
 
-    assert calls == ["xauusd"]
+    assert calls == ["GC=F"]
     assert result.ok_count == 1
 
 
@@ -211,7 +211,7 @@ def test_run_prices_per_item_failure(store: DataStore, configs_dir) -> None:
     defaults, insts = configs_dir
 
     def fake_fetch(ticker, from_date, to_date, interval="d"):
-        if ticker == "xauusd":
+        if ticker == "GC=F":
             raise RuntimeError("HTTP 503")
         return _sample_bars(1)
 

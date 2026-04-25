@@ -8,7 +8,6 @@ instrument:
   asset_class: metals
   ticker: XAUUSD
   cfd_ticker: Gold
-  stooq_ticker: xauusd
   yahoo_ticker: GC=F   # COMEX Gold continuous futures (samme kilde cot-explorer bruker)
   cot_contract: "GOLD - COMMODITY EXCHANGE INC."
   cot_report: disaggregated

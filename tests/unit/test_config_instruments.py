@@ -119,7 +119,7 @@ def test_metadata_optional_fields_accepted(tmp_path: Path) -> None:
           asset_class: metals
           ticker: XAUUSD
           cfd_ticker: Gold
-          stooq_ticker: xauusd
+          yahoo_ticker: GC=F
           cot_contract: "GOLD - COMMODITY EXCHANGE INC."
           cot_report: disaggregated
           weather_region: global

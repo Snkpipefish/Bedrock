@@ -8,7 +8,6 @@ instrument:
   asset_class: grains
   ticker: ZC
   cfd_ticker: Corn
-  stooq_ticker: zc.f
   yahoo_ticker: ZC=F   # CBOT Corn continuous futures
   cot_contract: "CORN - CHICAGO BOARD OF TRADE"
   cot_report: disaggregated

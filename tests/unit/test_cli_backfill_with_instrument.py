@@ -2,7 +2,7 @@
 
 Dekker:
 
-- prices: --instrument gir stooq_ticker + kanonisk DB-tag
+- prices: --instrument gir yahoo_ticker + kanonisk DB-tag
 - cot-disaggregated/cot-legacy: --instrument gir cot_contract
 - weather: --instrument gir region/lat/lon
 - fundamentals: --instrument itererer over fred_series_ids med per-serie
@@ -46,7 +46,7 @@ instrument:
   id: Gold
   asset_class: metals
   ticker: XAUUSD
-  stooq_ticker: xauusd
+  yahoo_ticker: GC=F
   cot_contract: "GOLD - COMMODITY EXCHANGE INC."
   cot_report: disaggregated
   fred_series_ids:
@@ -75,7 +75,7 @@ instrument:
   id: Corn
   asset_class: grains
   ticker: ZC
-  stooq_ticker: zc.f
+  yahoo_ticker: ZC=F
   weather_region: us_cornbelt
   weather_lat: 40.75
   weather_lon: -96.75
@@ -164,18 +164,16 @@ def test_prices_instrument_yaml_lookup(
     db = tmp_path / "bedrock.db"
     captured: dict[str, object] = {}
 
-    def fake_fetch(ticker, from_date, to_date, interval="d"):
+    def fake_fetch(ticker, from_date, to_date, interval="1d", timeout_sec=15.0):
         captured["ticker"] = ticker
         return _sample_bars(2)
 
-    with patch("bedrock.cli.backfill.fetch_prices", side_effect=fake_fetch):
+    with patch("bedrock.cli.backfill.fetch_yahoo_prices", side_effect=fake_fetch):
         result = runner.invoke(
             cli,
             [
                 "backfill",
                 "prices",
-                "--source",
-                "stooq",
                 "--instrument",
                 "gold",  # lowercase → case-insensitive YAML-lookup
                 "--from",
@@ -188,7 +186,7 @@ def test_prices_instrument_yaml_lookup(
         )
 
     assert result.exit_code == 0, result.output
-    assert captured["ticker"] == "xauusd"  # fra YAML
+    assert captured["ticker"] == "GC=F"  # fra YAML yahoo_ticker
     # Kanonisk DB-tag fra YAML: "Gold" (ikke "gold")
     store = DataStore(db)
     assert store.has_prices("Gold", "D1")
@@ -201,22 +199,20 @@ def test_prices_explicit_ticker_bypasses_yaml(
     db = tmp_path / "bedrock.db"
     captured: dict[str, object] = {}
 
-    def fake_fetch(ticker, from_date, to_date, interval="d"):
+    def fake_fetch(ticker, from_date, to_date, interval="1d", timeout_sec=15.0):
         captured["ticker"] = ticker
         return _sample_bars(1)
 
-    with patch("bedrock.cli.backfill.fetch_prices", side_effect=fake_fetch):
+    with patch("bedrock.cli.backfill.fetch_yahoo_prices", side_effect=fake_fetch):
         result = runner.invoke(
             cli,
             [
                 "backfill",
                 "prices",
-                "--source",
-                "stooq",
                 "--instrument",
                 "Silver",  # ikke i YAML, men --ticker bypasser lookup
                 "--ticker",
-                "xagusd",
+                "SI=F",
                 "--from",
                 "2024-01-02",
                 "--db",
@@ -227,7 +223,7 @@ def test_prices_explicit_ticker_bypasses_yaml(
         )
 
     assert result.exit_code == 0, result.output
-    assert captured["ticker"] == "xagusd"
+    assert captured["ticker"] == "SI=F"
 
 
 def test_prices_unknown_instrument_without_ticker_errors(
