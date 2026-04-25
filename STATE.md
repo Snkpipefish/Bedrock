@@ -5,7 +5,8 @@
 - **Phase:** 12 **ÅPEN 2026-04-25** — parallell-drift (PLAN § 12). Sub-sessions:
   - **66:** infrastruktur for parallell-drift (compare-script + monitor-script + systemd-runbook). **LUKKET 2026-04-25**
   - **67:** aktivert parallell-drift — alle 6 bedrock fetch-timere `enabled --now` på user-systemd. Cot-explorer-timere uberørte (system-systemd). **LUKKET 2026-04-25**
-  - **68 (neste):** observasjons-vindu (~2 uker per PLAN § 12.1). Daglig: `compare_signals_daily.py` + `monitor_pipeline.py` for å fange drift. Open issue å adressere før Fase 13: prices-fetcher feiler (Stooq-fallback aktiv, Yahoo-port fra session 58 ikke fullt forrang) — krever egen fix-session.
+  - **69:** prices-fetcher fix — Stooq fjernet, Yahoo eneste pris-kilde. `prices.py` redusert til ~30 linjer (tynn fasade rundt yahoo.py). `stooq_ticker`-felt + YAML-bruk + `--source`-flagg slettet. 5 source-filer + 6 test-filer + 2 instrument-YAMLer endret. Smoke-test mot ekte data via systemd: 2/2 OK, Gold close 4722.30 + Corn close 455.0 fra Yahoo continuous futures. **LUKKET 2026-04-25**
+  - **68 (neste):** observasjons-vindu (~2 uker per PLAN § 12.1). Daglig: `compare_signals_daily.py` + `monitor_pipeline.py` for å fange drift. Open issue å adressere før Fase 13: ingen automatisk regenerering av signals.json (orchestrator må kjøres per instrument; trenger `bedrock signals all` eller systemd-timer for orchestrator).
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -43,9 +44,9 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `chore/fase-12-activate-parallel` (Nivå 3 — denne sessionen). PR #1 (session 66) merget til main 2026-04-25. Branch-protection på `main` i GitHub UI er **ikke automatisert** — må settes opp manuelt, se `docs/branch_strategy.md`.
-- **Blocked:** nei. Session 68 (observasjon) kan starte når som helst — det er primært å la timere kjøre + lese rapporter.
-- **Next task:** **Session 68 — observasjons-vindu (PLAN § 12.1, 2 uker).** Konkret: (a) la bedrock fetch-timere kjøre på schedule; (b) daglig kjør `compare_signals_daily.py` + `monitor_pipeline.py` (eller installer `bedrock-monitor.timer` per `docs/fase-12-runbook.md § C.3`); (c) inspiser monitor-output for drift/feil; (d) **fix-session før Fase 13:** Yahoo-fetcher må ta over fra Stooq i bedrock.fetch.prices (session 58 portet kode men dispatch-pri er fortsatt Stooq); (e) IKKE skru av cot-explorer-timere.
+- **Branch:** `fix/prices-yahoo-default` (Nivå 3 — session 69). PR #1 (session 66) + PR #2 (session 67) merget til main 2026-04-25. Branch-protection på `main` i GitHub UI er **ikke automatisert** — må settes opp manuelt, se `docs/branch_strategy.md`.
+- **Blocked:** nei. Session 68 (observasjon) kan starte når som helst.
+- **Next task:** **Session 68 — observasjons-vindu (PLAN § 12.1, ~2 uker).** Konkret: (a) la bedrock fetch-timere kjøre på schedule; (b) daglig kjør `compare_signals_daily.py` + `monitor_pipeline.py` (eller installer `bedrock-monitor.timer` per `docs/fase-12-runbook.md § C.3`); (c) inspiser monitor-output for drift/feil; (d) IKKE skru av cot-explorer-timere; (e) eventuelt legg til `bedrock signals all`-CLI eller orchestrator-timer så signals.json regenereres daglig (ellers blir compare-rapporten stale).
 - **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
 ## Open questions to user
@@ -133,6 +134,139 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 69: Fase 12 — prices-fetcher Stooq → Yahoo (LUKKET)
+
+**Scope:** Fix-session påvist i session 67 — `bedrock-fetch-prices.service`
+feilet fordi `bedrock.fetch.prices` brukte Stooq, mens session 58 portet
+Yahoo-koden men ikke gjorde den til primary. Per bruker-beslutning
+(approach B): Stooq fjernet helt, Yahoo eneste pris-kilde. PR #2
+(session 67 STATE) merget til main før denne sessionen startet.
+
+**Endret denne session (feature-branch `fix/prices-yahoo-default`):**
+
+`src/bedrock/fetch/prices.py` (~155 → ~32 linjer):
+- Fjernet Stooq-CSV-implementasjon (`STOOQ_CSV_URL`,
+  `build_stooq_url_params`, `fetch_prices` HTTP-bygging,
+  `_normalize_stooq_df`).
+- Modulen er nå tynn fasade rundt `bedrock.fetch.yahoo`:
+  `from bedrock.fetch.yahoo import YahooFetchError as PriceFetchError,
+  fetch_yahoo_prices as fetch_prices`. Beholder offentlig API-kontrakt
+  (`fetch_prices`, `PriceFetchError`) slik at eksisterende
+  callers fortsatt fungerer uten import-endring.
+
+`src/bedrock/config/instruments.py`:
+- Fjernet `stooq_ticker: str | None`-felt fra `InstrumentMetadata`.
+  Pydantic `extra="forbid"` betyr at YAML-er som fortsatt har feltet
+  vil hard-faile lasting (intentional; fanger glemte oppdateringer).
+
+`src/bedrock/config/fetch_runner.py`:
+- `run_prices` bruker nå `meta.yahoo_ticker or meta.ticker`
+  (var `meta.stooq_ticker or meta.ticker`).
+
+`src/bedrock/cli/backfill.py`:
+- Fjernet `STOOQ_CSV_URL`, `build_stooq_url_params`, `fetch_prices`
+  imports (sistnevnte er fortsatt importert via patch-target i
+  tester men ikke nødvendig her).
+- Fjernet `--source` CLI-flagg (var `yahoo`/`stooq`-toggle, nå
+  Yahoo-only).
+- `prices_cmd`-signatur og dry-run-logikk forenklet — bruker kun
+  `build_yahoo_url`/`fetch_yahoo_prices`.
+- `_resolve_prices` bruker `meta.yahoo_ticker or meta.ticker`.
+- Eksempel-streng i docstring: `bedrock backfill prices
+  --instrument Gold --from 2010-01-01` (fjernet stooq-eksempel).
+
+`src/bedrock/cli/instruments.py`:
+- Display-rad bytter `stooq_ticker:    {value}` →
+  `yahoo_ticker:    {value}`.
+
+`src/bedrock/fetch/__init__.py`:
+- Modul-docstring oppdatert (Yahoo som pris-kilde; Fase 12 session 69
+  notert).
+
+`config/instruments/gold.yaml`:
+- `stooq_ticker: xauusd` slettet. `yahoo_ticker: GC=F` beholdt.
+
+`config/instruments/corn.yaml`:
+- `stooq_ticker: zc.f` slettet. `yahoo_ticker: ZC=F` beholdt.
+
+**Tester (alle filer som hadde `stooq_ticker` eller `--source`):**
+
+`tests/unit/test_fetch_prices.py` (~140 → ~30 linjer):
+- Erstattet hele Stooq-teststack med 3 fasade-tester:
+  - `fetch_prices is fetch_yahoo_prices`
+  - `PriceFetchError is YahooFetchError`
+  - `__all__` eksponerer begge
+
+`tests/unit/test_fetch_runner.py`:
+- Fixtures: `stooq_ticker: xauusd` → `yahoo_ticker: GC=F`,
+  `stooq_ticker: zc.f` → `yahoo_ticker: ZC=F`
+- Assertions: `xauusd`/`zc.f` → `GC=F`/`ZC=F` (3 steder)
+- Patch-target uendret (`bedrock.fetch.prices.fetch_prices`) —
+  fungerer fordi prices.py re-eksporterer yahoo-funksjonen.
+
+`tests/unit/test_cli_instruments.py`:
+- Fixture-YAML: `stooq_ticker: xauusd` → `yahoo_ticker: GC=F`
+
+`tests/unit/test_config_instruments.py`:
+- Test-YAML i `test_metadata_optional_fields_accepted`:
+  `stooq_ticker: xauusd` → `yahoo_ticker: GC=F`
+
+`tests/unit/test_cli_backfill_with_instrument.py`:
+- Fixture-YAML for Gold + Corn: `stooq_ticker` → `yahoo_ticker`
+- Patch-target: `bedrock.cli.backfill.fetch_prices` →
+  `bedrock.cli.backfill.fetch_yahoo_prices`
+- Fjernet `--source stooq`-args i CLI-invocations
+- Fake-fetch-signatur: `interval="d"` → `interval="1d", timeout_sec=15.0`
+- Ticker-assertions: `xauusd` → `GC=F`, `xagusd` → `SI=F`
+
+`tests/unit/test_cli_backfill.py`:
+- 6 patch-target-substitusjoner (`fetch_prices` → `fetch_yahoo_prices`)
+- Alle `--source stooq`-args fjernet
+- `xauusd`-tickere → `GC=F`, `eurusd` → `EURUSD=X`
+- Dry-run URL-asserts byttet:
+  - `stooq.com` → `finance.yahoo.com`
+  - `s=xauusd` → `GC%3DF` eller `GC=F`
+  - `d1=20240102` / `d2=20240104` → `period1=` / `period2=`
+
+**Tester:** 1265/1265 grønne (var 1273 før — netto −8: gammel
+test_fetch_prices.py hadde ~17 Stooq-spesifikke tester (URL-bygger,
+HTTP-feil-håndtering, CSV-normalisering); ny har 3 fasade-tester.
+Differansen er −14 + opp til +6 tilfeldige tellinger andre steder
+som har vunnet/tapt over tid).
+
+**Smoke-test mot ekte data via systemd:**
+
+```
+$ systemctl --user start bedrock-fetch-prices.service
+$ systemctl --user status bedrock-fetch-prices.service
+   Active: inactive (dead) since ... (status=0/SUCCESS)
+   Apr 25 20:58:53 ... fetch_yahoo_prices ticker=ZC=F interval=1d
+   Apr 25 20:58:53 ... fetch_yahoo_prices ticker=GC=F interval=1d
+   Apr 25 20:58:53 ...   OK   Corn → 2 row(s)
+   Apr 25 20:58:53 ...   OK   Gold → 2 row(s)
+   Apr 25 20:58:53 ...   Summary: 2/2 ok, 0 failed, 4 total rows
+```
+
+DB-verifisering: Gold close 4722.30 (24.04.2026), Corn close 455.0
+(24.04.2026) — Yahoo continuous futures (GC=F, ZC=F).
+
+Monitor-status post-fix: `4 fresh; 1 aging: prices; 1 missing:
+cot_legacy`. Aging er forventet — Yahoos siste bar er fredag, og
+session kjørte lørdag (~39h gammel; stale_hours=30, så aging-zonen
+30-60h. Vil bli fresh ved første mandag-fetch).
+
+**Eksplisitt utenfor scope (kommer senere):**
+- `bedrock signals all`-CLI eller orchestrator-timer: signals.json
+  regenereres ikke automatisk av fetch-timerne. Krever manuell
+  `bedrock signals <instrument>` per instrument inntil dette legges
+  til. Ikke kritisk for parallell-drift (compare-script kjører mot
+  hva som finnes), men før cutover bør signals.json være ferskt.
+- Cot-explorer-fetchere som mangler i bedrock: per bruker-beslutning
+  vil PLAN § 7.3-listen prioriteres — 8 nye datakilder for Fase 4-6
+  (USDA WASDE, USDA Crop Progress, eksport-policy, BRL-driver,
+  BDI-driver, ICE softs COT, IGC, disease/pest). Egen sub-fase etter
+  Fase 13 cutover, ikke nå.
 
 ### 2026-04-25 — Session 67: Fase 12 — aktivert parallell-drift (LUKKET)
 
