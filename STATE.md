@@ -2,11 +2,13 @@
 
 ## Current state
 
-- **Phase:** 12 **ÅPEN 2026-04-25** — parallell-drift (PLAN § 12). Sub-sessions:
+- **Phase:** 12 **ÅPEN 2026-04-25** — parallell-drift (PLAN § 12). Observasjonsvinduet (sub-session 68) er **PAUSET** per bruker-beslutning 2026-04-25: gjelden fra tidligere faser (placeholder-drivere, kun 2 instrumenter, pyright-feil) gjorde at compare-script viste 0 felles signals — observasjon var meningsløs. Sub-fase 12.5 (debt-rydding) startet i stedet, drivere før instrumenter.
   - **66:** infrastruktur for parallell-drift (compare-script + monitor-script + systemd-runbook). **LUKKET 2026-04-25**
-  - **67:** aktivert parallell-drift — alle 6 bedrock fetch-timere `enabled --now` på user-systemd. Cot-explorer-timere uberørte (system-systemd). **LUKKET 2026-04-25**
-  - **69:** prices-fetcher fix — Stooq fjernet, Yahoo eneste pris-kilde. `prices.py` redusert til ~30 linjer (tynn fasade rundt yahoo.py). `stooq_ticker`-felt + YAML-bruk + `--source`-flagg slettet. 5 source-filer + 6 test-filer + 2 instrument-YAMLer endret. Smoke-test mot ekte data via systemd: 2/2 OK, Gold close 4722.30 + Corn close 455.0 fra Yahoo continuous futures. **LUKKET 2026-04-25**
-  - **68 (neste):** observasjons-vindu (~2 uker per PLAN § 12.1). Daglig: `compare_signals_daily.py` + `monitor_pipeline.py` for å fange drift. Open issue å adressere før Fase 13: ingen automatisk regenerering av signals.json (orchestrator må kjøres per instrument; trenger `bedrock signals all` eller systemd-timer for orchestrator).
+  - **67:** aktivert parallell-drift — alle 6 bedrock fetch-timere `enabled --now`. **LUKKET 2026-04-25**
+  - **69:** prices-fetcher Stooq → Yahoo. **LUKKET 2026-04-25**
+- **Sub-fase 12.5 ÅPEN 2026-04-25** — debt-rydding før observasjonsvinduet kan gi mening. Roadmap: Block A drivere (~3-4 sessioner), Block B agri-drivere (~4-5), Block C instrumenter (~3-5), Block D polish (~2-3). Totalt 12-17 sessioner.
+  - **70:** Block A start — positioning-drivere (`positioning_mm_pct` + `cot_z_score`) port fra cot-explorers `cot_analytics.py`. Erstatter sma200_align placeholder i Gold YAML positioning-familien. End-to-end-verifisert: Gold positioning 0.385 (var 1.0 placeholder); MAKRO-grade fra A+ → A. **LUKKET 2026-04-25**
+  - **71 (neste):** Block A fortsetter — `real_yield` (DGS10−T10YIE), `dxy_chg5d`, `vix_regime` for macro-familien.
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -44,9 +46,9 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `fix/prices-yahoo-default` (Nivå 3 — session 69). PR #1 (session 66) + PR #2 (session 67) merget til main 2026-04-25. Branch-protection på `main` i GitHub UI er **ikke automatisert** — må settes opp manuelt, se `docs/branch_strategy.md`.
-- **Blocked:** nei. Session 68 (observasjon) kan starte når som helst.
-- **Next task:** **Session 68 — observasjons-vindu (PLAN § 12.1, ~2 uker).** Konkret: (a) la bedrock fetch-timere kjøre på schedule; (b) daglig kjør `compare_signals_daily.py` + `monitor_pipeline.py` (eller installer `bedrock-monitor.timer` per `docs/fase-12-runbook.md § C.3`); (c) inspiser monitor-output for drift/feil; (d) IKKE skru av cot-explorer-timere; (e) eventuelt legg til `bedrock signals all`-CLI eller orchestrator-timer så signals.json regenereres daglig (ellers blir compare-rapporten stale).
+- **Branch:** `feat/positioning-cot-drivers` (Nivå 3 — session 70). PR #1 + #2 + #3 merget til main 2026-04-25. Branch-protection på `main` i GitHub UI er **ikke automatisert**.
+- **Blocked:** nei. Session 71 kan starte når som helst.
+- **Next task:** **Session 71 — Block A fortsettelse: macro-drivere.** Konkret: (a) legg `VIXCLS` til Gold/Corn `fred_series_ids`, kjør `bedrock backfill fundamentals` med ny serie; (b) implementer `real_yield`-driver (DGS10−T10YIE fra fundamentals-tabell); (c) implementer `dxy_chg5d` (DTWEXBGS 5-dager rolling pct change); (d) implementer `vix_regime` (VIXCLS classifies low/normal/high); (e) erstatt sma200_align placeholder i Gold YAML macro-familien; (f) end-to-end-verifisering.
 - **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
 ## Open questions to user
@@ -134,6 +136,107 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 70: Sub-fase 12.5 åpning — positioning-drivere (LUKKET)
+
+**Scope:** Block A start i debt-rydding-fasen. Bruker stilte spørsmål
+om hvorfor vi skulle observere parallell-drift med kun placeholder-
+drivere og 2 instrumenter (0 felles signaler) — gyldig poeng.
+Beslutning: pause Fase 12 obs, rydd gjeld, drivere først. Session 70
+= port av cot-explorer's positioning-statistikk + erstatte sma200_align-
+placeholder i Gold positioning-familien.
+
+**Endret denne session (feature-branch `feat/positioning-cot-drivers`):**
+
+`src/bedrock/engine/drivers/_stats.py` (ny, ~75 linjer):
+- Privat helper-modul. Port av cot-explorers `cot_analytics.py`:
+  - `rank_percentile(current, history)` → 0-100 rank
+  - `rolling_z(current, history)` → robust z-score (median+MAD).
+- `MIN_OBS_FOR_PCTILE = 26` (matchet original).
+- Begge returnerer `None` ved kort historikk eller MAD=0.
+
+`src/bedrock/engine/drivers/positioning.py` (ny, ~245 linjer):
+- `@register("positioning_mm_pct")`: rank-percentile av MM net,
+  normalisert til 0..1.
+- `@register("cot_z_score")`: robust z-score, mappet til 0..1 via
+  step-thresholds som matcher `momentum_z`-konvensjonen.
+- Felles helper `_resolve_contract` (lazy-import `find_instrument`
+  for å unngå sirkulær — samme mønster som `analog.py`).
+- `_compute_metric` støtter `mm_net` og `mm_net_pct` (normalisert
+  mot OI for å redusere scale-bias).
+- Defensiv 0.0-retur ved alle feiltilstander.
+
+`src/bedrock/engine/drivers/__init__.py`:
+- Auto-import utvidet: `analog, currency, positioning, trend`.
+
+`config/instruments/gold.yaml`:
+- positioning-familie: sma200_align placeholder erstattet med
+  `positioning_mm_pct` (0.6 weight) + `cot_z_score` (0.4 weight),
+  begge med `metric: mm_net_pct` og `lookback_weeks: 52`.
+
+**Tester (36 nye, alle grønne):**
+
+`tests/unit/test_drivers_stats.py` (18 tester):
+- rank_percentile: median/max/min/short-history/None-current/
+  None-history/None-i-historikk-filtreres/akkurat-MIN-obs
+- rolling_z: median/positiv/negativ/MAD=0/short/outlier-robust/
+  None-i-historikk/finite/None-current/akkurat-MIN-obs
+
+`tests/unit/test_drivers_positioning.py` (18 tester):
+- Registry-sjekk for begge drivere
+- positioning_mm_pct: top-long → ~1.0, bottom-long → ~0.0,
+  manglende contract/data/historikk → 0.0, mm_net_pct-metric,
+  ukjent metric → 0.0, lookback-cap
+- cot_z_score: extreme long → 1.0, extreme short → 0.0,
+  median → 0.5, MAD=0 → 0.0, custom thresholds, default-mapping
+  regresjon, lookback-default
+- `_MockStore` + `_build_cot_df`-helpers for in-memory testing
+  uten DB-avhengighet.
+
+**End-to-end-verifisering mot ekte data (orchestrator):**
+
+```
+Gold scoring etter session 70:
+  makro buy:  total=4.241 grade=A   positioning=0.385
+  makro sell: total=4.241 grade=A   positioning=0.385
+  scalp buy:  total=4.028 grade=A+  positioning=0.385
+  scalp sell: total=4.028 grade=A+  positioning=0.385
+  swing buy:  total=4.495 grade=A+  positioning=0.385
+  swing sell: total=4.495 grade=A+  positioning=0.385
+```
+
+Vs før (placeholder sma200_align ga konstant 1.0):
+- positioning er nå 0.385 (faktisk MM net %-positionering rank
+  i lavere halvdel av siste 52 ukers historikk).
+- Gold MAKRO degradert fra A+ til A — positioning-familien er
+  vekttyngst i makro (1.3) og er moderat lav.
+
+Direkte driver-test mot ekte data:
+- Gold `positioning_mm_pct` (mm_net): 0.115
+- Gold `cot_z_score` (mm_net): 0.0
+- Gold `positioning_mm_pct` (mm_net_pct): 0.442
+- Corn `positioning_mm_pct` (mm_net): 0.904 (MM ekstremt long)
+- Corn `cot_z_score` (mm_net): 1.0 (z≥2)
+
+**Tester:** 1301/1301 grønne (+36 nye).
+
+**Beslutninger denne sessionen:**
+- Statistikk-funksjoner i privat `_stats.py` (lik mønster fra
+  cot-explorer). Lik nok at framtidig dim-pruning eller
+  asset-class-spesifikke percentile kan gjøres ett sted.
+- Default `mm_net_pct`-metric for Gold (normalisert mot OI) —
+  Gold-OI har vokst betraktelig (300k → 365k siste år), så
+  normalisering gir mer stabil percentile-tolkning.
+- `cot_z_score` step-thresholds matcher `momentum_z` slik at
+  blandede z-baserte familier får konsistent skalering.
+- Direction-spesifikk inversjon (contrarian-tolkning) IKKE
+  implementert i driver — hører i regel-design.
+
+**Eksplisitt utenfor scope (kommer i session 71+):**
+- `real_yield`, `dxy_chg5d`, `vix_regime` (macro) → session 71
+- `weather_stress`, `enso_regime`, `conab_yoy` (Corn) → Block B
+- Erstatte placeholder i Gold `macro`/`structure`/`risk` → 71-72
+- Erstatte placeholder i Corn-familier → Block B
 
 ### 2026-04-25 — Session 69: Fase 12 — prices-fetcher Stooq → Yahoo (LUKKET)
 
