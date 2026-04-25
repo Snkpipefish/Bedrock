@@ -2,7 +2,10 @@
 
 ## Current state
 
-- **Phase:** 9 **ÅPEN** (UI: 4 faner + admin-editor). Struktureres som tre runder per bruker-beslutning 2026-04-24:
+- **Phase:** 10 **ÅPEN** (analog-matching + ubrukt-data-audit). Splittet i to spor per bruker-beslutning 2026-04-25:
+  - **Spor B — ubrukt-data-audit (session 56):** dokumentasjon, ingen kode. **LUKKET 2026-04-25**
+  - **Spor A — analog-matching (sessions 57-60):** outcome-labels → `find_analog_cases` → `analog`-driver-familie → UI-rendering. **VENTER på beslutninger A-D fra audit-rapport.**
+- **Phase:** 9 **LUKKET 2026-04-25** (UI: 4 faner + admin-editor). Struktureres som tre runder per bruker-beslutning 2026-04-24:
   - **Runde 1 (session 47-50):** minimal data-wiring per fane, funksjonelt null polish
   - **Runde 2 (session 51-53):** styling, flyt, filtrering, detaljmodaler — **LUKKET 2026-04-25**
   - **Runde 3 (session 54-55):** admin-rule-editor på separat URL med kode-gate — **LUKKET 2026-04-25**
@@ -16,12 +19,33 @@
 - Session 53 lukket — UI-polish. Tokenbasert designsystem (--c-*/--sp-*/--fs-*/--r-*), system-fonter med tabular-nums for alle tall, header med gradient + accent + live `/health`-status-pill (online/down/unreachable), tettere KPI-kort, klarere tab-aktiv-tilstand, semantiske status-pills i Kartrommet. **Runde 2 LUKKET** — alle fire faner har filter, modal med explain-trace, og polert visuell stil.
 - Session 54 lukket — Admin rule-editor (instrument-YAML). Ny `/admin`-route + `web/admin.html` med kode-gate (X-Admin-Code → sessionStorage/localStorage), to-pane editor (sidebar med instrument-liste + YAML-textarea), Reload + Lagre + Cmd/Ctrl+S. Bygger på eksisterende `/admin/rules`-endepunkter fra Fase 7 session 38.
 - Session 55 lukket — Admin-editor utvidet: (a) lightweight dry-run (`POST /admin/rules/<id>/dry-run` validerer Pydantic uten å skrive), (b) git-commit-on-save (subprocess `git -C <root>` add + commit; auto-push-hook pusher; respons har `git`-felt), (c) logs-viewer (`GET /admin/logs?tail=N` + UI-tab med monospace pre-output). **Runde 3 LUKKET** — admin-editor er funksjonell for instrument-regler med safe-edit-loop (validate → save → commit → push) og pipeline-log-viewer. **Fase 9 LUKKET** — alle tre runder (data-wiring + filter/modal/polish + admin-editor) er levert.
+- Session 56 lukket — Fase 10 spor B (audit). `docs/data_audit_2026-04.md` levert: kilde × leses-av-tabell + K-NN-feasibility per asset-klasse mot PLAN § 6.5. Hovedfunn: bedrock.db er tom (0 rader), 4 av 5 DataStore-getters har ingen konsument (kun get_prices brukes), 3 brudd mot § 6.5 flagget (energy backwardation/supply, grains/softs ENSO, softs UNICA). Fire beslutninger til bruker (A-D) blokkerer session 57.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
-- **Blocked:** nei
-- **Next task:** **Fase 10** per PLAN-tabellen. Status-felt nullstilles ved start av Fase 10. Deferred admin-utvidelser (lever når brukeren ber): heavyweight dry-run (score-diff mot 7 dager), `/admin/fetch` + `/admin/bot` + `/admin/defaults`-editorer, pipeline-styringer (kill-all/pause/force-run + admin-auth på `/kill`).
+- **Blocked:** ja — Spor A (sessions 57-60) venter på beslutninger A-D fra audit (se Open questions).
+- **Next task:** **Session 57** = ADR-005 (DataStore-API for analog) + outcome-labels + backfill. Først må A-D besvares.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
+
+### Fase 10 — venter på A-D før session 57 starter
+
+- **A.** Brudd 2 (ENSO mangler kilde for grains + softs): legge inn
+  NOAA ONI-fetcher i Spor A som tillegg, eller utsette grains K-NN?
+  Anbefaling i audit: M (manuelt fyll, ~150 linjer ny fetcher).
+- **B.** Weather-form for grains/softs: Open-Meteo daglig backfill
+  via eksisterende `bedrock backfill weather` (beregne hot_days/
+  water_bal i driver) ELLER migrere `~/cot-explorer/agri_history/`
+  månedlig (krever ny `weather_monthly`-tabell + ADR)? Påvirker
+  session 57-scope.
+- **C.** Brudd 1 (energy backwardation + supply_disruption_level
+  mangler) + Brudd 3 (softs UNICA mangler): bekrefte utsett —
+  ingen K-NN for energy/softs i Fase 10? Anbefaling i audit: U.
+- **D.** Backfill-rekkefølge i session 57: prices → cot_disaggregated
+  (gold + corn) → fundamentals (DGS10, DGS2, T10YIE, DTWEXBGS) →
+  weather (avhenger av B). Forventet runtime 1-2 timer. OK å kjøre
+  ende-til-ende i session 57?
+
+### Eldre, fortsatt åpne
 
 - Skal pre-commit-hooks (ruff/yamllint/commitizen) aktiveres nå eller venter
   vi til `uv sync` er kjørt? Per nå committer vi uten pre-commit-validering.
@@ -100,6 +124,63 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 56: Fase 10 spor B — fetch-data-audit + K-NN-feasibility (LUKKET)
+
+**Scope:** Første session i Fase 10. Ren dokumentasjons-leveranse —
+ingen kode. Mandat fra PLAN § 14-tillegg ("ubrukt-data-gjennomgang er
+Fase 10-oppgave") + bruker-instruksjon: kartlegg `kilde × leses-av`
++ K-NN-feasibility per asset-klasse mot § 6.5. Ingen sletting av
+fetch-scripts.
+
+**Endret denne session (commit `f16ed20`):**
+
+`docs/data_audit_2026-04.md` (ny, 307 linjer):
+- § 1: fetch-modul-inventar (7 moduler, alle aktive, ingen døde)
+- § 2: DataStore-tabell-status — alle 5 tabeller har 0 rader,
+  bedrock.db er fullstendig tom
+- § 3: krys-referanse `kilde × leses-av` — kun `prices` har
+  konsumenter; `cot_disaggregated`/`cot_legacy`/`fundamentals`/
+  `weather` brukes ikke av noen driver/endpoint/UI
+- § 4: eksterne data-reservoarer i `~/cot-explorer/data/` —
+  16 års COT-history (2010-2025) + 184 mnd weather i
+  `agri_history/` + masse snapshots
+- § 5: K-NN-feasibility per asset-klasse mot § 6.5; tre brudd
+  flagget med M/D/U-forslag per Q2-instruks
+- § 6: fire beslutninger til bruker (A-D) som blokkerer session 57
+
+**Designvalg:**
+
+- **Streng kontrakt mot § 6.5** (per Q2): brudd flagget istedenfor
+  stille utvidelse. Audit avdekket ikke en data-rik kilde som
+  åpenbart burde tilføyes som "tillegg-dim Y".
+- **K-NN-omfang i Spor A** anbefales begrenset til Gold (metals)
+  og betinget Corn (grains, avhenger av A+B). Energy + softs +
+  FX har ingen instrument konfigurert i `config/instruments/`,
+  så å levere K-NN uten et instrument å score er trolig ikke
+  verdt det. Anbefaling: utsett til instrumentene introduseres.
+- **Ingen ADR i denne sessionen.** ADR-005 (DataStore-API for
+  analog: `find_analog_cases`, `get_outcomes`, `append_outcomes`,
+  evt. `weather_monthly`) hører i session 57 etter at A-D er
+  besvart, fordi ADR-en avhenger av beslutning B (weather-form).
+- **Ingen migrasjon av `~/cot-explorer/`-data** — utføres i session
+  57 etter beslutning B og D.
+
+**Verifisert:**
+- Audit basert på faktisk fil-inspeksjon: `sqlite3 data/bedrock.db`
+  for tabell-rader, `grep store.get_*` over `src/`, `grep fetch\\(`
+  over `web/assets/`, `find ~/cot-explorer/data` for inventar.
+- Ingen påvirkning på eksisterende kode/tester (audit er ren MD).
+- pytest ikke kjørt — ingen kode-endring.
+
+**Neste session (57):**
+- Først: bruker svarer på A-D
+- Deretter: ADR-005 → outcome-labels-DDL → backfill-CLI-kjøring →
+  forward-return-beregning + lagring → tester
+- Bevisst tett scope: outcome-labels alene. K-NN-implementasjon
+  hører i session 58.
+
+---
 
 ### 2026-04-25 — Session 55: Fase 9 runde 3 — dry-run + git-commit + logs-viewer + RUNDE 3 LUKKET
 
