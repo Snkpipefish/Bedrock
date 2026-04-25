@@ -8,7 +8,7 @@
     - **57:** ADR-005 + skjema + DataStore-utvidelse + ENSO-fetcher (pure kode). **LUKKET 2026-04-25**
     - **58:** backfill-eksekvering (3 nye CLI + Yahoo-port + full backfill). **LUKKET 2026-04-25**
     - **59:** `find_analog_cases`-impl + asset-klasse-dim-mapping. **LUKKET 2026-04-25**
-    - **60:** `analog`-driver-familie + YAML-integrasjon
+    - **60:** `analog`-driver-familie + YAML-integrasjon. **LUKKET 2026-04-25**
     - **61:** UI-rendering (modal-utvidelse + `analog`-felt på SignalEntry)
 - **Phase:** 9 **LUKKET 2026-04-25** (UI: 4 faner + admin-editor). Struktureres som tre runder per bruker-beslutning 2026-04-24:
   - **Runde 1 (session 47-50):** minimal data-wiring per fane, funksjonelt null polish
@@ -28,9 +28,10 @@
 - Session 57 lukket — ADR-005 + skjema + DataStore-utvidelse + ENSO-fetcher. Pure kode + 45 nye tester (1038/1038 grønt). Ingen backfill-eksekvering (det er session 58). Beslutninger A-D besvart: A=M (NOAA ONI-fetcher), B=B2 (migrer agri_history månedlig, ny `weather_monthly`-tabell), C=U (utsett energy/softs), D=split (57=kode, 58=backfill).
 - Session 58 lukket — full backfill kjørt. To kilder krevde fix underveis: (a) Stooq begynte å kreve API-nøkkel → port av cot-explorers `build_price_history.py` til ny `bedrock/fetch/yahoo.py`, Yahoo nå default for prices; (b) CFTC endret feltnavn `m_money_positions_long` → `..._long_all` → `_DISAGG_FIELD_MAP` rebased. 3 nye CLI-er: `bedrock backfill enso/weather-monthly/outcomes`. DB vokste fra 0 → 3.54 MB med 46 569 rader. 1085/1085 tester grønne (+47 nye). Se `docs/backfill_2026-04.md` for full statistikk.
 - Session 59 lukket — `find_analog_cases`-impl. Ny modul `bedrock/data/analog.py` (320 linjer) med ASSET_CLASS_DIMS (§ 6.5 slavisk), 6 implementerte DIM_EXTRACTORS, `extract_query_from_latest`, og K-NN (weighted Euclidean over z-normaliserte verdier). ADR-005-avvik dokumentert: funksjonen ble frittstående (ikke DataStore-metode) for å unngå data → config-kobling. Sanity mot ekte Gold/Corn-data: topp-5 sims 0.88-0.95 (Gold), 0.70-0.72 (Corn). 1129/1129 tester (+44 nye fordelt på 3 filer).
+- Session 60 lukket — analog-driver-familie + YAML-integrasjon. Ny `bedrock/engine/drivers/analog.py` med `analog_hit_rate` + `analog_avg_return` (registrert via `@register`). Felles `_knn`-helper med defensive exception-håndtering (alle feil → 0.0 + log). Sirkulær import (cli → config → engine → drivers → drivers.analog) løst med lat import av `find_instrument` inne i `_knn`. Gold + Corn-YAML utvidet med `analog`-familie (Gold: family_weights 0.3/0.8/1.2 per horizon; Corn: weight 2). Engine end-to-end-verifisert mot ekte data: Gold scorer 0.45 i analog-familien, Corn 0.0. 1145/1145 tester (+16 nye).
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** **Session 60** = `analog`-driver-familie + YAML-integrasjon. Skriv `analog_hit_rate` og `analog_avg_return` (og evt. `analog_match_count`) som drivere registrert i `bedrock.engine.drivers.analog`. Drivere kaller `find_analog_cases` via `extract_query_from_latest`. Per ADR-005 B5: hit-terskel + horizon-vindu + K via driver-params (overstyrbar via `config/defaults/`-inheritance). Utvid `gold.yaml` + `corn.yaml` med en `analog`-familie-blokk. Tester: driver-output mot fixture-DB med kjente neighbors → kjent score; explain-trace har analog-felt.
+- **Next task:** **Session 61** (siste i Spor A/Fase 10) = UI-rendering. Modal-utvidelse for setup-kort med `analog`-seksjon: narrative ("N matcher, Y/N steg ≥3% innen 30d, snitt +X%") + neighbor-mini-tabell (ref_date + similarity + outcomes). SignalEntry får `analog`-felt persistert til JSON (analogt med session 52 sin `families`-utvidelse). Kjøretid: orchestrator må kalle `find_analog_cases` per signal og inkludere resultatet i `_build_entry`. Tester: snapshot + logical (analog-blokk i JSON, modal rendrer riktig).
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -118,6 +119,117 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 60: Fase 10 spor A — analog-driver-familie + YAML-integrasjon (LUKKET)
+
+**Scope:** Tredje kode-session i Spor A. Bind K-NN-resultater fra
+session 59 til scoring-pipelinen via to nye drivere registrert i
+engine, og aktiver dem i Gold + Corn YAML.
+
+**Endret denne session (commit `07d4f73`):**
+
+`src/bedrock/engine/drivers/analog.py` (ny, 220 linjer):
+- `analog_hit_rate(store, instrument, params) -> float`:
+  - Andelen av K nærmeste naboer der forward_return ≥
+    `outcome_threshold_pct` (default 3.0)
+  - Returnerer 0..1 direkte (n_hits/k)
+  - Per ADR-005 B5: terskel er driver-config, ikke baked into data
+- `analog_avg_return(store, instrument, params) -> float`:
+  - Avg forward_return mappet via terskel-trapp til 0..1
+  - Default mapping: ≥+5%→1.0, ≥+3%→0.8, ≥+2%→0.65, ≥+1%→0.5,
+    ≥0%→0.4, <0%→0.0
+  - `direction: invert`-param flipper fortegn (bear-bruk)
+  - `score_thresholds`-dict overstyrer default
+- `_knn(store, instrument, params)` felles helper:
+  - Validerer asset_class mot `ASSET_CLASS_DIMS`
+  - Slår opp `InstrumentMetadata` via `find_instrument` (lat import)
+  - Bygger query via `extract_query_from_latest(skip_missing=True)`
+  - Kaller `find_analog_cases`
+  - Defensive: alle exceptions → (None, error_msg) → driver returnerer
+    0.0 + log
+
+`src/bedrock/engine/drivers/__init__.py`:
+- Auto-import-linja oppdatert: `from bedrock.engine.drivers import
+  analog, currency, trend`. Sikrer at `@register("analog_*")` kjøres.
+
+`config/instruments/gold.yaml`:
+- `family_weights[analog]` lagt til per horizon: SCALP=0.3, SWING=0.8,
+  MAKRO=1.2 (K-NN matcher best lange horisonter)
+- `max_score` bumpet 4.5/5.0/4.7 → 4.8/5.8/5.9
+- Ny `families.analog`-blokk med to drivere (hit_rate + avg_return),
+  hver vekt 0.5, params `{asset_class: metals, k: 5,
+  horizon_days: 30, ...}`
+
+`config/instruments/corn.yaml`:
+- Ny `families.analog` (weight: 2, samme som andre families). Drivere
+  konfigurert for grains.
+- `max_score` bumpet 18 → 20
+
+`tests/unit/test_analog_drivers.py` (ny, 16 tester):
+- Hit-rate basic + edge-cases: missing/unknown asset_class, unknown
+  instrument, no-data, terskel-konfig (0% / 100% / default)
+- Avg-return basic + invert + custom-thresholds + negative-history +
+  strong-positive (1.0 maks)
+- Sanity: begge drivere registrert under riktig navn
+
+**Designvalg:**
+
+- **Lat import av `find_instrument`** løste sirkulær import. Modul-
+  toppen importerer fra `bedrock.data.analog`; CLI-helperen
+  importeres inne i `_knn`-funksjonen. Dokumentert i selve modulen
+  (kommentar over import-blokken).
+- **Frittstående `_knn`-helper, ikke duplisert i hver driver.**
+  Begge drivere har identisk pre-prosessering (validering, lookup,
+  K-NN-kall) — refaktor inn felles helper. Bare differensieringen
+  (hit-rate-aggregering vs avg-mapping) er per driver.
+- **`outcome_threshold_pct` lagres ikke i driver-output.** Driver
+  returnerer kun hit_rate (0..1). Caller (familie-aggregator) ser
+  ikke hva terskelen var. Hvis vi senere vil ha det i explain-trace,
+  må vi utvide DriverResult — egen task.
+- **YAML-vekter er bevisst forskjellige per horizon for Gold.** SCALP
+  får liten vekt (0.3) — 30d-K-NN sier lite om scalp-trading. MAKRO
+  får stor vekt (1.2) — passer perfekt med 90d-historikk-matching.
+  SWING (0.8) er midt i mellom.
+- **`max_score` bumpet konsistent.** 4.5 + 0.3 = 4.8 (nytt SCALP-
+  max). Hvis vi senere bytter analog-vekt, må max_score justeres
+  manuelt (det er ikke automatisk derivat fra family_weights). Som
+  i dag.
+- **Corn fikk lavere relativ analog-vekt** (2 av 18 i den additive
+  modellen, dvs. 11%) enn Gold MAKRO (1.2 av 5.9, dvs. 20%). Begrunnelse:
+  vær-stress + ENSO er allerede dekket av andre Corn-families
+  (`weather`, `enso`), så analog er mindre marginal.
+
+**End-to-end-resultat (Engine.score mot ekte data):**
+
+| Instrument | Horizon | Total | Grade | Analog-fam |
+|---|---|---:|---|---|
+| Gold | SCALP | 4.34 | A+ | 0.45 (hit=0.4, avg=0.5) |
+| Gold | SWING | 5.11 | A+ | 0.45 |
+| Gold | MAKRO | 5.04 | A+ | 0.45 |
+| Corn | (additiv) | 16.0 | A+ | 0.0 (hit=0, avg=0) |
+
+Corn analog 0.0 reflekterer at K-NN-naboer for nåværende vær/ENSO/
+DXY-tilstand har historisk hatt avg ret -13.7%/-30.7% — driveren
+gir riktig 0.0 for bull-instrument. invert-direction-driver kan
+brukes for short-corn-signaler i framtiden.
+
+**Verifisert:**
+- pytest full → 1145/1145 (var 1129, +16 nye)
+- ruff check + format → grønt
+- Pre-commit hook → grønt
+- Auto-push → `origin/main`
+- Manuell sanity: Engine.score over Gold (3 horisonter) + Corn
+
+**Neste session (61 — siste i Spor A/Fase 10):**
+- UI-rendering i modal: analog-seksjon m/narrative + neighbor-tabell
+- SignalEntry utvides med `analog`-felt (analogt med session 52
+  `families`)
+- Orchestrator `_build_entry` kaller `find_analog_cases` per signal
+  og persisterer resultatet
+- Tester: snapshot på SignalEntry-JSON, logical på modal-rendering
+- Etter session 61 lukkes Fase 10 (tag `v0.10.0-fase-10`)
+
+---
 
 ### 2026-04-25 — Session 59: Fase 10 spor A — find_analog_cases-impl + dim-mapping (LUKKET)
 
