@@ -2,6 +2,9 @@
 
 ## Current state
 
+- **Phase:** 11 **ÅPEN** (backtest-rammeverk + 12 mnd historikk-replay). Bruker-beslutning 2026-04-25: bli på Nivå 1 til Fase 11 ferdig, bytt til Nivå 3 ved Fase 12 start.
+  - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
+  - **63+:** as-of-date orchestrator-replay (krever DataStore-view-clip), per-grade-breakdown, `compare_signals(v1, v2)`, evt. UI-fane
 - **Phase:** 10 **LUKKET 2026-04-25** (tag `v0.10.0-fase-10`). Analog-matching + ubrukt-data-audit. Splittet i to spor per bruker-beslutning 2026-04-25:
   - **Spor B — ubrukt-data-audit (session 56):** dokumentasjon, ingen kode. **LUKKET 2026-04-25**
   - **Spor A — analog-matching (sessions 57-61):** A-D besvart 2026-04-25 (M/B2/U/split). Re-numrert til 5 sessions etter D-splitt:
@@ -30,10 +33,11 @@
 - Session 59 lukket — `find_analog_cases`-impl. Ny modul `bedrock/data/analog.py` (320 linjer) med ASSET_CLASS_DIMS (§ 6.5 slavisk), 6 implementerte DIM_EXTRACTORS, `extract_query_from_latest`, og K-NN (weighted Euclidean over z-normaliserte verdier). ADR-005-avvik dokumentert: funksjonen ble frittstående (ikke DataStore-metode) for å unngå data → config-kobling. Sanity mot ekte Gold/Corn-data: topp-5 sims 0.88-0.95 (Gold), 0.70-0.72 (Corn). 1129/1129 tester (+44 nye fordelt på 3 filer).
 - Session 60 lukket — analog-driver-familie + YAML-integrasjon. Ny `bedrock/engine/drivers/analog.py` med `analog_hit_rate` + `analog_avg_return` (registrert via `@register`). Felles `_knn`-helper med defensive exception-håndtering (alle feil → 0.0 + log). Sirkulær import (cli → config → engine → drivers → drivers.analog) løst med lat import av `find_instrument` inne i `_knn`. Gold + Corn-YAML utvidet med `analog`-familie (Gold: family_weights 0.3/0.8/1.2 per horizon; Corn: weight 2). Engine end-to-end-verifisert mot ekte data: Gold scorer 0.45 i analog-familien, Corn 0.0. 1145/1145 tester (+16 nye).
 - Session 61 lukket — UI-rendering + SignalEntry-utvidelse. Nye `AnalogNeighbor` + `AnalogTrace` Pydantic-modeller. `SignalEntry.analog: AnalogTrace | None = None` (additiv, bakoverkompatibel). `_build_analog_trace` plukker driver-params fra første driver i analog-familien, kaller `find_analog_cases`, bygger trace med narrative-felter (n_neighbors, hit_rate_pct, avg_return_pct, dims_used, neighbors[]). UI-modal får `_analogHtml`-helper som rendrer "X av N steg ≥Y% innen Hd"-narrative + neighbor-mini-tabell. CSS for analog-tabell + pos/neg-fargekoder. End-to-end-verifisert: Gold MAKRO-signal har 5 naboer (topp: 2022-03-23 sim=0.955), JSON-roundtrip OK. 1155/1155 tester (+10 nye). **Fase 10 LUKKET — tag `v0.10.0-fase-10`.**
-- **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
+- Session 62 lukket — Fase 11 åpning. Scaffold for backtest-rammeverket: ny modul `bedrock/backtest/` (config + result + report + runner) + ny CLI `bedrock backtest run` + demo-rapport `docs/backtest_2026-04_gold-corn.md` mot ekte data (Gold/Corn × 30d/90d). Outcome-replay leser pre-beregnet `analog_outcomes` — ingen as-of-date orchestrator-replay ennå (det er senere session). Hit-flag beregnes on-the-fly fra config-terskel slik at samme tabell kan re-aggregeres uten re-backfill. Sanity: Gold 2024 30d hit-rate 59.1%, avg +3.87% (matcher Gold-bull-året). 1183/1183 tester (+28 nye fordelt på 2 filer).
+- **Branch:** `main` (jobber direkte på main, Nivå 1-modus). Bruker-beslutning 2026-04-25: bli på Nivå 1 til Fase 11 ferdig, bytt til Nivå 3 ved Fase 12 start.
 - **Blocked:** nei
-- **Next task:** **Fase 11** per PLAN-tabellen = backtest-rammeverk + 12 mnd historikk-replay. Output: rapport over signal-performance. Tag `v0.11.0-fase-11` ved fase-slutt. Etter Fase 11: Fase 12 (2 uker demo-parallell-drift) + Fase 13 (cutover). PLAN nevner også overgang til Nivå 3 git-modus (feature-branches + PR + branch-protection) ved Fase 11-12.
-- **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
+- **Next task:** **Session 63** = as-of-date orchestrator-replay. Krever `DataStoreView`-wrapper (eller equivalent) som klipper data ved en gitt ref_date slik at `Engine.score(...)` kun ser data ≤ ref_date. Så `run_orchestrator_replay` itererer ref_dates og samler full SignalEntry per dato → populerer score/grade/published på `BacktestSignal` + per_grade-breakdown på `BacktestReport`. Bevisst tett scope — `compare_signals(v1, v2)` og UI-fane hører i senere sessions etter as-of-date-replay er stabil.
+- **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) **ved Fase 12 start** per bruker-beslutning 2026-04-25.
 
 ## Open questions to user
 
@@ -120,6 +124,118 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 62: Fase 11 åpning — backtest-scaffold + outcome-replay + rapport-format (LUKKET)
+
+**Scope:** Første session i Fase 11. Per bruker-instruks: scaffold +
+rapport-format, ikke as-of-date orchestrator-replay (det kommer i
+session 63). Bruke eksisterende `analog_outcomes`-tabell + orchestrator
+som datakilde.
+
+**Endret denne session (commit `a511223`):**
+
+`src/bedrock/backtest/` (ny modul):
+- `__init__.py` — re-eksport av offentlige navn
+- `config.py` — `BacktestConfig`: instrument, horizon_days,
+  from_date, to_date, outcome_threshold_pct (default 3.0 per § 6.5),
+  report_format (markdown|json). `model_validator(mode="after")`
+  sjekker at from_date ≤ to_date.
+- `result.py` — `BacktestSignal` (ref_date, instrument, horizon_days,
+  forward_return_pct, max_drawdown_pct, hit) + score/grade/published
+  som None-able for senere orchestrator-replay. `BacktestResult`
+  pakker config + signals.
+- `report.py` — `BacktestReport` (n_signals, n_hits, hit_rate_pct,
+  avg/median/best/worst return, avg/worst drawdown, n_published,
+  by_grade). `summary_stats(result)` aggregerer. `format_markdown`
+  + `format_json` for output.
+- `runner.py` — `run_outcome_replay(store, config)`: leser
+  `store.get_outcomes(instrument, horizon_days)`, filtrerer på
+  dato-vindu, bygger BacktestSignal per rad, hit beregnes
+  on-the-fly fra config-terskel.
+
+`src/bedrock/cli/backtest.py` (ny CLI):
+- `bedrock backtest run --instrument <X> --horizon-days <H>
+  --from <D> --to <D> --threshold-pct <T> --report markdown|json
+  --output <FILE>`
+- Output til stdout eller fil
+
+`src/bedrock/cli/__main__.py`:
+- `cli.add_command(backtest)`
+
+`docs/backtest_2026-04_gold-corn.md` (ny demo-rapport):
+- Gold 30d (4071 obs): hit-rate 34.5%, avg +1.21%
+- Gold 90d (4011 obs): hit-rate 52.5%, avg +3.72%
+- Corn 30d (4069 obs): hit-rate 36.6%, avg +0.58%
+- Corn 90d (4009 obs): hit-rate 40.4%, avg +1.84%
+- Sub-period Gold 2024 30d (252 obs): hit-rate 59.1%, avg +3.87%
+- Demonstrerer både full-range og sub-period rapport-format
+
+**Tester (+28 nye → 1183/1183):**
+
+`test_backtest_runner.py` (21 tester):
+- BacktestConfig validering: minimal, horizon > 0, dato-vindu,
+  extra-felt forbidden, report_format choices
+- BacktestSignal/Result roundtrip
+- run_outcome_replay: full window, dato-filter, terskel-konfigurerbar,
+  unknown instrument/horizon → empty, sortering
+- summary_stats: empty, basic, n_published-None når score-felter mangler
+- format_markdown: metrics, signed return, empty-data-melding
+- format_json: roundtrip
+- BacktestReport-struktur
+
+`test_cli_backtest.py` (7 tester):
+- CLI markdown til stdout
+- CLI JSON til stdout
+- CLI til fil (parent-mkdir)
+- Missing DB → UsageError
+- Window-filter
+- Threshold-konfigurerbar
+- Unknown instrument viser "Ingen outcomes funnet"
+
+**Designvalg:**
+
+- **Hit-flag beregnes on-the-fly** (ikke lagret i `BacktestSignal`):
+  oh wait — det ER lagret. Men terskelen som ble brukt er i config,
+  ikke i signal. Dette gjør at `summary_stats` kan re-aggregere
+  med ulike terskler bare ved å re-lese config + re-kjøre runner
+  — ikke nødvendig å persistere flere `hit`-felter.
+- **`score`/`grade`/`published` som None-able** på BacktestSignal:
+  outcome-replay har ingen orchestrator-output. Når
+  `run_orchestrator_replay` er ferdig, fyller den disse uten å
+  endre schema — bakoverkompat.
+- **`n_published` = None når ingen signaler har published-flag**:
+  unngår misvisende "0 av N publisert" når data faktisk mangler.
+  Markdown-formatter hopper over rad hvis None.
+- **`by_grade` er tom dict** for outcome-replay (ingen score). Når
+  orchestrator-replay populerer, fyller den per-grade-stats.
+  Markdown-formatter rendrer kun seksjon hvis dict har innhold.
+- **`pd.isna`-import er late** i runner.py for å holde top-of-file
+  rent for ren-Python-import (matchet eksisterende
+  schemas.py-mønster).
+- **Demo-rapport har bevisst ingen sub-period for Corn**: Corn-
+  historikken er volatil og 5 sub-perioder hadde gjort rapporten
+  uoverskuelig. Vi kan utvide når sub-period-analyse blir et
+  konkret behov.
+
+**Verifisert:**
+- pytest full → 1183/1183 (var 1155, +28)
+- ruff check + format → grønt
+- Pre-commit hook → grønt (måtte la end-of-file-fixer kjøre én gang
+  på demo-rapporten)
+- Auto-push → `origin/main`
+- Manuell sanity: `bedrock backtest run --instrument Gold
+  --horizon-days 30 --from 2024-01-01 --to 2024-12-31` produserer
+  ekte rapport mot data/bedrock.db
+
+**Neste session (63):**
+- as-of-date orchestrator-replay
+- Designvalg å ta: en `DataStoreView`-wrapper som filtrerer alle
+  store-getters til ts ≤ ref_date, eller la run_orchestrator_replay
+  injisere et "as_of"-clip i Engine.score-pipelinen
+- Når replay er stabil: per-grade-breakdown blir naturlig
+- `compare_signals(v1, v2)` og UI-fane: senere sessions
+
+---
 
 ### 2026-04-25 — Session 61: Fase 10 spor A — UI-rendering + SignalEntry-analog (LUKKET, FASE 10 LUKKET)
 
