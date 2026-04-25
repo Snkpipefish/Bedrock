@@ -9,8 +9,9 @@
 - **Sub-fase 12.5 ÅPEN 2026-04-25** — debt-rydding før observasjonsvinduet kan gi mening. Roadmap: Block A drivere (~3-4 sessioner), Block B agri-drivere (~4-5), Block C instrumenter (~3-5), Block D polish (~2-3). Totalt 12-17 sessioner.
   - **70:** Block A — positioning-drivere (`positioning_mm_pct` + `cot_z_score`). Erstatter placeholder i Gold positioning-familien. **LUKKET 2026-04-25**
   - **71:** Block A — macro-drivere (`real_yield` + `dxy_chg5d` + `vix_regime`). Backfilt VIXCLS. Erstatter placeholder i Gold macro-familien. **LUKKET 2026-04-25**
-  - **72:** Block B start — agri-drivere (`weather_stress` + `enso_regime`). Erstatter placeholder i Corn weather + enso-familier. End-to-end: Corn weather=0.10, enso=0.50, total=13.21/20 grade A. **LUKKET 2026-04-25**
-  - **73 (neste):** Block B fortsetter eller Block C. Alternativer: (a) `conab_yoy`/`usda_export_pace`/`crop_progress` for Corn outlook/yield/conab/cross; (b) konfigurere Cotton/Coffee/Soybean/Sugar/Wheat YAMLer; (c) Fase 11 backtest re-run for å verifisere Corn-inversjon er fixet.
+  - **72:** Block B start — agri-drivere (`weather_stress` + `enso_regime`). Erstatter placeholder i Corn weather + enso-familier. **LUKKET 2026-04-25**
+  - **73:** Validering — Corn-backtest re-run etter session 72. **Funn: Corn FORTSATT INVERTERT** (A+ 16.7%/30d og 33.3%/90d vs C 60.0%/30d og 66.7%/90d). Session 72 fixet kun 2 av 7 familier; sma200_align placeholder i de resterende 5 holder Corn invertert. **LUKKET 2026-04-25** med dokumentert next-step.
+  - **74 (neste):** Erstatt sma200_align i Corn outlook/yield/conab/cross-familiene. Konkret: (a) flytt weather_stress til yield-familien (mer naturlig hjem); (b) ny `seasonal_stage`-driver for outlook (måneds-til-planting/silking/harvest); (c) `currency_cross_trend` (allerede bygget) i cross-familien mot DXY; (d) conab utsett til Conab-fetcher bygges. Re-kjør validering.
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -48,9 +49,9 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `feat/agri-drivers` (Nivå 3 — session 72). PR #1-#5 merget. Branch-protection på `main` i GitHub UI er **ikke automatisert**.
-- **Blocked:** nei.
-- **Next task:** **Session 73.** Velg mellom (a) flere agri-drivere (`conab_yoy`, `usda_export_pace`, `crop_progress`); (b) Block C — nye instrumenter (Cotton/Coffee/Soybean/Sugar/Wheat); (c) Fase 11 backtest re-run for å bekrefte Corn-inversjon er fixet.
+- **Branch:** `chore/fase-11-rerun-corn` (Nivå 3 — session 73). PR #1-#6 merget.
+- **Blocked:** nei. Validering avslørte at Corn-fix krever flere drivere før Block C kan starte.
+- **Next task:** **Session 74 — fortsett Block B.** Erstatt sma200_align i Corn outlook/yield/conab/cross. Konkret: (a) flytt weather_stress til yield; (b) ny `seasonal_stage` for outlook; (c) `currency_cross_trend` for cross-familien; (d) conab utsett. Re-kjør Corn-validering etter for å bekrefte inversjonen er fjernet.
 - **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
 ## Open questions to user
@@ -138,6 +139,45 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 73: Corn-validering etter Block B (LUKKET med funn)
+
+**Scope:** Bekrefte at Block B (session 72) fixer Corn-inversjonen
+funnet i Fase 11 session 64.
+
+**Endret denne session (feature-branch `chore/fase-11-rerun-corn`):**
+
+- `scripts/backtest_corn_validation.py` (ny, ~90 l): focused validation-
+  script. Corn × 30d/90d, kun direction=buy, step_days=10. Wall-time
+  ~73s (vs ~7 min for full Fase 11-rapport).
+- `docs/backtest_corn_validation_2026-04.md` (ny): full rapport.
+
+**Resultat — Corn er FORTSATT INVERTERT:**
+
+| Grade | 30d n | 30d hit | 30d avg | 90d n | 90d hit | 90d avg |
+|---|---:|---:|---:|---:|---:|---:|
+| A+ | 6 | **16.7%** | -2.06% | 3 | **33.3%** | -6.42% |
+| A | 1 | 0.0% | +1.51% | — | — | — |
+| B | 6 | 16.7% | -2.12% | 5 | 40.0% | +0.90% |
+| C | 10 | **60.0%** | **+2.44%** | 9 | **66.7%** | **+6.70%** |
+
+Sammenligning vs session 64-funn:
+- Session 64: A+ -2.38% / -5.67%, C +1.68% / +6.40% (30d/90d)
+- Session 73: A+ -2.06% / -6.42%, C +2.44% / +6.70% (30d/90d)
+
+Marginal endring i absoluttverdier — inversjonen består.
+
+**Diagnose:** Session 72 fixet kun 2 av 7 Corn-familier. De 5 andre
+(outlook/yield/conab/cross + trend) bruker fortsatt sma200_align som
+scorer på pris-trend. Når Corn er i bull-trend gir sma200_align høy
+score → A+ → men når fundamentals ikke bekrefter, ender det med
+tap. Resulterer i over-scoring av "A+".
+
+**Konklusjon:** Block B må fortsette i session 74 med drivere for
+de gjenværende familiene før Corn er meningsfullt scoret.
+
+**Ingen kode-endring i scoring-engine.** Funn dokumenterer at Block B
+må fortsette før parallell-drift kan gi mening for Corn.
 
 ### 2026-04-25 — Session 72: Sub-fase 12.5 Block B — agri-drivere (LUKKET)
 
