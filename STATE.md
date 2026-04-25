@@ -6,7 +6,8 @@
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
   - **64:** Full 12-mnd-rapport for Gold + Corn × 30/90d. **LUKKET 2026-04-25**. Funn: Corn-scoring er invertert for buy-direction (A+ < C i hit-rate). Kjent issue, ikke Fase 11-blokker.
-  - **65+:** `compare_signals(v1, v2)`, evt. UI-fane, fase-tag `v0.11.0-fase-11`
+  - **65:** `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. **LUKKET 2026-04-25**.
+  - **66+:** evt. UI-fane (Backtest), fase-tag `v0.11.0-fase-11` når brukeren bestemmer at Fase 11 er ferdig
 - **Phase:** 10 **LUKKET 2026-04-25** (tag `v0.10.0-fase-10`). Analog-matching + ubrukt-data-audit. Splittet i to spor per bruker-beslutning 2026-04-25:
   - **Spor B — ubrukt-data-audit (session 56):** dokumentasjon, ingen kode. **LUKKET 2026-04-25**
   - **Spor A — analog-matching (sessions 57-61):** A-D besvart 2026-04-25 (M/B2/U/split). Re-numrert til 5 sessions etter D-splitt:
@@ -38,9 +39,10 @@
 - Session 62 lukket — Fase 11 åpning. Scaffold for backtest-rammeverket: ny modul `bedrock/backtest/` (config + result + report + runner) + ny CLI `bedrock backtest run` + demo-rapport `docs/backtest_2026-04_gold-corn.md` mot ekte data (Gold/Corn × 30d/90d). Outcome-replay leser pre-beregnet `analog_outcomes` — ingen as-of-date orchestrator-replay ennå (det er senere session). Hit-flag beregnes on-the-fly fra config-terskel slik at samme tabell kan re-aggregeres uten re-backfill. Sanity: Gold 2024 30d hit-rate 59.1%, avg +3.87% (matcher Gold-bull-året). 1183/1183 tester (+28 nye fordelt på 2 filer).
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
+- Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
 - **Branch:** `main` (jobber direkte på main, Nivå 1-modus). Bruker-beslutning 2026-04-25: bli på Nivå 1 til Fase 11 ferdig, bytt til Nivå 3 ved Fase 12 start.
 - **Blocked:** nei
-- **Next task:** **Session 65** = `compare_signals(v1, v2)` for regelsett-impact-tester (PLAN § 11.5). API: ta to BacktestResult og returnere diff per ref_date (score-δ, grade-overgang, hit-overgang). Markdown-rapport som viser hvilke ref_dates regelendringen påvirket. Bruk: redaktør endrer YAML i admin-UI → backtest både gammel + ny → diff-rapport viser hvor mye det monner. Etter session 65: vurder UI-fane for backtest-resultater (per § 11.5). Tag `v0.11.0-fase-11` når compare_signals er på plass + UI-fane (eller når brukeren bestemmer at vi er ferdige).
+- **Next task:** **Session 66** = vurder UI-fane for backtest-resultater (PLAN § 11.5 nevner det som mulig leveranse). Alternativ: lukke Fase 11 her og tagge `v0.11.0-fase-11`. Backtest-rammeverket har nå alle PLAN § 11.5-leveransene: outcome-replay (62), orchestrator-replay (63), per-grade-breakdown (63), full 12-mnd-rapport (64), compare_signals (65). UI-fane vil gi visualisering, men brukeren kan i prinsippet kjøre rapportene fra CLI og lese .md-filer direkte. Forslag: bekreft med bruker om Fase 11 er klar for tagging eller om UI-fane kreves først.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) **ved Fase 12 start** per bruker-beslutning 2026-04-25.
 
 ## Open questions to user
@@ -128,6 +130,96 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 65: Fase 11 — compare_signals(v1, v2) + CLI compare (LUKKET)
+
+**Scope:** PLAN § 11.5 leveranse — regelsett-impact-tester. API:
+gitt to BacktestResult, returner CompareReport med per-ref_date diff
++ aggregat. Brukes både i tester (assertions på max-endring) og i
+PR-output for å vise YAML-redigerings-impact.
+
+**Endret denne session (commit `3ea5935`):**
+
+`src/bedrock/backtest/compare.py` (ny, ~350 linjer):
+- `CompareReport` Pydantic-modell (aggregat + diff_rows)
+- `DiffRow` med kind ("only_v1"|"only_v2"|"changed") og per-versjon-felter
+- `compare_signals(v1, v2, *, label_v1, label_v2)` — diff per ref_date
+- Toleranse 1e-9 på score-sammenligning (Pydantic float-rep-støy)
+- Grade-rangering: A+ (0) → A (1) → B (2) → C (3) → D (4); ukjent (99)
+- `format_compare_markdown(report, *, max_rows=50)` med oppsummering +
+  diff-tabell (cappet til max_rows; resten flagget med "X flere utelatt")
+- `format_compare_json(report)` for full audit
+- Instrument/horizon-mismatch logger advarsel via structlog (ingen
+  exception — caller har ansvaret for sammenlignbarhet)
+
+`src/bedrock/cli/backtest.py` — ny subkommando:
+- `bedrock backtest compare --v1 X.json --v2 Y.json [--label-v1 ...]
+  [--label-v2 ...] [--report markdown|json] [--output FILE]
+  [--max-rows N]`
+- `_load_result_from_json` helper rekonstruerer BacktestResult fra
+  JSON-payload-en `format_json` produserer (parser config + signals
+  via Pydantic; report-feltet ignoreres siden det re-aggregeres)
+
+`src/bedrock/backtest/__init__.py` eksporterer compare_signals,
+CompareReport, DiffRow, format_compare_markdown, format_compare_json.
+
+**Tester (+22 → 1234/1234):**
+
+`test_backtest_compare.py`:
+- Identiske inputs → 0 endringer (signal_count_delta=0)
+- Numerisk støy < 1e-9 filtreres ut
+- Grade promoted (B→A+), demoted (A+→C), uchanged
+- Ukjent grade rangeres som verste (rank 99)
+- Published lagt til / fjernet
+- Hit-flag endret (samme fwd, annet hit)
+- only_v1, only_v2, disjoint, n_common-beregning
+- DiffRow-innhold: gamle og nye verdier per kind
+- § 11.5-mønsteret: `signal_count_delta < 0.10 * len(v1)` brukbart
+- Instrument/horizon-mismatch logger advarsel uten å kaste
+- Markdown empty-diff vs with-diffs, max_rows-trunkering med
+  "X flere rader utelatt" footer
+- JSON-roundtrip via Pydantic
+- CLI: write-to-file (markdown), emit-stdout (json)
+
+**Designvalg:**
+
+- **Diff på ref_date-nivå (ikke (ref_date, direction))**: rapportering
+  blir enklere; en rapport-kjøring dekker én direction (per
+  run_orchestrator_replay-API). Caller som vil sammenligne BUY+SELL
+  må kjøre compare to ganger.
+- **CompareReport som Pydantic, ikke dataclass**: matcher
+  BacktestResult/Report-konvensjon. JSON-roundtrip er gratis.
+- **Toleranse 1e-9 på score**: Pydantic float-rep kan ha sub-femtosekund
+  støy. Realistisk score-resolution er 0.01; 1e-9 er rikelig under.
+- **Grade-rangering hardkodet**: alternativt kunne lest grade_thresholds
+  fra YAML, men det krever instrumentet-kontekst som compare ikke har.
+  Flat A+→D-rangering er konsistent med UI-rendering i session 61.
+- **Instrument/horizon-mismatch som warning, ikke error**: caller kan
+  ha legitime grunner til cross-instrument-sammenligning (f.eks.
+  Gold 30d vs Gold 90d for å se horisont-effekt). Logger advarsel og
+  fortsetter.
+- **CLI `_load_result_from_json` ignorerer "report"-feltet**: det
+  re-aggregeres ved behov med summary_stats. Holder JSON-formatet
+  bakoverkompatibelt — gamle JSON-filer uten "report"-felt fungerer.
+- **Diff-tabell capped (max_rows=50 default)**: rapport-readability;
+  full audit via JSON. "X flere utelatt"-footer signaliserer det.
+
+**Verifisert:**
+- pytest full → 1234/1234 (var 1212, +22)
+- ruff check + format → grønt etter SIM103-fix (return condition direkte)
+  + import-sortering
+- Pre-commit hook + auto-push → `origin/main`
+- Smoke-test mot in-process v1/v2 viser forventet diff-tabell
+
+**Neste session (66):**
+- Beslutning kreves: legge til UI-fane for backtest, eller lukke Fase 11
+  og tagge `v0.11.0-fase-11`?
+- PLAN § 11.5 nevner "evt. UI-fane" som mulig leveranse — ikke krav.
+- Backtest-rammeverket har alle § 11.5-leveransene som er nødvendige
+  for å kjøre fra CLI: outcome-replay, orchestrator-replay,
+  per-grade-breakdown, compare_signals, full 12-mnd-rapport.
+
+---
 
 ### 2026-04-25 — Session 64: Fase 11 — full 12-mnd-rapport for Gold + Corn × 30/90d (LUKKET)
 
