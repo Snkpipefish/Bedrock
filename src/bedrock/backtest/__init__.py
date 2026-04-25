@@ -23,6 +23,13 @@ Ingen HTTP, ingen orchestrator-kjøring i session 62.
 
 from __future__ import annotations
 
+from bedrock.backtest.compare import (
+    CompareReport,
+    DiffRow,
+    compare_signals,
+    format_compare_json,
+    format_compare_markdown,
+)
 from bedrock.backtest.config import BacktestConfig
 from bedrock.backtest.report import (
     BacktestReport,
@@ -40,6 +47,11 @@ __all__ = [
     "BacktestReport",
     "BacktestResult",
     "BacktestSignal",
+    "CompareReport",
+    "DiffRow",
+    "compare_signals",
+    "format_compare_json",
+    "format_compare_markdown",
     "format_json",
     "format_markdown",
     "run_orchestrator_replay",

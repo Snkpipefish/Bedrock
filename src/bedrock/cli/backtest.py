@@ -7,6 +7,7 @@ til når orchestrator-replay er implementert.
 
 from __future__ import annotations
 
+import json
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -15,6 +16,10 @@ import click
 
 from bedrock.backtest import (
     BacktestConfig,
+    BacktestResult,
+    compare_signals,
+    format_compare_json,
+    format_compare_markdown,
     format_json,
     format_markdown,
     run_orchestrator_replay,
@@ -196,6 +201,105 @@ def run_cmd(
         click.echo(f"Wrote backtest report to {output} ({report.n_signals} signals)")
     else:
         click.echo(text)
+
+
+@backtest.command("compare")
+@click.option(
+    "--v1",
+    "v1_path",
+    required=True,
+    type=click.Path(path_type=Path, exists=True, dir_okay=False),
+    help="Sti til v1-BacktestResult JSON (fra `backtest run --report json`).",
+)
+@click.option(
+    "--v2",
+    "v2_path",
+    required=True,
+    type=click.Path(path_type=Path, exists=True, dir_okay=False),
+    help="Sti til v2-BacktestResult JSON.",
+)
+@click.option(
+    "--label-v1",
+    default="v1",
+    show_default=True,
+    help="Etikett for v1 i rapporten.",
+)
+@click.option(
+    "--label-v2",
+    default="v2",
+    show_default=True,
+    help="Etikett for v2 i rapporten.",
+)
+@click.option(
+    "--report",
+    "report_format",
+    type=click.Choice(["markdown", "json"], case_sensitive=False),
+    default="markdown",
+    show_default=True,
+)
+@click.option(
+    "--output",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Skriv compare-rapport til fil. Default: stdout.",
+)
+@click.option(
+    "--max-rows",
+    type=int,
+    default=50,
+    show_default=True,
+    help="Max diff-rader i markdown (kun markdown-format).",
+)
+def compare_cmd(
+    v1_path: Path,
+    v2_path: Path,
+    label_v1: str,
+    label_v2: str,
+    report_format: str,
+    output: Path | None,
+    max_rows: int,
+) -> None:
+    """Diff to BacktestResult-JSON-filer (regelsett-impact-tester per § 11.5).
+
+    Eksempel:
+
+        bedrock backtest run --instrument Gold --horizon-days 30 \\
+            --mode orchestrator --report json --output v1.json
+        # ... rediger gold.yaml ...
+        bedrock backtest run --instrument Gold --horizon-days 30 \\
+            --mode orchestrator --report json --output v2.json
+        bedrock backtest compare --v1 v1.json --v2 v2.json \\
+            --label-v1 baseline --label-v2 nye-vekter
+    """
+    v1 = _load_result_from_json(v1_path)
+    v2 = _load_result_from_json(v2_path)
+    report = compare_signals(v1, v2, label_v1=label_v1, label_v2=label_v2)
+    if report_format.lower() == "json":
+        text = format_compare_json(report)
+    else:
+        text = format_compare_markdown(report, max_rows=max_rows)
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(text, encoding="utf-8")
+        click.echo(
+            f"Wrote compare-rapport til {output} "
+            f"(Δ={report.signal_count_delta}, n_changed={report.n_changed})"
+        )
+    else:
+        click.echo(text)
+
+
+def _load_result_from_json(path: Path) -> BacktestResult:
+    """Les BacktestResult fra JSON-fil produsert av `format_json`.
+
+    JSON-en har topnivå `config`, `report` (ignoreres her — vi
+    re-aggregerer ved behov) og `signals`. Pydantic parser config og
+    signals automatisk.
+    """
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return BacktestResult.model_validate(
+        {"config": payload["config"], "signals": payload.get("signals", [])}
+    )
 
 
 def main() -> None:
