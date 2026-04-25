@@ -44,18 +44,16 @@ def _sample_bars(n: int = 3) -> pd.DataFrame:
 
 def test_backfill_prices_writes_to_db(runner: CliRunner, tmp_path: Path) -> None:
     db = tmp_path / "bedrock.db"
-    with patch("bedrock.cli.backfill.fetch_prices", return_value=_sample_bars(3)):
+    with patch("bedrock.cli.backfill.fetch_yahoo_prices", return_value=_sample_bars(3)):
         result = runner.invoke(
             cli,
             [
                 "backfill",
                 "prices",
-                "--source",
-                "stooq",
                 "--instrument",
                 "Gold",
                 "--ticker",
-                "xauusd",
+                "GC=F",
                 "--from",
                 "2024-01-02",
                 "--to",
@@ -77,18 +75,16 @@ def test_backfill_prices_writes_to_db(runner: CliRunner, tmp_path: Path) -> None
 def test_backfill_creates_parent_dir_for_db(runner: CliRunner, tmp_path: Path) -> None:
     """--db path med ikke-eksisterende forelder skal få katalog opprettet."""
     db = tmp_path / "nested" / "subdir" / "bedrock.db"
-    with patch("bedrock.cli.backfill.fetch_prices", return_value=_sample_bars(1)):
+    with patch("bedrock.cli.backfill.fetch_yahoo_prices", return_value=_sample_bars(1)):
         result = runner.invoke(
             cli,
             [
                 "backfill",
                 "prices",
-                "--source",
-                "stooq",
                 "--instrument",
                 "Gold",
                 "--ticker",
-                "xauusd",
+                "GC=F",
                 "--from",
                 "2024-01-02",
                 "--db",
@@ -110,18 +106,16 @@ def test_backfill_defaults_to_today_when_to_missing(runner: CliRunner, tmp_path:
         called_with["to"] = to_date
         return _sample_bars(1)
 
-    with patch("bedrock.cli.backfill.fetch_prices", side_effect=fake_fetch):
+    with patch("bedrock.cli.backfill.fetch_yahoo_prices", side_effect=fake_fetch):
         result = runner.invoke(
             cli,
             [
                 "backfill",
                 "prices",
-                "--source",
-                "stooq",
                 "--instrument",
                 "Gold",
                 "--ticker",
-                "xauusd",
+                "GC=F",
                 "--from",
                 "2024-01-02",
                 "--db",
@@ -135,18 +129,16 @@ def test_backfill_defaults_to_today_when_to_missing(runner: CliRunner, tmp_path:
 
 def test_backfill_respects_tf_option(runner: CliRunner, tmp_path: Path) -> None:
     db = tmp_path / "bedrock.db"
-    with patch("bedrock.cli.backfill.fetch_prices", return_value=_sample_bars(1)):
+    with patch("bedrock.cli.backfill.fetch_yahoo_prices", return_value=_sample_bars(1)):
         runner.invoke(
             cli,
             [
                 "backfill",
                 "prices",
-                "--source",
-                "stooq",
                 "--instrument",
                 "Gold",
                 "--ticker",
-                "xauusd",
+                "GC=F",
                 "--from",
                 "2024-01-02",
                 "--to",
@@ -170,18 +162,16 @@ def test_backfill_respects_tf_option(runner: CliRunner, tmp_path: Path) -> None:
 
 def test_dry_run_shows_url_without_http_call(runner: CliRunner, tmp_path: Path) -> None:
     db = tmp_path / "bedrock.db"
-    with patch("bedrock.cli.backfill.fetch_prices") as mock_fetch:
+    with patch("bedrock.cli.backfill.fetch_yahoo_prices") as mock_fetch:
         result = runner.invoke(
             cli,
             [
                 "backfill",
                 "prices",
-                "--source",
-                "stooq",
                 "--instrument",
                 "Gold",
                 "--ticker",
-                "xauusd",
+                "GC=F",
                 "--from",
                 "2024-01-02",
                 "--to",
@@ -194,10 +184,12 @@ def test_dry_run_shows_url_without_http_call(runner: CliRunner, tmp_path: Path) 
 
     assert result.exit_code == 0, result.output
     assert "DRY-RUN" in result.output
-    assert "stooq.com" in result.output
-    assert "s=xauusd" in result.output
-    assert "d1=20240102" in result.output
-    assert "d2=20240104" in result.output
+    assert "finance.yahoo.com" in result.output
+    # Yahoo URL-encoder = som %3D, og ticker er case-sensitive
+    assert "GC%3DF" in result.output or "GC=F" in result.output
+    # Yahoo bruker epoch-tid (period1/period2) ikke YYYYMMDD
+    assert "period1=" in result.output
+    assert "period2=" in result.output
 
     # Fetch skal ikke være kalt
     mock_fetch.assert_not_called()
@@ -213,12 +205,10 @@ def test_dry_run_shows_destination_db_path(runner: CliRunner, tmp_path: Path) ->
         [
             "backfill",
             "prices",
-            "--source",
-            "stooq",
             "--instrument",
             "EURUSD",
             "--ticker",
-            "eurusd",
+            "EURUSD=X",
             "--from",
             "2024-01-02",
             "--db",
@@ -241,7 +231,7 @@ def test_dry_run_shows_destination_db_path(runner: CliRunner, tmp_path: Path) ->
 def test_missing_instrument_errors(runner: CliRunner) -> None:
     result = runner.invoke(
         cli,
-        ["backfill", "prices", "--ticker", "xauusd", "--from", "2024-01-02"],
+        ["backfill", "prices", "--ticker", "GC=F", "--from", "2024-01-02"],
     )
     assert result.exit_code != 0
     assert "instrument" in result.output.lower()
@@ -250,7 +240,7 @@ def test_missing_instrument_errors(runner: CliRunner) -> None:
 def test_missing_from_date_errors(runner: CliRunner) -> None:
     result = runner.invoke(
         cli,
-        ["backfill", "prices", "--instrument", "Gold", "--ticker", "xauusd"],
+        ["backfill", "prices", "--instrument", "Gold", "--ticker", "GC=F"],
     )
     assert result.exit_code != 0
 
@@ -261,12 +251,10 @@ def test_invalid_date_format_errors(runner: CliRunner) -> None:
         [
             "backfill",
             "prices",
-            "--source",
-            "stooq",
             "--instrument",
             "Gold",
             "--ticker",
-            "xauusd",
+            "GC=F",
             "--from",
             "not-a-date",
         ],

@@ -179,7 +179,7 @@ def run_prices(
     def _items():
         for cfg in instruments:
             meta = cfg.instrument
-            ticker = meta.stooq_ticker or meta.ticker
+            ticker = meta.yahoo_ticker or meta.ticker
             if not ticker:
                 continue
             item_id = meta.id

@@ -108,7 +108,7 @@ def _print_instrument(cfg: InstrumentConfig) -> None:
     click.echo(f"  asset_class:     {meta.asset_class}")
     click.echo(f"  ticker:          {meta.ticker}")
     click.echo(f"  cfd_ticker:      {meta.cfd_ticker or '-'}")
-    click.echo(f"  stooq_ticker:    {meta.stooq_ticker or '-'}")
+    click.echo(f"  yahoo_ticker:    {meta.yahoo_ticker or '-'}")
     click.echo(f"  cot_contract:    {meta.cot_contract or '-'}")
     click.echo(f"  cot_report:      {meta.cot_report or '-'}")
     click.echo(f"  weather_region:  {meta.weather_region or '-'}")

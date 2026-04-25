@@ -43,7 +43,6 @@ from bedrock.fetch.fred import (
     build_fred_params,
     fetch_fred_series,
 )
-from bedrock.fetch.prices import STOOQ_CSV_URL, build_stooq_url_params, fetch_prices
 from bedrock.fetch.weather import (
     OPEN_METEO_ARCHIVE_URL,
     build_open_meteo_params,
@@ -103,8 +102,8 @@ def backfill() -> None:
     "--ticker",
     default=None,
     help=(
-        "Stooq-ticker (f.eks. xauusd). Hvis utelatt, brukes instrumentets "
-        "`stooq_ticker` (eller `ticker`) fra YAML."
+        "Yahoo Finance-ticker (f.eks. GC=F). Hvis utelatt, brukes instrumentets "
+        "`yahoo_ticker` (eller `ticker`) fra YAML."
     ),
 )
 @click.option(
@@ -122,21 +121,11 @@ def backfill() -> None:
     help="Slutt-dato (YYYY-MM-DD) inklusiv. Default: i dag.",
 )
 @click.option(
-    "--source",
-    type=click.Choice(["yahoo", "stooq"], case_sensitive=False),
-    default="yahoo",
-    show_default=True,
-    help=(
-        "Pris-kilde. yahoo (default, ingen API-nøkkel) eller stooq "
-        "(legacy, krever API-nøkkel etter april 2026)."
-    ),
-)
-@click.option(
     "--interval",
     type=click.Choice(["1d", "1wk", "1mo"], case_sensitive=False),
     default="1d",
     show_default=True,
-    help="Yahoo-intervall (kun gyldig for --source yahoo). Stooq har bare daglig.",
+    help="Yahoo-intervall.",
 )
 @click.option(
     "--tf",
@@ -163,59 +152,47 @@ def prices_cmd(
     ticker: str | None,
     from_date: datetime,
     to_date: datetime | None,
-    source: str,
     interval: str,
     tf: str,
     db_path: Path,
     instruments_dir: Path,
     dry_run: bool,
 ) -> None:
-    """Backfill prisbarer til SQLite (Yahoo Finance default, Stooq legacy).
+    """Backfill prisbarer fra Yahoo Finance til SQLite.
 
     Eksempel:
 
         bedrock backfill prices --instrument Gold --from 2010-01-01
-        bedrock backfill prices --instrument Gold --source stooq --ticker xauusd --from 2016-01-01
+        bedrock backfill prices --instrument Corn --from 2010-01-01 --interval 1wk
 
     `--dry-run` bygger og viser URL uten å gjøre HTTP-kall eller skrive til DB.
 
-    Per Fase 10 session 58: Yahoo er nå default. Stooq begynte å kreve
-    API-nøkkel som ble en blocker; cot-explorers Yahoo-port gjenbrukes
-    som primærkilde (port av build_price_history.py — verifisert
-    produksjon gjennom 15 års historikk-bygging).
+    Per session 69 (Fase 12): Yahoo er eneste pris-kilde. Stooq-fallback
+    fjernet — krevde API-nøkkel etter april 2026 og ble blocker. Yahoo-
+    port (session 58) er verifisert mot 15 års historikk fra
+    cot-explorer.
     """
     if instrument is None:
         raise click.UsageError("--instrument er påkrevd.")
 
-    resolved_instrument, resolved_ticker = _resolve_prices(
-        instrument, ticker, instruments_dir, source.lower()
-    )
+    resolved_instrument, resolved_ticker = _resolve_prices(instrument, ticker, instruments_dir)
 
     _from: date = from_date.date()
     _to: date = to_date.date() if to_date is not None else date.today()
 
     if dry_run:
-        if source.lower() == "yahoo":
-            url = build_yahoo_url(resolved_ticker, _from, _to, interval=interval.lower())  # type: ignore[arg-type]
-            click.echo(f"DRY-RUN  URL: {url}")
-        else:
-            params = build_stooq_url_params(resolved_ticker, _from, _to)
-            param_str = "&".join(f"{k}={v}" for k, v in params.items())
-            click.echo(f"DRY-RUN  URL: {STOOQ_CSV_URL}?{param_str}")
+        url = build_yahoo_url(resolved_ticker, _from, _to, interval=interval.lower())  # type: ignore[arg-type]
+        click.echo(f"DRY-RUN  URL: {url}")
         click.echo(
-            f"DRY-RUN  Would write to: {db_path} "
-            f"(instrument={resolved_instrument}, tf={tf}, source={source.lower()})"
+            f"DRY-RUN  Would write to: {db_path} (instrument={resolved_instrument}, tf={tf})"
         )
         return
 
     click.echo(
         f"Fetching {resolved_instrument} ({resolved_ticker}) "
-        f"from {_from} to {_to} via {source.lower()} interval={interval}..."
+        f"from {_from} to {_to} via Yahoo interval={interval}..."
     )
-    if source.lower() == "yahoo":
-        df = fetch_yahoo_prices(resolved_ticker, _from, _to, interval=interval.lower())  # type: ignore[arg-type]
-    else:
-        df = fetch_prices(resolved_ticker, _from, _to)
+    df = fetch_yahoo_prices(resolved_ticker, _from, _to, interval=interval.lower())  # type: ignore[arg-type]
     click.echo(f"Fetched {len(df)} bars.")
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -228,7 +205,6 @@ def _resolve_prices(
     instrument_arg: str,
     ticker_arg: str | None,
     instruments_dir: Path,
-    source: str = "yahoo",
 ) -> tuple[str, str]:
     """Returner (DB-instrument-tag, ticker) etter --instrument + YAML-oppslag.
 
@@ -236,19 +212,14 @@ def _resolve_prices(
 
     - Eksplisitt `--ticker` vinner: (instrument_arg, ticker_arg). YAML røres
       ikke — lar brukere kjøre mot DB uten å skrive YAML først.
-    - Uten `--ticker`: slå opp YAML. Per source velges:
-      - yahoo: `yahoo_ticker or ticker`
-      - stooq: `stooq_ticker or ticker`
+    - Uten `--ticker`: slå opp YAML, bruk `yahoo_ticker or ticker`.
     """
     if ticker_arg is not None:
         return instrument_arg, ticker_arg
 
     cfg = find_instrument(instrument_arg, instruments_dir)
     meta = cfg.instrument
-    if source == "yahoo":
-        resolved_ticker = meta.yahoo_ticker or meta.ticker
-    else:
-        resolved_ticker = meta.stooq_ticker or meta.ticker
+    resolved_ticker = meta.yahoo_ticker or meta.ticker
     return meta.id, resolved_ticker
 
 

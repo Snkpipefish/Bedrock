@@ -61,7 +61,6 @@ class InstrumentMetadata(BaseModel):
     cfd_ticker: str | None = None  # broker-spesifikk (cTrader-routing)
 
     # Fetch-relaterte optional
-    stooq_ticker: str | None = None  # avvik fra `ticker` hvis Stooq har annet navn
     yahoo_ticker: str | None = None  # Yahoo Finance-ticker (f.eks. "GC=F" for Gold)
     cot_contract: str | None = None  # CFTC `market_and_exchange_names` eksakt
     cot_report: str | None = None  # "disaggregated" eller "legacy"

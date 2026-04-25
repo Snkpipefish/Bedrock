@@ -1,12 +1,15 @@
 """Fetch-laget for Bedrock.
 
-Rå I/O mot eksterne datakilder (Stooq, CFTC, FRED, værtjenester, etc.).
-Ingen scoring eller forretningslogikk her — kun henting + normalisering
-til DataFrame/Series-format som matcher `bedrock.data.schemas`.
+Rå I/O mot eksterne datakilder (Yahoo Finance, CFTC, FRED, værtjenester,
+NOAA ENSO, USDA-kalender). Ingen scoring eller forretningslogikk her —
+kun henting + normalisering til DataFrame/Series-format som matcher
+`bedrock.data.schemas`.
 
-Fase 3 session 10: kun `prices` (Stooq CSV) som demo for backfill-CLI.
-Fase 6 (session 27+) utvider med kalender-datakilder og config-drevet
-cadence (se PLAN § 7).
+Fase 3 session 10: første demo-fetcher for backfill-CLI.
+Fase 6 (session 27+) la til config-drevet cadence (se PLAN § 7).
+Fase 10 session 58: Yahoo-port erstattet Stooq som pris-kilde.
+Fase 12 session 69: Stooq fjernet helt; `prices.py` er nå tynn fasade
+rundt `yahoo.py`.
 """
 
 # Side-effekt-import: registrerer `usda_blackout`-gate i gates-registry
