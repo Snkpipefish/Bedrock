@@ -14,9 +14,10 @@
 - Session 51 lukket — Filter-bar (horizon/grade/instrument/direction) på Skipsloggen + Financial + Soft commodities. Pure filter-logikk i `web/assets/filter.js`; 18 logiske tester (`tests/web/test_filter.test.mjs`).
 - Session 52 lukket — Modal med explain-trace. SignalEntry utvidet med `families: dict[str, FamilyResult]` + `active_families: int` (persisterer driver-trace fra Engine til JSON). Klikk på setup-kort eller trade-rad åpner modal med score-bar/driver-tabell/setup-detaljer. Trade-modal har disclaimer om at trace ikke lagres per trade enda.
 - Session 53 lukket — UI-polish. Tokenbasert designsystem (--c-*/--sp-*/--fs-*/--r-*), system-fonter med tabular-nums for alle tall, header med gradient + accent + live `/health`-status-pill (online/down/unreachable), tettere KPI-kort, klarere tab-aktiv-tilstand, semantiske status-pills i Kartrommet. **Runde 2 LUKKET** — alle fire faner har filter, modal med explain-trace, og polert visuell stil.
+- Session 54 lukket — Admin rule-editor (instrument-YAML). Ny `/admin`-route + `web/admin.html` med kode-gate (X-Admin-Code → sessionStorage/localStorage), to-pane editor (sidebar med instrument-liste + YAML-textarea), Reload + Lagre + Cmd/Ctrl+S. Bygger på eksisterende `/admin/rules`-endepunkter fra Fase 7 session 38. Dry-run, git-commit-on-save, og flere YAML-editorer (fetch/bot/defaults) er utsatt til session 55.
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** **Runde 3 (sessions 54-55)** — admin-rule-editor på separat URL (`web/admin.html`) med kode-gate. PLAN § 10.5 + § 10.6 definerer scope: YAML-edit av instrument-regler/grade-terskler/horisont-vekter/fetch-cadence/bot-thresholds + dry-run + auto-commit. Backend trenger nye `/admin/*`-endepunkter med X-Admin-Code-header (SHA-256 hash mot ADMIN_CODE_HASH i env).
+- **Next task:** **Session 55 (siste i runde 3)** — utvid admin-editor: (a) dry-run-scoring (kjør orchestrator mot siste 7 dager, vis score-diff før commit), (b) git-commit-on-save (auto-push-hook tar resten), (c) `/admin/fetch` + `/admin/bot` + `/admin/defaults`-endepunkter + UI-tabs i admin.html, (d) pipeline-styringer (killswitch / pause / force-run), (e) logs-viewer.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -98,6 +99,132 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 54: Fase 9 runde 3 — admin rule-editor (instrument-YAML)
+
+**Scope:** Første av to admin-sessions. Lever fungerende editor for
+instrument-regler mot eksisterende `/admin/rules`-endepunkter (Fase 7
+session 38 implementerte allerede GET liste / GET enkelt / PUT med
+Pydantic-validering + atomic write). Session 55 utvider med dry-run
++ git-commit + flere YAML-editorer + pipeline-styringer.
+
+**Endret denne session (commit `0cd7e53`):**
+
+`src/bedrock/signal_server/endpoints/ui.py`:
+- Ny `/admin`-route som serverer `web/admin.html`. Skjult URL —
+  ikke linket fra index.html, brukeren når den via direkte URL +
+  kode-gate. PLAN § 10.5.
+
+`web/admin.html`:
+- Erstattet placeholder med full editor-skall:
+  - `<header>` med admin-badge + status-pill (samme som dashboard)
+  - `<section id="gate">` (kode-input + "Husk for fanen"-checkbox
+    + feilmelding-felt) — vises før auth
+  - `<main id="admin-main" hidden>` med to-pane:
+    - `.admin-sidebar` (instrument-liste, sticky position, Reload-
+      og Logg ut-knapp)
+    - `.admin-editor-pane` (tittel + path + Reload/Lagre-knapper +
+      dirty-indicator + YAML-textarea + feedback-area)
+
+`web/assets/admin.css` (ny, 217 linjer):
+- Bygger på tokens fra `style.css` (en kilde for hele systemet)
+- `[hidden] !important` for å vinne over display:grid/flex på
+  .admin-main / .admin-editor-active
+- Gate-card med shadow-2 + akse-fokus-ring på input
+- Sidebar med sticky-position + scrollable instrument-liste
+- Monospace YAML-textarea med tab-size: 2
+- Success/error-feedback med semantisk soft-palett
+
+`web/assets/admin.js` (ny, 252 linjer):
+- `authFetch(url, init)` — wrapper som henter X-Admin-Code fra
+  storage og legger på header automatisk
+- `tryAuth(code)` — tester via GET /admin/rules (200/401/503)
+- `bootGate()` — sjekker om lagret kode fortsatt virker; ellers
+  vis gate
+- `loadInstrumentList()` — fetcher liste, rendrer som klikkbar
+  `<ul>` med tabindex/Enter/Space-tilgjengelighet
+- `loadInstrument(id)` — fetcher YAML, fyller textarea, lagrer
+  i `LAST_LOADED_YAML` for dirty-sammenlikning
+- `saveCurrent()` — PUT med Content-Type: application/json. Ved
+  400 med `details` rendres Pydantic-loc-trefte feil
+- Cmd/Ctrl+S = lagre. `beforeunload`-advarsel hvis dirty.
+- Confirm-prompt før forkasting av endringer ved instrument-bytte
+  / reload / logg ut.
+
+`tests/unit/signal_server/test_endpoints_ui.py` (+2 tester):
+- `test_admin_serves_html` (klar 200 + innhold)
+- `test_admin_404_when_missing` (web_root finnes men admin.html
+  mangler)
+- web_root-fixture inkluderer nå `admin.html`
+
+**Sikkerhet:**
+- X-Admin-Code er **cleartext-sammenlikning** over loopback (eksisterende
+  fra Fase 7 — endres ikke i denne sessionen). PLAN nevner SHA-256
+  hash mot ADMIN_CODE_HASH; det er en separat oppgradering.
+- Kode lagres i `sessionStorage` (default — slettes når fane lukkes).
+  Hvis bruker huker av "Husk for denne fanen" → `localStorage` (vedvarer
+  mellom session). Aldri i URL eller cookie.
+- Logg ut-knapp clearer begge storages umiddelbart.
+- Path-traversal-sanitering finnes på backend (`_INSTRUMENT_ID_RE`).
+
+**Designvalg:**
+
+- **Bygge på eksisterende endpoints** — `/admin/rules`-endpunktene
+  fra Fase 7 var ferdige. Session 54 leverer kun frontend +
+  ruter-tillegg. Det gjorde at scope-en faktisk var rimelig for én
+  session.
+- **Plain `<textarea>` ikke CodeMirror** — vanilla JS, ingen
+  build-step, ingen npm-deps (PLAN § 15). YAML er kort nok at
+  syntax highlighting ikke er kritisk. Hvis det blir savnet i
+  praksis, kan vi legge til Prism eller CodeMirror i en senere
+  session uten å rive opp arkitekturen.
+- **Storage-valg via checkbox** — bruker velger eksplisitt om
+  koden skal vedvare. Default er `sessionStorage` (mer privacy-
+  bevart). For en single-user-installasjon på lokal maskin er
+  `localStorage` praktisk; for delt bruk er `sessionStorage` riktig.
+- **Editor-flyt med dirty-indicator** — `LAST_LOADED_YAML`
+  sammenliknes med `textarea.value` i hver `input`-event. Lagre-
+  knappen disables når ikke-dirty, så bruker kan ikke ved uhell
+  POSTe med samme innhold. `beforeunload` + confirm-prompt
+  beskytter mot tap av endringer.
+- **Feedback med Pydantic-detail-rendering** — PUT-endpointet
+  returnerer `details: [{loc: [...], msg: ...}]` ved
+  ValidationError. Vi viser dette som `families.trend: mangler
+  påkrevd felt`-format så bruker ser nøyaktig hvor i YAML-en
+  feilen ligger.
+
+**Verifisert:**
+- pytest full → 982/982 (var 980 før, +2 nye admin-route-tester)
+- Browser preview med mock-fetch:
+  - Wrong code (`wrong`) → "Ugyldig admin-kode." vises i gate
+  - Riktig code (`secret123`) → main vises, 3 instruments listet
+    (gold/corn/wheat med byte-størrelser)
+  - Click på `gold` → YAML lastet i textarea, editor-tittel +
+    path oppdatert, save-knapp disabled (ikke dirty)
+  - Edit textarea → dirty-indicator "● endringer ulagrede" vises,
+    Lagre-knappen aktiveres
+  - Save → success-feedback `"Lagret: /cfg/gold.yaml"`, dirty
+    skjult, save-knapp disabled igjen
+  - Save med `SHOULD_FAIL`-trigger → error-feedback `"validering
+    feilet\n  families.trend: mangler påkrevd felt"`, dirty
+    bevart
+  - Logg ut → kode slettet fra begge storages, gate vises igjen
+- `[hidden] !important` fix: før dette overstyrte `.admin-main {
+  display: grid }` `[hidden]`-attributtens UA-spec'd `display: none`.
+
+**Commit:** `0cd7e53 feat(ui): admin rule-editor — kode-gate +
+instrument YAML-editor`. Auto-pushet til origin/main.
+
+**Neste:** Session 55 — utvid admin-editor med:
+1. Dry-run-scoring (POST /admin/rules/<id>/dry-run → kjør
+   orchestrator mot siste 7 dager → returner score-diff)
+2. Git-commit-on-save (etter atomic write — git add + commit +
+   auto-push-hook tar resten)
+3. `/admin/fetch` + `/admin/bot` + `/admin/defaults`-endepunkter +
+   tabs i admin.html for å bytte mellom YAML-typer
+4. Pipeline-styringer: killswitch (POST /kill all) / pause / force-
+   run + UI-knapper
+5. Logs-viewer (les siste 200 linjer av logs/pipeline.log)
 
 ### 2026-04-25 — Session 53: Fase 9 runde 2 — UI-polish (Option A) + RUNDE 2 LUKKET
 
