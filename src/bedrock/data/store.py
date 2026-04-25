@@ -18,26 +18,33 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Sequence
+from datetime import date
 from pathlib import Path
 from typing import Literal, Protocol
 
 import pandas as pd
 
 from bedrock.data.schemas import (
+    ANALOG_OUTCOMES_COLS,
     COT_DISAGGREGATED_COLS,
     COT_LEGACY_COLS,
+    DDL_ANALOG_OUTCOMES,
     DDL_COT_DISAGGREGATED,
     DDL_COT_LEGACY,
     DDL_FUNDAMENTALS,
     DDL_PRICES,
     DDL_WEATHER,
+    DDL_WEATHER_MONTHLY,
     FUNDAMENTALS_COLS,
+    TABLE_ANALOG_OUTCOMES,
     TABLE_COT_DISAGGREGATED,
     TABLE_COT_LEGACY,
     TABLE_FUNDAMENTALS,
     TABLE_PRICES,
     TABLE_WEATHER,
+    TABLE_WEATHER_MONTHLY,
     WEATHER_COLS,
+    WEATHER_MONTHLY_COLS,
 )
 
 CotReport = Literal["disaggregated", "legacy"]
@@ -84,6 +91,8 @@ class DataStore:
             conn.execute(DDL_COT_LEGACY)
             conn.execute(DDL_FUNDAMENTALS)
             conn.execute(DDL_WEATHER)
+            conn.execute(DDL_WEATHER_MONTHLY)
+            conn.execute(DDL_ANALOG_OUTCOMES)
             conn.commit()
 
     # ------------------------------------------------------------------
@@ -473,6 +482,216 @@ class DataStore:
                 f"SELECT 1 FROM {TABLE_WEATHER} WHERE region = ? LIMIT 1",
                 (region,),
             )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # Weather monthly (pre-aggregert per region per måned, ADR-005)
+    # ------------------------------------------------------------------
+
+    def append_weather_monthly(self, df: pd.DataFrame) -> int:
+        """Skriv månedlig vær-aggregat. `df` må ha region + month;
+        resterende felt valgfri. INSERT OR REPLACE på (region, month).
+
+        `month` må være 'YYYY-MM'-streng (samme format som SQL-kolonnen).
+        Caller validerer format via `WeatherMonthlyRow` ved migrering;
+        denne metoden trygger på Pydantic-pipelinen.
+        """
+        if "region" not in df.columns or "month" not in df.columns:
+            raise ValueError(
+                f"append_weather_monthly: df must have 'region' and 'month'. "
+                f"Got: {sorted(df.columns)}"
+            )
+
+        prepared = df.reindex(columns=list(WEATHER_MONTHLY_COLS)).copy()
+
+        def _to_int_or_none(v: object) -> int | None:
+            if v is None or pd.isna(v):
+                return None
+            return int(v)
+
+        def _to_float_or_none(v: object) -> float | None:
+            if v is None or pd.isna(v):
+                return None
+            return float(v)
+
+        rows: Sequence[tuple] = [
+            (
+                row.region,
+                row.month,
+                _to_float_or_none(row.temp_mean),
+                _to_float_or_none(row.temp_max),
+                _to_float_or_none(row.precip_mm),
+                _to_float_or_none(row.et0_mm),
+                _to_int_or_none(row.hot_days),
+                _to_int_or_none(row.dry_days),
+                _to_int_or_none(row.wet_days),
+                _to_float_or_none(row.water_bal),
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_WEATHER_MONTHLY} "
+                f"(region, month, temp_mean, temp_max, precip_mm, et0_mm, "
+                f"hot_days, dry_days, wet_days, water_bal) "
+                f"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_weather_monthly(
+        self,
+        region: str,
+        last_n: int | None = None,
+    ) -> pd.DataFrame:
+        """Returner månedlig vær-aggregat for region (sortert på month ASC).
+
+        `last_n` = N gir de N nyeste månedene. Kaster `KeyError` hvis
+        region ikke har noen rader. `month`-kolonnen returneres som
+        ren str ('YYYY-MM'); caller velger selv om den vil parse til
+        Period/Timestamp.
+        """
+        query = f"""
+            SELECT region, month, temp_mean, temp_max, precip_mm, et0_mm,
+                   hot_days, dry_days, wet_days, water_bal
+            FROM {TABLE_WEATHER_MONTHLY}
+            WHERE region = ?
+            ORDER BY month ASC
+        """
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=(region,))
+
+        if df.empty:
+            raise KeyError(f"No monthly weather for region={region!r}")
+
+        if last_n is None:
+            return df
+        return df.tail(last_n).reset_index(drop=True)
+
+    def has_weather_monthly(self, region: str) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"SELECT 1 FROM {TABLE_WEATHER_MONTHLY} WHERE region = ? LIMIT 1",
+                (region,),
+            )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # Analog outcomes (forward returns per ref_date × horizon, ADR-005)
+    # ------------------------------------------------------------------
+
+    def append_outcomes(self, df: pd.DataFrame) -> int:
+        """Skriv pre-beregnede forward-utfall. `df` må ha kolonnene
+        instrument, ref_date, horizon_days, forward_return_pct.
+        `max_drawdown_pct` er valgfri (NULL hvis ikke beregnet).
+
+        Idempotent via PK (instrument, ref_date, horizon_days).
+        """
+        required = ("instrument", "ref_date", "horizon_days", "forward_return_pct")
+        missing = [c for c in required if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_outcomes: missing columns {missing}. "
+                f"Required: {list(required)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df.reindex(columns=list(ANALOG_OUTCOMES_COLS)).copy()
+        prepared["ref_date"] = pd.to_datetime(prepared["ref_date"]).dt.strftime("%Y-%m-%d")
+
+        def _to_float_or_none(v: object) -> float | None:
+            if v is None or pd.isna(v):
+                return None
+            return float(v)
+
+        rows: Sequence[tuple] = [
+            (
+                str(row.instrument),
+                row.ref_date,
+                int(row.horizon_days),
+                float(row.forward_return_pct),
+                _to_float_or_none(row.max_drawdown_pct),
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_ANALOG_OUTCOMES} "
+                f"(instrument, ref_date, horizon_days, forward_return_pct, "
+                f"max_drawdown_pct) VALUES (?, ?, ?, ?, ?)",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_outcomes(
+        self,
+        instrument: str,
+        ref_dates: Sequence[str | date | pd.Timestamp] | None = None,
+        horizon_days: int | None = None,
+    ) -> pd.DataFrame:
+        """Hent forward-utfall for instrument.
+
+        `ref_dates`: hvis gitt, batch-lookup på de spesifikke datoene
+        (matcher `ref_date`-kolonnen). Manglende rader rapporteres ikke.
+        Hvis None, returneres alle rader for instrumentet.
+
+        `horizon_days`: filtrer på spesifikk horisont. Hvis None,
+        returneres alle horisonter.
+
+        Returnerer pd.DataFrame med ref_date som pd.Timestamp i kolonne
+        (ikke index — matcher get_cot-pattern). Tom DataFrame hvis ingen
+        treff (ingen exception — caller forventer kanskje partial hit
+        ved batch-lookup).
+        """
+        clauses = ["instrument = ?"]
+        params: list[object] = [instrument]
+
+        if horizon_days is not None:
+            clauses.append("horizon_days = ?")
+            params.append(int(horizon_days))
+
+        if ref_dates is not None:
+            normalized = [pd.Timestamp(d).strftime("%Y-%m-%d") for d in ref_dates]
+            if not normalized:
+                # Caller passed an empty sequence — return empty frame
+                # without hitting DB. Saves a query.
+                return pd.DataFrame(
+                    columns=list(ANALOG_OUTCOMES_COLS),
+                )
+            placeholders = ",".join(["?"] * len(normalized))
+            clauses.append(f"ref_date IN ({placeholders})")
+            params.extend(normalized)
+
+        query = f"""
+            SELECT instrument, ref_date, horizon_days, forward_return_pct,
+                   max_drawdown_pct
+            FROM {TABLE_ANALOG_OUTCOMES}
+            WHERE {" AND ".join(clauses)}
+            ORDER BY ref_date ASC
+        """
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=tuple(params))
+
+        if df.empty:
+            return df
+
+        df["ref_date"] = pd.to_datetime(df["ref_date"])
+        return df
+
+    def has_outcomes(self, instrument: str, horizon_days: int | None = None) -> bool:
+        clauses = ["instrument = ?"]
+        params: list[object] = [instrument]
+        if horizon_days is not None:
+            clauses.append("horizon_days = ?")
+            params.append(int(horizon_days))
+        query = f"SELECT 1 FROM {TABLE_ANALOG_OUTCOMES} WHERE {' AND '.join(clauses)} LIMIT 1"
+        with self._connect() as conn:
+            cursor = conn.execute(query, tuple(params))
             return cursor.fetchone() is not None
 
     # ------------------------------------------------------------------

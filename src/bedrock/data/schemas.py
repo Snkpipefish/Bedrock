@@ -11,14 +11,18 @@ commercial + non-reportable) vs legacy (non-commercial + commercial +
 non-reportable). NULL-sprawl unngås ved å holde dem separate.
 Fase 2 session 8: `FredSeriesRow` (fundamentals, én verdi per (series_id, date))
 og `WeatherDailyRow` (region × daglig observasjon: tmax/tmin/precip/gdd).
+Fase 10 session 57 (ADR-005): `WeatherMonthlyRow` (region × måned, pre-aggregert
+fra agri_history) og `AnalogOutcomeRow` (instrument × ref_date × horizon,
+forward-return-utfall for K-NN).
 Senere sessions: `TradeRow`.
 """
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # ---------------------------------------------------------------------------
 # PriceBar — én OHLCV-bar for (instrument, tf, ts)
@@ -288,3 +292,123 @@ CREATE TABLE IF NOT EXISTS {TABLE_WEATHER} (
 """
 
 WEATHER_COLS: tuple[str, ...] = ("region", "date", "tmax", "tmin", "precip", "gdd")
+
+
+# ---------------------------------------------------------------------------
+# WeatherMonthlyRow — pre-aggregert månedlig vær per region (ADR-005)
+# ---------------------------------------------------------------------------
+
+
+_MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+"""Validerer 'YYYY-MM'-format (ikke 'YYYY-1' eller '2026-13')."""
+
+
+class WeatherMonthlyRow(BaseModel):
+    """Månedlig vær-aggregat per region. Pre-beregnede verdier (hot_days,
+    water_bal etc.) som ikke kan utledes fra `WeatherDailyRow` alene uten
+    ekstra parametre. Migreres fra `~/cot-explorer/data/agri_history/`
+    i Fase 10 session 58.
+
+    `month` er 'YYYY-MM' (ISO month, ikke datetime). Alle målinger er
+    valgfrie — kilder kan rapportere ulikt subset.
+    """
+
+    region: str
+    month: str
+    temp_mean: float | None = None  # °C
+    temp_max: float | None = None  # °C
+    precip_mm: float | None = Field(default=None, ge=0.0)
+    et0_mm: float | None = Field(default=None, ge=0.0)
+    hot_days: int | None = Field(default=None, ge=0)
+    dry_days: int | None = Field(default=None, ge=0)
+    wet_days: int | None = Field(default=None, ge=0)
+    water_bal: float | None = None  # nedbør - et0 (kan være negativ)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("month")
+    @classmethod
+    def _check_month(cls, v: str) -> str:
+        if not _MONTH_RE.match(v):
+            raise ValueError(f"month must be 'YYYY-MM', got: {v!r}")
+        return v
+
+
+TABLE_WEATHER_MONTHLY = "weather_monthly"
+
+DDL_WEATHER_MONTHLY = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_WEATHER_MONTHLY} (
+    region    TEXT NOT NULL,
+    month     TEXT NOT NULL,
+    temp_mean REAL,
+    temp_max  REAL,
+    precip_mm REAL,
+    et0_mm    REAL,
+    hot_days  INTEGER,
+    dry_days  INTEGER,
+    wet_days  INTEGER,
+    water_bal REAL,
+    PRIMARY KEY (region, month)
+)
+"""
+
+WEATHER_MONTHLY_COLS: tuple[str, ...] = (
+    "region",
+    "month",
+    "temp_mean",
+    "temp_max",
+    "precip_mm",
+    "et0_mm",
+    "hot_days",
+    "dry_days",
+    "wet_days",
+    "water_bal",
+)
+
+
+# ---------------------------------------------------------------------------
+# AnalogOutcomeRow — pre-beregnede forward returns for K-NN (ADR-005)
+# ---------------------------------------------------------------------------
+
+
+class AnalogOutcomeRow(BaseModel):
+    """Pre-beregnet forward-utfall for én historisk ref-dato.
+
+    Lagrer rå return (i %, ikke binær hit). Hit-terskel er driver-config
+    og anvendes on-the-fly — slik at vi kan justere terskel uten å re-
+    backfille tabellen.
+
+    `max_drawdown_pct` er valgfri i skjemaet (NULL hvis beregneren ikke
+    kjørte med high-resolution-data), men inkluderes by default per
+    ADR-005 — pre-beregning er gratis i samme pass som forward_return.
+    """
+
+    instrument: str
+    ref_date: date
+    horizon_days: int = Field(gt=0)
+    forward_return_pct: float
+    max_drawdown_pct: float | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+TABLE_ANALOG_OUTCOMES = "analog_outcomes"
+
+DDL_ANALOG_OUTCOMES = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_ANALOG_OUTCOMES} (
+    instrument         TEXT    NOT NULL,
+    ref_date           TEXT    NOT NULL,
+    horizon_days       INTEGER NOT NULL,
+    forward_return_pct REAL    NOT NULL,
+    max_drawdown_pct   REAL,
+    PRIMARY KEY (instrument, ref_date, horizon_days)
+)
+"""
+
+ANALOG_OUTCOMES_COLS: tuple[str, ...] = (
+    "instrument",
+    "ref_date",
+    "horizon_days",
+    "forward_return_pct",
+    "max_drawdown_pct",
+)

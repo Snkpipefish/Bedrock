@@ -52,3 +52,11 @@ fetchers:
     on_failure: retry_with_backoff
     table: weather
     ts_column: date
+
+  enso:
+    module: bedrock.fetch.enso
+    cron: "0 6 12 * *"          # 12. i måneden 06:00 UTC (etter NOAAs ~10.-publisering)
+    stale_hours: 720            # månedlig — toler 30 dagers etterslep
+    on_failure: log_and_skip
+    table: fundamentals          # ADR-005: lagres som series_id="NOAA_ONI"
+    ts_column: date
