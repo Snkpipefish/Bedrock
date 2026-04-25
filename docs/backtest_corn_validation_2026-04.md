@@ -8,14 +8,14 @@
 
 ## Corn · h=30d · direction=buy
 
-*Wall-time: 42.1s · 23 signaler · step_days=10*
+*Wall-time: 43.6s · 23 signaler · step_days=10*
 
 # Backtest: Corn · h=30d
 
 - **Vindu:** 2025-04-25 .. 2026-04-25
 - **Antall signaler:** 23
 - **Hit-terskel:** ≥ 3.0%
-- **Publisert (score ≥ floor):** 12 av 23
+- **Publisert (score ≥ floor):** 19 av 23
 
 | Metric | Value |
 |---|---:|
@@ -31,24 +31,23 @@
 
 | Grade | n | Hit-rate | Avg return |
 |---|---:|---:|---:|
-| A+ | 6 | 16.7% | -2.06% |
-| A | 1 | 0.0% | +1.51% |
-| B | 6 | 16.7% | -2.12% |
-| C | 10 | 60.0% | +2.44% |
+| A | 3 | 33.3% | +0.27% |
+| B | 17 | 29.4% | -0.37% |
+| C | 3 | 66.7% | +2.11% |
 
 
 ---
 
 ## Corn · h=90d · direction=buy
 
-*Wall-time: 30.6s · 17 signaler · step_days=10*
+*Wall-time: 32.4s · 17 signaler · step_days=10*
 
 # Backtest: Corn · h=90d
 
 - **Vindu:** 2025-04-25 .. 2026-04-25
 - **Antall signaler:** 17
 - **Hit-terskel:** ≥ 3.0%
-- **Publisert (score ≥ floor):** 8 av 17
+- **Publisert (score ≥ floor):** 15 av 17
 
 | Metric | Value |
 |---|---:|
@@ -64,11 +63,11 @@
 
 | Grade | n | Hit-rate | Avg return |
 |---|---:|---:|---:|
-| A+ | 3 | 33.3% | -6.42% |
-| B | 5 | 40.0% | +0.90% |
-| C | 9 | 66.7% | +6.70% |
+| A | 1 | 0.0% | -8.22% |
+| B | 14 | 50.0% | +2.16% |
+| C | 2 | 100.0% | +11.71% |
 
 
 ---
 
-*Total wall-time: 72.7s*
+*Total wall-time: 76.0s*

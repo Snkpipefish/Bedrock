@@ -21,14 +21,23 @@ min_score_publish: 7
 
 families:
   outlook:
+    # Sub-fase 12.5 session 74: seasonal_stage erstatter sma200_align.
+    # Default-kalender (NH grains): apr-jul vekst-aktiv, oct-mar low-signal.
     weight: 5
     drivers:
-      # Placeholder-driver inntil agri-drivere skrives
-      - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+      - name: seasonal_stage
+        weight: 1.0
+        params: {}  # bruker default NH-grain-kalender
   yield:
+    # Yield-forventning drives av samme weather-stress-data som weather-
+    # familien, men weight i denne familien (3) reflekterer at yield er
+    # forward-looking mens weather er current-state.
     weight: 3
     drivers:
-      - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+      - name: weather_stress
+        weight: 1.0
+        params:
+          lookback_months: 1
   weather:
     # Sub-fase 12.5 session 72: ekte vær-stress-driver fra weather_monthly.
     # Høy stress (varmt + tørt + vann-underskudd) er bull for Corn (lavere
@@ -48,13 +57,24 @@ families:
         weight: 1.0
         params: {}
   conab:
+    # PLACEHOLDER: Conab-fetcher (Brazil agri ministry) er ikke
+    # implementert ennå. Familien beholdes for fremtidig conab_yoy-
+    # driver, men sma200_align gir trend-leak. Vurder å sette
+    # weight: 0 eller fjerne familien helt før Fase 13 cutover hvis
+    # Conab-fetcher fortsatt ikke er bygget.
     weight: 2
     drivers:
       - {name: sma200_align, weight: 1.0, params: {tf: D1}}
   cross:
+    # USD-styrke er bear for Corn (US-eksport blir dyrere globalt).
+    # dxy_chg5d med bull_when=negative gir høy score når USD svekkes.
     weight: 2
     drivers:
-      - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+      - name: dxy_chg5d
+        weight: 1.0
+        params:
+          bull_when: negative
+          window: 5
   analog:
     weight: 2
     # K-NN per § 6.5 grains: weather_stress + enso + dxy_chg5d
