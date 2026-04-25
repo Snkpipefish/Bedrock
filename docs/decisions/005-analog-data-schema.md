@@ -147,14 +147,24 @@ det by default).
   rapporteres ikke (ingen exception).
 - `has_outcomes(instrument, horizon_days) -> bool` — staleness-helper.
 
-### B4: `find_analog_cases`-API-kontrakt (impl venter til session 59)
+### B4: `find_analog_cases`-API-kontrakt
+
+**Tillegg 2026-04-25 (session 59 implementasjon):** Funksjonen ble
+plassert som **frittstående funksjon i `bedrock.data.analog`**, ikke
+som `DataStore`-metode. Begrunnelse: extractors trenger
+`InstrumentMetadata` (`cot_contract`, `weather_region`), og å la
+`DataStore` importere fra `config`-laget hadde innført unødvendig
+modul-kobling. Funksjonen tar `store: DataStore` + `meta:
+InstrumentMetadata` som eksplisitte argumenter. Resten av kontrakten
+under er uendret.
 
 ```python
 def find_analog_cases(
-    self,
+    store: DataStore,
     instrument: str,
-    query_dims: dict[str, float],
+    meta: InstrumentMetadata,
     asset_class: str,
+    query_dims: dict[str, float],
     *,
     k: int = 5,
     dim_weights: dict[str, float] | None = None,
