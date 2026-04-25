@@ -1,0 +1,84 @@
+# Soybean — agri instrument (grains)
+# Sub-fase 12.5 Block C session 75. US-cornbelt-overlapp med Corn,
+# men egen pod-set-periode juli-aug.
+
+inherits: family_agri
+
+instrument:
+  id: Soybean
+  asset_class: grains
+  ticker: ZS
+  cfd_ticker: Soybean
+  yahoo_ticker: ZS=F
+  cot_contract: "SOYBEANS - CHICAGO BOARD OF TRADE"
+  cot_report: disaggregated
+  weather_region: us_cornbelt
+  weather_lat: 40.75
+  weather_lon: -96.75
+
+aggregation: additive_sum
+max_score: 16
+min_score_publish: 6
+
+families:
+  outlook:
+    weight: 5
+    drivers:
+      - name: seasonal_stage
+        weight: 1.0
+        params:
+          # US Soybean: planting May-Jun, pod-set Jul-Aug (yield-
+          # determinerende), maturity Sep, harvest Oct.
+          # Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec
+          monthly_scores: [0.3, 0.3, 0.4, 0.5, 0.7, 0.9, 1.0, 1.0, 0.8, 0.5, 0.4, 0.3]
+  yield:
+    weight: 3
+    drivers:
+      - name: weather_stress
+        weight: 1.0
+        params:
+          lookback_months: 1
+  weather:
+    weight: 2
+    drivers:
+      - name: weather_stress
+        weight: 1.0
+        params:
+          lookback_months: 1
+  enso:
+    weight: 2
+    drivers:
+      - name: enso_regime
+        weight: 1.0
+        params: {}
+  cross:
+    weight: 2
+    drivers:
+      - name: dxy_chg5d
+        weight: 1.0
+        params:
+          bull_when: negative
+          window: 5
+  analog:
+    weight: 2
+    drivers:
+      - name: analog_hit_rate
+        weight: 0.5
+        params:
+          asset_class: grains
+          k: 5
+          horizon_days: 30
+          outcome_threshold_pct: 3.0
+          min_history_days: 365
+      - name: analog_avg_return
+        weight: 0.5
+        params:
+          asset_class: grains
+          k: 5
+          horizon_days: 30
+          min_history_days: 365
+
+grade_thresholds:
+  A_plus: {min_score: 11, min_families_active: 4}
+  A:      {min_score: 8,  min_families_active: 3}
+  B:      {min_score: 6,  min_families_active: 2}

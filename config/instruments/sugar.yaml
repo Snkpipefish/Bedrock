@@ -1,0 +1,92 @@
+# Sugar — agri instrument (softs)
+# Sub-fase 12.5 Block C session 75. Brazilian sugarcane (~40 % global
+# produksjon). Zafra (harvest) Apr-Nov, dvs supply-pressure i den
+# perioden — pris-sensitivitet høy.
+
+inherits: family_agri
+
+instrument:
+  id: Sugar
+  asset_class: softs
+  ticker: SB
+  cfd_ticker: Sugar
+  yahoo_ticker: SB=F
+  cot_contract: "SUGAR NO. 11 - ICE FUTURES U.S."
+  cot_report: disaggregated
+  # brazil_mato_grosso er ikke perfekt for sukker (mer sentral-Brasil),
+  # men nærmeste tilgjengelige region. Bytt til São Paulo-region hvis
+  # weather_monthly utvides senere.
+  weather_region: brazil_mato_grosso
+  weather_lat: -21.5
+  weather_lon: -47.0  # SP-region
+
+aggregation: additive_sum
+max_score: 16
+min_score_publish: 6
+
+families:
+  outlook:
+    weight: 5
+    drivers:
+      - name: seasonal_stage
+        weight: 1.0
+        params:
+          # Brazilian sugarcane: zafra Apr-Nov (harvest, supply-fokus),
+          # entressafra Dec-Mar (growing, yield-fokus).
+          # Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec
+          monthly_scores: [0.7, 0.7, 0.8, 0.9, 1.0, 1.0, 1.0, 1.0, 0.9, 0.7, 0.6, 0.6]
+  yield:
+    weight: 3
+    drivers:
+      - name: weather_stress
+        weight: 1.0
+        params:
+          lookback_months: 1
+  weather:
+    weight: 2
+    drivers:
+      - name: weather_stress
+        weight: 1.0
+        params:
+          lookback_months: 1
+  enso:
+    # Sugar/Brasil: La Niña gir typisk våtere SE-Brazil = mindre
+    # bra for høst (regnete dager forsinker zafra) = bull.
+    weight: 2
+    drivers:
+      - name: enso_regime
+        weight: 1.0
+        params: {}
+  cross:
+    # Sugar er BRL-eksponert (samme som coffee). USD-styrke = BRL-
+    # svakhet = bull for sukker-eksport.
+    weight: 2
+    drivers:
+      - name: dxy_chg5d
+        weight: 1.0
+        params:
+          bull_when: positive
+          window: 5
+  analog:
+    weight: 2
+    drivers:
+      - name: analog_hit_rate
+        weight: 0.5
+        params:
+          asset_class: softs
+          k: 5
+          horizon_days: 30
+          outcome_threshold_pct: 3.0
+          min_history_days: 365
+      - name: analog_avg_return
+        weight: 0.5
+        params:
+          asset_class: softs
+          k: 5
+          horizon_days: 30
+          min_history_days: 365
+
+grade_thresholds:
+  A_plus: {min_score: 11, min_families_active: 4}
+  A:      {min_score: 8,  min_families_active: 3}
+  B:      {min_score: 6,  min_families_active: 2}

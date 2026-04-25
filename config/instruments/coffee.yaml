@@ -1,0 +1,89 @@
+# Coffee — agri instrument (softs)
+# Sub-fase 12.5 Block C session 75. Brazil-dominert produksjon —
+# bruker brazil_coffee weather-region. Flowering Sep-Oct (yield-
+# determinerende), harvest Apr-Aug.
+
+inherits: family_agri
+
+instrument:
+  id: Coffee
+  asset_class: softs
+  ticker: KC
+  cfd_ticker: Coffee
+  yahoo_ticker: KC=F
+  cot_contract: "COFFEE C - ICE FUTURES U.S."
+  cot_report: disaggregated
+  weather_region: brazil_coffee
+  weather_lat: -21.0  # SE Brazil (Minas Gerais)
+  weather_lon: -45.0
+
+aggregation: additive_sum
+max_score: 16
+min_score_publish: 6
+
+families:
+  outlook:
+    weight: 5
+    drivers:
+      - name: seasonal_stage
+        weight: 1.0
+        params:
+          # Brazilian coffee: flowering Sep-Oct (1.0), development
+          # Nov-Mar (0.7), harvest Apr-Aug (0.4-0.6).
+          # Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec
+          monthly_scores: [0.7, 0.7, 0.7, 0.4, 0.4, 0.5, 0.5, 0.6, 1.0, 1.0, 0.8, 0.7]
+  yield:
+    weight: 3
+    drivers:
+      - name: weather_stress
+        weight: 1.0
+        params:
+          lookback_months: 1
+  weather:
+    weight: 2
+    drivers:
+      - name: weather_stress
+        weight: 1.0
+        params:
+          lookback_months: 1
+  enso:
+    # Coffee i Brasil: La Niña øker frost-risiko + tørke = bull.
+    weight: 2
+    drivers:
+      - name: enso_regime
+        weight: 1.0
+        params: {}
+  cross:
+    # Coffee er BRL-eksponert. Vi har ikke BRL-feed enda; bruker DXY
+    # som proxy. USD-svakhet → BRL-styrke (typisk korrelert) → bear
+    # for coffee (brasiliansk eksport blir dyrere). Inverter.
+    weight: 2
+    drivers:
+      - name: dxy_chg5d
+        weight: 1.0
+        params:
+          bull_when: positive  # USD-styrke → BRL-svakhet → bull coffee
+          window: 5
+  analog:
+    weight: 2
+    drivers:
+      - name: analog_hit_rate
+        weight: 0.5
+        params:
+          asset_class: softs
+          k: 5
+          horizon_days: 30
+          outcome_threshold_pct: 3.0
+          min_history_days: 365
+      - name: analog_avg_return
+        weight: 0.5
+        params:
+          asset_class: softs
+          k: 5
+          horizon_days: 30
+          min_history_days: 365
+
+grade_thresholds:
+  A_plus: {min_score: 11, min_families_active: 4}
+  A:      {min_score: 8,  min_families_active: 3}
+  B:      {min_score: 6,  min_families_active: 2}
