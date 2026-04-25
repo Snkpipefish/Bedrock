@@ -17,3 +17,13 @@ rules:
   truthy:
     allowed-values: ['true', 'false', 'on', 'off']
     check-keys: false
+  # Bedrocks YAML-filer bruker alignment-padding for lesbarhet —
+  # f.eks. `scalp:  900` (2 spaces for column-alignment) og inline
+  # mappings `{ start: "09:00", end: "21:00" }` (spaces inside
+  # braces). Slå av strenge regler her.
+  colons:
+    max-spaces-after: -1
+  braces:
+    max-spaces-inside: 1
+  commas:
+    max-spaces-after: -1

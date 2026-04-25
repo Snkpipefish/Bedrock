@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -50,7 +50,7 @@ def default_cfg() -> DailyLossConfig:
 
 
 def test_default_state_is_zero_and_today(monitor: SafetyMonitor) -> None:
-    today = datetime.now(UTC).date()
+    today = datetime.now(timezone.utc).date()
     assert monitor.daily_loss == 0.0
     assert monitor.daily_loss_date == today
 
@@ -108,18 +108,18 @@ def test_negative_add_loss_ignored(
 def test_load_ignores_state_from_previous_day(
     state_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    yesterday = (datetime.now(UTC) - timedelta(days=1)).date()
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date()
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps({"date": yesterday.isoformat(), "daily_loss": 999.0}))
     with caplog.at_level("INFO", logger="bedrock.bot.safety"):
         m = SafetyMonitor(state_path=state_path)
     # State fra i går skal IKKE brukes — dagens tap er 0
     assert m.daily_loss == 0.0
-    assert m.daily_loss_date == datetime.now(UTC).date()
+    assert m.daily_loss_date == datetime.now(timezone.utc).date()
 
 
 def test_load_recovers_same_day_state(state_path: Path) -> None:
-    today = datetime.now(UTC).date()
+    today = datetime.now(timezone.utc).date()
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps({"date": today.isoformat(), "daily_loss": 250.0}))
     m = SafetyMonitor(state_path=state_path)
@@ -159,7 +159,7 @@ def test_reset_same_day_returns_false(monitor: SafetyMonitor) -> None:
 
 def test_reset_new_day_resets_and_returns_true(state_path: Path) -> None:
     # Simuler at state er fra i går
-    yesterday = (datetime.now(UTC) - timedelta(days=1)).date()
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date()
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps({"date": yesterday.isoformat(), "daily_loss": 500.0}))
     # _load_state ignorerer i-går-state (ser den som dead), men la oss sette
@@ -171,7 +171,7 @@ def test_reset_new_day_resets_and_returns_true(state_path: Path) -> None:
     m._state.daily_loss = 500.0
     assert m.reset_daily_loss_if_new_day() is True
     assert m.daily_loss == 0.0
-    assert m.daily_loss_date == datetime.now(UTC).date()
+    assert m.daily_loss_date == datetime.now(timezone.utc).date()
 
 
 def test_rollover_callback_called_with_dates(state_path: Path) -> None:
@@ -181,14 +181,14 @@ def test_rollover_callback_called_with_dates(state_path: Path) -> None:
         captured.append((prev, new))
 
     m = SafetyMonitor(state_path=state_path, on_rollover=cb)
-    yesterday = (datetime.now(UTC) - timedelta(days=1)).date()
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date()
     m._state.date = yesterday
     m._state.daily_loss = 500.0
     m.reset_daily_loss_if_new_day()
     assert len(captured) == 1
     prev, new = captured[0]
     assert prev == yesterday
-    assert new == datetime.now(UTC).date()
+    assert new == datetime.now(timezone.utc).date()
 
 
 def test_rollover_callback_exception_does_not_block_reset(
@@ -198,7 +198,7 @@ def test_rollover_callback_exception_does_not_block_reset(
         raise RuntimeError("git-commit feilet")
 
     m = SafetyMonitor(state_path=state_path, on_rollover=boom)
-    yesterday = (datetime.now(UTC) - timedelta(days=1)).date()
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date()
     m._state.date = yesterday
     m._state.daily_loss = 500.0
     with caplog.at_level("ERROR", logger="bedrock.bot.safety"):
@@ -217,7 +217,7 @@ def test_rollover_callback_sees_pre_reset_state(state_path: Path) -> None:
         observed.append(prev)
 
     m = SafetyMonitor(state_path=state_path, on_rollover=cb)
-    yesterday = (datetime.now(UTC) - timedelta(days=2)).date()
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=2)).date()
     m._state.date = yesterday
     m.reset_daily_loss_if_new_day()
     assert observed == [yesterday]

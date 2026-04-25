@@ -18,7 +18,7 @@ Dekker også:
 from __future__ import annotations
 
 from collections import deque
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -197,7 +197,7 @@ def test_agri_signal_not_overridden(
         low=4.50,
         close=4.515,
         volume=100,
-        timestamp=datetime.now(UTC),
+        timestamp=datetime.now(timezone.utc),
     )
     engine._on_candle_closed(10, candle)
 
@@ -249,7 +249,7 @@ def test_technical_signal_also_unchanged(
             low=1.0800,
             close=1.0801,
             volume=1,
-            timestamp=datetime.now(UTC),
+            timestamp=datetime.now(timezone.utc),
         ),
     )
     assert len(active_states) == 1
@@ -297,7 +297,7 @@ def test_daily_loss_gate_blocks_new_entry(
             low=1.08,
             close=1.081,
             volume=1,
-            timestamp=datetime.now(UTC),
+            timestamp=datetime.now(timezone.utc),
         ),
     )
     # Daily-loss-gate stopper trade før state opprettes
@@ -322,7 +322,7 @@ def test_ttl_blocks_stale_scalp(
     )
     engine = _make_engine(client, safety, config, active_states, stats_path=tmp_path / "s.json")
     engine.on_symbols_ready(client)
-    old_ts = (datetime.now(UTC) - timedelta(minutes=30)).isoformat()
+    old_ts = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
     signal = {
         "id": "stale-scalp",
         "instrument": "EURUSD",
@@ -344,7 +344,7 @@ def test_ttl_blocks_stale_scalp(
             low=1.08,
             close=1.081,
             volume=1,
-            timestamp=datetime.now(UTC),
+            timestamp=datetime.now(timezone.utc),
         ),
     )
     assert len(active_states) == 0
@@ -363,7 +363,7 @@ def test_ttl_allows_fresh_swing(
     )
     engine = _make_engine(client, safety, config, active_states, stats_path=tmp_path / "s.json")
     engine.on_symbols_ready(client)
-    ts = (datetime.now(UTC) - timedelta(minutes=30)).isoformat()
+    ts = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
     signal = {
         "id": "fresh-swing",
         "instrument": "EURUSD",
@@ -385,7 +385,7 @@ def test_ttl_allows_fresh_swing(
             low=1.08,
             close=1.081,
             volume=1,
-            timestamp=datetime.now(UTC),
+            timestamp=datetime.now(timezone.utc),
         ),
     )
     assert len(active_states) == 1
@@ -437,7 +437,7 @@ def test_duplicate_instrument_direction_blocked(
             low=1.08,
             close=1.081,
             volume=1,
-            timestamp=datetime.now(UTC),
+            timestamp=datetime.now(timezone.utc),
         ),
     )
     # Fortsatt kun 1 state (den gamle) — ny ble blokkert
@@ -603,7 +603,7 @@ def test_confirmation_body_threshold(
         low=1.0800,
         close=1.0807,
         volume=1,
-        timestamp=datetime.now(UTC),
+        timestamp=datetime.now(timezone.utc),
     )
     assert engine._check_confirmation(sig, 1, candle, min_score=2) is True
 
@@ -631,7 +631,7 @@ def test_confirmation_small_body_fails_strict(
         low=1.0799,
         close=1.0801,
         volume=1,
-        timestamp=datetime.now(UTC),
+        timestamp=datetime.now(timezone.utc),
     )
     # min_score=2 → passerer (score=2)
     assert engine._check_confirmation(sig, 1, candle, min_score=2) is True
@@ -658,7 +658,7 @@ def test_confirmation_no_ema_returns_false(
         low=1.08,
         close=1.081,
         volume=1,
-        timestamp=datetime.now(UTC),
+        timestamp=datetime.now(timezone.utc),
     )
     assert engine._check_confirmation(sig, 1, candle) is False
 
@@ -675,7 +675,12 @@ def test_confirmation_stats_persist_every_20(
 
     sig = {"id": "x", "instrument": "EURUSD", "direction": "buy", "entry_zone": [1.08, 1.081]}
     candle = Candle(
-        open=1.0802, high=1.0807, low=1.08, close=1.0807, volume=1, timestamp=datetime.now(UTC)
+        open=1.0802,
+        high=1.0807,
+        low=1.08,
+        close=1.0807,
+        volume=1,
+        timestamp=datetime.now(timezone.utc),
     )
 
     for _ in range(20):
@@ -709,7 +714,7 @@ def test_update_indicators_needs_14_candles_for_atr(
                 low=1.0 + i * 0.001,
                 close=1.0 + i * 0.001,
                 volume=1,
-                timestamp=datetime.now(UTC),
+                timestamp=datetime.now(timezone.utc),
             )
         )
     engine._update_indicators(1)
@@ -732,7 +737,7 @@ def test_update_indicators_ema_and_atr_computed(
                 low=0.999 + i * 0.001,
                 close=1.001 + i * 0.001,
                 volume=1,
-                timestamp=datetime.now(UTC),
+                timestamp=datetime.now(timezone.utc),
             )
         )
     engine._update_indicators(1)
@@ -825,7 +830,7 @@ def test_execute_trade_callback_called_on_confirm(
         low=1.0800,
         close=1.0807,
         volume=1,
-        timestamp=datetime.now(UTC),
+        timestamp=datetime.now(timezone.utc),
     )
     engine._on_candle_closed(1, candle)
     execute.assert_called_once()
@@ -857,7 +862,7 @@ def test_manage_open_positions_called_even_without_signals(
         low=1.08,
         close=1.081,
         volume=1,
-        timestamp=datetime.now(UTC),
+        timestamp=datetime.now(timezone.utc),
     )
     engine._on_candle_closed(1, candle)
     manage.assert_called_once_with(1, candle)
@@ -885,7 +890,7 @@ def test_server_frozen_still_manages_positions(
         low=1.08,
         close=1.081,
         volume=1,
-        timestamp=datetime.now(UTC),
+        timestamp=datetime.now(timezone.utc),
     )
     engine._on_candle_closed(1, candle)
     manage.assert_called_once()
@@ -985,7 +990,7 @@ def test_execute_trade_sends_market_order(
         low=1.0798,
         close=1.0801,
         volume=1,
-        timestamp=datetime.now(UTC),
+        timestamp=datetime.now(timezone.utc),
     )
     engine._execute_trade_impl(sig, state, candle)
 
@@ -1036,7 +1041,7 @@ def test_execute_trade_sends_limit_order_when_rule_set(
         low=2049.9,
         close=2050.3,
         volume=1,
-        timestamp=datetime.now(UTC),
+        timestamp=datetime.now(timezone.utc),
     )
     engine._execute_trade_impl(sig, state, candle)
 
@@ -1066,7 +1071,7 @@ def test_execute_trade_blocks_on_zero_risk(
     active_states.append(state)
     sig = _make_signal(stop=1.0800)
     candle = Candle(
-        open=1.08, high=1.081, low=1.079, close=1.08, volume=1, timestamp=datetime.now(UTC)
+        open=1.08, high=1.081, low=1.079, close=1.08, volume=1, timestamp=datetime.now(timezone.utc)
     )
     engine._execute_trade_impl(sig, state, candle)
     client.send_new_order.assert_not_called()
@@ -1093,7 +1098,7 @@ def test_execute_trade_blocks_on_daily_loss(
     active_states.append(state)
     sig = _make_signal()
     candle = Candle(
-        open=1.08, high=1.081, low=1.079, close=1.08, volume=1, timestamp=datetime.now(UTC)
+        open=1.08, high=1.081, low=1.079, close=1.08, volume=1, timestamp=datetime.now(timezone.utc)
     )
     engine._execute_trade_impl(sig, state, candle)
     client.send_new_order.assert_not_called()
@@ -1126,7 +1131,12 @@ def test_execute_trade_blocks_oil_geo_warning_with_tight_sl(
         "rules": {},
     }
     candle = Candle(
-        open=85.03, high=85.06, low=85.01, close=85.04, volume=1, timestamp=datetime.now(UTC)
+        open=85.03,
+        high=85.06,
+        low=85.01,
+        close=85.04,
+        volume=1,
+        timestamp=datetime.now(timezone.utc),
     )
     engine._execute_trade_impl(sig, state, candle)
     client.send_new_order.assert_not_called()
@@ -1167,7 +1177,7 @@ def test_execute_trade_blocks_total_correlation_limit(
         "rules": {},
     }
     candle = Candle(
-        open=1.08, high=1.081, low=1.079, close=1.08, volume=1, timestamp=datetime.now(UTC)
+        open=1.08, high=1.081, low=1.079, close=1.08, volume=1, timestamp=datetime.now(timezone.utc)
     )
     engine._execute_trade_impl(sig, new_state, candle)
     client.send_new_order.assert_not_called()
@@ -1205,7 +1215,7 @@ def test_execute_trade_agri_size_halved_and_corn_blocked_out_of_session(
         sig_id="corn-1", instrument="Corn", alert=4.51, stop=4.40, t1=4.90, base_risk=40
     )
     candle = Candle(
-        open=4.51, high=4.52, low=4.50, close=4.515, volume=1, timestamp=datetime.now(UTC)
+        open=4.51, high=4.52, low=4.50, close=4.515, volume=1, timestamp=datetime.now(timezone.utc)
     )
     engine._execute_trade_impl(sig, state, candle)
     client.send_new_order.assert_not_called()
@@ -1246,7 +1256,7 @@ def test_execute_trade_agri_in_session_sends_order(
         sig_id="corn-ok", instrument="Corn", alert=4.51, stop=4.40, t1=4.90, base_risk=40
     )
     candle = Candle(
-        open=4.51, high=4.52, low=4.50, close=4.515, volume=1, timestamp=datetime.now(UTC)
+        open=4.51, high=4.52, low=4.50, close=4.515, volume=1, timestamp=datetime.now(timezone.utc)
     )
     engine._execute_trade_impl(sig, state, candle)
     client.send_new_order.assert_called_once()
@@ -1283,7 +1293,12 @@ def test_monday_gap_blocks_when_gap_large(
     buf = CandleBuffer()
     buf.candles.append(
         Candle(
-            open=1.080, high=1.081, low=1.079, close=1.080, volume=0, timestamp=datetime.now(UTC)
+            open=1.080,
+            high=1.081,
+            low=1.079,
+            close=1.080,
+            volume=0,
+            timestamp=datetime.now(timezone.utc),
         )
     )
     engine.h1_candle_buffers[1] = buf

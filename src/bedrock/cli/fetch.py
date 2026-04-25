@@ -7,7 +7,7 @@ session(er) legger til `run <fetcher>` og `run --all`.
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import click
@@ -89,7 +89,7 @@ def status_cmd(
         )
 
     store = DataStore(db_path) if db_path.exists() else _DummyStore()
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
 
     report = status_report(config, store, now=now)
 
@@ -222,7 +222,7 @@ def run_cmd(
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     store = DataStore(db_path)
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
 
     # Bestem hvilke fetchere å kjøre
     if fetcher_name is not None:

@@ -49,7 +49,7 @@ import time
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -743,7 +743,7 @@ class CtraderClient:
             "step_volume": sym.stepVolume,
             "digits": sym.digits,
             "description": getattr(sym, "description", ""),
-            "updated": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
+            "updated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M timezone.utc"),
         }
         info_file.parent.mkdir(parents=True, exist_ok=True)
         info_file.write_text(_json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")

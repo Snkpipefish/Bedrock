@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from textwrap import dedent
 
@@ -171,7 +171,7 @@ def test_check_staleness_no_data(tmp_path: Path) -> None:
 def test_check_staleness_fresh_data(tmp_path: Path) -> None:
     store = DataStore(tmp_path / "bedrock.db")
     # Hvis vi skriver data med ts "nå", burde status være fresh
-    now = datetime(2024, 6, 1, 12, 0, tzinfo=UTC)
+    now = datetime(2024, 6, 1, 12, 0, tzinfo=timezone.utc)
     df = pd.DataFrame(
         {
             "ts": [now - timedelta(hours=1)],
@@ -191,7 +191,7 @@ def test_check_staleness_fresh_data(tmp_path: Path) -> None:
 
 def test_check_staleness_old_data(tmp_path: Path) -> None:
     store = DataStore(tmp_path / "bedrock.db")
-    now = datetime(2024, 6, 1, 12, 0, tzinfo=UTC)
+    now = datetime(2024, 6, 1, 12, 0, tzinfo=timezone.utc)
     df = pd.DataFrame(
         {
             "ts": [now - timedelta(hours=50)],  # stale_hours=24
@@ -274,7 +274,7 @@ def test_cli_fetch_status_with_fresh_data(runner: CliRunner, tmp_path: Path) -> 
     store = DataStore(db)
     df = pd.DataFrame(
         {
-            "ts": pd.to_datetime([datetime.now(UTC)]),
+            "ts": pd.to_datetime([datetime.now(timezone.utc)]),
             "open": [1.0],
             "high": [1.0],
             "low": [1.0],

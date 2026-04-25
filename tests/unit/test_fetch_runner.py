@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from textwrap import dedent
 from unittest.mock import patch
@@ -357,7 +357,7 @@ def test_run_fundamentals_with_key(store: DataStore, configs_dir) -> None:
 
 
 def test_default_from_date_with_stale_hours() -> None:
-    now = datetime(2024, 6, 1, 12, 0, tzinfo=UTC)
+    now = datetime(2024, 6, 1, 12, 0, tzinfo=timezone.utc)
     spec = _spec(stale_hours=24)
     result = default_from_date(spec, now=now, buffer_multiplier=2.0)
     # 24h × 2 = 48h bak → 30. mai
@@ -504,7 +504,7 @@ def test_cli_fetch_run_stale_only_skips_fresh(
     # Skriv fersk data
     store = DataStore(db)
     df = _sample_bars(1)
-    df["ts"] = pd.to_datetime([datetime.now(UTC)])
+    df["ts"] = pd.to_datetime([datetime.now(timezone.utc)])
     store.append_prices("Gold", "D1", df)
 
     mock_fetch_called = {"n": 0}

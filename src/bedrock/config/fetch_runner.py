@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -125,7 +125,7 @@ def run_fetcher_by_name(
         filtered_key = _find_instrument_key(configs, instrument_filter)
         configs = {filtered_key: configs[filtered_key]}
 
-    effective_to = to_date or datetime.now(UTC).date()
+    effective_to = to_date or datetime.now(timezone.utc).date()
 
     return runner(
         spec=spec,
@@ -355,7 +355,7 @@ def default_from_date(
     nok til å fange gap ved forsinket kjøring uten å hente unødvendig
     langt bak.
     """
-    resolved_now = now or datetime.now(UTC)
+    resolved_now = now or datetime.now(timezone.utc)
     hours = spec.stale_hours * buffer_multiplier
     return (resolved_now - timedelta(hours=hours)).date()
 

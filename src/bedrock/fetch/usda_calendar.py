@@ -31,7 +31,7 @@ YAML-form for gate i instrument-reglene:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -59,7 +59,7 @@ def load_usda_calendar(
     """Les USDA-kalender fra YAML.
 
     Returnerer `{report_type: [datetime, ...]}`. Alle datetimes er
-    timezone-aware (UTC). Sorterer listen slik at tidlige datoer
+    timezone-aware (timezone.utc). Sorterer listen slik at tidlige datoer
     kommer først.
 
     Caches basert på absolutt sti. For å tvinge reload, bruk
@@ -128,9 +128,9 @@ def _parse_datetime(value: Any, source: str, report_type: str) -> datetime:
             f"{value!r} ({type(value).__name__})"
         )
 
-    # Sikre timezone-awareness — anta UTC hvis ikke spesifisert
+    # Sikre timezone-awareness — anta timezone.utc hvis ikke spesifisert
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
+        dt = dt.replace(tzinfo=timezone.utc)
     return dt
 
 
@@ -185,7 +185,7 @@ def _usda_blackout(context: GateContext, params: dict[str, Any]) -> bool:
 
 def _ensure_aware(dt: datetime) -> datetime:
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=UTC)
+        return dt.replace(tzinfo=timezone.utc)
     return dt
 
 

@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Pre-commit hook for Bedrock.
+#
+# Delegerer til pre-commit-rammeverket (https://pre-commit.com/) som
+# kjører hookene definert i .pre-commit-config.yaml (ruff, pyright,
+# yamllint, gitleaks).
+#
+# Vi skriver denne manuelt i .githooks/ fordi `core.hooksPath` er
+# satt til .githooks/ for å beholde auto-push-hook (post-commit).
+# `pre-commit install` skriver default til .git/hooks/ som ikke
+# leses når core.hooksPath er satt.
+#
+# Aktiver: chmod +x .githooks/pre-commit (gjøres engang av Bedrock-
+# oppsett — denne fila committes med x-bit). Resten følger automatisk
+# fordi core.hooksPath allerede peker på .githooks/.
+#
+# Hopper over hvis pre-commit ikke er installert (graceful for fresh
+# clones som ikke har kjørt `uv sync` enda).
+
+if [ -x ".venv/bin/pre-commit" ]; then
+    exec .venv/bin/pre-commit run --hook-stage pre-commit
+elif command -v pre-commit >/dev/null 2>&1; then
+    exec pre-commit run --hook-stage pre-commit
+else
+    echo "[pre-commit] pre-commit ikke installert (.venv/bin/pre-commit mangler)"
+    echo "[pre-commit]   kjør: uv sync --all-extras  eller  pip install pre-commit"
+    echo "[pre-commit]   commit fortsetter uten lint-sjekk"
+    exit 0
+fi

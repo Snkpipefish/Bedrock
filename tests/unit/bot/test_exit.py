@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 from collections import deque
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -174,7 +174,7 @@ def test_p1_geo_spike_closes_buy(
     # Move against buy: entry=1.08, close=1.07 → 0.01 > 2.0 × 0.0050 = 0.01? akkurat.
     # Bruk close=1.069 → 0.011 > 0.010
     candle = Candle(
-        open=1.08, high=1.08, low=1.069, close=1.069, volume=0, timestamp=datetime.now(UTC)
+        open=1.08, high=1.08, low=1.069, close=1.069, volume=0, timestamp=datetime.now(timezone.utc)
     )
     ex.manage_open_positions(1, candle)
     client.close_position.assert_called_once()
@@ -200,7 +200,7 @@ def test_p1_geo_spike_does_not_trigger_in_favor(
     active_states.append(state)
     # Close 1.082 er i favør for buy (entry=1.08) men UNDER T1=1.0850 → ingen exit
     candle = Candle(
-        open=1.08, high=1.083, low=1.08, close=1.082, volume=0, timestamp=datetime.now(UTC)
+        open=1.08, high=1.083, low=1.08, close=1.082, volume=0, timestamp=datetime.now(timezone.utc)
     )
     ex.manage_open_positions(1, candle)
     client.close_position.assert_not_called()
@@ -230,7 +230,12 @@ def test_p2_kill_switch_closes(
     state.kill_switch = True
     active_states.append(state)
     candle = Candle(
-        open=1.08, high=1.081, low=1.079, close=1.080, volume=0, timestamp=datetime.now(UTC)
+        open=1.08,
+        high=1.081,
+        low=1.079,
+        close=1.080,
+        volume=0,
+        timestamp=datetime.now(timezone.utc),
     )
     ex.manage_open_positions(1, candle)
     client.close_position.assert_called_once()
@@ -269,7 +274,12 @@ def test_p3_t1_hit_partial_close_buy(
     active_states.append(state)
     # Close=1.0851 ≥ T1=1.0850 → T1 reached
     candle = Candle(
-        open=1.084, high=1.0852, low=1.084, close=1.0851, volume=0, timestamp=datetime.now(UTC)
+        open=1.084,
+        high=1.0852,
+        low=1.084,
+        close=1.0851,
+        volume=0,
+        timestamp=datetime.now(timezone.utc),
     )
     ex.manage_open_positions(1, candle)
     # Partial close: 50% av 2000 = 1000
@@ -313,7 +323,12 @@ def test_p3_t1_hit_forced_full_close_when_remaining_below_min(
     active_states.append(state)
     # Desired = 1000, men remaining 1000 < min 1500 → steng alt
     candle = Candle(
-        open=1.084, high=1.0852, low=1.084, close=1.0851, volume=0, timestamp=datetime.now(UTC)
+        open=1.084,
+        high=1.0852,
+        low=1.084,
+        close=1.0851,
+        volume=0,
+        timestamp=datetime.now(timezone.utc),
     )
     # Pre-create log-entry så _log_trade_closed finner den
     (tmp_path / "signal_log.json").write_text(
@@ -352,7 +367,12 @@ def test_p36_giveback_closes_when_peak_dropped(
     active_states.append(state)
     # Close=1.0805 (progress = (1.0805-1.08)/(1.0850-1.08) = 0.1) < gb_exit=0.3 for fx
     candle = Candle(
-        open=1.081, high=1.082, low=1.080, close=1.0805, volume=0, timestamp=datetime.now(UTC)
+        open=1.081,
+        high=1.082,
+        low=1.080,
+        close=1.0805,
+        volume=0,
+        timestamp=datetime.now(timezone.utc),
     )
     ex.manage_open_positions(1, candle)
     client.close_position.assert_called_once()
@@ -385,7 +405,12 @@ def test_p5a_timeout_negative_progress_closes_loss(
     active_states.append(state)
     # Negativ progress (close=1.0795 < entry=1.0800 for buy)
     candle = Candle(
-        open=1.08, high=1.08, low=1.0795, close=1.0795, volume=0, timestamp=datetime.now(UTC)
+        open=1.08,
+        high=1.08,
+        low=1.0795,
+        close=1.0795,
+        volume=0,
+        timestamp=datetime.now(timezone.utc),
     )
     ex.manage_open_positions(1, candle)
     client.close_position.assert_called_once()
@@ -416,7 +441,12 @@ def test_p5a_timeout_with_good_progress_activates_trail(
     active_states.append(state)
     # Progress = (1.0840-1.08)/(1.085-1.08) = 0.8 > 0.5 default → trail
     candle = Candle(
-        open=1.083, high=1.084, low=1.083, close=1.0840, volume=0, timestamp=datetime.now(UTC)
+        open=1.083,
+        high=1.084,
+        low=1.083,
+        close=1.0840,
+        volume=0,
+        timestamp=datetime.now(timezone.utc),
     )
     ex.manage_open_positions(1, candle)
     client.close_position.assert_not_called()
@@ -451,7 +481,12 @@ def test_p5b_hard_close_at_double_expiry(
     state.expiry_candles = 32
     active_states.append(state)
     candle = Candle(
-        open=1.084, high=1.085, low=1.083, close=1.084, volume=0, timestamp=datetime.now(UTC)
+        open=1.084,
+        high=1.085,
+        low=1.083,
+        close=1.084,
+        volume=0,
+        timestamp=datetime.now(timezone.utc),
     )
     ex.manage_open_positions(1, candle)
     client.close_position.assert_called_once()

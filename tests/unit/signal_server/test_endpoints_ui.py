@@ -17,7 +17,7 @@ Dekker:
 from __future__ import annotations
 
 import json
-from datetime import UTC
+from datetime import timezone
 from pathlib import Path
 
 import pytest
@@ -168,7 +168,9 @@ def test_assets_404_for_missing_file(client: FlaskClient) -> None:
 
 
 def _write_log(path: Path, entries: list[dict]) -> None:
-    path.write_text(json.dumps({"entries": entries, "last_updated": "2026-04-24 12:00 UTC"}))
+    path.write_text(
+        json.dumps({"entries": entries, "last_updated": "2026-04-24 12:00 timezone.utc"})
+    )
 
 
 def test_trade_log_returns_entries(client: FlaskClient, trade_log_path: Path) -> None:
@@ -176,13 +178,13 @@ def test_trade_log_returns_entries(client: FlaskClient, trade_log_path: Path) ->
         trade_log_path,
         [
             {
-                "timestamp": "2026-04-24 10:00 UTC",
+                "timestamp": "2026-04-24 10:00 timezone.utc",
                 "signal": {"id": "a", "instrument": "EURUSD"},
                 "result": "win",
                 "pnl": {"pnl_usd": 12.5},
             },
             {
-                "timestamp": "2026-04-24 11:00 UTC",
+                "timestamp": "2026-04-24 11:00 timezone.utc",
                 "signal": {"id": "b", "instrument": "GOLD"},
                 "result": None,
             },
@@ -194,7 +196,7 @@ def test_trade_log_returns_entries(client: FlaskClient, trade_log_path: Path) ->
     assert data["total_count"] == 2
     assert len(data["entries"]) == 2
     assert data["entries"][0]["signal"]["id"] == "a"
-    assert data["last_updated"] == "2026-04-24 12:00 UTC"
+    assert data["last_updated"] == "2026-04-24 12:00 timezone.utc"
 
 
 def test_trade_log_limit_truncates(client: FlaskClient, trade_log_path: Path) -> None:
@@ -658,7 +660,7 @@ def test_pipeline_health_fresh_status_under_stale_threshold(
     DataStore(db_path)  # initialiserer schema
 
     # Sett inn en prises-observasjon som er 1 time gammel (stale_hours=30)
-    one_hour_ago = (datetime.now(UTC) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    one_hour_ago = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
     with sqlite3.connect(db_path) as conn:
         conn.execute(
             "INSERT INTO prices (instrument, tf, ts, close) VALUES (?, ?, ?, ?)",
@@ -688,7 +690,7 @@ def test_pipeline_health_aging_between_1x_and_2x_stale(
     DataStore(db_path)
 
     # 45 timer gammel (1.5 × 30)
-    aging = (datetime.now(UTC) - timedelta(hours=45)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    aging = (datetime.now(timezone.utc) - timedelta(hours=45)).strftime("%Y-%m-%dT%H:%M:%SZ")
     with sqlite3.connect(db_path) as conn:
         conn.execute(
             "INSERT INTO prices (instrument, tf, ts, close) VALUES (?, ?, ?, ?)",
@@ -714,7 +716,7 @@ def test_pipeline_health_stale_above_2x(
     DataStore(db_path)
 
     # 100 timer gammel (> 2 × 30)
-    old = (datetime.now(UTC) - timedelta(hours=100)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    old = (datetime.now(timezone.utc) - timedelta(hours=100)).strftime("%Y-%m-%dT%H:%M:%SZ")
     with sqlite3.connect(db_path) as conn:
         conn.execute(
             "INSERT INTO prices (instrument, tf, ts, close) VALUES (?, ?, ?, ?)",

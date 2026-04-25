@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from textwrap import dedent
 
@@ -55,7 +55,7 @@ def test_load_parses_prospective_plantings(tmp_path: Path) -> None:
     # Sortert: 2025 før 2026
     assert dates[0] < dates[1]
     assert dates[1].year == 2026
-    # Timezone-aware (UTC)
+    # Timezone-aware (timezone.utc)
     assert dates[0].tzinfo is not None
 
 
@@ -77,7 +77,7 @@ def test_load_parses_multiple_report_types(tmp_path: Path) -> None:
 
 
 def test_load_accepts_naive_datetime_as_utc(tmp_path: Path) -> None:
-    """YAML datetime uten tz skal tolkes som UTC."""
+    """YAML datetime uten tz skal tolkes som timezone.utc."""
     path = tmp_path / "usda.yaml"
     path.write_text(
         dedent(
@@ -185,8 +185,8 @@ def test_usda_blackout_returns_false_when_now_is_none(tmp_path: Path) -> None:
 def test_usda_blackout_triggers_within_window(tmp_path: Path) -> None:
     fn = get_gate("usda_blackout")
     path = _calendar_path(tmp_path)
-    # Rapport kl 16:00 UTC, 2 timer før → innenfor ±3h
-    now = datetime(2026, 3, 31, 14, 0, tzinfo=UTC)
+    # Rapport kl 16:00 timezone.utc, 2 timer før → innenfor ±3h
+    now = datetime(2026, 3, 31, 14, 0, tzinfo=timezone.utc)
     assert fn(_ctx(now), {"calendar_path": str(path), "hours": 3}) is True
 
 
@@ -194,7 +194,7 @@ def test_usda_blackout_no_trigger_outside_window(tmp_path: Path) -> None:
     fn = get_gate("usda_blackout")
     path = _calendar_path(tmp_path)
     # 4 timer før → utenfor ±3h
-    now = datetime(2026, 3, 31, 12, 0, tzinfo=UTC)
+    now = datetime(2026, 3, 31, 12, 0, tzinfo=timezone.utc)
     assert fn(_ctx(now), {"calendar_path": str(path), "hours": 3}) is False
 
 
@@ -202,7 +202,7 @@ def test_usda_blackout_triggers_at_exact_boundary(tmp_path: Path) -> None:
     """±3h inkluderer grenseverdiene (≤, ikke <)."""
     fn = get_gate("usda_blackout")
     path = _calendar_path(tmp_path)
-    now = datetime(2026, 3, 31, 13, 0, tzinfo=UTC)  # exactly -3h
+    now = datetime(2026, 3, 31, 13, 0, tzinfo=timezone.utc)  # exactly -3h
     assert fn(_ctx(now), {"calendar_path": str(path), "hours": 3}) is True
 
 
@@ -211,7 +211,7 @@ def test_usda_blackout_asymmetric_window(tmp_path: Path) -> None:
     path = _calendar_path(tmp_path)
     # hours_before=1, hours_after=6
     # 2 timer før → utenfor (1h-vinduet)
-    now_before = datetime(2026, 3, 31, 14, 0, tzinfo=UTC)
+    now_before = datetime(2026, 3, 31, 14, 0, tzinfo=timezone.utc)
     assert (
         fn(
             _ctx(now_before),
@@ -220,7 +220,7 @@ def test_usda_blackout_asymmetric_window(tmp_path: Path) -> None:
         is False
     )
     # 5 timer etter → innenfor (6h-vinduet)
-    now_after = datetime(2026, 3, 31, 21, 0, tzinfo=UTC)
+    now_after = datetime(2026, 3, 31, 21, 0, tzinfo=timezone.utc)
     assert (
         fn(
             _ctx(now_after),
@@ -244,7 +244,7 @@ def test_usda_blackout_filter_report_types(tmp_path: Path) -> None:
         )
     )
     fn = get_gate("usda_blackout")
-    now = datetime(2026, 6, 28, 16, 0, tzinfo=UTC)
+    now = datetime(2026, 6, 28, 16, 0, tzinfo=timezone.utc)
     # Uten filter → utløses (grain_stocks matcher)
     assert fn(_ctx(now), {"calendar_path": str(path)}) is True
     # Med filter til kun prospective_plantings → ikke utløses
@@ -261,7 +261,7 @@ def test_usda_blackout_filter_report_types(tmp_path: Path) -> None:
 
 
 def test_usda_blackout_uses_naive_now_as_utc(tmp_path: Path) -> None:
-    """Hvis context.now er naiv datetime → tolk som UTC."""
+    """Hvis context.now er naiv datetime → tolk som timezone.utc."""
     fn = get_gate("usda_blackout")
     path = _calendar_path(tmp_path)
     now = datetime(2026, 3, 31, 15, 0)  # naiv

@@ -7,7 +7,7 @@ at build_setup faktisk kan finne nivåer.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from textwrap import dedent
 
@@ -149,7 +149,7 @@ def test_generate_signals_financial_end_to_end(
     instruments_dir: Path,
 ) -> None:
     _write_gold(instruments_dir)
-    now = datetime(2024, 1, 1, tzinfo=UTC)
+    now = datetime(2024, 1, 1, tzinfo=timezone.utc)
 
     result = generate_signals(
         "Gold",
@@ -184,7 +184,7 @@ def test_generate_signals_with_snapshot_persists_stable_id(
     _write_gold(instruments_dir)
     snapshot = tmp_path / "last_run.json"
 
-    first_ts = datetime(2024, 1, 1, tzinfo=UTC)
+    first_ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
     first = generate_signals(
         "Gold",
         store_with_wavy_prices,
@@ -196,7 +196,7 @@ def test_generate_signals_with_snapshot_persists_stable_id(
     assert first.snapshot_written == snapshot
     assert snapshot.exists()
 
-    second_ts = datetime(2024, 1, 2, tzinfo=UTC)
+    second_ts = datetime(2024, 1, 2, tzinfo=timezone.utc)
     second = generate_signals(
         "Gold",
         store_with_wavy_prices,

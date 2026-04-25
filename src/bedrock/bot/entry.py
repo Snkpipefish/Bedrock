@@ -42,7 +42,7 @@ import os
 import tempfile
 from collections import deque
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -202,7 +202,7 @@ class EntryEngine:
             close = close_i / div
             open_ = open_i / div
             high = high_i / div
-            ts = datetime.fromtimestamp(bar.utcTimestampInMinutes * 60, tz=UTC)
+            ts = datetime.fromtimestamp(bar.utcTimestampInMinutes * 60, tz=timezone.utc)
             buf.candles.append(
                 Candle(
                     open=open_,
@@ -277,7 +277,7 @@ class EntryEngine:
         if buf.current_ts is None or bar.utcTimestampInMinutes != buf.current_ts:
             # Lukk forrige candle
             if buf.current_ts is not None:
-                prev_ts = datetime.fromtimestamp(buf.current_ts * 60, tz=UTC)
+                prev_ts = datetime.fromtimestamp(buf.current_ts * 60, tz=timezone.utc)
                 closed_candle = Candle(
                     open=buf.current_open or 0.0,
                     high=buf.current_high or 0.0,
@@ -316,7 +316,7 @@ class EntryEngine:
             return
         if buf.current_ts is None or bar.utcTimestampInMinutes != buf.current_ts:
             if buf.current_ts is not None:
-                prev_ts = datetime.fromtimestamp(buf.current_ts * 60, tz=UTC)
+                prev_ts = datetime.fromtimestamp(buf.current_ts * 60, tz=timezone.utc)
                 buf.candles.append(
                     Candle(
                         open=buf.current_open or 0.0,
@@ -481,7 +481,7 @@ class EntryEngine:
         if self._safety.bot_locked:
             if (
                 self._safety.bot_locked_until is None
-                or datetime.now(UTC) < self._safety.bot_locked_until
+                or datetime.now(timezone.utc) < self._safety.bot_locked_until
             ):
                 self._manage_open_positions(symbol_id, candle)
                 return
@@ -503,8 +503,8 @@ class EntryEngine:
         if valid_until:
             try:
                 exp = datetime.fromisoformat(valid_until.replace("Z", "+00:00"))
-                if datetime.now(UTC) > exp:
-                    now_min = datetime.now(UTC).replace(second=0, microsecond=0)
+                if datetime.now(timezone.utc) > exp:
+                    now_min = datetime.now(timezone.utc).replace(second=0, microsecond=0)
                     if self._last_expiry_log != now_min:
                         log.info("[UTLØPT] Signalfilen er utgått — venter på nye signaler.")
                         self._last_expiry_log = now_min
@@ -569,7 +569,7 @@ class EntryEngine:
         if created_at:
             try:
                 ca = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-                age = (datetime.now(UTC) - ca).total_seconds()
+                age = (datetime.now(timezone.utc) - ca).total_seconds()
                 ttl = self._horizon_ttl_seconds(horizon)
                 if age > ttl:
                     sig_id = sig.get("id", "?")
@@ -866,7 +866,7 @@ class EntryEngine:
         """Atomic write av confirmation-stats."""
         try:
             stats = dict(self._confirmation_stats)
-            stats["last_updated"] = datetime.now(UTC).isoformat()
+            stats["last_updated"] = datetime.now(timezone.utc).isoformat()
             if stats["total"] > 0:
                 stats["pass_rate"] = round(stats["passed"] / stats["total"], 3)
             self._stats_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1280,7 +1280,7 @@ class EntryEngine:
                 data = json.loads(self._trade_log_path.read_text(encoding="utf-8"))
             else:
                 data = {"entries": []}
-            now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+            now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M timezone.utc")
             entry = {
                 "timestamp": now,
                 "closed_at": None,

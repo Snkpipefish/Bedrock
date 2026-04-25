@@ -16,7 +16,7 @@ logikk-endring utover:
 
 Ansvaret:
 - Eie daily-loss-tall + persistere det atomisk til disk
-- Rulle over ved ny UTC-dag og utløse callback
+- Rulle over ved ny timezone.utc-dag og utløse callback
 - Beregne daily-loss-limit (max(pct × balance, nok-gulv))
 - Holde flagg: `server_frozen`, `bot_locked`, `bot_locked_until`
 - Eskalerende fetch-fail-logging (info → warning → error hvert 10.)
@@ -37,7 +37,7 @@ import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from bedrock.bot.config import DailyLossConfig
@@ -56,7 +56,7 @@ DEFAULT_DAILY_LOSS_STATE_PATH = Path.home() / "bedrock" / "data" / "bot" / "dail
 # Type-alias for dag-rollover-hook
 # ─────────────────────────────────────────────────────────────
 
-# Kalles med (forrige_dato, ny_dato) ved midnatt UTC. Typisk bruk:
+# Kalles med (forrige_dato, ny_dato) ved midnatt timezone.utc. Typisk bruk:
 # comms.py committer gårsdagens trade-log.
 DayRolloverCallback = Callable[[date, date], None]
 
@@ -109,7 +109,7 @@ class SafetyMonitor:
         self._on_rollover = on_rollover or _noop_rollover
 
         # Daily-loss state (lastes fra disk ved oppstart)
-        today = datetime.now(UTC).date()
+        today = datetime.now(timezone.utc).date()
         self._state = _PersistedState(date=today, daily_loss=0.0)
         self._load_state()
 
@@ -153,7 +153,7 @@ class SafetyMonitor:
         `on_rollover(prev_date, new_date)` BEFORE state resettes til 0,
         slik at callback kan bruke gårsdagens dato til commit-melding.
         """
-        today = datetime.now(UTC).date()
+        today = datetime.now(timezone.utc).date()
         if today <= self._state.date:
             return False
         prev_date = self._state.date
@@ -259,7 +259,7 @@ class SafetyMonitor:
             log.warning("[SAFETY] Kunne ikke laste daily_loss_state: %s", e)
             return
 
-        today = datetime.now(UTC).date()
+        today = datetime.now(timezone.utc).date()
         if saved.date == today:
             self._state = saved
             log.info(

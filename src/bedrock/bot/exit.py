@@ -50,7 +50,7 @@ import json
 import logging
 import os
 import tempfile
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 from typing import TYPE_CHECKING, Any
@@ -564,7 +564,7 @@ class ExitEngine:
             if not self._trade_log_path.exists():
                 return
             data = json.loads(self._trade_log_path.read_text(encoding="utf-8"))
-            now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+            now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M timezone.utc")
             pnl = self._calc_pnl(state, close_price)
             real = getattr(state, "_real_pnl", None)
             if real is not None and pnl:
@@ -624,7 +624,7 @@ class ExitEngine:
                         state.signal_id,
                     )
                     return
-            now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+            now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M timezone.utc")
             entry = {
                 "timestamp": now,
                 "closed_at": None,

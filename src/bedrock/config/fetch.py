@@ -29,7 +29,7 @@ fetchers:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -143,7 +143,7 @@ def _parse_ts(raw: Any) -> datetime:
         dt = raw
     elif isinstance(raw, (int, float)):
         # Unix-timestamp (sek)
-        dt = datetime.fromtimestamp(float(raw), tz=UTC)
+        dt = datetime.fromtimestamp(float(raw), tz=timezone.utc)
     elif isinstance(raw, str):
         # ISO-format; støtter 'YYYY-MM-DD' (dato-only) og full
         # 'YYYY-MM-DDTHH:MM:SS[Z/+00:00]'
@@ -157,7 +157,7 @@ def _parse_ts(raw: Any) -> datetime:
         raise FetchConfigError(f"Ukjent timestamp-format: {raw!r}")
 
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
+        dt = dt.replace(tzinfo=timezone.utc)
     return dt
 
 
@@ -168,9 +168,9 @@ def check_staleness(
     now: datetime | None = None,
 ) -> FetcherStatus:
     """Beregn staleness-status for én fetcher."""
-    resolved_now = now or datetime.now(UTC)
+    resolved_now = now or datetime.now(timezone.utc)
     if resolved_now.tzinfo is None:
-        resolved_now = resolved_now.replace(tzinfo=UTC)
+        resolved_now = resolved_now.replace(tzinfo=timezone.utc)
 
     latest = latest_observation_ts(store, spec.table, spec.ts_column)
 

@@ -19,7 +19,7 @@ Flyt per (direction, horizon)-kombinasjon:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -171,7 +171,7 @@ def generate_signals(
         defaults_dir=defaults_dir,
     )
 
-    run_ts = now or datetime.now(UTC)
+    run_ts = now or datetime.now(timezone.utc)
     directions_list = directions if directions is not None else [Direction.BUY, Direction.SELL]
     horizons_list = _resolve_horizons(cfg, horizons)
 

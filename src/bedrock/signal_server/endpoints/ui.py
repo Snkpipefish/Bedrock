@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC
+from datetime import timezone
 from pathlib import Path
 from typing import Any
 
@@ -333,7 +333,7 @@ def pipeline_health() -> Response:
     from bedrock.data.store import DataStore
 
     cfg = _config()
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
 
     try:
         fetch_cfg = load_fetch_config(cfg.fetch_config_path)

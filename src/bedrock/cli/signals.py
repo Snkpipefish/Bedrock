@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import click
@@ -152,7 +152,7 @@ def signals_cmd(
             defaults_dir=defaults_dir,
             snapshot_path=snapshot_path,
             write_snapshot=not no_snapshot_write,
-            now=datetime.now(UTC),
+            now=datetime.now(timezone.utc),
             price_tf=price_tf,
             price_lookback=price_lookback,
         )
