@@ -5,7 +5,8 @@
 - **Phase:** 11 **ÅPEN** (backtest-rammeverk + 12 mnd historikk-replay). Bruker-beslutning 2026-04-25: bli på Nivå 1 til Fase 11 ferdig, bytt til Nivå 3 ved Fase 12 start.
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
-  - **64+:** `compare_signals(v1, v2)`, 12-mnd full-replay-rapport (Gold + Corn × 30/90d), evt. UI-fane, fase-tag `v0.11.0-fase-11`
+  - **64:** Full 12-mnd-rapport for Gold + Corn × 30/90d. **LUKKET 2026-04-25**. Funn: Corn-scoring er invertert for buy-direction (A+ < C i hit-rate). Kjent issue, ikke Fase 11-blokker.
+  - **65+:** `compare_signals(v1, v2)`, evt. UI-fane, fase-tag `v0.11.0-fase-11`
 - **Phase:** 10 **LUKKET 2026-04-25** (tag `v0.10.0-fase-10`). Analog-matching + ubrukt-data-audit. Splittet i to spor per bruker-beslutning 2026-04-25:
   - **Spor B — ubrukt-data-audit (session 56):** dokumentasjon, ingen kode. **LUKKET 2026-04-25**
   - **Spor A — analog-matching (sessions 57-61):** A-D besvart 2026-04-25 (M/B2/U/split). Re-numrert til 5 sessions etter D-splitt:
@@ -36,9 +37,10 @@
 - Session 61 lukket — UI-rendering + SignalEntry-utvidelse. Nye `AnalogNeighbor` + `AnalogTrace` Pydantic-modeller. `SignalEntry.analog: AnalogTrace | None = None` (additiv, bakoverkompatibel). `_build_analog_trace` plukker driver-params fra første driver i analog-familien, kaller `find_analog_cases`, bygger trace med narrative-felter (n_neighbors, hit_rate_pct, avg_return_pct, dims_used, neighbors[]). UI-modal får `_analogHtml`-helper som rendrer "X av N steg ≥Y% innen Hd"-narrative + neighbor-mini-tabell. CSS for analog-tabell + pos/neg-fargekoder. End-to-end-verifisert: Gold MAKRO-signal har 5 naboer (topp: 2022-03-23 sim=0.955), JSON-roundtrip OK. 1155/1155 tester (+10 nye). **Fase 10 LUKKET — tag `v0.10.0-fase-10`.**
 - Session 62 lukket — Fase 11 åpning. Scaffold for backtest-rammeverket: ny modul `bedrock/backtest/` (config + result + report + runner) + ny CLI `bedrock backtest run` + demo-rapport `docs/backtest_2026-04_gold-corn.md` mot ekte data (Gold/Corn × 30d/90d). Outcome-replay leser pre-beregnet `analog_outcomes` — ingen as-of-date orchestrator-replay ennå (det er senere session). Hit-flag beregnes on-the-fly fra config-terskel slik at samme tabell kan re-aggregeres uten re-backfill. Sanity: Gold 2024 30d hit-rate 59.1%, avg +3.87% (matcher Gold-bull-året). 1183/1183 tester (+28 nye fordelt på 2 filer).
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
+- Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - **Branch:** `main` (jobber direkte på main, Nivå 1-modus). Bruker-beslutning 2026-04-25: bli på Nivå 1 til Fase 11 ferdig, bytt til Nivå 3 ved Fase 12 start.
 - **Blocked:** nei
-- **Next task:** **Session 64** = full 12-mnd-replay-rapport for Gold + Corn × 30d/90d (PLAN § 13 Fase 11 leveranse "rapport over signal-performance"). Wall-time-estimat: ~252 dager × 4 kombinasjoner × 2s = ~30 min med step_days=1. Med step_days=5 (ukentlig): ~50 dager × 4 × 2s = ~7 min. Output: oppdatert `docs/backtest_2026-04_orchestrator-replay.md` (eller ny `docs/backtest_fase11_full.md`) med per-instrument/horizon-tabeller. Etter dette: vurdere `compare_signals(v1, v2)` for regelsett-impact + evt. UI-fane (per § 11.5). Tag `v0.11.0-fase-11` ved fase-slutt.
+- **Next task:** **Session 65** = `compare_signals(v1, v2)` for regelsett-impact-tester (PLAN § 11.5). API: ta to BacktestResult og returnere diff per ref_date (score-δ, grade-overgang, hit-overgang). Markdown-rapport som viser hvilke ref_dates regelendringen påvirket. Bruk: redaktør endrer YAML i admin-UI → backtest både gammel + ny → diff-rapport viser hvor mye det monner. Etter session 65: vurder UI-fane for backtest-resultater (per § 11.5). Tag `v0.11.0-fase-11` når compare_signals er på plass + UI-fane (eller når brukeren bestemmer at vi er ferdige).
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) **ved Fase 12 start** per bruker-beslutning 2026-04-25.
 
 ## Open questions to user
@@ -126,6 +128,79 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 64: Fase 11 — full 12-mnd-rapport for Gold + Corn × 30/90d (LUKKET)
+
+**Scope:** PLAN § 13 Fase 11 leveranse: rapport over signal-performance.
+4 orchestrator-replay-kjøringer kombinert i én markdown-fil.
+
+**Endret denne session (commit `18ef671`):**
+
+`scripts/backtest_fase11_full.py` (ny, ~95 linjer):
+- 12-mnd-vindu (today-365d → today)
+- Itererer Gold + Corn × 30d + 90d med step_days=5 (ukentlig)
+- direction=buy (sell vil generere mirror-resultat)
+- Skriver hver kjøring som markdown-seksjon med per-grade-tabell
+- Total wall-time-rapportering
+
+`docs/backtest_fase11_full.md` (ny, ~120 linjer):
+- Hovedfunn-seksjon på toppen (5 punkter)
+- Per (instrument, horizon)-blokk med summary_stats + per-grade
+
+**Resultater:**
+
+| Instrument | h | n_sigs | Pub | Hit-rate | Avg ret | A+ hit | C hit |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Gold | 30d | 45 | 35 | 60.0% | +5.24% | 60.0% | — |
+| Gold | 90d | 33 | 33 | 100.0% | +22.38% | 100.0% | — |
+| Corn | 30d | 45 | 23 | 35.6% | +0.26% | 7.7% | 42.9% |
+| Corn | 90d | 33 | 13 | 51.5% | +3.19% | 16.7% | 65.0% |
+
+**Hovedfunn:**
+
+1. Gold er monotont scorende — A+/A er korrekt rangert.
+2. **Corn er invertert for buy.** A+ presterer dårligere enn C på begge
+   horisonter. Skyldes at Corn-rules vekter sterkt på sma200_align
+   (placeholder fra Fase 5) som gir høy buy-score under bull-trender,
+   men 2025-26 Corn har vært mean-reverting. Må fikses i Fase 6
+   (agri-drivere) — ikke Fase 11-blokker.
+3. Publish-floor er konservativt for Gold (78%/100%), riktig for Corn
+   (51%/39%).
+4. 90d > 30d for Gold (+22.4% vs +5.2%); motsatt for Corn (+3.2% vs +0.3%).
+5. Wall-time 4.7 min med step_days=5; ~25 min med daglig.
+
+**Designvalg:**
+
+- **Hovedfunn-seksjon i rapporten**: brukeren får raskt overblikk over
+  hva replayen forteller; tabellene under gir detaljer for de som vil
+  grave. Fortolkning av Corn-inversjon er flagget som anomali, ikke
+  som "bevis på at Corn-config er feil" — krever bekreftelse fra
+  bruker eller etter Fase 6.
+- **Direction=buy kun**: rapporten dekker kun én side. Sell-replay vil
+  speile resultatet (sell A+ = buy A+s motpart). For Fase 11-baseline
+  er buy nok; senere session kan rapportere begge hvis nødvendig.
+- **step_days=5 (ukentlig)**: balansert mellom presisjon og wall-time.
+  Daglig (step_days=1) ville gitt ~252 datapunkter per kjøring, 25 min
+  total — overkill for baseline-rapport.
+- **Script i scripts/ ikke i src/**: dette er en engangs-genereringsoppgave
+  som vi vil re-kjøre etter regelendringer. Ikke en del av runtime-API.
+  Hører i scripts/ som `migrate_agri_history.py` etc. (ikke testet
+  direkte; impl-en er testet via runner.py-tester).
+
+**Verifisert:**
+- Skript kjørte i 280.6s (4.7 min) uten exceptions
+- Rapport er lesbar og selvforklarende
+- pytest-status uendret (1212/1212 fra session 63)
+- Pre-commit + auto-push grønt
+
+**Neste session (65):**
+- `compare_signals(v1, v2)` for regelsett-impact-tester
+- Bruk: admin redigerer YAML → backtest både versjoner → diff-rapport
+  viser ref_dates der regelendringen flyttet score/grade/hit
+- Etter dette: vurder UI-fane for backtest-resultater (per § 11.5);
+  fase-tag `v0.11.0-fase-11` når brukeren bestemmer at vi er ferdige
+
+---
 
 ### 2026-04-25 — Session 63: Fase 11 — orchestrator-replay + AsOfDateStore + per-grade-breakdown (LUKKET)
 
