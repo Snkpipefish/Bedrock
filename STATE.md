@@ -11,13 +11,10 @@
 - Session 49 lukket — Fane 3 Soft commodities (samme kort-grid; backend klar fra 48).
 - Session 50 lukket — Fane 4 Kartrommet (pipeline-helse, gruppert per PLAN § 10.4). **Runde 1 LUKKET** — alle fire faner har funksjonell data-wiring.
 - **Pre-runde-2 cleanup (2026-04-25):** Python 3.10-baseline (ADR-004), CI bumpet til 3.10, pre-commit aktivert lokalt via `.githooks/pre-commit`-delegering, datetime.UTC reverted til timezone.utc i 20 filer. Pyright-step non-blocking i CI inntil 162 akkumulerte type-errors er ryddet (egen task).
+- Session 51 lukket — Filter-bar (horizon/grade/instrument/direction) på Skipsloggen + Financial + Soft commodities. Pure filter-logikk i `web/assets/filter.js`; 18 logiske tester (`tests/web/test_filter.test.mjs`).
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** **Runde 2 (sessions 51-53)** — styling, flyt, filtrering, detaljmodaler. Konkret scope for session 51 velges ved start:
-  - **Option A (polish-først):** farger + typografi + header + visuell hierarki. Gir umiddelbar UX-vin.
-  - **Option B (filter-først):** filter-bar på Skipsloggen (horizon/result/instrument) og setups-fanene (grade/instrument/direction). Funksjonell forbedring uten polish.
-  - **Option C (modal-først):** klikk-på-rad/kort åpner detaljmodal med explain-trace/analog-matcher. Forutsetter at backend eksponerer denne informasjonen — må kartlegges.
-- Runde 3 (sessions 54-55) er admin-rule-editor på separat URL med kode-gate.
+- **Next task:** **Session 52 (Option C — modal)**. Først kartlegg hva backend eksponerer av explain-trace (Fase 5 orchestrator skal allerede ha trace-strukturen), så implementer modal som åpnes ved klikk på trade-rad og setup-kort. Etter session 52: session 53 = Option A (polish — typografi/farger/hierarki/header).
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -99,6 +96,100 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 51: Fase 9 runde 2 — filter-bar (Option B)
+
+**Scope:** Første session i runde 2. Filter-bar over Skipsloggen + begge
+setups-faner. Klientsidig på allerede-fetchede entries — backend
+uberørt. KPI-sammendrag (Skipsloggen) aggregeres fortsatt over full
+logg; kun rad-listen filtreres. Bruker valgte Option B fra runde-2-
+trekanten (B før C/A) fordi B er backend-uavhengig og funksjonell
+forbedring større enn polish, mens C trenger explain-trace-API-
+kartlegging som er bedre som egen session.
+
+**Filter-akser per fane:**
+- Skipsloggen, Financial, Soft commodities: `direction`,
+  `grade`, `horizon`, `instrument`
+- Kartrommet: ingen (read-only pipeline-helse)
+
+**Filer endret/opprettet:**
+
+`web/assets/filter.js` (ny, 53 linjer):
+- Pure FLT-state per scope (skipsloggen / financial / agri)
+- `applyFilter(scope, items, axesOf)` — generisk på begge entry-
+  former
+- `fltAxesFromTrade(entry)` leser fra `.signal`-undertre (trade-log)
+- `fltAxesFromSetup(s)` leser top-level (setups)
+- CommonJS-eksport guardet mot browser (testbar fra Node uten DOM)
+
+`web/assets/app.js` (+85, -10):
+- Importerer filter.js som klassisk script-global
+- `wireFilterBar(scope, onChange)` + `buildFilterBarHtml()` +
+  `setFilterCount(scope, shown, total)` — DOM-glue
+- `TRADE_ENTRIES`, `FINANCIAL_SETUPS`, `AGRI_SETUPS` lagrer
+  unfiltered fetch-resultat
+- `renderTradeTableFiltered/renderFinancialFiltered/renderAgriFiltered`
+  — gjenrender post-filter
+- Tomt-state-tekst skiller "ingen treff" fra "ingen data"
+- KPI-render uberørt (bruker `summary` direkte fra `/trade_log/summary`
+  som aggregerer over full logg på server-siden)
+
+`web/index.html` (+5, -0):
+- 3 × `<div class="filter-bar-mount" data-flt-scope="...">`
+- `<script src="/assets/filter.js">` lastet før `app.js`
+
+`web/assets/style.css` (+82, -0):
+- `.filter-bar` + `.flt-pill` + `.flt-search` + `.flt-reset`
+- Aktiv pill = mørk navy; aktiv `data-val=BUY` grønn,
+  `data-val=SELL` rød (matcher eksisterende `.pos`/`.neg`)
+- Reset-knapp blir `:disabled` når ingen filter er aktiv
+
+`tests/web/test_filter.test.mjs` (ny, 18 tester):
+- `node --test` (built-in test-runner, ingen npm-deps)
+- Importerer filter.js via CommonJS-require
+- Dekker:
+  - `fltAxesFromTrade` leser `.signal`-undertre, `fltAxesFromSetup`
+    top-level
+  - Manglende `.signal` → tom-streng-akser (kun ALL matcher)
+  - `fltActive` false på fresh state, true ved én aktiv akse
+  - `applyFilter` per akse (dir / grade / horizon / instr-substring
+    case-insensitive)
+  - Stacking: 4 akser samtidig (BUY+A++SWING+gold) gir kun GOLD
+  - Skopisolasjon: mut av FLT.financial påvirker ikke FLT.agri
+  - Tom treff-liste returneres (ikke null)
+  - Trade-log: filter på `.signal.instrument` virker
+
+**Design-valg:**
+
+- **Pure-funksjon-utvinning:** filter-state og applyFilter ligger i
+  egen fil, ikke begravd i app.js. Test-kostnaden går fra "umulig
+  uten JSDOM" til "node --test importerer require". 53 linjer er
+  ikke over-engineering — det er én tydelig modul med ett ansvar.
+- **Klientside-filter:** API-rundtrip per filter-endring ville være
+  dårlig UX og krevd backend-endring. Allerede-fetchede entries
+  ligger i minne (≤ 100 trade-rader, ≤ ~20 setups) — filtrering er
+  trivielt billig.
+- **KPI uberørt:** Filter er en visnings-affordance, ikke en
+  scope-redusering. Captain-stats skal alltid vise full sannhet.
+- **`data-val`-styling:** BUY/SELL får farge-koding via attribute-
+  selektor i CSS. Ingen JS for å sette farger — den semantiske
+  HTML-attributten driver visning.
+- **`disabled`-reset:** Reset-knappen er disabled når
+  `fltActive(scope) === false`. Visuell hint at "ingenting å
+  nullstille". Implementert via `_syncBarUi`.
+
+**Verifisert:**
+- `node --test tests/web/test_filter.test.mjs` → 18/18 grønne
+- `pytest` (full suite) → 979/979 grønne
+- `curl` smoke: 3 mount-divs i `/index.html`, `/assets/filter.js` +
+  `/assets/app.js` serveres riktig
+
+**Commit:** `669e58b feat(ui): filter-bar (horizon/grade/instrument/
+direction) på Skipsloggen + setups`. Auto-pushet til origin/main.
+
+**Neste:** Session 52 = Option C (modal). Først kartlegg hva
+orchestrator/Engine eksponerer av explain-trace (Fase 5 har allerede
+struktur), så implementer modal ved klikk på trade-rad / setup-kort.
 
 ### 2026-04-25 — Pre-runde-2 cleanup: Python 3.10 + pre-commit + ADR-004
 
