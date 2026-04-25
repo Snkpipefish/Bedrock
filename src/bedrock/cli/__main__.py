@@ -17,6 +17,7 @@ from bedrock.cli.backtest import backtest
 from bedrock.cli.fetch import fetch
 from bedrock.cli.instruments import instruments
 from bedrock.cli.signals import signals_cmd
+from bedrock.cli.signals_all import signals_all_cmd
 from bedrock.cli.systemd import systemd
 
 
@@ -36,6 +37,7 @@ cli.add_command(backtest)
 cli.add_command(fetch)
 cli.add_command(instruments)
 cli.add_command(signals_cmd, name="signals")
+cli.add_command(signals_all_cmd)
 cli.add_command(systemd)
 
 

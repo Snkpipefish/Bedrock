@@ -12,8 +12,9 @@
   - **72:** Block B start — agri-drivere (`weather_stress` + `enso_regime`). Erstatter placeholder i Corn weather + enso-familier. **LUKKET 2026-04-25**
   - **73:** Validering — Corn-backtest re-run etter session 72. **Funn: Corn FORTSATT INVERTERT**. **LUKKET 2026-04-25**.
   - **74:** Block B fortsettelse — `seasonal_stage`-driver. Erstattet placeholders i Corn outlook/yield/cross. **Resultat: Corn-inversjonen er fjernet.** **LUKKET 2026-04-25**.
-  - **75:** Block C — 5 nye agri-instrumenter konfigurert (Cotton/Coffee/Soybean/Sugar/Wheat). Backfilt hver: ~4100 prices + 851 (eller 206 for Wheat) COT-rapporter. Crop-spesifikke seasonal_stage-kalendere. **Compare-rapport viser nå 6 felles signaler vs cot-explorer** (var 0). Observasjonsvinduet kan starte meningsfullt. **LUKKET 2026-04-25**.
-  - **76 (neste):** Block D start — `bedrock signals all`-CLI for å regenerere signals.json daglig som timer + pyright-cleanup (162 errors). Eller: gjenoppta Fase 12 observasjonsvindu nå som det er meningsfullt overlap.
+  - **75:** Block C — 5 nye agri-instrumenter. **Compare-rapport viser nå 6 felles signaler vs cot-explorer** (var 0). **LUKKET 2026-04-25**.
+  - **76:** Block D start — `bedrock signals-all`-CLI som regenererer signals.json fra alle YAMLer + systemd-timer (Mon-Fri 03:30, etter alle fetch-timere). 7 nye tester. **LUKKET 2026-04-26**. Manuell sudo-step gjenstår for å installere timer.
+  - **77 (neste):** pyright-cleanup eller gjenoppta Fase 12 obs-vindu nå som signals.json regenereres automatisk.
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -51,9 +52,14 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `feat/agri-instruments-block-c` (Nivå 3 — session 75). PR #1-#8 merget. 7 instrumenter konfigurert i bedrock (Gold, Corn, Cotton, Coffee, Soybean, Sugar, Wheat).
-- **Blocked:** nei.
-- **Next task:** **Session 76.** To alternativer: (a) Block D start — `bedrock signals all`-CLI + orchestrator-timer som regenererer signals.json daglig, slik at Fase 12 obs får ferske signaler å sammenligne; (b) gjenoppta Fase 12 observasjonsvindu (sub-session 68) nå som compare-script har 6 felles signaler å analysere; (c) pyright-cleanup (162 errors).
+- **Branch:** `feat/signals-cli-block-d` (Nivå 3 — session 76). PR #1-#9 merget. `bedrock signals-all`-CLI + systemd-timer-templates lagt til.
+- **Blocked:** Manuell sudo-step gjenstår — `bedrock-signals-all.timer` er ikke installert til /etc/systemd/system fordi sudo krever passord. Bruker kjører:
+  ```
+  sudo cp systemd/bedrock-signals-all.{service,timer} /etc/systemd/system/
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now bedrock-signals-all.timer
+  ```
+- **Next task:** **Session 77.** Etter timer er installert: gjenoppta Fase 12 obs-vindu eller pyright-cleanup (162 errors).
 - **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
 ## Open questions to user
@@ -141,6 +147,86 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-26 — Session 76: Sub-fase 12.5 Block D start — signals-all CLI + timer (LUKKET)
+
+**Scope:** Lag CLI for daglig regenerering av `data/signals.json` slik
+at Fase 12 obs-vindu kan sammenligne mot cot-explorer over tid (ikke
+bare en static-snapshot). Block C session 75 ga 6 felles signaler;
+uten daglig regenerering ville disse fryse.
+
+**Endret denne session (feature-branch `feat/signals-cli-block-d`):**
+
+`src/bedrock/cli/signals_all.py` (ny, ~165 linjer):
+- `bedrock signals-all`-kommando. Iterer over `*.yaml` i instruments-
+  dir, kjør orchestrator per instrument, samle alle entries til en
+  flat liste, skriv til ``--output`` (default `data/signals.json`).
+- `_discover_instrument_ids`: glob *.yaml, capitalize stem, skip
+  filer som starter med ``_`` eller ``family_``.
+- `--skip`-flag (kan gjentas) for å hoppe over instrumenter.
+- `--continue-on-error` (default på): én feil stopper ikke loopen,
+  men rapporteres til stderr.
+- Bruker `write_snapshot=False` for å ikke tukle med snapshot-filer
+  (CLI er stateless mht. setup-hysterese).
+
+`src/bedrock/cli/__main__.py`:
+- Registrerer `signals_all_cmd` som `bedrock signals-all`.
+
+`systemd/bedrock-signals-all.service` (ny):
+- Type=oneshot, ExecStart=`bedrock signals-all`
+- After= alle 3 hovedfetchere (prices, cot_disaggregated, fundamentals)
+
+`systemd/bedrock-signals-all.timer` (ny):
+- OnCalendar=Mon-Fri *-*-* 03:30:00
+- Persistent=true (catch-up etter reboot/missed-runs)
+- 03:30 er etter alle fetch-timere (02:30-03:00)
+
+`tests/unit/test_cli_signals_all.py` (ny, 7 tester):
+- _discover_instrument_ids: capitalize-pattern, skip _/family_,
+  empty/missing dir
+- signals_all_cmd: --skip-flag, --output, exit-codes ved missing-db
+  og empty-instruments-dir
+
+**End-to-end (smoke-test mot real data):**
+
+```
+$ bedrock signals-all
+  Cotton: 6 entries
+  Gold: 6 entries
+  Coffee: 6 entries
+  Corn: 6 entries
+  Soybean: 6 entries
+  Sugar: 6 entries
+  Wheat: 6 entries
+
+Wrote 42 entries from 7/7 instruments to data/signals.json
+```
+
+Wall-time ~20 sek for 7 instrumenter.
+
+**Tester:** 1359/1359 grønne (+7 nye).
+
+**Manuell sudo-step (ikke gjort programmatisk — sudo trenger passord):**
+
+```
+sudo cp systemd/bedrock-signals-all.service /etc/systemd/system/
+sudo cp systemd/bedrock-signals-all.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now bedrock-signals-all.timer
+```
+
+Etter at bruker kjører dette, vil signals.json regenereres mandag-
+fredag 03:30 og compare_signals_daily.py har ferske data å diff-e
+mot cot-explorer hver dag.
+
+**Beslutninger:**
+- `bedrock signals-all` som top-level command (ikke `bedrock signals --all`)
+  fordi det er en distinkt operasjon (batch vs single) og click-args er
+  ikke kompatible (instrument_id er positional og required for `signals`).
+- `--continue-on-error` default på fordi en feil i ett instrument ikke
+  skal blokkere de andre. Stderr-rapport gir synlighet.
+- Snapshot-skriving deaktivert i batch — orchestrator-snapshots er
+  per-instrument og brukes av interactive bedrock signals-flow.
 
 ### 2026-04-25 — Session 75: Sub-fase 12.5 Block C — 5 nye agri-instrumenter (LUKKET)
 

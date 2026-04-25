@@ -1,0 +1,14 @@
+# Generert av Block D session 76. Daglig regenerering av signals.json
+# kl 03:30 — etter at alle bedrock-fetch-*-timere er ferdige (de
+# kjører 02:30-03:00 mandag-fredag).
+[Unit]
+Description=Bedrock signals-all timer (daglig)
+Requires=bedrock-signals-all.service
+
+[Timer]
+OnCalendar=Mon-Fri *-*-* 03:30:00
+Persistent=true
+Unit=bedrock-signals-all.service
+
+[Install]
+WantedBy=timers.target

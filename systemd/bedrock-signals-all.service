@@ -1,0 +1,17 @@
+# Generert av Block D session 76. Etter alle fetchere har kjørt
+# (typisk 03:00) regenererer denne signals.json fra ferskeste data.
+# Brukes av compare-script + monitor-script under Fase 12 obs-vindu.
+[Unit]
+Description=Bedrock signals-all: regenerer data/signals.json fra alle YAMLer
+After=network-online.target bedrock-fetch-prices.service bedrock-fetch-cot_disaggregated.service bedrock-fetch-fundamentals.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/pc/bedrock
+ExecStart=/home/pc/bedrock/.venv/bin/bedrock signals-all
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
