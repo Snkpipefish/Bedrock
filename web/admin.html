@@ -2,15 +2,87 @@
 <html lang="no">
 <head>
     <meta charset="UTF-8">
-    <title>Bedrock admin</title>
-    <!--
-      Placeholder. Full admin-editor implementeres i Fase 8.
-      Kode-beskyttet rule-editor som POSTer til signal_server /admin/rules.
-      Se PLAN.md § 10.5.
-    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bedrock admin · rule-editor</title>
+    <link rel="stylesheet" href="/assets/style.css">
+    <link rel="stylesheet" href="/assets/admin.css">
 </head>
 <body>
-    <h1>Bedrock admin</h1>
-    <p>Admin-editor ikke implementert ennå. Se <code>PLAN.md § 10.5</code>.</p>
+    <header class="app-header">
+        <div class="app-header-row">
+            <h1>Bedrock <span class="admin-badge">admin</span></h1>
+            <span class="status-pill" id="server-status" data-status="unknown" title="Server-status">
+                <span class="dot"></span>
+                <span class="status-text">checking…</span>
+            </span>
+        </div>
+    </header>
+
+    <!-- Code-gate: vises før list/editor lastes -->
+    <section id="gate" class="admin-gate">
+        <div class="admin-gate-card">
+            <h2>Kode kreves</h2>
+            <p class="meta">
+                Denne siden er ikke linket fra dashbordet. Skriv inn admin-koden
+                (samme som <code>BEDROCK_ADMIN_CODE</code> i serverens env) for å
+                redigere instrument-regler.
+            </p>
+            <form id="gate-form" autocomplete="off">
+                <input type="password" id="gate-code" autocomplete="off"
+                       placeholder="admin-kode" required>
+                <label class="admin-gate-remember">
+                    <input type="checkbox" id="gate-remember">
+                    Husk for denne fanen
+                </label>
+                <button type="submit" class="btn btn-primary">Logg inn</button>
+            </form>
+            <p class="admin-gate-error" id="gate-error" hidden></p>
+        </div>
+    </section>
+
+    <!-- Hovedinnhold: skjult inntil gate passert -->
+    <main class="admin-main" id="admin-main" hidden>
+        <aside class="admin-sidebar">
+            <div class="admin-sidebar-head">
+                <h3>Instruments</h3>
+                <button class="btn btn-ghost btn-sm" id="reload-list" title="Reload-liste">↻</button>
+            </div>
+            <ul class="admin-instr-list" id="instr-list">
+                <li class="meta">Laster…</li>
+            </ul>
+            <button class="btn btn-ghost btn-sm" id="logout-btn" title="Glem koden">Logg ut</button>
+        </aside>
+
+        <section class="admin-editor-pane" id="editor-pane">
+            <div class="admin-editor-empty" id="editor-empty">
+                <p class="meta">Velg et instrument fra venstre for å redigere YAML.</p>
+            </div>
+
+            <div class="admin-editor-active" id="editor-active" hidden>
+                <header class="admin-editor-head">
+                    <div>
+                        <h2 id="editor-title">–</h2>
+                        <p class="meta" id="editor-path">–</p>
+                    </div>
+                    <div class="admin-editor-actions">
+                        <button class="btn btn-ghost" id="reload-btn" title="Forkast endringer">↻ Reload</button>
+                        <button class="btn btn-primary" id="save-btn" disabled>Lagre</button>
+                    </div>
+                </header>
+
+                <div class="admin-editor-meta" id="editor-meta">
+                    <span class="admin-dirty-indicator" id="dirty-indicator" hidden>● endringer ulagrede</span>
+                </div>
+
+                <textarea class="admin-yaml-editor" id="yaml-editor"
+                          spellcheck="false" autocomplete="off"
+                          autocapitalize="off" autocorrect="off"></textarea>
+
+                <div class="admin-editor-feedback" id="feedback" hidden></div>
+            </div>
+        </section>
+    </main>
+
+    <script src="/assets/admin.js"></script>
 </body>
 </html>

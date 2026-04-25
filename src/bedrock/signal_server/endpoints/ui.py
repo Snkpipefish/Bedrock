@@ -94,6 +94,22 @@ def index() -> Response:
     return send_from_directory(root, "index.html")
 
 
+@ui_bp.get("/admin")
+def admin() -> Response:
+    """Admin-rule-editor (Fase 9 runde 3 session 54).
+
+    Skjult URL — ikke linket fra index.html. Bruker når den via direkte
+    URL og oppgir `BEDROCK_ADMIN_CODE` i kode-gaten. Selve HTML-en er
+    public; alle skrive-handlinger går mot `/admin/rules`-endepunktene
+    som krever `X-Admin-Code`-header. PLAN § 10.5.
+    """
+    root = _web_root()
+    admin_path = root / "admin.html"
+    if not admin_path.exists():
+        abort(404, description=f"admin.html ikke funnet i {root}")
+    return send_from_directory(root, "admin.html")
+
+
 @ui_bp.get("/assets/<path:subpath>")
 def assets(subpath: str) -> Response:
     assets_root = _web_root() / "assets"

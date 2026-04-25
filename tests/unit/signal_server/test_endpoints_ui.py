@@ -33,6 +33,7 @@ def web_root(tmp_path: Path) -> Path:
     root = tmp_path / "web"
     root.mkdir()
     (root / "index.html").write_text("<html><body>Skipsloggen</body></html>")
+    (root / "admin.html").write_text("<html><body>Admin rule editor</body></html>")
     (root / "assets").mkdir()
     (root / "assets" / "app.js").write_text("console.log('hei');")
     (root / "assets" / "style.css").write_text("body { color: red; }")
@@ -142,6 +143,25 @@ def test_index_404_when_missing(tmp_path: Path) -> None:
     cfg = ServerConfig(web_root=empty, trade_log_path=tmp_path / "x.json")
     app = create_app(cfg)
     r = app.test_client().get("/")
+    assert r.status_code == 404
+
+
+def test_admin_serves_html(client: FlaskClient) -> None:
+    """Fase 9 runde 3 session 54: /admin serverer admin.html. Ikke
+    linket fra index.html — bruker når den via direkte URL + kode-gate."""
+    r = client.get("/admin")
+    assert r.status_code == 200
+    assert b"Admin rule editor" in r.data
+
+
+def test_admin_404_when_missing(tmp_path: Path) -> None:
+    """web_root finnes men admin.html mangler → 404."""
+    empty = tmp_path / "web_no_admin"
+    empty.mkdir()
+    (empty / "index.html").write_text("<html></html>")
+    cfg = ServerConfig(web_root=empty, trade_log_path=tmp_path / "x.json")
+    app = create_app(cfg)
+    r = app.test_client().get("/admin")
     assert r.status_code == 404
 
 
