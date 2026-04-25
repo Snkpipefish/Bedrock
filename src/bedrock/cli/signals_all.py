@@ -112,15 +112,16 @@ def signals_all_cmd(
     til en flat liste, og skriv til ``output_path``. Brukes av systemd-
     timer for daglig regenerering.
     """
-    if not db_path.exists():
-        raise click.UsageError(
-            f"DB-fil finnes ikke: {db_path}. Kjør `bedrock backfill prices` først."
-        )
-
+    # Sjekk instruments-dir først (rask, ingen avhengighet) før DB.
     instruments = _discover_instrument_ids(instruments_dir)
     if not instruments:
         raise click.UsageError(
             f"Ingen instrumenter funnet i {instruments_dir}. Forventer *.yaml-filer."
+        )
+
+    if not db_path.exists():
+        raise click.UsageError(
+            f"DB-fil finnes ikke: {db_path}. Kjør `bedrock backfill prices` først."
         )
 
     skip_lower = {s.lower() for s in skip_instruments}

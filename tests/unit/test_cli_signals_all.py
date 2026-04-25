@@ -56,6 +56,11 @@ def test_discover_returns_empty_for_empty_dir(tmp_path: Path) -> None:
 
 def test_signals_all_writes_output(tmp_path: Path) -> None:
     """End-to-end: kjør mot real prosjekt-DB + config-dir, sjekk JSON."""
+    import pytest
+
+    if not Path("data/bedrock.db").exists():
+        pytest.skip("data/bedrock.db not backfilled — run `bedrock backfill ...` first")
+
     runner = CliRunner()
     output = tmp_path / "signals.json"
     result = runner.invoke(
@@ -86,15 +91,21 @@ def test_signals_all_fails_on_missing_db(tmp_path: Path) -> None:
 
 
 def test_signals_all_fails_on_empty_instruments_dir(tmp_path: Path) -> None:
-    """Tom instruments-dir = UsageError."""
+    """Tom instruments-dir = UsageError. Ingen DB-avhengighet (sjekk
+    rekkefølge: instruments-dir valideres før DB).
+    """
     runner = CliRunner()
     empty_dir = tmp_path / "empty"
     empty_dir.mkdir()
+    fake_db = tmp_path / "fake.db"
+    fake_db.touch()  # eksisterer, så DB-check passerer
     result = runner.invoke(
         signals_all_cmd,
         [
             "--instruments-dir",
             str(empty_dir),
+            "--db",
+            str(fake_db),
         ],
     )
     assert result.exit_code != 0
