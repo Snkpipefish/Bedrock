@@ -326,9 +326,7 @@ def load_bot_config_from_yaml_string(text: str) -> BotConfig:
     """Parse en YAML-streng til BotConfig. Tom streng → defaults."""
     data: Any = yaml.safe_load(text) or {}
     if not isinstance(data, dict):
-        raise ValueError(
-            f"bot.yaml top-level må være mapping, fikk {type(data).__name__}"
-        )
+        raise ValueError(f"bot.yaml top-level må være mapping, fikk {type(data).__name__}")
     return BotConfig.model_validate(data)
 
 
@@ -337,9 +335,7 @@ def load_bot_config_from_yaml_string(text: str) -> BotConfig:
 # ─────────────────────────────────────────────────────────────
 
 
-def diff_startup_only(
-    current: StartupOnlyConfig, proposed: StartupOnlyConfig
-) -> list[str]:
+def diff_startup_only(current: StartupOnlyConfig, proposed: StartupOnlyConfig) -> list[str]:
     """Returner liste av felt-paths som er endret i `proposed` vs `current`.
 
     Returnerer tom liste hvis identiske. Feilmelding er egnet for å logge
@@ -352,9 +348,7 @@ def diff_startup_only(
     return diffs
 
 
-def _walk_diff(
-    cur: Any, new: Any, *, prefix: str, out: list[str]
-) -> None:
+def _walk_diff(cur: Any, new: Any, *, prefix: str, out: list[str]) -> None:
     if isinstance(cur, dict) and isinstance(new, dict):
         keys = set(cur.keys()) | set(new.keys())
         for k in sorted(keys):
@@ -364,9 +358,7 @@ def _walk_diff(
         out.append(f"{prefix}: {cur!r} → {new!r}")
 
 
-def apply_reloadable_inplace(
-    current: ReloadableConfig, new: ReloadableConfig
-) -> None:
+def apply_reloadable_inplace(current: ReloadableConfig, new: ReloadableConfig) -> None:
     """Muter `current` in-place til å matche `new`'s felter.
 
     Trengs av SIGHUP-handleren i `bot/__main__.py`: alle bot-moduler
@@ -379,9 +371,7 @@ def apply_reloadable_inplace(
         setattr(current, name, getattr(new, name))
 
 
-def reload_bot_config(
-    path: Path | str | None, current: BotConfig
-) -> tuple[BotConfig, list[str]]:
+def reload_bot_config(path: Path | str | None, current: BotConfig) -> tuple[BotConfig, list[str]]:
     """SIGHUP-reload-entry.
 
     Leser YAML på nytt, holder `current.startup_only` aktiv og bytter

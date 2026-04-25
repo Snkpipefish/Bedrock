@@ -20,7 +20,6 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # ---------------------------------------------------------------------------
 # PriceBar — én OHLCV-bar for (instrument, tf, ts)
 # ---------------------------------------------------------------------------

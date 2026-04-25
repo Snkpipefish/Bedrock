@@ -57,9 +57,7 @@ def instruments() -> None:
 def list_cmd(instruments_dir: Path, defaults_dir: Path) -> None:
     """List alle instrumenter i katalog med sentral metadata."""
     if not instruments_dir.exists():
-        raise click.UsageError(
-            f"Instruments directory not found: {instruments_dir}"
-        )
+        raise click.UsageError(f"Instruments directory not found: {instruments_dir}")
 
     try:
         configs = load_all_instruments(instruments_dir, defaults_dir=defaults_dir)
@@ -70,7 +68,9 @@ def list_cmd(instruments_dir: Path, defaults_dir: Path) -> None:
         click.echo(f"(ingen instrumenter i {instruments_dir})")
         return
 
-    header = f"{'id':<12} {'asset_class':<10} {'ticker':<10} {'cot_contract':<40} {'weather':<15} fred"
+    header = (
+        f"{'id':<12} {'asset_class':<10} {'ticker':<10} {'cot_contract':<40} {'weather':<15} fred"
+    )
     click.echo(header)
     click.echo("-" * len(header))
     for inst_id in sorted(configs.keys()):

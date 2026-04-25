@@ -19,7 +19,7 @@ Flyt per (direction, horizon)-kombinasjon:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -57,7 +57,6 @@ from bedrock.setups.levels import (
     rank_levels,
 )
 from bedrock.setups.snapshot import load_snapshot, save_snapshot
-
 
 # ---------------------------------------------------------------------------
 # Result-modeller
@@ -124,9 +123,7 @@ def _horizon_from_name(name: str) -> Horizon:
     """Bruker-input (uppercase/lowercase) → Horizon-enum."""
     upper = name.upper()
     if upper not in _YAML_TO_ENUM:
-        raise OrchestratorError(
-            f"Unknown horizon {name!r}. Valid: {sorted(_YAML_TO_ENUM.keys())}"
-        )
+        raise OrchestratorError(f"Unknown horizon {name!r}. Valid: {sorted(_YAML_TO_ENUM.keys())}")
     return _YAML_TO_ENUM[upper]
 
 
@@ -174,7 +171,7 @@ def generate_signals(
         defaults_dir=defaults_dir,
     )
 
-    run_ts = now or datetime.now(timezone.utc)
+    run_ts = now or datetime.now(UTC)
     directions_list = directions if directions is not None else [Direction.BUY, Direction.SELL]
     horizons_list = _resolve_horizons(cfg, horizons)
 
@@ -182,8 +179,7 @@ def generate_signals(
     ohlc = store.get_prices_ohlc(cfg.instrument.id, price_tf, price_lookback)
     if len(ohlc) < 2:
         raise OrchestratorError(
-            f"Ikke nok prisdata for {cfg.instrument.id} "
-            f"({len(ohlc)} barer, behov ≥ 2)."
+            f"Ikke nok prisdata for {cfg.instrument.id} ({len(ohlc)} barer, behov ≥ 2)."
         )
     current_price = float(ohlc["close"].iloc[-1])
     atr = compute_atr(ohlc)
@@ -237,9 +233,7 @@ def generate_signals(
 # ---------------------------------------------------------------------------
 
 
-def _resolve_horizons(
-    cfg: InstrumentConfig, requested: list[str] | None
-) -> list[Horizon]:
+def _resolve_horizons(cfg: InstrumentConfig, requested: list[str] | None) -> list[Horizon]:
     """Bestem hvilke horisonter som skal genereres for.
 
     YAML-nøkler er uppercase ("SCALP" etc.); enum-verdier er lowercase.
@@ -315,13 +309,11 @@ def _compute_scores(
     eng = engine or Engine()
     if isinstance(cfg.rules, AgriRules):
         single = eng.score(cfg.instrument.id, store, cfg.rules, horizon=None)
-        return {h: single for h in horizons}
+        return dict.fromkeys(horizons, single)
 
     assert isinstance(cfg.rules, FinancialRules)  # nosec B101
     return {
-        h: eng.score(
-            cfg.instrument.id, store, cfg.rules, horizon=_yaml_key_from_horizon(h)
-        )
+        h: eng.score(cfg.instrument.id, store, cfg.rules, horizon=_yaml_key_from_horizon(h))
         for h in horizons
     }
 
@@ -410,4 +402,4 @@ def _build_entry(
     )
 
 
-__all__ = ["SignalEntry", "OrchestratorResult", "generate_signals"]
+__all__ = ["OrchestratorResult", "SignalEntry", "generate_signals"]

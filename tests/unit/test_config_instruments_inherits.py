@@ -18,7 +18,6 @@ from bedrock.config.instruments import (
 )
 from bedrock.engine.engine import AgriRules, FinancialRules
 
-
 # ---------------------------------------------------------------------------
 # Hjelpere
 # ---------------------------------------------------------------------------
@@ -298,9 +297,7 @@ def test_non_string_inherits_errors(tmp_path: Path) -> None:
     defaults = tmp_path / "defaults"
     defaults.mkdir()
     inst = tmp_path / "x.yaml"
-    inst.write_text(
-        "inherits: [a, b]\ninstrument: {id: X, asset_class: fx, ticker: X}\n"
-    )
+    inst.write_text("inherits: [a, b]\ninstrument: {id: X, asset_class: fx, ticker: X}\n")
     with pytest.raises(InstrumentConfigError, match="inherits.*must be a string"):
         load_instrument_config(inst, defaults_dir=defaults)
 

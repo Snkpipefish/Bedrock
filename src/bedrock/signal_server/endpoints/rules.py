@@ -52,9 +52,7 @@ def _check_auth() -> tuple[object, int] | None:
     cfg = _get_config()
     if cfg.admin_code is None:
         return (
-            jsonify(
-                {"error": "admin-endepunkter er ikke konfigurert"}
-            ),
+            jsonify({"error": "admin-endepunkter er ikke konfigurert"}),
             503,
         )
     header = request.headers.get("X-Admin-Code")

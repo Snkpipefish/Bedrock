@@ -36,10 +36,11 @@ from __future__ import annotations
 import logging
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
 
 import requests
 
@@ -70,9 +71,7 @@ def _noop(*_args: Any, **_kwargs: Any) -> None:  # pragma: no cover
 # ─────────────────────────────────────────────────────────────
 
 
-def adaptive_poll_interval(
-    signals_data: Optional[dict[str, Any]], cfg: PollingConfig
-) -> int:
+def adaptive_poll_interval(signals_data: dict[str, Any] | None, cfg: PollingConfig) -> int:
     """Returner kort intervall hvis SCALP-signaler er aktive, ellers default.
 
     Matcher scalp_edge:`_fetch_signals_loop` semantikk — sjekker
@@ -160,9 +159,7 @@ def commit_daily_trade_log(
         text=True,
     )
     if add_result.returncode != 0:
-        log.warning(
-            "[TRADE-LOG] git add feilet: %s", add_result.stderr.strip()
-        )
+        log.warning("[TRADE-LOG] git add feilet: %s", add_result.stderr.strip())
         return False
 
     # git commit — kan returnere 1 hvis ingen endringer, det er OK
@@ -200,7 +197,7 @@ def commit_daily_trade_log(
 class FetchResult:
     """Resultat fra fetch_signals — makes tester enklere enn tuple-return."""
 
-    signals_data: Optional[dict[str, Any]]
+    signals_data: dict[str, Any] | None
     kill_ids: list[str]
 
 
@@ -220,7 +217,7 @@ class SignalComms:
         safety: SafetyMonitor,
         on_signals: Callable[[dict[str, Any]], None] = _noop,
         on_kill_ids: Callable[[list[str]], None] = _noop,
-        session: Optional[requests.Session] = None,
+        session: requests.Session | None = None,
     ) -> None:
         self._url = startup_cfg.signal_url.rstrip("/")
         self._api_key = api_key
@@ -231,14 +228,12 @@ class SignalComms:
         self._schema_warned: set[str] = set()
         # Siste mottatte signal-data — brukes av caller til å beregne
         # adaptiv poll-intervall
-        self.latest_signals: Optional[dict[str, Any]] = None
+        self.latest_signals: dict[str, Any] | None = None
 
     def _headers(self) -> dict[str, str]:
         return {"X-API-Key": self._api_key} if self._api_key else {}
 
-    def _fetch_with_retry(
-        self, path: str, *, timeout: int
-    ) -> Optional[requests.Response]:
+    def _fetch_with_retry(self, path: str, *, timeout: int) -> requests.Response | None:
         """GET med 3-trinns retry (0/1/3 s backoff). Retry kun på 5xx og
         nettverksfeil; 4xx returneres umiddelbart. Returnerer None hvis
         siste forsøk kastet eksepsjon.
@@ -248,7 +243,7 @@ class SignalComms:
         """
         url = f"{self._url}{path}"
         headers = self._headers()
-        last_exc: Optional[Exception] = None
+        last_exc: Exception | None = None
         for i, d in enumerate(_RETRY_DELAYS):
             if d:
                 time.sleep(d)
@@ -275,7 +270,7 @@ class SignalComms:
     # Public HTTP-operasjoner
     # ─────────────────────────────────────────────────────────
 
-    def fetch_signals(self) -> Optional[dict[str, Any]]:
+    def fetch_signals(self) -> dict[str, Any] | None:
         """Hent /signals. Oppdaterer safety-tellere + `latest_signals` +
         kaller `on_signals`-callback med parsed dict. Returnerer dict
         eller None ved feil."""
@@ -365,9 +360,7 @@ class SignalComms:
                 timeout=5,
             )
             ok = 200 <= resp.status_code < 300
-            log.info(
-                "[PRISER] %d priser pushet → HTTP %d", len(prices), resp.status_code
-            )
+            log.info("[PRISER] %d priser pushet → HTTP %d", len(prices), resp.status_code)
             return ok
         except Exception as exc:
             log.warning("[PRISER] Push feilet: %s", exc)

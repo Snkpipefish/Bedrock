@@ -16,7 +16,6 @@ from bedrock.setups.levels import (
     rank_levels,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -34,10 +33,10 @@ def _ohlc_from_highs_lows(
     ts = pd.date_range(start, periods=n, freq=freq)
     return pd.DataFrame(
         {
-            "open": [(h + l) / 2 for h, l in zip(highs, lows, strict=True)],
+            "open": [(h + lo) / 2 for h, lo in zip(highs, lows, strict=True)],
             "high": highs,
             "low": lows,
-            "close": [(h + l) / 2 for h, l in zip(highs, lows, strict=True)],
+            "close": [(h + lo) / 2 for h, lo in zip(highs, lows, strict=True)],
         },
         index=ts,
     )
@@ -222,17 +221,13 @@ def test_prior_monthly_period_accepted() -> None:
 
 
 def test_round_numbers_above_and_below() -> None:
-    levels = detect_round_numbers(
-        current_price=2003.5, step=10.0, count_above=3, count_below=3
-    )
+    levels = detect_round_numbers(current_price=2003.5, step=10.0, count_above=3, count_below=3)
     prices = sorted(lvl.price for lvl in levels)
     assert prices == [1980.0, 1990.0, 2000.0, 2010.0, 2020.0, 2030.0]
 
 
 def test_round_numbers_strength_scales_with_trailing_zeros() -> None:
-    levels = detect_round_numbers(
-        current_price=2003.5, step=10.0, count_above=3, count_below=3
-    )
+    levels = detect_round_numbers(current_price=2003.5, step=10.0, count_above=3, count_below=3)
     by_price = {lvl.price: lvl.strength for lvl in levels}
 
     # 2000 / 10 = 200 → 2 trailing zeros → 0.9
@@ -267,9 +262,7 @@ def test_round_numbers_type_is_round_number() -> None:
 
 def test_round_numbers_fine_step_for_fx() -> None:
     """EURUSD-lignende: step 0.01."""
-    levels = detect_round_numbers(
-        current_price=1.0957, step=0.01, count_above=2, count_below=2
-    )
+    levels = detect_round_numbers(current_price=1.0957, step=0.01, count_above=2, count_below=2)
     prices = sorted(round(lvl.price, 4) for lvl in levels)
     # current=1.0957, step=0.01 → nærmeste over = 1.10, under = 1.09
     assert prices == [1.08, 1.09, 1.1, 1.11]

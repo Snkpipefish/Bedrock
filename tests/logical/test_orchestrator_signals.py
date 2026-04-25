@@ -7,7 +7,7 @@ at build_setup faktisk kan finne nivåer.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from textwrap import dedent
 
@@ -21,7 +21,6 @@ from bedrock.data.store import DataStore
 from bedrock.orchestrator import generate_signals
 from bedrock.orchestrator.score import OrchestratorError
 from bedrock.setups.generator import Direction, Horizon
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -150,7 +149,7 @@ def test_generate_signals_financial_end_to_end(
     instruments_dir: Path,
 ) -> None:
     _write_gold(instruments_dir)
-    now = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    now = datetime(2024, 1, 1, tzinfo=UTC)
 
     result = generate_signals(
         "Gold",
@@ -185,7 +184,7 @@ def test_generate_signals_with_snapshot_persists_stable_id(
     _write_gold(instruments_dir)
     snapshot = tmp_path / "last_run.json"
 
-    first_ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    first_ts = datetime(2024, 1, 1, tzinfo=UTC)
     first = generate_signals(
         "Gold",
         store_with_wavy_prices,
@@ -197,7 +196,7 @@ def test_generate_signals_with_snapshot_persists_stable_id(
     assert first.snapshot_written == snapshot
     assert snapshot.exists()
 
-    second_ts = datetime(2024, 1, 2, tzinfo=timezone.utc)
+    second_ts = datetime(2024, 1, 2, tzinfo=UTC)
     second = generate_signals(
         "Gold",
         store_with_wavy_prices,
@@ -209,12 +208,10 @@ def test_generate_signals_with_snapshot_persists_stable_id(
 
     # For hvert matchende slot: setup_id og first_seen uendret, last_updated oppdatert
     first_buy = next(
-        e for e in first.entries
-        if e.direction == Direction.BUY and e.setup is not None
+        e for e in first.entries if e.direction == Direction.BUY and e.setup is not None
     )
     second_buy = next(
-        e for e in second.entries
-        if e.direction == Direction.BUY and e.setup is not None
+        e for e in second.entries if e.direction == Direction.BUY and e.setup is not None
     )
     assert first_buy.setup is not None
     assert second_buy.setup is not None

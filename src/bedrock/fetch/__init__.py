@@ -12,5 +12,5 @@ cadence (se PLAN § 7).
 # Side-effekt-import: registrerer `usda_blackout`-gate i gates-registry
 # slik at den er tilgjengelig via get_gate() uten eksplisitt import fra
 # caller. Ligger nederst for å unngå sirkulær-import.
-# ruff: noqa: E402, F401
-from bedrock.fetch import usda_calendar  # noqa: E402
+# ruff: noqa: F401
+from bedrock.fetch import usda_calendar

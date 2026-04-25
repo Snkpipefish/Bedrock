@@ -5,10 +5,10 @@ from __future__ import annotations
 import pytest
 
 from bedrock.engine.gates import (
+    _REGISTRY,  # type: ignore[attr-defined]
+    VALID_CAP_GRADES,
     GateContext,
     GateSpec,
-    VALID_CAP_GRADES,
-    _REGISTRY,  # type: ignore[attr-defined]
     all_gate_names,
     apply_gates,
     cap_grade,
@@ -16,7 +16,6 @@ from bedrock.engine.gates import (
     get_gate,
     is_gate_registered,
 )
-
 
 # ---------------------------------------------------------------------------
 # Registry
@@ -118,13 +117,13 @@ def test_valid_cap_grades_contains_both_conventions() -> None:
 
 
 def _ctx(**overrides) -> GateContext:
-    defaults: dict = dict(
-        instrument="Test",
-        score=1.0,
-        max_score=5.0,
-        active_families=3,
-        family_scores={"trend": 1.0},
-    )
+    defaults: dict = {
+        "instrument": "Test",
+        "score": 1.0,
+        "max_score": 5.0,
+        "active_families": 3,
+        "family_scores": {"trend": 1.0},
+    }
     defaults.update(overrides)
     return GateContext(**defaults)
 

@@ -20,7 +20,6 @@ from bedrock.signal_server.schemas import (
 )
 from bedrock.signal_server.storage import load_signals
 
-
 # ---------------------------------------------------------------------------
 # PersistedSignal schema
 # ---------------------------------------------------------------------------
@@ -134,7 +133,7 @@ def test_load_non_array_root_raises(tmp_path: Path) -> None:
 
 def test_load_non_object_row_raises(tmp_path: Path) -> None:
     path = tmp_path / "signals.json"
-    path.write_text('[1, 2, 3]', encoding="utf-8")
+    path.write_text("[1, 2, 3]", encoding="utf-8")
     with pytest.raises(SignalStoreError, match="objekt"):
         load_signals(path)
 

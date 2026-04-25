@@ -50,11 +50,10 @@ import json
 import logging
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
-from typing import TYPE_CHECKING, Any, Optional
-
+from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
 from bedrock.bot.config import ReloadableConfig
@@ -94,8 +93,8 @@ class ExitEngine:
         safety: SafetyMonitor,
         config: ReloadableConfig,
         active_states: list[TradeState],
-        entry: "EntryEngine",
-        trade_log_path: Optional[Path] = None,
+        entry: EntryEngine,
+        trade_log_path: Path | None = None,
     ) -> None:
         self._client = client
         self._safety = safety
@@ -132,12 +131,8 @@ class ExitEngine:
             horizon = state.horizon or "SCALP"
             # SWING/MAKRO bruker 1H ATR/EMA; SCALP bruker 15m
             if horizon in ("SWING", "MAKRO"):
-                atr = self._entry.get_atr14_h1(symbol_id) or self._entry.get_atr14(
-                    symbol_id
-                )
-                ema_c = self._entry.get_ema9_h1(symbol_id, 0) or self._entry.get_ema9(
-                    symbol_id, 0
-                )
+                atr = self._entry.get_atr14_h1(symbol_id) or self._entry.get_atr14(symbol_id)
+                ema_c = self._entry.get_ema9_h1(symbol_id, 0) or self._entry.get_ema9(symbol_id, 0)
             else:
                 atr = self._entry.get_atr14(symbol_id)
                 ema_c = self._entry.get_ema9(symbol_id, 0)
@@ -151,11 +146,7 @@ class ExitEngine:
 
             # ── P1: Geo-spike ────────────────────────────────
             if atr:
-                move_against = (
-                    close - state.entry_price
-                    if is_sell
-                    else state.entry_price - close
-                )
+                move_against = close - state.entry_price if is_sell else state.entry_price - close
                 if move_against > geo_mult * atr:
                     log.warning(
                         "[GEO-SPIKE] %s — %.5f > %.2f×ATR. STENGER.",
@@ -177,36 +168,25 @@ class ExitEngine:
             # ── P2.5: Weekend-gate ───────────────────────────
             weekend = self._weekend_action()
             if weekend["close_scalp"] and horizon == "SCALP":
-                log.info(
-                    "[WEEKEND] %s SCALP — stenger før helg.", state.signal_id
-                )
+                log.info("[WEEKEND] %s SCALP — stenger før helg.", state.signal_id)
                 self._close_all(state, close, "WEEKEND-CLOSE")
                 remove.append(state)
                 continue
-            if (
-                weekend["tighten_sl"]
-                and horizon in ("SWING", "MAKRO")
-                and atr is not None
-            ):
+            if weekend["tighten_sl"] and horizon in ("SWING", "MAKRO") and atr is not None:
                 tighter_sl = self._compute_weekend_sl(state, close, atr)
                 if tighter_sl is not None:
                     old_sl = state.stop_price
                     state.stop_price = tighter_sl
-                    self._client.amend_sl_tp(
-                        position_id=state.position_id, stop_loss=tighter_sl
-                    )
+                    self._client.amend_sl_tp(position_id=state.position_id, stop_loss=tighter_sl)
                     log.info(
-                        "[WEEKEND] %s SL strammet: %.5f → %.5f "
-                        "(%.1f×ATR)",
+                        "[WEEKEND] %s SL strammet: %.5f → %.5f (%.1f×ATR)",
                         state.signal_id,
                         old_sl,
                         tighter_sl,
                         self._config.weekend.sl_atr_mult,
                     )
 
-            gp = self._config.group_params.get(
-                get_group_name(state.instrument or "")
-            )
+            gp = self._config.group_params.get(get_group_name(state.instrument or ""))
             if gp is None:
                 gp = self._config.group_params["fx"]
             progress = self._compute_progress(state, close)
@@ -223,21 +203,13 @@ class ExitEngine:
 
             # ── P3: T1 nådd (partial close + BE + trail-aktiv) ──
             if not state.t1_price_reached:
-                t1_reached = (
-                    close <= state.t1_price
-                    if is_sell
-                    else close >= state.t1_price
-                )
+                t1_reached = close <= state.t1_price if is_sell else close >= state.t1_price
                 if t1_reached:
                     t1_close_pct = hcfg.get("exit_t1_close_pct", 0.50)
-                    close_vol, remaining = self._calc_close_volume(
-                        state, t1_close_pct
-                    )
+                    close_vol, remaining = self._calc_close_volume(state, t1_close_pct)
                     forced_full = remaining == 0
                     pnl_vol = close_vol
-                    self._client.close_position(
-                        position_id=state.position_id, volume=close_vol
-                    )
+                    self._client.close_position(position_id=state.position_id, volume=close_vol)
                     state.remaining_volume = remaining
                     self._set_break_even(state, symbol_id)
                     state.t1_price_reached = True
@@ -246,8 +218,7 @@ class ExitEngine:
                     trail_mult = self._resolve_trail_mult(state, hcfg, rules, gp)
                     self._update_trail(state, close, symbol_id, trail_mult)
                     log.info(
-                        "[T1] %s — T1 nådd. Stengte %d enheter (%s). "
-                        "Trail aktivert.",
+                        "[T1] %s — T1 nådd. Stengte %d enheter (%s). Trail aktivert.",
                         state.signal_id,
                         close_vol,
                         "hele" if forced_full else "50%",
@@ -263,11 +234,7 @@ class ExitEngine:
             if state.trail_active and state.trail_level is not None:
                 trail_mult = self._resolve_trail_mult(state, hcfg, rules, gp)
                 self._update_trail(state, close, symbol_id, trail_mult)
-                trail_hit = (
-                    close < state.trail_level
-                    if not is_sell
-                    else close > state.trail_level
-                )
+                trail_hit = close < state.trail_level if not is_sell else close > state.trail_level
                 if trail_hit:
                     log.info(
                         "[TRAIL STOP] %s — close %.5f brøt trail %.5f. Stenger.",
@@ -315,15 +282,11 @@ class ExitEngine:
             # ── P5a: Timeout ──────────────────────────────────
             exp = state.expiry_candles
             timeout_partial_pct = hcfg.get("exit_timeout_partial_pct", 0.50)
-            if (
-                not state.t1_price_reached
-                and state.candles_since_entry >= exp
-            ):
+            if not state.t1_price_reached and state.candles_since_entry >= exp:
                 if progress > timeout_partial_pct:
                     base_trail = self._resolve_trail_mult(state, hcfg, rules, gp)
                     log.info(
-                        "[TIMEOUT] %s — progress=%.0f%% > %.0f%%. "
-                        "Aktiverer trailing, gir mer tid.",
+                        "[TIMEOUT] %s — progress=%.0f%% > %.0f%%. Aktiverer trailing, gir mer tid.",
                         state.signal_id,
                         progress * 100,
                         timeout_partial_pct * 100,
@@ -378,9 +341,7 @@ class ExitEngine:
             return {"close_scalp": False, "tighten_sl": True}
         return {"close_scalp": False, "tighten_sl": False}
 
-    def _compute_weekend_sl(
-        self, state: TradeState, close: float, atr: float
-    ) -> Optional[float]:
+    def _compute_weekend_sl(self, state: TradeState, close: float, atr: float) -> float | None:
         """Returnerer strammere weekend-SL (mult×ATR fra nåpris), eller None
         hvis ny SL ikke er strammere enn nåværende. Portert fra
         `trading_bot.py:_compute_weekend_sl` (1762-1773)."""
@@ -403,16 +364,12 @@ class ExitEngine:
             return (close - state.entry_price) / t1_dist
         return (state.entry_price - close) / t1_dist
 
-    def _update_trail(
-        self, state: TradeState, close: float, symbol_id: int, mult: float
-    ) -> None:
+    def _update_trail(self, state: TradeState, close: float, symbol_id: int, mult: float) -> None:
         """Ratchet trail-level og send amend til cTrader hvis forbedret.
         Portert fra `trading_bot.py:_update_trail` (2617-2659)."""
         horizon = state.horizon or "SCALP"
         if horizon in ("SWING", "MAKRO"):
-            atr = self._entry.get_atr14_h1(symbol_id) or self._entry.get_atr14(
-                symbol_id
-            ) or 0.0
+            atr = self._entry.get_atr14_h1(symbol_id) or self._entry.get_atr14(symbol_id) or 0.0
         else:
             atr = self._entry.get_atr14(symbol_id) or 0.0
         if not atr:
@@ -430,12 +387,7 @@ class ExitEngine:
                 state.trail_level = new_trail
 
         # M10: Advar hvis trail betydelig overskriver reconciled-SL
-        if (
-            state.reconciled
-            and state.reconciled_sl
-            and atr
-            and state.trail_level is not None
-        ):
+        if state.reconciled and state.reconciled_sl and atr and state.trail_level is not None:
             divergence = abs(state.trail_level - state.reconciled_sl)
             if divergence > atr and not getattr(state, "_m10_trail_logged", False):
                 log.warning(
@@ -448,22 +400,19 @@ class ExitEngine:
                 )
                 state._m10_trail_logged = True  # type: ignore[attr-defined]
 
-        self._client.amend_sl_tp(
-            position_id=state.position_id, stop_loss=state.trail_level
-        )
+        self._client.amend_sl_tp(position_id=state.position_id, stop_loss=state.trail_level)
 
     def _set_break_even(self, state: TradeState, symbol_id: int) -> None:
         """Flytt SL til break-even + ATR-buffer (post-T1).
         Portert fra `trading_bot.py:_set_break_even` (2531-2584)."""
         rules = (self._entry.signal_data or {}).get("rules", {})
-        gp = self._config.group_params.get(
-            get_group_name(state.instrument or "")
-        ) or self._config.group_params["fx"]
+        gp = (
+            self._config.group_params.get(get_group_name(state.instrument or ""))
+            or self._config.group_params["fx"]
+        )
         ratio = rules.get("be_buffer_atr_ratio", gp.be_atr)
         atr = self._entry.get_atr14(symbol_id) or 0.0
-        spread = self._client.last_ask.get(
-            symbol_id, 0
-        ) - self._client.last_bid.get(symbol_id, 0)
+        spread = self._client.last_ask.get(symbol_id, 0) - self._client.last_bid.get(symbol_id, 0)
         buffer_ = spread + ratio * atr
 
         if state.direction == "sell":
@@ -483,17 +432,9 @@ class ExitEngine:
             be_stop = round(ask + pip_size, pd)
 
         # Flytt kun hvis bedre enn nåværende SL
-        if (
-            state.direction == "sell"
-            and state.stop_price
-            and be_stop >= state.stop_price
-        ):
+        if state.direction == "sell" and state.stop_price and be_stop >= state.stop_price:
             return
-        if (
-            state.direction == "buy"
-            and state.stop_price
-            and be_stop <= state.stop_price
-        ):
+        if state.direction == "buy" and state.stop_price and be_stop <= state.stop_price:
             return
 
         # M10: Advar hvis BE betydelig overskriver reconciled-SL
@@ -510,9 +451,7 @@ class ExitEngine:
                     divergence,
                 )
 
-        self._client.amend_sl_tp(
-            position_id=state.position_id, stop_loss=be_stop
-        )
+        self._client.amend_sl_tp(position_id=state.position_id, stop_loss=be_stop)
         state.stop_price = be_stop
         log.info(
             "[BE] %s — stop til %s (buffer=%.5f spread=%.5f atr=%.5f)",
@@ -523,9 +462,7 @@ class ExitEngine:
             atr,
         )
 
-    def _calc_close_volume(
-        self, state: TradeState, fraction: float
-    ) -> tuple[int, int]:
+    def _calc_close_volume(self, state: TradeState, fraction: float) -> tuple[int, int]:
         """Returnerer (close_volume, remaining). Hvis remaining < min_volume:
         steng hele. Portert fra `trading_bot.py:_calc_close_volume` (2586-2602)."""
         info = self._client.symbol_info.get(state.symbol_id, {})
@@ -552,9 +489,7 @@ class ExitEngine:
         rules.trail_atr_multiplier som overstyrer gp.trail_atr."""
         instr_group = INSTRUMENT_GROUP.get(state.instrument or "", "fx")
         trail_atr_map = hcfg.get("exit_trail_atr_mult", {}) or {}
-        return trail_atr_map.get(
-            instr_group, rules.get("trail_atr_multiplier", gp.trail_atr)
-        )
+        return trail_atr_map.get(instr_group, rules.get("trail_atr_multiplier", gp.trail_atr))
 
     def _close_all(self, state: TradeState, close_price: float, reason: str) -> None:
         """Lukk hele resten av posisjonen og logg. position_id må være satt."""
@@ -568,9 +503,7 @@ class ExitEngine:
     # PnL-beregning (estimert, overskrives av cTrader-deal hvis mulig)
     # ─────────────────────────────────────────────────────────
 
-    def _calc_pnl(
-        self, state: TradeState, close_price: float
-    ) -> dict[str, Any]:
+    def _calc_pnl(self, state: TradeState, close_price: float) -> dict[str, Any]:
         """Estimert PnL i USD + pips. Portert fra
         `trading_bot.py:_calc_pnl` (1896-1959).
 
@@ -593,9 +526,7 @@ class ExitEngine:
 
         vol = (state.remaining_volume or 0) / 100.0
         if instr in _USD_BASE:
-            pnl_usd = (
-                round(price_diff * vol / close_price, 2) if close_price else 0.0
-            )
+            pnl_usd = round(price_diff * vol / close_price, 2) if close_price else 0.0
         else:
             pnl_usd = round(price_diff * vol, 2)
 
@@ -603,9 +534,7 @@ class ExitEngine:
         spread = getattr(state, "_entry_spread", 0) or 0
         if spread and vol:
             if instr in _USD_BASE:
-                spread_cost = (
-                    round(spread * vol / close_price, 4) if close_price else 0
-                )
+                spread_cost = round(spread * vol / close_price, 4) if close_price else 0
             else:
                 spread_cost = round(spread * vol, 4)
             pnl_usd = round(pnl_usd - spread_cost, 2)
@@ -624,9 +553,7 @@ class ExitEngine:
     # Trade-close-logging + reconcile-logging
     # ─────────────────────────────────────────────────────────
 
-    def _log_trade_closed(
-        self, state: TradeState, reason: str, close_price: float = 0.0
-    ) -> None:
+    def _log_trade_closed(self, state: TradeState, reason: str, close_price: float = 0.0) -> None:
         """Oppdater siste åpne entry for signal-id med close-data + PnL.
 
         Portert fra `trading_bot.py:_log_trade_closed` (1961-2008), men
@@ -637,7 +564,7 @@ class ExitEngine:
             if not self._trade_log_path.exists():
                 return
             data = json.loads(self._trade_log_path.read_text(encoding="utf-8"))
-            now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
             pnl = self._calc_pnl(state, close_price)
             real = getattr(state, "_real_pnl", None)
             if real is not None and pnl:
@@ -653,10 +580,7 @@ class ExitEngine:
             else:
                 result = "managed"
             for e in data.get("entries", []):
-                if (
-                    e.get("signal", {}).get("id") == state.signal_id
-                    and e.get("result") is None
-                ):
+                if e.get("signal", {}).get("id") == state.signal_id and e.get("result") is None:
                     e["closed_at"] = now
                     e["result"] = result
                     e["exit_reason"] = reason
@@ -667,9 +591,7 @@ class ExitEngine:
             self._atomic_write_json(data)
             real_tag = " [cTrader]" if pnl.get("pnl_real") else " [est]"
             pnl_str = (
-                f"  {pnl['pnl_usd']:+.2f} USD ({pnl['pips']:+.1f} pips){real_tag}"
-                if pnl
-                else ""
+                f"  {pnl['pnl_usd']:+.2f} USD ({pnl['pips']:+.1f} pips){real_tag}" if pnl else ""
             )
             log.info(
                 "[TRADE-LOG] %s stengt: %s (%s)%s",
@@ -696,16 +618,13 @@ class ExitEngine:
             else:
                 data = {"entries": []}
             for e in data.get("entries", []):
-                if (
-                    e.get("signal", {}).get("id") == state.signal_id
-                    and e.get("result") is None
-                ):
+                if e.get("signal", {}).get("id") == state.signal_id and e.get("result") is None:
                     log.info(
                         "[TRADE-LOG] %s allerede i logg (reconcile)",
                         state.signal_id,
                     )
                     return
-            now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
             entry = {
                 "timestamp": now,
                 "closed_at": None,
@@ -727,7 +646,7 @@ class ExitEngine:
                     "reconciled": True,
                 },
             }
-            data["entries"] = [entry] + data.get("entries", [])
+            data["entries"] = [entry, *data.get("entries", [])]
             data["last_updated"] = now
             self._atomic_write_json(data)
             log.info("[TRADE-LOG] %s lagt til via reconcile", state.signal_id)
@@ -794,22 +713,14 @@ class ExitEngine:
                 if gross is not None:
                     pnl_real = round(gross / (10**money_digits), 2)
                     swap = getattr(cpd, "swap", 0) or 0
-                    swap_real = (
-                        round(swap / (10**money_digits), 4) if swap else 0
-                    )
+                    swap_real = round(swap / (10**money_digits), 4) if swap else 0
                     comm_cpd = getattr(cpd, "commission", 0) or 0
-                    comm_real2 = (
-                        round(comm_cpd / (10**money_digits), 4) if comm_cpd else 0
-                    )
+                    comm_real2 = round(comm_cpd / (10**money_digits), 4) if comm_cpd else 0
                     net_real = round(pnl_real + swap_real + comm_real2, 2)
                     pos_id = getattr(deal, "positionId", None)
                     if pos_id:
                         matched = next(
-                            (
-                                s
-                                for s in self._active_states
-                                if s.position_id == pos_id
-                            ),
+                            (s for s in self._active_states if s.position_id == pos_id),
                             None,
                         )
                         if matched is not None:
@@ -833,9 +744,7 @@ class ExitEngine:
         if not label.startswith("SE-"):
             return
         sig_id = label[3:]
-        state = next(
-            (s for s in self._active_states if s.signal_id == sig_id), None
-        )
+        state = next((s for s in self._active_states if s.signal_id == sig_id), None)
         if state is None:
             return
         if state.phase == TradePhase.IN_TRADE:
@@ -844,7 +753,7 @@ class ExitEngine:
         state.position_id = pos.positionId
         state.phase = TradePhase.IN_TRADE
         # M1: Bruk faktisk filled volume (kan være < full_volume ved partial)
-        filled: Optional[int] = None
+        filled: int | None = None
         if event.HasField("deal"):
             d = event.deal
             filled = getattr(d, "filledVolume", None) or getattr(d, "volume", None)
@@ -883,12 +792,8 @@ class ExitEngine:
             pd = self._client.symbol_price_digits.get(state.symbol_id, 5)
             sl = round(state.stop_price, pd)
             tp = round(state.t1_price, pd) if state.t1_price > 0 else None
-            self._client.amend_sl_tp(
-                position_id=pos.positionId, stop_loss=sl, take_profit=tp
-            )
-            log.info(
-                "[AMEND] SL=%s TP=%s (digits=%d)", sl, tp if tp else 0, pd
-            )
+            self._client.amend_sl_tp(position_id=pos.positionId, stop_loss=sl, take_profit=tp)
+            log.info("[AMEND] SL=%s TP=%s (digits=%d)", sl, tp if tp else 0, pd)
         else:
             log.info("[LIMIT FILL] SL/TP allerede satt på limit order")
 
@@ -903,11 +808,7 @@ class ExitEngine:
         log.error("[ORDRE FEIL] %s (kode %s)", desc, code)
         with self._lock:
             if code == "POSITION_NOT_FOUND":
-                closed = [
-                    s
-                    for s in list(self._active_states)
-                    if s.phase == TradePhase.IN_TRADE
-                ]
+                closed = [s for s in list(self._active_states) if s.phase == TradePhase.IN_TRADE]
                 for s in closed:
                     is_tp = s.t1_price_reached
                     if not is_tp and s.t1_price:
@@ -917,9 +818,7 @@ class ExitEngine:
                         if last_price:
                             dist_t1 = abs(last_price - s.t1_price)
                             dist_stop = (
-                                abs(last_price - s.stop_price)
-                                if s.stop_price
-                                else float("inf")
+                                abs(last_price - s.stop_price) if s.stop_price else float("inf")
                             )
                             if dist_t1 < dist_stop:
                                 is_tp = True
@@ -938,9 +837,7 @@ class ExitEngine:
             stuck = [
                 s
                 for s in list(self._active_states)
-                if s.phase != TradePhase.IN_TRADE
-                and s.position_id is None
-                and s.entry_price > 0
+                if s.phase != TradePhase.IN_TRADE and s.position_id is None and s.entry_price > 0
             ]
             for s in stuck:
                 log.warning("[ORDRE FEIL] Fjerner stuck state: %s", s.signal_id)

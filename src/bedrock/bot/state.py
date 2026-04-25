@@ -20,7 +20,6 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
-from typing import Optional
 
 
 class TradePhase(Enum):
@@ -46,7 +45,7 @@ class TradeState:
     """Intern state per åpen trade."""
 
     signal_id: str
-    position_id: Optional[int] = None
+    position_id: int | None = None
     phase: TradePhase = TradePhase.AWAITING_CONFIRMATION
     entry_price: float = 0.0
     t1_price: float = 0.0
@@ -64,15 +63,15 @@ class TradeState:
     symbol_id: int = 0
     # ── Horizon-config (fra signal) ──────────────────────────────
     horizon: str = "SWING"
-    grade: Optional[str] = None
+    grade: str | None = None
     horizon_config: dict = field(default_factory=dict)
-    correlation_group: Optional[str] = None
-    order_id: Optional[int] = None  # for limit orders
-    lots_used: Optional[float] = None  # ønsket lot-størrelse ved entry (før stepVolume)
-    risk_pct_used: Optional[float] = None  # risk-% tier brukt (0.25/0.5/1.0)
+    correlation_group: str | None = None
+    order_id: int | None = None  # for limit orders
+    lots_used: float | None = None  # ønsket lot-størrelse ved entry (før stepVolume)
+    risk_pct_used: float | None = None  # risk-% tier brukt (0.25/0.5/1.0)
     # ── Exit-tracking (P3.5 / P3.6) ───────────────────────────────
     peak_progress: float = 0.0  # høyeste urealisert fremgang mot T1 (0–1+)
-    trail_level: Optional[float] = None  # nåværende trailing stop-nivå
+    trail_level: float | None = None  # nåværende trailing stop-nivå
     trail_active: bool = False  # trailing aktivert (etter T1 eller P5a)
     reconciled: bool = False  # Overtatt via reconcile (grace period for EMA9)
     # M10: Broker-SL/TP ved reconcile-tidspunkt — brukes til å varsle
@@ -86,8 +85,8 @@ class CandleBuffer:
     """Holder de siste N lukkede candles per symbol + "current" under-bygging."""
 
     candles: deque = field(default_factory=lambda: deque(maxlen=50))
-    current_open: Optional[float] = None
-    current_high: Optional[float] = None
-    current_low: Optional[float] = None
-    current_close: Optional[float] = None
-    current_ts: Optional[int] = None  # Unix ms
+    current_open: float | None = None
+    current_high: float | None = None
+    current_low: float | None = None
+    current_close: float | None = None
+    current_ts: int | None = None  # Unix ms

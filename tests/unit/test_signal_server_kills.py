@@ -69,9 +69,7 @@ def test_kill_schema_rejects_extra_fields() -> None:
 
 def test_kill_schema_default_timestamp() -> None:
     """killed_at skal auto-settes hvis ikke oppgitt."""
-    k = KillSwitch.model_validate(
-        {"instrument": "Gold", "horizon": "SWING"}
-    )
+    k = KillSwitch.model_validate({"instrument": "Gold", "horizon": "SWING"})
     assert k.killed_at is not None
 
 
@@ -122,12 +120,8 @@ def test_upsert_kill_creates_file(tmp_path: Path) -> None:
 
 def test_upsert_kill_deduplicates_by_slot(tmp_path: Path) -> None:
     path = tmp_path / "kills.json"
-    first = KillSwitch.model_validate(
-        {**_valid_kill_dict(), "reason": "first"}
-    )
-    second = KillSwitch.model_validate(
-        {**_valid_kill_dict(), "reason": "second"}
-    )
+    first = KillSwitch.model_validate({**_valid_kill_dict(), "reason": "first"})
+    second = KillSwitch.model_validate({**_valid_kill_dict(), "reason": "second"})
     upsert_kill(path, first)
     upsert_kill(path, second)
     kills = load_kills(path)
@@ -195,15 +189,11 @@ def test_invalidate_matching_marks_only_matching(tmp_path: Path) -> None:
     )
     append_signal(
         path,
-        PersistedSignal.model_validate(
-            {**_valid_signal_dict(), "direction": "SELL"}
-        ),
+        PersistedSignal.model_validate({**_valid_signal_dict(), "direction": "SELL"}),
     )
     append_signal(
         path,
-        PersistedSignal.model_validate(
-            {**_valid_signal_dict(), "horizon": "SCALP"}
-        ),
+        PersistedSignal.model_validate({**_valid_signal_dict(), "horizon": "SCALP"}),
     )
 
     count = invalidate_matching(
@@ -272,9 +262,7 @@ def test_post_kill_idempotent_same_slot(app_with_files) -> None:
     app, tmp_path = app_with_files
     with app.test_client() as client:
         client.post("/kill", json=_valid_kill_dict())
-        client.post(
-            "/kill", json={**_valid_kill_dict(), "reason": "updated"}
-        )
+        client.post("/kill", json={**_valid_kill_dict(), "reason": "updated"})
     kills = load_kills(tmp_path / "kills.json")
     assert len(kills) == 1
     assert kills[0].reason == "updated"
@@ -291,9 +279,7 @@ def test_post_kill_rejects_bad_horizon(app_with_files) -> None:
 def test_post_kill_requires_json(app_with_files) -> None:
     app, _ = app_with_files
     with app.test_client() as client:
-        response = client.post(
-            "/kill", data="hello", content_type="text/plain"
-        )
+        response = client.post("/kill", data="hello", content_type="text/plain")
     assert response.status_code == 415
 
 
@@ -301,9 +287,7 @@ def test_get_kills_returns_list(app_with_files) -> None:
     app, _ = app_with_files
     with app.test_client() as client:
         client.post("/kill", json=_valid_kill_dict())
-        client.post(
-            "/kill", json={**_valid_kill_dict(), "horizon": "SCALP"}
-        )
+        client.post("/kill", json={**_valid_kill_dict(), "horizon": "SCALP"})
         response = client.get("/kills")
     assert response.status_code == 200
     body = response.get_json()
@@ -322,9 +306,7 @@ def test_clear_kills_returns_count(app_with_files) -> None:
     app, _ = app_with_files
     with app.test_client() as client:
         client.post("/kill", json=_valid_kill_dict())
-        client.post(
-            "/kill", json={**_valid_kill_dict(), "horizon": "SCALP"}
-        )
+        client.post("/kill", json={**_valid_kill_dict(), "horizon": "SCALP"})
         response = client.post("/clear_kills")
     assert response.status_code == 200
     assert response.get_json()["removed"] == 2
@@ -428,9 +410,7 @@ def test_invalidate_rejects_bad_direction(app_with_files) -> None:
 def test_invalidate_requires_json(app_with_files) -> None:
     app, _ = app_with_files
     with app.test_client() as client:
-        response = client.post(
-            "/invalidate", data="x", content_type="text/plain"
-        )
+        response = client.post("/invalidate", data="x", content_type="text/plain")
     assert response.status_code == 415
 
 

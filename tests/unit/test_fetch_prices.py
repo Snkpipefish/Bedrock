@@ -17,7 +17,6 @@ from bedrock.fetch.prices import (
     fetch_prices,
 )
 
-
 # ---------------------------------------------------------------------------
 # URL-bygging
 # ---------------------------------------------------------------------------
@@ -103,30 +102,36 @@ def test_fetch_prices_no_data_response_raises() -> None:
 
 
 def test_fetch_prices_http_error_status_raises() -> None:
-    with patch(
-        "bedrock.fetch.prices.http_get_with_retry",
-        return_value=_mock_response("Server error", status=500),
+    with (
+        patch(
+            "bedrock.fetch.prices.http_get_with_retry",
+            return_value=_mock_response("Server error", status=500),
+        ),
+        pytest.raises(PriceFetchError, match="HTTP 500"),
     ):
-        with pytest.raises(PriceFetchError, match="HTTP 500"):
-            fetch_prices("xauusd", date(2024, 1, 1), date(2024, 1, 2))
+        fetch_prices("xauusd", date(2024, 1, 1), date(2024, 1, 2))
 
 
 def test_fetch_prices_malformed_csv_raises() -> None:
     malformed = "not,a,csv\nmissing,columns"
-    with patch(
-        "bedrock.fetch.prices.http_get_with_retry",
-        return_value=_mock_response(malformed),
+    with (
+        patch(
+            "bedrock.fetch.prices.http_get_with_retry",
+            return_value=_mock_response(malformed),
+        ),
+        pytest.raises(PriceFetchError, match="missing columns"),
     ):
-        with pytest.raises(PriceFetchError, match="missing columns"):
-            fetch_prices("xauusd", date(2024, 1, 1), date(2024, 1, 2))
+        fetch_prices("xauusd", date(2024, 1, 1), date(2024, 1, 2))
 
 
 def test_fetch_prices_network_exception_wrapped() -> None:
     import requests
 
-    with patch(
-        "bedrock.fetch.prices.http_get_with_retry",
-        side_effect=requests.ConnectionError("connection refused"),
+    with (
+        patch(
+            "bedrock.fetch.prices.http_get_with_retry",
+            side_effect=requests.ConnectionError("connection refused"),
+        ),
+        pytest.raises(PriceFetchError, match="Network failure"),
     ):
-        with pytest.raises(PriceFetchError, match="Network failure"):
-            fetch_prices("xauusd", date(2024, 1, 1), date(2024, 1, 2))
+        fetch_prices("xauusd", date(2024, 1, 1), date(2024, 1, 2))

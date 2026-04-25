@@ -63,7 +63,10 @@ def grade_financial(
 
     pct = total_score / max_score
 
-    if pct >= thresholds.a_plus.min_pct_of_max and active_families >= thresholds.a_plus.min_families:
+    if (
+        pct >= thresholds.a_plus.min_pct_of_max
+        and active_families >= thresholds.a_plus.min_families
+    ):
         return "A+"
     if pct >= thresholds.a.min_pct_of_max and active_families >= thresholds.a.min_families:
         return "A"

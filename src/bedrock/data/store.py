@@ -107,8 +107,7 @@ class DataStore:
         """
         if "ts" not in df.columns or "close" not in df.columns:
             raise ValueError(
-                f"append_prices: df must have columns 'ts' and 'close'. "
-                f"Got: {sorted(df.columns)}"
+                f"append_prices: df must have columns 'ts' and 'close'. Got: {sorted(df.columns)}"
             )
 
         required_cols = ["ts", "open", "high", "low", "close", "volume"]
@@ -412,8 +411,7 @@ class DataStore:
         tmin, precip, gdd er valgfrie."""
         if "region" not in df.columns or "date" not in df.columns:
             raise ValueError(
-                f"append_weather: df must have 'region' and 'date'. "
-                f"Got: {sorted(df.columns)}"
+                f"append_weather: df must have 'region' and 'date'. Got: {sorted(df.columns)}"
             )
 
         prepared = df.reindex(columns=list(WEATHER_COLS)).copy()
@@ -500,9 +498,7 @@ class DataStore:
             # Tabell/kolonne-identifikatorer må interpoleres (sqlite
             # param-binding er kun for verdier). Verdier stammer fra
             # Pydantic-validert YAML, ikke request-input.
-            row = conn.execute(
-                f"SELECT MAX({ts_column}) FROM {table}"  # noqa: S608
-            ).fetchone()
+            row = conn.execute(f"SELECT MAX({ts_column}) FROM {table}").fetchone()
 
         if row is None or row[0] is None:
             return None

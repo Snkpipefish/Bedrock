@@ -29,13 +29,12 @@ fetchers:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
-
 
 DEFAULT_FETCH_CONFIG_PATH = Path("config/fetch.yaml")
 
@@ -96,9 +95,7 @@ def load_fetch_config(path: Path | str | None = None) -> FetchConfig:
     if raw is None:
         raise FetchConfigError(f"{target}: empty YAML file")
     if not isinstance(raw, dict):
-        raise FetchConfigError(
-            f"{target}: expected YAML mapping, got {type(raw).__name__}"
-        )
+        raise FetchConfigError(f"{target}: expected YAML mapping, got {type(raw).__name__}")
 
     return FetchConfig.model_validate(raw)
 
@@ -146,7 +143,7 @@ def _parse_ts(raw: Any) -> datetime:
         dt = raw
     elif isinstance(raw, (int, float)):
         # Unix-timestamp (sek)
-        dt = datetime.fromtimestamp(float(raw), tz=timezone.utc)
+        dt = datetime.fromtimestamp(float(raw), tz=UTC)
     elif isinstance(raw, str):
         # ISO-format; støtter 'YYYY-MM-DD' (dato-only) og full
         # 'YYYY-MM-DDTHH:MM:SS[Z/+00:00]'
@@ -160,7 +157,7 @@ def _parse_ts(raw: Any) -> datetime:
         raise FetchConfigError(f"Ukjent timestamp-format: {raw!r}")
 
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt
 
 
@@ -171,9 +168,9 @@ def check_staleness(
     now: datetime | None = None,
 ) -> FetcherStatus:
     """Beregn staleness-status for én fetcher."""
-    resolved_now = now or datetime.now(timezone.utc)
+    resolved_now = now or datetime.now(UTC)
     if resolved_now.tzinfo is None:
-        resolved_now = resolved_now.replace(tzinfo=timezone.utc)
+        resolved_now = resolved_now.replace(tzinfo=UTC)
 
     latest = latest_observation_ts(store, spec.table, spec.ts_column)
 
@@ -212,8 +209,7 @@ def status_report(
 ) -> list[FetcherStatus]:
     """Samlet status for alle fetchere. Sortert etter navn."""
     return [
-        check_staleness(name, spec, store, now)
-        for name, spec in sorted(config.fetchers.items())
+        check_staleness(name, spec, store, now) for name, spec in sorted(config.fetchers.items())
     ]
 
 

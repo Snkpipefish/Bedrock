@@ -11,11 +11,9 @@ from __future__ import annotations
 from datetime import date
 from unittest.mock import Mock, patch
 
-import pandas as pd
 import pytest
 
 from bedrock.fetch.cot_cftc import CFTC_LEGACY_URL, CotFetchError, fetch_cot_legacy
-
 
 SAMPLE_LEGACY_ROWS = [
     {
@@ -56,9 +54,7 @@ def test_fetch_cot_legacy_returns_legacy_schema() -> None:
         "bedrock.fetch.cot_cftc.http_get_with_retry",
         return_value=_mock_response(SAMPLE_LEGACY_ROWS),
     ):
-        df = fetch_cot_legacy(
-            "GOLD - COMMODITY EXCHANGE INC.", date(2020, 1, 1), date(2020, 1, 31)
-        )
+        df = fetch_cot_legacy("GOLD - COMMODITY EXCHANGE INC.", date(2020, 1, 1), date(2020, 1, 31))
 
     # Legacy har noncomm_*, ikke mm_*/other_*
     assert list(df.columns) == [
@@ -80,7 +76,7 @@ def test_fetch_cot_legacy_uses_legacy_url() -> None:
     """Verifiser at fetcher treffer legacy-datasettet, ikke disaggregated."""
     called_url = {}
 
-    def capture(url, params=None, **kwargs):  # noqa: ARG001
+    def capture(url, params=None, **kwargs):
         called_url["url"] = url
         return _mock_response(SAMPLE_LEGACY_ROWS)
 
@@ -99,9 +95,7 @@ def test_fetch_cot_legacy_end_to_end_matches_datastore(tmp_path) -> None:
         "bedrock.fetch.cot_cftc.http_get_with_retry",
         return_value=_mock_response(SAMPLE_LEGACY_ROWS),
     ):
-        df = fetch_cot_legacy(
-            "GOLD - COMMODITY EXCHANGE INC.", date(2020, 1, 1), date(2020, 1, 31)
-        )
+        df = fetch_cot_legacy("GOLD - COMMODITY EXCHANGE INC.", date(2020, 1, 1), date(2020, 1, 31))
 
     store = DataStore(tmp_path / "bedrock.db")
     written = store.append_cot_legacy(df)
@@ -115,9 +109,7 @@ def test_fetch_cot_legacy_end_to_end_matches_datastore(tmp_path) -> None:
 
 
 def test_fetch_cot_legacy_empty_response() -> None:
-    with patch(
-        "bedrock.fetch.cot_cftc.http_get_with_retry", return_value=_mock_response([])
-    ):
+    with patch("bedrock.fetch.cot_cftc.http_get_with_retry", return_value=_mock_response([])):
         df = fetch_cot_legacy("UNKNOWN", date(2020, 1, 1), date(2020, 1, 15))
     assert df.empty
     # Kolonner er legacy-sett, ikke disaggregated
@@ -134,11 +126,11 @@ def test_fetch_cot_legacy_missing_fields_raises() -> None:
             "m_money_positions_long": "100",  # disagg-felt, ikke legacy
         }
     ]
-    with patch(
-        "bedrock.fetch.cot_cftc.http_get_with_retry", return_value=_mock_response(bad)
+    with (
+        patch("bedrock.fetch.cot_cftc.http_get_with_retry", return_value=_mock_response(bad)),
+        pytest.raises(CotFetchError, match="missing fields"),
     ):
-        with pytest.raises(CotFetchError, match="missing fields"):
-            fetch_cot_legacy("x", date(2020, 1, 1), date(2020, 1, 15))
+        fetch_cot_legacy("x", date(2020, 1, 1), date(2020, 1, 15))
 
 
 def test_fetch_cot_legacy_string_numbers_converted_to_int() -> None:

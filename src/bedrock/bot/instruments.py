@@ -12,8 +12,6 @@ justerer. Denne modulen inneholder kun mapping-data.
 
 from __future__ import annotations
 
-from typing import Optional
-
 # ─────────────────────────────────────────────────────────────
 # Trading-symbol-mapping: Bedrock-navn → kandidat-tickere hos broker
 # ─────────────────────────────────────────────────────────────
@@ -149,7 +147,7 @@ DEFAULT_GROUP = "fx"
 # ─────────────────────────────────────────────────────────────
 
 
-def net_usd_direction(instrument: str, direction: str) -> Optional[str]:
+def net_usd_direction(instrument: str, direction: str) -> str | None:
     """Returner 'long_usd' eller 'short_usd' for ett FX-par+retning, ellers None.
 
     `direction` er "buy" eller "sell" (signal-side).

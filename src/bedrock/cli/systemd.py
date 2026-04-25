@@ -62,18 +62,14 @@ def systemd() -> None:
     "working_dir",
     default=None,
     type=click.Path(path_type=Path),
-    help=(
-        "WorkingDirectory i genererte .service-filer. "
-        "Default: gjeldende arbeidskatalog."
-    ),
+    help=("WorkingDirectory i genererte .service-filer. Default: gjeldende arbeidskatalog."),
 )
 @click.option(
     "--executable",
     "bedrock_executable",
     default=None,
     help=(
-        "Full sti til `bedrock`-CLI som systemd skal kjøre. "
-        "Default: detect fra `sys.executable`."
+        "Full sti til `bedrock`-CLI som systemd skal kjøre. Default: detect fra `sys.executable`."
     ),
 )
 def generate_cmd(
@@ -104,18 +100,13 @@ def generate_cmd(
 
     written = write_units(units, output_dir)
 
-    click.echo(
-        f"Skrev {len(written)} filer til {output_dir.resolve()}:"
-    )
+    click.echo(f"Skrev {len(written)} filer til {output_dir.resolve()}:")
     for path in written:
         click.echo(f"  {path.name}")
     click.echo("")
     click.echo("Neste steg:")
     click.echo(f"  bedrock systemd install --units-dir {output_dir}")
-    click.echo(
-        "  # deretter: systemctl --user enable --now "
-        "bedrock-fetch-<name>.timer"
-    )
+    click.echo("  # deretter: systemctl --user enable --now bedrock-fetch-<name>.timer")
 
 
 @systemd.command("install")
@@ -140,21 +131,16 @@ def install_cmd(units_dir: Path, dry_run: bool) -> None:
     """
     if not units_dir.exists():
         raise click.UsageError(
-            f"Units-katalog mangler: {units_dir}. Kjør "
-            f"`bedrock systemd generate` først."
+            f"Units-katalog mangler: {units_dir}. Kjør `bedrock systemd generate` først."
         )
 
     units = sorted(units_dir.glob("bedrock-fetch-*"))
     if not units:
-        raise click.UsageError(
-            f"Fant ingen bedrock-fetch-* filer i {units_dir}"
-        )
+        raise click.UsageError(f"Fant ingen bedrock-fetch-* filer i {units_dir}")
 
     systemctl = shutil.which("systemctl")
     if systemctl is None and not dry_run:
-        raise click.UsageError(
-            "Fant ikke `systemctl`. Denne kommandoen krever systemd."
-        )
+        raise click.UsageError("Fant ikke `systemctl`. Denne kommandoen krever systemd.")
 
     any_failure = False
     for unit in units:
@@ -180,14 +166,8 @@ def install_cmd(units_dir: Path, dry_run: bool) -> None:
 
     if not dry_run:
         click.echo("")
-        click.echo(
-            "Kjør `systemctl --user daemon-reload` hvis enheter ikke "
-            "vises automatisk."
-        )
-        click.echo(
-            "Aktiver timere med: "
-            "systemctl --user enable --now bedrock-fetch-<name>.timer"
-        )
+        click.echo("Kjør `systemctl --user daemon-reload` hvis enheter ikke vises automatisk.")
+        click.echo("Aktiver timere med: systemctl --user enable --now bedrock-fetch-<name>.timer")
 
     if any_failure:
         click.get_current_context().exit(1)

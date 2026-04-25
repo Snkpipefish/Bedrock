@@ -51,7 +51,9 @@ def sma200_align(store: Any, instrument: str, params: dict) -> float:
     try:
         prices = store.get_prices(instrument, tf=tf, lookback=_SMA_WINDOW + 50)
     except Exception as exc:
-        _log.warning("sma200_align.prices_unavailable", instrument=instrument, tf=tf, error=str(exc))
+        _log.warning(
+            "sma200_align.prices_unavailable", instrument=instrument, tf=tf, error=str(exc)
+        )
         return 0.0
 
     if len(prices) < _SMA_WINDOW:

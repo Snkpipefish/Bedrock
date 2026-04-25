@@ -102,9 +102,7 @@ def test_list_requires_admin_code(app_with_admin) -> None:
 def test_list_rejects_wrong_code(app_with_admin) -> None:
     app, _ = app_with_admin
     with app.test_client() as client:
-        response = client.get(
-            "/admin/rules", headers=_headers("wrong-code")
-        )
+        response = client.get("/admin/rules", headers=_headers("wrong-code"))
     assert response.status_code == 401
     assert "ugyldig" in response.get_json()["error"]
 
@@ -163,18 +161,14 @@ def test_get_detail_returns_raw_yaml(app_with_admin) -> None:
 def test_get_detail_missing_returns_404(app_with_admin) -> None:
     app, _ = app_with_admin
     with app.test_client() as client:
-        response = client.get(
-            "/admin/rules/nonexistent", headers=_headers()
-        )
+        response = client.get("/admin/rules/nonexistent", headers=_headers())
     assert response.status_code == 404
 
 
 def test_get_detail_rejects_path_traversal(app_with_admin) -> None:
     app, _ = app_with_admin
     with app.test_client() as client:
-        response = client.get(
-            "/admin/rules/..%2fetc%2fpasswd", headers=_headers()
-        )
+        response = client.get("/admin/rules/..%2fetc%2fpasswd", headers=_headers())
     # Flask avviser URL-encoded slash med 404; om ikke, fanger vår regex
     assert response.status_code in (400, 404)
 
@@ -182,9 +176,7 @@ def test_get_detail_rejects_path_traversal(app_with_admin) -> None:
 def test_get_detail_rejects_invalid_id(app_with_admin) -> None:
     app, _ = app_with_admin
     with app.test_client() as client:
-        response = client.get(
-            "/admin/rules/has.dot", headers=_headers()
-        )
+        response = client.get("/admin/rules/has.dot", headers=_headers())
     assert response.status_code == 400
 
 
@@ -351,9 +343,7 @@ def test_put_atomic_no_tmp_files_left(app_with_admin) -> None:
             headers=_headers(),
             json={"yaml_content": _valid_yaml_for("newsym")},
         )
-    tmp_files = [
-        f for f in instruments_dir.iterdir() if f.name.startswith(".")
-    ]
+    tmp_files = [f for f in instruments_dir.iterdir() if f.name.startswith(".")]
     assert tmp_files == []
 
 

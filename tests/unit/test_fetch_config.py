@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from textwrap import dedent
 
@@ -22,7 +22,6 @@ from bedrock.config.fetch import (
     status_report,
 )
 from bedrock.data.store import DataStore
-
 
 # ---------------------------------------------------------------------------
 # Loader
@@ -172,7 +171,7 @@ def test_check_staleness_no_data(tmp_path: Path) -> None:
 def test_check_staleness_fresh_data(tmp_path: Path) -> None:
     store = DataStore(tmp_path / "bedrock.db")
     # Hvis vi skriver data med ts "nå", burde status være fresh
-    now = datetime(2024, 6, 1, 12, 0, tzinfo=timezone.utc)
+    now = datetime(2024, 6, 1, 12, 0, tzinfo=UTC)
     df = pd.DataFrame(
         {
             "ts": [now - timedelta(hours=1)],
@@ -192,7 +191,7 @@ def test_check_staleness_fresh_data(tmp_path: Path) -> None:
 
 def test_check_staleness_old_data(tmp_path: Path) -> None:
     store = DataStore(tmp_path / "bedrock.db")
-    now = datetime(2024, 6, 1, 12, 0, tzinfo=timezone.utc)
+    now = datetime(2024, 6, 1, 12, 0, tzinfo=UTC)
     df = pd.DataFrame(
         {
             "ts": [now - timedelta(hours=50)],  # stale_hours=24
@@ -257,31 +256,25 @@ def _write_minimal_config(path: Path) -> None:
     )
 
 
-def test_cli_fetch_status_empty_db(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_cli_fetch_status_empty_db(runner: CliRunner, tmp_path: Path) -> None:
     config = tmp_path / "fetch.yaml"
     _write_minimal_config(config)
     db = tmp_path / "bedrock.db"  # finnes ikke
 
-    result = runner.invoke(
-        cli, ["fetch", "status", "--config", str(config), "--db", str(db)]
-    )
+    result = runner.invoke(cli, ["fetch", "status", "--config", str(config), "--db", str(db)])
     assert result.exit_code == 0, result.output
     assert "prices" in result.output
     assert "NO_DATA" in result.output
 
 
-def test_cli_fetch_status_with_fresh_data(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_cli_fetch_status_with_fresh_data(runner: CliRunner, tmp_path: Path) -> None:
     config = tmp_path / "fetch.yaml"
     _write_minimal_config(config)
     db = tmp_path / "bedrock.db"
     store = DataStore(db)
     df = pd.DataFrame(
         {
-            "ts": pd.to_datetime([datetime.now(timezone.utc)]),
+            "ts": pd.to_datetime([datetime.now(UTC)]),
             "open": [1.0],
             "high": [1.0],
             "low": [1.0],
@@ -291,16 +284,12 @@ def test_cli_fetch_status_with_fresh_data(
     )
     store.append_prices("Gold", "D1", df)
 
-    result = runner.invoke(
-        cli, ["fetch", "status", "--config", str(config), "--db", str(db)]
-    )
+    result = runner.invoke(cli, ["fetch", "status", "--config", str(config), "--db", str(db)])
     assert result.exit_code == 0, result.output
     assert "fresh" in result.output
 
 
-def test_cli_fetch_status_json_output(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_cli_fetch_status_json_output(runner: CliRunner, tmp_path: Path) -> None:
     config = tmp_path / "fetch.yaml"
     _write_minimal_config(config)
     db = tmp_path / "bedrock.db"
@@ -325,9 +314,7 @@ def test_cli_fetch_status_json_output(
     assert payload[0]["has_data"] is False
 
 
-def test_cli_fetch_status_missing_config(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_cli_fetch_status_missing_config(runner: CliRunner, tmp_path: Path) -> None:
     result = runner.invoke(
         cli,
         [

@@ -15,18 +15,17 @@ Senere sessions utvider med:
 
 from __future__ import annotations
 
+# Side-effekt-import: sikrer at `usda_blackout`-gate registreres slik
+# at orchestrator-kall med `gates: [usda_blackout]` fungerer uten at
+# caller må huske på å importere modulen først.
+# ruff: noqa: F401
+from bedrock.fetch import usda_calendar
 from bedrock.orchestrator.score import OrchestratorError, score_instrument
 from bedrock.orchestrator.signals import (
     OrchestratorResult,
     SignalEntry,
     generate_signals,
 )
-
-# Side-effekt-import: sikrer at `usda_blackout`-gate registreres slik
-# at orchestrator-kall med `gates: [usda_blackout]` fungerer uten at
-# caller må huske på å importere modulen først.
-# ruff: noqa: E402, F401
-from bedrock.fetch import usda_calendar  # noqa: E402
 
 __all__ = [
     "OrchestratorError",

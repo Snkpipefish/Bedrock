@@ -80,9 +80,7 @@ def _find_yaml(instrument_id: str, instruments_dir: Path) -> Path:
     Reiser `OrchestratorError` hvis ingen match.
     """
     if not instruments_dir.exists():
-        raise OrchestratorError(
-            f"Instruments directory not found: {instruments_dir}"
-        )
+        raise OrchestratorError(f"Instruments directory not found: {instruments_dir}")
 
     # Eksakt
     exact = instruments_dir / f"{instrument_id}.yaml"
@@ -97,8 +95,7 @@ def _find_yaml(instrument_id: str, instruments_dir: Path) -> Path:
 
     available = sorted(p.stem for p in instruments_dir.glob("*.yaml"))
     raise OrchestratorError(
-        f"Instrument {instrument_id!r} has no YAML in {instruments_dir}. "
-        f"Available: {available}"
+        f"Instrument {instrument_id!r} has no YAML in {instruments_dir}. Available: {available}"
     )
 
 
@@ -132,9 +129,7 @@ def _validate_horizon_arg(cfg: InstrumentConfig, horizon: str | None) -> None:
             )
         return
 
-    raise OrchestratorError(
-        f"Unknown rules type: {type(cfg.rules).__name__}"
-    )
+    raise OrchestratorError(f"Unknown rules type: {type(cfg.rules).__name__}")
 
 
-__all__ = ["score_instrument", "OrchestratorError"]
+__all__ = ["OrchestratorError", "score_instrument"]

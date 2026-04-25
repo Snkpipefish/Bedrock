@@ -16,7 +16,6 @@ import bedrock.engine.drivers  # noqa: F401
 from bedrock.cli.__main__ import cli
 from bedrock.data.store import DataStore
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -124,9 +123,7 @@ def test_signals_human_readable_output(
     assert "grade=" in result.output
 
 
-def test_signals_json_output(
-    runner: CliRunner, db_with_prices: Path, configs_dir
-) -> None:
+def test_signals_json_output(runner: CliRunner, db_with_prices: Path, configs_dir) -> None:
     defaults, insts = configs_dir
     result = runner.invoke(
         cli,
@@ -149,9 +146,7 @@ def test_signals_json_output(
     assert len(payload["entries"]) >= 2
 
 
-def test_signals_filters_horizon(
-    runner: CliRunner, db_with_prices: Path, configs_dir
-) -> None:
+def test_signals_filters_horizon(runner: CliRunner, db_with_prices: Path, configs_dir) -> None:
     defaults, insts = configs_dir
     result = runner.invoke(
         cli,
@@ -174,9 +169,7 @@ def test_signals_filters_horizon(
     assert all(e["horizon"] == "swing" for e in payload["entries"])
 
 
-def test_signals_filters_direction(
-    runner: CliRunner, db_with_prices: Path, configs_dir
-) -> None:
+def test_signals_filters_direction(runner: CliRunner, db_with_prices: Path, configs_dir) -> None:
     defaults, insts = configs_dir
     result = runner.invoke(
         cli,
@@ -200,9 +193,7 @@ def test_signals_filters_direction(
     assert all(e["direction"] == "buy" for e in payload["entries"])
 
 
-def test_signals_missing_db_errors(
-    runner: CliRunner, tmp_path: Path, configs_dir
-) -> None:
+def test_signals_missing_db_errors(runner: CliRunner, tmp_path: Path, configs_dir) -> None:
     defaults, insts = configs_dir
     result = runner.invoke(
         cli,

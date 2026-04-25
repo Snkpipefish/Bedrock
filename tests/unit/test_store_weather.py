@@ -69,9 +69,7 @@ def test_weather_dedupe_on_same_date_region(store: DataStore) -> None:
 
 def test_weather_optional_columns_nullable(store: DataStore) -> None:
     """Minimalt input (kun region + date) skal funke; andre kolonner blir NULL."""
-    minimal = pd.DataFrame(
-        {"region": ["us_cornbelt"], "date": ["2024-07-01"]}
-    )
+    minimal = pd.DataFrame({"region": ["us_cornbelt"], "date": ["2024-07-01"]})
     store.append_weather(minimal)
     df = store.get_weather("us_cornbelt")
     assert len(df) == 1
@@ -92,9 +90,7 @@ def test_weather_unknown_region_raises(store: DataStore) -> None:
 
 def test_weather_separate_regions(store: DataStore) -> None:
     store.append_weather(_weather_df(region="us_cornbelt", tmax=[28.0, 29.0, 30.0]))
-    store.append_weather(
-        _weather_df(region="brazil_mato_grosso", tmax=[32.0, 33.0, 34.0])
-    )
+    store.append_weather(_weather_df(region="brazil_mato_grosso", tmax=[32.0, 33.0, 34.0]))
 
     us = store.get_weather("us_cornbelt")
     br = store.get_weather("brazil_mato_grosso")

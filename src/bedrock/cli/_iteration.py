@@ -55,7 +55,7 @@ def run_with_summary(
         click.echo(f"[{idx}/{total}] {label}={item}")
         try:
             written = process_fn(item)
-        except Exception as exc:  # noqa: BLE001 — per-item resiliens
+        except Exception as exc:
             results.append(ItemResult(item_id=item, ok=False, error=str(exc)))
             click.echo(f"  FAIL {item}: {exc}", err=True)
             continue

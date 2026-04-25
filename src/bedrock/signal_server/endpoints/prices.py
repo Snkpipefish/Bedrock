@@ -131,10 +131,7 @@ def get_prices() -> tuple[object, int]:
             200,
         )
 
-    bars = [
-        {"ts": ts.isoformat(), "close": float(close)}
-        for ts, close in series.items()
-    ]
+    bars = [{"ts": ts.isoformat(), "close": float(close)} for ts, close in series.items()]
     return (
         jsonify(
             {

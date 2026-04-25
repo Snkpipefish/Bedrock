@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import date
 from unittest.mock import Mock, patch
 
-import pandas as pd
 import pytest
 
 from bedrock.fetch.cot_cftc import (
@@ -13,7 +12,6 @@ from bedrock.fetch.cot_cftc import (
     build_socrata_query,
     fetch_cot_disaggregated,
 )
-
 
 # ---------------------------------------------------------------------------
 # Query-bygging
@@ -88,7 +86,7 @@ def _mock_response(payload, status: int = 200) -> Mock:
     return m
 
 
-def test_fetch_cot_disaggregated_returns_bedrock_schema(tmp_path) -> None:  # noqa: ARG001
+def test_fetch_cot_disaggregated_returns_bedrock_schema(tmp_path) -> None:
     with patch(
         "bedrock.fetch.cot_cftc.http_get_with_retry",
         return_value=_mock_response(SAMPLE_SOCRATA_ROWS),
@@ -151,9 +149,7 @@ def test_fetch_cot_converts_string_numbers_to_int() -> None:
 
 def test_fetch_cot_empty_response_returns_empty_frame() -> None:
     """Tom Socrata-liste = tom DataFrame med riktig skjema. Ingen exception."""
-    with patch(
-        "bedrock.fetch.cot_cftc.http_get_with_retry", return_value=_mock_response([])
-    ):
+    with patch("bedrock.fetch.cot_cftc.http_get_with_retry", return_value=_mock_response([])):
         df = fetch_cot_disaggregated("UNKNOWN", date(2024, 1, 1), date(2024, 1, 15))
     assert df.empty
     assert "mm_long" in df.columns
@@ -162,40 +158,46 @@ def test_fetch_cot_empty_response_returns_empty_frame() -> None:
 def test_fetch_cot_missing_fields_raises() -> None:
     """Hvis Socrata-respons mangler forventede felter, kast CotFetchError."""
     bad_rows = [{"report_date_as_yyyy_mm_dd": "2024-01-02", "market_and_exchange_names": "X"}]
-    with patch(
-        "bedrock.fetch.cot_cftc.http_get_with_retry", return_value=_mock_response(bad_rows)
+    with (
+        patch("bedrock.fetch.cot_cftc.http_get_with_retry", return_value=_mock_response(bad_rows)),
+        pytest.raises(CotFetchError, match="missing fields"),
     ):
-        with pytest.raises(CotFetchError, match="missing fields"):
-            fetch_cot_disaggregated("X", date(2024, 1, 1), date(2024, 1, 15))
+        fetch_cot_disaggregated("X", date(2024, 1, 1), date(2024, 1, 15))
 
 
 def test_fetch_cot_http_error_raises() -> None:
-    with patch(
-        "bedrock.fetch.cot_cftc.http_get_with_retry",
-        return_value=_mock_response([], status=503),
+    with (
+        patch(
+            "bedrock.fetch.cot_cftc.http_get_with_retry",
+            return_value=_mock_response([], status=503),
+        ),
+        pytest.raises(CotFetchError, match="HTTP 503"),
     ):
-        with pytest.raises(CotFetchError, match="HTTP 503"):
-            fetch_cot_disaggregated("X", date(2024, 1, 1), date(2024, 1, 15))
+        fetch_cot_disaggregated("X", date(2024, 1, 1), date(2024, 1, 15))
 
 
 def test_fetch_cot_non_list_json_raises() -> None:
-    with patch(
-        "bedrock.fetch.cot_cftc.http_get_with_retry",
-        return_value=_mock_response({"error": "server down"}),
+    with (
+        patch(
+            "bedrock.fetch.cot_cftc.http_get_with_retry",
+            return_value=_mock_response({"error": "server down"}),
+        ),
+        pytest.raises(CotFetchError, match="non-list"),
     ):
-        with pytest.raises(CotFetchError, match="non-list"):
-            fetch_cot_disaggregated("X", date(2024, 1, 1), date(2024, 1, 15))
+        fetch_cot_disaggregated("X", date(2024, 1, 1), date(2024, 1, 15))
 
 
 def test_fetch_cot_network_failure_wrapped() -> None:
     import requests
 
-    with patch(
-        "bedrock.fetch.cot_cftc.http_get_with_retry",
-        side_effect=requests.Timeout("timeout"),
+    with (
+        patch(
+            "bedrock.fetch.cot_cftc.http_get_with_retry",
+            side_effect=requests.Timeout("timeout"),
+        ),
+        pytest.raises(CotFetchError, match="Network failure"),
     ):
-        with pytest.raises(CotFetchError, match="Network failure"):
-            fetch_cot_disaggregated("X", date(2024, 1, 1), date(2024, 1, 15))
+        fetch_cot_disaggregated("X", date(2024, 1, 1), date(2024, 1, 15))
 
 
 def test_fetch_cot_trims_iso_timestamp_to_date() -> None:

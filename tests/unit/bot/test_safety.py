@@ -17,9 +17,8 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -51,7 +50,7 @@ def default_cfg() -> DailyLossConfig:
 
 
 def test_default_state_is_zero_and_today(monitor: SafetyMonitor) -> None:
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(UTC).date()
     assert monitor.daily_loss == 0.0
     assert monitor.daily_loss_date == today
 
@@ -80,9 +79,7 @@ def test_add_loss_accumulates(monitor: SafetyMonitor) -> None:
     assert monitor.daily_loss == 150.0
 
 
-def test_add_loss_persists_to_disk(
-    monitor: SafetyMonitor, state_path: Path
-) -> None:
+def test_add_loss_persists_to_disk(monitor: SafetyMonitor, state_path: Path) -> None:
     monitor.add_loss(42.5)
     assert state_path.exists()
     data = json.loads(state_path.read_text())
@@ -111,24 +108,20 @@ def test_negative_add_loss_ignored(
 def test_load_ignores_state_from_previous_day(
     state_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date()
+    yesterday = (datetime.now(UTC) - timedelta(days=1)).date()
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(
-        json.dumps({"date": yesterday.isoformat(), "daily_loss": 999.0})
-    )
+    state_path.write_text(json.dumps({"date": yesterday.isoformat(), "daily_loss": 999.0}))
     with caplog.at_level("INFO", logger="bedrock.bot.safety"):
         m = SafetyMonitor(state_path=state_path)
     # State fra i går skal IKKE brukes — dagens tap er 0
     assert m.daily_loss == 0.0
-    assert m.daily_loss_date == datetime.now(timezone.utc).date()
+    assert m.daily_loss_date == datetime.now(UTC).date()
 
 
 def test_load_recovers_same_day_state(state_path: Path) -> None:
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(UTC).date()
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(
-        json.dumps({"date": today.isoformat(), "daily_loss": 250.0})
-    )
+    state_path.write_text(json.dumps({"date": today.isoformat(), "daily_loss": 250.0}))
     m = SafetyMonitor(state_path=state_path)
     assert m.daily_loss == 250.0
 
@@ -143,9 +136,7 @@ def test_corrupt_state_file_handled_gracefully(
     assert m.daily_loss == 0.0
 
 
-def test_save_uses_atomic_write(
-    monitor: SafetyMonitor, state_path: Path
-) -> None:
+def test_save_uses_atomic_write(monitor: SafetyMonitor, state_path: Path) -> None:
     """Atomic write bør gi en temp-fil som replaces — verifiser at
     endelig fil eksisterer og ingen temp-rester er igjen."""
     monitor.add_loss(10.0)
@@ -168,11 +159,9 @@ def test_reset_same_day_returns_false(monitor: SafetyMonitor) -> None:
 
 def test_reset_new_day_resets_and_returns_true(state_path: Path) -> None:
     # Simuler at state er fra i går
-    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date()
+    yesterday = (datetime.now(UTC) - timedelta(days=1)).date()
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(
-        json.dumps({"date": yesterday.isoformat(), "daily_loss": 500.0})
-    )
+    state_path.write_text(json.dumps({"date": yesterday.isoformat(), "daily_loss": 500.0}))
     # _load_state ignorerer i-går-state (ser den som dead), men la oss sette
     # state manuelt til yesterday for å teste rollover-path
     m = SafetyMonitor(state_path=state_path)
@@ -182,7 +171,7 @@ def test_reset_new_day_resets_and_returns_true(state_path: Path) -> None:
     m._state.daily_loss = 500.0
     assert m.reset_daily_loss_if_new_day() is True
     assert m.daily_loss == 0.0
-    assert m.daily_loss_date == datetime.now(timezone.utc).date()
+    assert m.daily_loss_date == datetime.now(UTC).date()
 
 
 def test_rollover_callback_called_with_dates(state_path: Path) -> None:
@@ -192,14 +181,14 @@ def test_rollover_callback_called_with_dates(state_path: Path) -> None:
         captured.append((prev, new))
 
     m = SafetyMonitor(state_path=state_path, on_rollover=cb)
-    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date()
+    yesterday = (datetime.now(UTC) - timedelta(days=1)).date()
     m._state.date = yesterday
     m._state.daily_loss = 500.0
     m.reset_daily_loss_if_new_day()
     assert len(captured) == 1
     prev, new = captured[0]
     assert prev == yesterday
-    assert new == datetime.now(timezone.utc).date()
+    assert new == datetime.now(UTC).date()
 
 
 def test_rollover_callback_exception_does_not_block_reset(
@@ -209,7 +198,7 @@ def test_rollover_callback_exception_does_not_block_reset(
         raise RuntimeError("git-commit feilet")
 
     m = SafetyMonitor(state_path=state_path, on_rollover=boom)
-    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date()
+    yesterday = (datetime.now(UTC) - timedelta(days=1)).date()
     m._state.date = yesterday
     m._state.daily_loss = 500.0
     with caplog.at_level("ERROR", logger="bedrock.bot.safety"):
@@ -228,7 +217,7 @@ def test_rollover_callback_sees_pre_reset_state(state_path: Path) -> None:
         observed.append(prev)
 
     m = SafetyMonitor(state_path=state_path, on_rollover=cb)
-    yesterday = (datetime.now(timezone.utc) - timedelta(days=2)).date()
+    yesterday = (datetime.now(UTC) - timedelta(days=2)).date()
     m._state.date = yesterday
     m.reset_daily_loss_if_new_day()
     assert observed == [yesterday]
@@ -255,9 +244,7 @@ def test_limit_zero_balance_returns_nok_floor(default_cfg: DailyLossConfig) -> N
     assert SafetyMonitor.daily_loss_limit(0, default_cfg) == 500.0
 
 
-def test_exceeded_flag_flips_at_limit(
-    monitor: SafetyMonitor, default_cfg: DailyLossConfig
-) -> None:
+def test_exceeded_flag_flips_at_limit(monitor: SafetyMonitor, default_cfg: DailyLossConfig) -> None:
     # Balance 100000 → limit = 2000
     assert not monitor.daily_loss_exceeded(100_000, default_cfg)
     monitor.add_loss(1999.0)
@@ -280,8 +267,7 @@ def test_record_fetch_failure_first_logs_info(
     assert monitor.fetch_fail_count == 1
     assert monitor.fetch_frozen_since is not None
     assert any(
-        rec.levelno == logging.INFO and "feilet" in rec.message.lower()
-        for rec in caplog.records
+        rec.levelno == logging.INFO and "feilet" in rec.message.lower() for rec in caplog.records
     )
 
 
@@ -331,9 +317,10 @@ def test_fetch_success_clears_state(
     assert monitor.server_frozen is False
     assert monitor.fetch_fail_count == 0
     assert monitor.fetch_frozen_since is None
-    assert any("gjenoppretter" in rec.message.lower() or
-               "gjenopprettet" in rec.message.lower()
-               for rec in caplog.records)
+    assert any(
+        "gjenoppretter" in rec.message.lower() or "gjenopprettet" in rec.message.lower()
+        for rec in caplog.records
+    )
 
 
 def test_fetch_success_noop_when_already_healthy(

@@ -39,9 +39,7 @@ def _sample_cot_df(n: int = 2) -> pd.DataFrame:
 
 def test_backfill_cot_writes_to_db(runner: CliRunner, tmp_path: Path) -> None:
     db = tmp_path / "bedrock.db"
-    with patch(
-        "bedrock.cli.backfill.fetch_cot_disaggregated", return_value=_sample_cot_df(2)
-    ):
+    with patch("bedrock.cli.backfill.fetch_cot_disaggregated", return_value=_sample_cot_df(2)):
         result = runner.invoke(
             cli,
             [

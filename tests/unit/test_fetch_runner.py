@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from textwrap import dedent
 from unittest.mock import patch
@@ -20,7 +20,6 @@ from bedrock.config.fetch_runner import (
     run_fetcher_by_name,
 )
 from bedrock.data.store import DataStore
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -162,7 +161,7 @@ def test_run_prices_iterates_all_instruments(store: DataStore, configs_dir) -> N
     defaults, insts = configs_dir
     calls: list[str] = []
 
-    def fake_fetch(ticker, from_date, to_date, interval="d"):  # noqa: ARG001
+    def fake_fetch(ticker, from_date, to_date, interval="d"):
         calls.append(ticker)
         return _sample_bars(2)
 
@@ -188,7 +187,7 @@ def test_run_prices_instrument_filter(store: DataStore, configs_dir) -> None:
     defaults, insts = configs_dir
     calls: list[str] = []
 
-    def fake_fetch(ticker, from_date, to_date, interval="d"):  # noqa: ARG001
+    def fake_fetch(ticker, from_date, to_date, interval="d"):
         calls.append(ticker)
         return _sample_bars(1)
 
@@ -211,7 +210,7 @@ def test_run_prices_per_item_failure(store: DataStore, configs_dir) -> None:
     """Én feil skal ikke abortere resten."""
     defaults, insts = configs_dir
 
-    def fake_fetch(ticker, from_date, to_date, interval="d"):  # noqa: ARG001
+    def fake_fetch(ticker, from_date, to_date, interval="d"):
         if ticker == "xauusd":
             raise RuntimeError("HTTP 503")
         return _sample_bars(1)
@@ -238,14 +237,12 @@ def test_run_prices_per_item_failure(store: DataStore, configs_dir) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_run_cot_disaggregated_only_matching_report(
-    store: DataStore, configs_dir
-) -> None:
+def test_run_cot_disaggregated_only_matching_report(store: DataStore, configs_dir) -> None:
     """Kun instrumenter med cot_report=disaggregated kalles."""
     defaults, insts = configs_dir
     calls: list[str] = []
 
-    def fake_fetch(contract, from_date, to_date):  # noqa: ARG001
+    def fake_fetch(contract, from_date, to_date):
         calls.append(contract)
         return pd.DataFrame()  # tom → 0 rader skrevet
 
@@ -273,7 +270,7 @@ def test_run_weather_only_agri_with_region(store: DataStore, configs_dir) -> Non
     defaults, insts = configs_dir
     calls: list[tuple] = []
 
-    def fake_fetch(region, lat, lon, from_date, to_date):  # noqa: ARG001
+    def fake_fetch(region, lat, lon, from_date, to_date):
         calls.append((region, lat, lon))
         return pd.DataFrame(
             {
@@ -306,9 +303,7 @@ def test_run_weather_only_agri_with_region(store: DataStore, configs_dir) -> Non
 # ---------------------------------------------------------------------------
 
 
-def test_run_fundamentals_without_key_fails_gracefully(
-    store: DataStore, configs_dir
-) -> None:
+def test_run_fundamentals_without_key_fails_gracefully(store: DataStore, configs_dir) -> None:
     defaults, insts = configs_dir
     # Ingen FRED_API_KEY satt, ingen secrets-fil
     with patch("bedrock.config.fetch_runner.get_secret", return_value=None):
@@ -331,7 +326,7 @@ def test_run_fundamentals_with_key(store: DataStore, configs_dir) -> None:
     defaults, insts = configs_dir
     os.environ["FRED_API_KEY"] = "test_key"
 
-    def fake_fetch(series_id, api_key, from_date, to_date):  # noqa: ARG001
+    def fake_fetch(series_id, api_key, from_date, to_date):
         return pd.DataFrame(
             {
                 "series_id": [series_id],
@@ -362,7 +357,7 @@ def test_run_fundamentals_with_key(store: DataStore, configs_dir) -> None:
 
 
 def test_default_from_date_with_stale_hours() -> None:
-    now = datetime(2024, 6, 1, 12, 0, tzinfo=timezone.utc)
+    now = datetime(2024, 6, 1, 12, 0, tzinfo=UTC)
     spec = _spec(stale_hours=24)
     result = default_from_date(spec, now=now, buffer_multiplier=2.0)
     # 24h × 2 = 48h bak → 30. mai
@@ -379,9 +374,7 @@ def runner() -> CliRunner:
     return CliRunner()
 
 
-def _write_fetch_config(
-    path: Path, *, include: list[str] | None = None
-) -> None:
+def _write_fetch_config(path: Path, *, include: list[str] | None = None) -> None:
     fetchers = {
         "prices": {
             "module": "bedrock.fetch.prices",
@@ -412,7 +405,7 @@ def test_cli_fetch_run_single(runner: CliRunner, tmp_path: Path, configs_dir) ->
     _write_fetch_config(config, include=["prices"])
     db = tmp_path / "bedrock.db"
 
-    def fake_fetch(ticker, from_date, to_date, interval="d"):  # noqa: ARG001
+    def fake_fetch(ticker, from_date, to_date, interval="d"):
         return _sample_bars(2)
 
     with patch("bedrock.fetch.prices.fetch_prices", side_effect=fake_fetch):
@@ -441,18 +434,16 @@ def test_cli_fetch_run_single(runner: CliRunner, tmp_path: Path, configs_dir) ->
     assert "Summary" in result.output
 
 
-def test_cli_fetch_run_all_fetchers(
-    runner: CliRunner, tmp_path: Path, configs_dir
-) -> None:
+def test_cli_fetch_run_all_fetchers(runner: CliRunner, tmp_path: Path, configs_dir) -> None:
     defaults, insts = configs_dir
     config = tmp_path / "fetch.yaml"
     _write_fetch_config(config)
     db = tmp_path / "bedrock.db"
 
-    def fake_prices(ticker, from_date, to_date, interval="d"):  # noqa: ARG001
+    def fake_prices(ticker, from_date, to_date, interval="d"):
         return _sample_bars(1)
 
-    def fake_weather(region, lat, lon, from_date, to_date):  # noqa: ARG001
+    def fake_weather(region, lat, lon, from_date, to_date):
         return pd.DataFrame(
             {
                 "region": [region],
@@ -464,8 +455,9 @@ def test_cli_fetch_run_all_fetchers(
             }
         )
 
-    with patch("bedrock.fetch.prices.fetch_prices", side_effect=fake_prices), patch(
-        "bedrock.fetch.weather.fetch_weather", side_effect=fake_weather
+    with (
+        patch("bedrock.fetch.prices.fetch_prices", side_effect=fake_prices),
+        patch("bedrock.fetch.weather.fetch_weather", side_effect=fake_weather),
     ):
         result = runner.invoke(
             cli,
@@ -512,7 +504,7 @@ def test_cli_fetch_run_stale_only_skips_fresh(
     # Skriv fersk data
     store = DataStore(db)
     df = _sample_bars(1)
-    df["ts"] = pd.to_datetime([datetime.now(timezone.utc)])
+    df["ts"] = pd.to_datetime([datetime.now(UTC)])
     store.append_prices("Gold", "D1", df)
 
     mock_fetch_called = {"n": 0}

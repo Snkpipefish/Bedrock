@@ -70,9 +70,7 @@ def _register_meta_endpoints(app: Flask, cfg: ServerConfig) -> None:
                 "port": cfg.port,
                 "host": cfg.host,
                 "endpoints_registered": sorted(
-                    rule.rule
-                    for rule in app.url_map.iter_rules()
-                    if rule.endpoint != "static"
+                    rule.rule for rule in app.url_map.iter_rules() if rule.endpoint != "static"
                 ),
             },
             200,

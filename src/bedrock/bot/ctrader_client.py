@@ -47,11 +47,12 @@ import os
 import sys
 import time
 from collections import deque
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
-from typing import Any, Callable, Optional
+from typing import Any
 
 from ctrader_open_api import Client, EndPoints, Protobuf, TcpProtocol
 from ctrader_open_api.messages.OpenApiCommonMessages_pb2 import (
@@ -166,7 +167,7 @@ class CtraderCallbacks:
     on_reconcile: Callable[[Any], None] = _noop
     # Kalt etter _on_symbols_list har populert symbol_map + lookup-dicts,
     # men FØR subscribe-spots begynner. Bot initialiserer candle-buffere her.
-    on_symbols_ready: Callable[["CtraderClient"], None] = _noop
+    on_symbols_ready: Callable[[CtraderClient], None] = _noop
     on_trader_info: Callable[[float], None] = _noop
 
 
@@ -202,14 +203,14 @@ class CtraderClient:
         credentials: CtraderCredentials,
         demo: bool,
         startup_config: StartupOnlyConfig,
-        callbacks: Optional[CtraderCallbacks] = None,
+        callbacks: CtraderCallbacks | None = None,
     ) -> None:
         self._creds = credentials
         self._demo = demo
         self._startup = startup_config
         self._callbacks = callbacks or CtraderCallbacks()
 
-        self.client: Optional[Client] = None
+        self.client: Client | None = None
 
         # Symbol-lookup og -info — eid av transport
         self.symbol_map: dict[str, int] = {}  # instrument-navn → symbol_id
@@ -232,11 +233,11 @@ class CtraderClient:
         self._reconnecting: bool = False
 
         # Watchdog
-        self._last_spot_time: Optional[float] = None
+        self._last_spot_time: float | None = None
         self._last_spot_per_sid: dict[int, float] = {}
         self._symbol_silent_logged: set[int] = set()
-        self._heartbeat_loop: Optional[task.LoopingCall] = None
-        self._watchdog_loop: Optional[task.LoopingCall] = None
+        self._heartbeat_loop: task.LoopingCall | None = None
+        self._watchdog_loop: task.LoopingCall | None = None
 
         # Pending requests (clientMsgId → type) — for debug
         self._pending_requests: dict[str, str] = {}
@@ -253,9 +254,7 @@ class CtraderClient:
         er ansvarlig for å registrere signal-handlers (SIGHUP/SIGTERM)
         før denne kalles.
         """
-        endpoint = (
-            EndPoints.PROTOBUF_DEMO_HOST if self._demo else EndPoints.PROTOBUF_LIVE_HOST
-        )
+        endpoint = EndPoints.PROTOBUF_DEMO_HOST if self._demo else EndPoints.PROTOBUF_LIVE_HOST
         log.info("═══════════════════════════════════════")
         log.info("  Bedrock trading bot (cTrader transport)")
         log.info("  Modus: %s", "DEMO" if self._demo else "⚠️ LIVE")
@@ -294,9 +293,7 @@ class CtraderClient:
         rc = self._startup.reconnect
         now = time.time()
         # Rydd opp timestamps utenfor vinduet
-        self._reconnect_times = [
-            t for t in self._reconnect_times if now - t < rc.window_sec
-        ]
+        self._reconnect_times = [t for t in self._reconnect_times if now - t < rc.window_sec]
         self._reconnect_times.append(now)
         if len(self._reconnect_times) > rc.max_in_window:
             log.error(
@@ -420,10 +417,10 @@ class CtraderClient:
         label: str = "",
         comment: str = "",
         order_type: str = "MARKET",
-        limit_price: Optional[float] = None,
-        stop_loss: Optional[float] = None,
-        take_profit: Optional[float] = None,
-        expiration_ms: Optional[int] = None,
+        limit_price: float | None = None,
+        stop_loss: float | None = None,
+        take_profit: float | None = None,
+        expiration_ms: int | None = None,
     ) -> Any:
         """Send ProtoOANewOrderReq. MARKET eller LIMIT.
 
@@ -463,8 +460,8 @@ class CtraderClient:
         self,
         *,
         position_id: int,
-        stop_loss: Optional[float] = None,
-        take_profit: Optional[float] = None,
+        stop_loss: float | None = None,
+        take_profit: float | None = None,
     ) -> Any:
         """Endre SL og/eller TP på åpen posisjon."""
         req = ProtoOAAmendPositionSLTPReq()
@@ -550,9 +547,7 @@ class CtraderClient:
                 log.debug("[SYMBOL] %s → %s (sid=%s)", instr_name, sym.symbolName, sid)
 
         # Valider INSTRUMENT_MAP-dekning mot megleren
-        missing_instruments = [
-            name for name in INSTRUMENT_MAP if name not in self.symbol_map
-        ]
+        missing_instruments = [name for name in INSTRUMENT_MAP if name not in self.symbol_map]
         for name in missing_instruments:
             log.warning(
                 "[SYMBOL-MAP] %r har ingen match hos megler — signaler for "
@@ -562,9 +557,7 @@ class CtraderClient:
             )
         for name, tickers in found_tickers.items():
             if len(tickers) > 1:
-                chosen = next(
-                    (t for t in INSTRUMENT_MAP[name] if t in tickers), tickers[0]
-                )
+                chosen = next((t for t in INSTRUMENT_MAP[name] if t in tickers), tickers[0])
                 log.warning(
                     "[SYMBOL-MAP] %r har flere treff hos megler: %s — valgte %r. "
                     "Bekreft at dette er riktig kontraktspec (CFD/future/spot).",
@@ -693,8 +686,11 @@ class CtraderClient:
         # Reconcile — etter symbol-detaljer
         reactor.callLater(detail_delay + 0.5, self.send_reconcile)  # type: ignore[attr-defined]
 
-        log.info("[KLAR] Transport initialisert — %d trading-symboler, %d feed-symboler",
-                 len(self.symbol_map), len(self.price_feed_sids))
+        log.info(
+            "[KLAR] Transport initialisert — %d trading-symboler, %d feed-symboler",
+            len(self.symbol_map),
+            len(self.price_feed_sids),
+        )
 
     def _on_subscribe_spots(self, res: Any) -> None:
         pass  # Stille OK
@@ -712,9 +708,7 @@ class CtraderClient:
                 "step_volume": sym.stepVolume,
             }
             self.symbol_price_digits[sid] = sym.digits
-            name = next(
-                (k for k, v in self.symbol_map.items() if v == sid), str(sid)
-            )
+            name = next((k for k, v in self.symbol_map.items() if v == sid), str(sid))
             log.info(
                 "[SYMBOL INFO] %s: lotSize=%s minVol=%s stepVol=%s digits=%s",
                 name,
@@ -749,12 +743,10 @@ class CtraderClient:
             "step_volume": sym.stepVolume,
             "digits": sym.digits,
             "description": getattr(sym, "description", ""),
-            "updated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+            "updated": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
         }
         info_file.parent.mkdir(parents=True, exist_ok=True)
-        info_file.write_text(
-            _json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        info_file.write_text(_json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
         log.info("[AGRI SYMBOL] %s info lagret til %s", name, info_file)
 
     # ─────────────────────────────────────────────────────────
@@ -925,9 +917,7 @@ def load_credentials_from_env() -> CtraderCredentials:
     try:
         account_id = int(account_id_raw)
     except ValueError as exc:
-        raise RuntimeError(
-            f"CTRADER_ACCOUNT_ID må være heltall, fikk {account_id_raw!r}"
-        ) from exc
+        raise RuntimeError(f"CTRADER_ACCOUNT_ID må være heltall, fikk {account_id_raw!r}") from exc
 
     return CtraderCredentials(
         client_id=client_id,

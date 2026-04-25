@@ -41,9 +41,7 @@ def upload() -> tuple[object, int]:
 
     if "file" not in request.files:
         return (
-            jsonify(
-                {"error": "multipart/form-data med 'file'-felt kreves"}
-            ),
+            jsonify({"error": "multipart/form-data med 'file'-felt kreves"}),
             400,
         )
 

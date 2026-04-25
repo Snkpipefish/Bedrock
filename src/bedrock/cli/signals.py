@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import click
@@ -139,9 +139,7 @@ def signals_cmd(
 
     store = DataStore(db_path)
     # Direction-enum har lowercase values; CLI-argumenter normaliseres
-    direction_list = (
-        [Direction(d.lower()) for d in directions] if directions else None
-    )
+    direction_list = [Direction(d.lower()) for d in directions] if directions else None
     horizon_list = list(horizons) if horizons else None
 
     try:
@@ -154,7 +152,7 @@ def signals_cmd(
             defaults_dir=defaults_dir,
             snapshot_path=snapshot_path,
             write_snapshot=not no_snapshot_write,
-            now=datetime.now(timezone.utc),
+            now=datetime.now(UTC),
             price_tf=price_tf,
             price_lookback=price_lookback,
         )
@@ -167,12 +165,12 @@ def signals_cmd(
         _print_table(result)
 
 
-def _print_json(result) -> None:  # noqa: ANN001
+def _print_json(result) -> None:
     """Full JSON-dump for programatisk forbruk."""
     click.echo(json.dumps(result.model_dump(mode="json"), indent=2, default=str))
 
 
-def _print_table(result) -> None:  # noqa: ANN001
+def _print_table(result) -> None:
     """Menneskelesbar oversikt per entry."""
     click.echo(f"Instrument: {result.instrument}")
     click.echo(f"Run: {result.run_ts.isoformat()}")
@@ -185,7 +183,7 @@ def _print_table(result) -> None:  # noqa: ANN001
         click.echo("")
 
 
-def _print_entry(entry) -> None:  # noqa: ANN001
+def _print_entry(entry) -> None:
     marker = "PUBLISH" if entry.published else "       "
     setup_status = "SETUP" if entry.setup is not None else "-----"
     click.echo(
@@ -194,9 +192,7 @@ def _print_entry(entry) -> None:  # noqa: ANN001
         f"{entry.max_score:<5.1f}  grade={entry.grade}"
     )
     if entry.gates_triggered:
-        click.echo(
-            f"         gates_triggered: {', '.join(entry.gates_triggered)}"
-        )
+        click.echo(f"         gates_triggered: {', '.join(entry.gates_triggered)}")
     if entry.setup is not None:
         s = entry.setup.setup
         rr_str = f"{s.rr:.2f}" if s.rr is not None else "trailing"

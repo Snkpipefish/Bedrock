@@ -40,9 +40,7 @@ def weighted_horizon(
     Dette er prinsipp 1 fra PLAN.md: YAML bestemmer *hvilke* familier som
     teller for en gitt horisont.
     """
-    return sum(
-        family_scores.get(family, 0.0) * weight for family, weight in family_weights.items()
-    )
+    return sum(family_scores.get(family, 0.0) * weight for family, weight in family_weights.items())
 
 
 def additive_sum(

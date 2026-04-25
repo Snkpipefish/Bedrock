@@ -6,17 +6,14 @@ import pandas as pd
 import pytest
 
 from bedrock.setups.generator import (
-    ClusteredLevel,
     Direction,
     Horizon,
-    Setup,
     SetupConfig,
     build_setup,
     cluster_levels,
     compute_atr,
 )
 from bedrock.setups.levels import Level, LevelType
-
 
 # ---------------------------------------------------------------------------
 # compute_atr
@@ -467,9 +464,7 @@ def test_integration_detect_levels_then_build_setup() -> None:
     ts = pd.date_range("2024-01-01", periods=20, freq="D")
     highs = [105.0] * 9 + [106.0] + [105.0] * 10
     lows = [103.0] * 9 + [100.0] + [103.0] * 10  # swing low ved idx 9
-    ohlc = pd.DataFrame(
-        {"open": highs, "high": highs, "low": lows, "close": highs}, index=ts
-    )
+    ohlc = pd.DataFrame({"open": highs, "high": highs, "low": lows, "close": highs}, index=ts)
     swing_levels = detect_swing_levels(ohlc, window=3)
     round_levels = detect_round_numbers(current_price=104.0, step=2.0, count_above=3, count_below=3)
 

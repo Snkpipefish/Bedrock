@@ -75,9 +75,7 @@ from bedrock.bot.state import TradePhase, TradeState
 log = logging.getLogger("bedrock.bot.main")
 
 
-def _apply_kill_ids(
-    active_states: list[TradeState], kill_ids: list[str]
-) -> None:
+def _apply_kill_ids(active_states: list[TradeState], kill_ids: list[str]) -> None:
     """Sett `kill_switch=True` på alle IN_TRADE-states med matching signal_id.
 
     ExitEngine.manage_open_positions P2 plukker opp flagget og lukker
@@ -167,9 +165,7 @@ def build_bot(
     return client, comms, entry, exit_engine, bot_config, active_states
 
 
-def _make_sighup_handler(
-    bot_config: BotConfig, config_path: str | None
-) -> Any:
+def _make_sighup_handler(bot_config: BotConfig, config_path: str | None) -> Any:
     """Returner SIGHUP-handler som oppdaterer reloadable-delen in-place.
 
     Startup_only-diffs logges som warning — krever prosess-restart.
@@ -212,9 +208,7 @@ def _make_shutdown_handler(signal_name: str) -> Any:
     return _handle_shutdown
 
 
-def _schedule_polling_loop(
-    comms: SignalComms, config: Any, reactor_module: Any
-) -> None:
+def _schedule_polling_loop(comms: SignalComms, config: Any, reactor_module: Any) -> None:
     """Planlegg gjentatt fetch_once via reactor.callLater med adaptiv intervall.
 
     Adaptiv: default_seconds normalt, scalp_active_seconds hvis SCALP-
@@ -233,9 +227,7 @@ def _schedule_polling_loop(
     reactor_module.callLater(0, _tick)
 
 
-def register_signal_handlers(
-    bot_config: BotConfig, config_path: str | None
-) -> None:
+def register_signal_handlers(bot_config: BotConfig, config_path: str | None) -> None:
     """Registrer SIGHUP/SIGTERM/SIGINT-handlere. Må kalles før reactor.run()."""
     signal.signal(signal.SIGHUP, _make_sighup_handler(bot_config, config_path))
     signal.signal(signal.SIGTERM, _make_shutdown_handler("SIGTERM"))
@@ -277,9 +269,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     config_path_str = (
-        str(resolve_bot_config_path(args.config))
-        if args.config is None
-        else args.config
+        str(resolve_bot_config_path(args.config)) if args.config is None else args.config
     )
     register_signal_handlers(bot_config, config_path_str)
 
@@ -292,8 +282,9 @@ def main(argv: list[str] | None = None) -> int:
     log.info("═══════════════════════════════════════")
     log.info("  Bedrock trading bot — %s-modus", "DEMO" if args.demo else "LIVE")
     log.info("  Config: %s", config_path_str)
-    log.info("  %d instrumenter, %d pris-feeds",
-             len(client.symbol_map), len(client.price_feed_sids))
+    log.info(
+        "  %d instrumenter, %d pris-feeds", len(client.symbol_map), len(client.price_feed_sids)
+    )
     log.info("═══════════════════════════════════════")
 
     # Blokkerende — kjører til reactor.stop() via SIGTERM/SIGINT/fatal

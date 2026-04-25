@@ -38,7 +38,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from bedrock.setups.generator import Direction, Horizon, Setup
 
-
 # ---------------------------------------------------------------------------
 # Konfigurasjon
 # ---------------------------------------------------------------------------
@@ -151,9 +150,7 @@ def stabilize_setup(
     uendret (nyttig for debugging).
     """
     cfg = config if config is not None else HysteresisConfig()
-    setup_id = compute_setup_id(
-        new_setup.instrument, new_setup.direction, new_setup.horizon
-    )
+    setup_id = compute_setup_id(new_setup.instrument, new_setup.direction, new_setup.horizon)
 
     if previous is None or not cfg.enabled:
         return StableSetup(
@@ -267,9 +264,9 @@ def _recompute_rr(
 
 __all__ = [
     "HysteresisConfig",
-    "StableSetup",
     "SetupSnapshot",
+    "StableSetup",
+    "apply_hysteresis_batch",
     "compute_setup_id",
     "stabilize_setup",
-    "apply_hysteresis_batch",
 ]

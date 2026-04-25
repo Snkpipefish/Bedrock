@@ -46,28 +46,21 @@ def load_signals(path: Path) -> list[PersistedSignal]:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise SignalStoreError(
-            f"{path} er ikke gyldig JSON: {exc}"
-        ) from exc
+        raise SignalStoreError(f"{path} er ikke gyldig JSON: {exc}") from exc
 
     if not isinstance(data, list):
         raise SignalStoreError(
-            f"{path} må ha en JSON-array som top-level element, "
-            f"fikk {type(data).__name__}"
+            f"{path} må ha en JSON-array som top-level element, fikk {type(data).__name__}"
         )
 
     signals: list[PersistedSignal] = []
     for idx, row in enumerate(data):
         if not isinstance(row, dict):
-            raise SignalStoreError(
-                f"{path}[{idx}] må være objekt, fikk {type(row).__name__}"
-            )
+            raise SignalStoreError(f"{path}[{idx}] må være objekt, fikk {type(row).__name__}")
         try:
             signals.append(PersistedSignal.model_validate(row))
         except ValidationError as exc:
-            raise SignalStoreError(
-                f"{path}[{idx}] feiler validering: {exc}"
-            ) from exc
+            raise SignalStoreError(f"{path}[{idx}] feiler validering: {exc}") from exc
 
     return signals
 
@@ -80,9 +73,7 @@ def _atomic_write_json(path: Path, payload: list[dict]) -> None:
     rydder opp tmp-fila.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent)
-    )
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent))
     tmp_path = Path(tmp_name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fp:
@@ -138,22 +129,16 @@ def load_kills(path: Path) -> list[KillSwitch]:
         raise SignalStoreError(f"{path} er ikke gyldig JSON: {exc}") from exc
 
     if not isinstance(data, list):
-        raise SignalStoreError(
-            f"{path} må ha JSON-array som top-level, fikk {type(data).__name__}"
-        )
+        raise SignalStoreError(f"{path} må ha JSON-array som top-level, fikk {type(data).__name__}")
 
     kills: list[KillSwitch] = []
     for idx, row in enumerate(data):
         if not isinstance(row, dict):
-            raise SignalStoreError(
-                f"{path}[{idx}] må være objekt, fikk {type(row).__name__}"
-            )
+            raise SignalStoreError(f"{path}[{idx}] må være objekt, fikk {type(row).__name__}")
         try:
             kills.append(KillSwitch.model_validate(row))
         except ValidationError as exc:
-            raise SignalStoreError(
-                f"{path}[{idx}] feiler validering: {exc}"
-            ) from exc
+            raise SignalStoreError(f"{path}[{idx}] feiler validering: {exc}") from exc
     return kills
 
 

@@ -15,7 +15,6 @@ from bedrock.fetch.fred import (
     fetch_fred_series,
 )
 
-
 # ---------------------------------------------------------------------------
 # Query-bygging
 # ---------------------------------------------------------------------------
@@ -109,9 +108,7 @@ def test_fetch_fred_end_to_end_matches_datastore(tmp_path) -> None:
 
 def test_fetch_fred_empty_observations_returns_empty_df() -> None:
     empty = {"observations": []}
-    with patch(
-        "bedrock.fetch.fred.http_get_with_retry", return_value=_mock_response(empty)
-    ):
+    with patch("bedrock.fetch.fred.http_get_with_retry", return_value=_mock_response(empty)):
         df = fetch_fred_series("X", "K", date(2024, 1, 1), date(2024, 1, 2))
     assert df.empty
     assert list(df.columns) == ["series_id", "date", "value"]
@@ -119,20 +116,20 @@ def test_fetch_fred_empty_observations_returns_empty_df() -> None:
 
 def test_fetch_fred_missing_observations_block_raises() -> None:
     bad = {"error_message": "something"}
-    with patch(
-        "bedrock.fetch.fred.http_get_with_retry", return_value=_mock_response(bad)
+    with (
+        patch("bedrock.fetch.fred.http_get_with_retry", return_value=_mock_response(bad)),
+        pytest.raises(FredFetchError, match="missing 'observations'"),
     ):
-        with pytest.raises(FredFetchError, match="missing 'observations'"):
-            fetch_fred_series("X", "K", date(2024, 1, 1), date(2024, 1, 2))
+        fetch_fred_series("X", "K", date(2024, 1, 1), date(2024, 1, 2))
 
 
 def test_fetch_fred_missing_date_or_value_in_row_raises() -> None:
     bad = {"observations": [{"realtime_start": "2024", "realtime_end": "2024"}]}
-    with patch(
-        "bedrock.fetch.fred.http_get_with_retry", return_value=_mock_response(bad)
+    with (
+        patch("bedrock.fetch.fred.http_get_with_retry", return_value=_mock_response(bad)),
+        pytest.raises(FredFetchError, match="missing 'date' or 'value'"),
     ):
-        with pytest.raises(FredFetchError, match="missing 'date' or 'value'"):
-            fetch_fred_series("X", "K", date(2024, 1, 1), date(2024, 1, 2))
+        fetch_fred_series("X", "K", date(2024, 1, 1), date(2024, 1, 2))
 
 
 def test_fetch_fred_http_error_includes_body_preview() -> None:
@@ -150,18 +147,20 @@ def test_fetch_fred_http_error_includes_body_preview() -> None:
 def test_fetch_fred_network_failure_wrapped() -> None:
     import requests
 
-    with patch(
-        "bedrock.fetch.fred.http_get_with_retry",
-        side_effect=requests.ConnectionError("refused"),
+    with (
+        patch(
+            "bedrock.fetch.fred.http_get_with_retry",
+            side_effect=requests.ConnectionError("refused"),
+        ),
+        pytest.raises(FredFetchError, match="Network failure"),
     ):
-        with pytest.raises(FredFetchError, match="Network failure"):
-            fetch_fred_series("X", "K", date(2024, 1, 1), date(2024, 1, 2))
+        fetch_fred_series("X", "K", date(2024, 1, 1), date(2024, 1, 2))
 
 
 def test_fetch_fred_hits_correct_url() -> None:
     called = {}
 
-    def capture(url, params=None, **kwargs):  # noqa: ARG001
+    def capture(url, params=None, **kwargs):
         called["url"] = url
         return _mock_response(SAMPLE_FRED_RESPONSE)
 

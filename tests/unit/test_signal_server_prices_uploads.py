@@ -142,9 +142,7 @@ def test_push_prices_idempotent_same_ts(app_with_files) -> None:
 def test_push_prices_requires_json(app_with_files) -> None:
     app, _ = app_with_files
     with app.test_client() as client:
-        response = client.post(
-            "/push-prices", data="x", content_type="text/plain"
-        )
+        response = client.post("/push-prices", data="x", content_type="text/plain")
     assert response.status_code == 415
 
 
@@ -203,10 +201,7 @@ def test_prices_last_n_limits_output(app_with_files) -> None:
     body = {
         "instrument": "Gold",
         "tf": "D1",
-        "bars": [
-            _bar(f"2026-04-{d:02d}T00:00:00", 2000.0 + d)
-            for d in range(1, 6)
-        ],
+        "bars": [_bar(f"2026-04-{d:02d}T00:00:00", 2000.0 + d) for d in range(1, 6)],
     }
     with app.test_client() as client:
         client.post("/push-prices", json=body)
@@ -219,9 +214,7 @@ def test_prices_last_n_limits_output(app_with_files) -> None:
 def test_prices_last_n_invalid(app_with_files) -> None:
     app, _ = app_with_files
     with app.test_client() as client:
-        response = client.get(
-            "/prices?instrument=Gold&tf=D1&last_n=not-a-number"
-        )
+        response = client.get("/prices?instrument=Gold&tf=D1&last_n=not-a-number")
     assert response.status_code == 400
 
 

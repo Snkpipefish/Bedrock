@@ -36,9 +36,7 @@ _DEFAULT_LOOKBACK = 30
 
 
 @register("currency_cross_trend")
-def currency_cross_trend(
-    store: Any, instrument: str, params: dict
-) -> float:
+def currency_cross_trend(store: Any, instrument: str, params: dict) -> float:
     """Score basert på prosentvis endring i en valuta-cross over lookback-vindu.
 
     Signatur følger standard driver-kontrakten. `instrument`-argumentet

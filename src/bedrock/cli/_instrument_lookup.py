@@ -74,4 +74,4 @@ def find_instrument(
     )
 
 
-__all__ = ["DEFAULT_INSTRUMENTS_DIR", "DEFAULT_DEFAULTS_DIR", "find_instrument"]
+__all__ = ["DEFAULT_DEFAULTS_DIR", "DEFAULT_INSTRUMENTS_DIR", "find_instrument"]

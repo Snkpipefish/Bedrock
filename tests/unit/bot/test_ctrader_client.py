@@ -33,7 +33,6 @@ from bedrock.bot.ctrader_client import (
     load_credentials_from_env,
 )
 
-
 # ─────────────────────────────────────────────────────────────
 # Fixtures
 # ─────────────────────────────────────────────────────────────
@@ -55,12 +54,8 @@ def startup_cfg() -> StartupOnlyConfig:
 
 
 @pytest.fixture
-def client(
-    creds: CtraderCredentials, startup_cfg: StartupOnlyConfig
-) -> CtraderClient:
-    return CtraderClient(
-        credentials=creds, demo=True, startup_config=startup_cfg
-    )
+def client(creds: CtraderCredentials, startup_cfg: StartupOnlyConfig) -> CtraderClient:
+    return CtraderClient(credentials=creds, demo=True, startup_config=startup_cfg)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -99,9 +94,7 @@ def test_client_uses_injected_callbacks(
     creds: CtraderCredentials, startup_cfg: StartupOnlyConfig
 ) -> None:
     cb = CtraderCallbacks(on_spot=MagicMock())
-    c = CtraderClient(
-        credentials=creds, demo=True, startup_config=startup_cfg, callbacks=cb
-    )
+    c = CtraderClient(credentials=creds, demo=True, startup_config=startup_cfg, callbacks=cb)
     assert c._callbacks is cb
 
 
@@ -176,11 +169,13 @@ def test_reconnect_over_budget_triggers_fatal(client: CtraderClient) -> None:
         client._on_disconnected(fake_client, "test reason")
     assert len(client._reconnect_times) == 6
     # Skal ha planlagt reactor.stop via callLater
-    assert any(
-        call.args and call.args[1] == mock_reactor.stop
-        for call in mock_reactor.callLater.call_args_list
-    ) or mock_reactor.stop.called or any(
-        "stop" in str(call) for call in mock_reactor.method_calls
+    assert (
+        any(
+            call.args and call.args[1] == mock_reactor.stop
+            for call in mock_reactor.callLater.call_args_list
+        )
+        or mock_reactor.stop.called
+        or any("stop" in str(call) for call in mock_reactor.method_calls)
     )
 
 
@@ -252,14 +247,10 @@ def test_on_spot_clears_silent_flag(client: CtraderClient) -> None:
     assert sid not in client._symbol_silent_logged
 
 
-def test_on_spot_fires_callback(
-    creds: CtraderCredentials, startup_cfg: StartupOnlyConfig
-) -> None:
+def test_on_spot_fires_callback(creds: CtraderCredentials, startup_cfg: StartupOnlyConfig) -> None:
     on_spot = MagicMock()
     cb = CtraderCallbacks(on_spot=on_spot)
-    c = CtraderClient(
-        credentials=creds, demo=True, startup_config=startup_cfg, callbacks=cb
-    )
+    c = CtraderClient(credentials=creds, demo=True, startup_config=startup_cfg, callbacks=cb)
     c.symbol_digits[1] = 5
     event = _FakeSpot(symbolId=1, _has_bid=True, _has_ask=True, bid=1, ask=2)
     c._on_spot(event)
@@ -273,9 +264,7 @@ def test_on_spot_callback_exception_does_not_propagate(
         raise RuntimeError("boom")
 
     cb = CtraderCallbacks(on_spot=boom)
-    c = CtraderClient(
-        credentials=creds, demo=True, startup_config=startup_cfg, callbacks=cb
-    )
+    c = CtraderClient(credentials=creds, demo=True, startup_config=startup_cfg, callbacks=cb)
     c.symbol_digits[1] = 5
     event = _FakeSpot(symbolId=1, _has_bid=True, _has_ask=True, bid=1, ask=2)
     # Skal ikke raise ut av _on_spot
@@ -352,9 +341,7 @@ def test_on_error_res_non_fatal_code_calls_callback(
 ) -> None:
     on_err = MagicMock()
     cb = CtraderCallbacks(on_error_res=on_err)
-    c = CtraderClient(
-        credentials=creds, demo=True, startup_config=startup_cfg, callbacks=cb
-    )
+    c = CtraderClient(credentials=creds, demo=True, startup_config=startup_cfg, callbacks=cb)
     err_event = MagicMock()
     err_event.errorCode = "SOMETHING_TRANSIENT"
     with patch.object(c, "_fatal_exit") as fatal:
@@ -433,9 +420,7 @@ def test_on_trader_info_sets_balance_and_fires_callback(
 ) -> None:
     on_ti = MagicMock()
     cb = CtraderCallbacks(on_trader_info=on_ti)
-    c = CtraderClient(
-        credentials=creds, demo=True, startup_config=startup_cfg, callbacks=cb
-    )
+    c = CtraderClient(credentials=creds, demo=True, startup_config=startup_cfg, callbacks=cb)
     res = MagicMock()
     res.trader.balance = 150_000  # cent
     with patch.object(c, "send"):
@@ -545,9 +530,7 @@ def test_send_new_order_limit_with_sl_tp_and_expiry(client: CtraderClient) -> No
 
 def test_send_new_order_limit_without_price_raises(client: CtraderClient) -> None:
     with pytest.raises(ValueError, match="limit_price"):
-        client.send_new_order(
-            symbol_id=22, trade_side="BUY", volume=500, order_type="LIMIT"
-        )
+        client.send_new_order(symbol_id=22, trade_side="BUY", volume=500, order_type="LIMIT")
 
 
 def test_amend_sl_tp(client: CtraderClient) -> None:

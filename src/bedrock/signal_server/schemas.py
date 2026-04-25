@@ -50,18 +50,14 @@ class PersistedSignal(BaseModel):
     @classmethod
     def _direction_must_be_valid(cls, value: str) -> str:
         if value not in _VALID_DIRECTIONS:
-            raise ValueError(
-                f"direction må være BUY/SELL, fikk {value!r}"
-            )
+            raise ValueError(f"direction må være BUY/SELL, fikk {value!r}")
         return value
 
     @field_validator("horizon")
     @classmethod
     def _horizon_must_be_valid(cls, value: str) -> str:
         if value not in _VALID_HORIZONS:
-            raise ValueError(
-                f"horizon må være SCALP/SWING/MAKRO, fikk {value!r}"
-            )
+            raise ValueError(f"horizon må være SCALP/SWING/MAKRO, fikk {value!r}")
         return value
 
     @field_validator("score")
@@ -91,9 +87,7 @@ class KillSwitch(BaseModel):
     @classmethod
     def _horizon_must_be_valid(cls, value: str) -> str:
         if value not in _VALID_HORIZONS:
-            raise ValueError(
-                f"horizon må være SCALP/SWING/MAKRO, fikk {value!r}"
-            )
+            raise ValueError(f"horizon må være SCALP/SWING/MAKRO, fikk {value!r}")
         return value
 
     @property
@@ -116,18 +110,14 @@ class InvalidationRequest(BaseModel):
     @classmethod
     def _direction_must_be_valid(cls, value: str) -> str:
         if value not in _VALID_DIRECTIONS:
-            raise ValueError(
-                f"direction må være BUY/SELL, fikk {value!r}"
-            )
+            raise ValueError(f"direction må være BUY/SELL, fikk {value!r}")
         return value
 
     @field_validator("horizon")
     @classmethod
     def _horizon_must_be_valid(cls, value: str) -> str:
         if value not in _VALID_HORIZONS:
-            raise ValueError(
-                f"horizon må være SCALP/SWING/MAKRO, fikk {value!r}"
-            )
+            raise ValueError(f"horizon må være SCALP/SWING/MAKRO, fikk {value!r}")
         return value
 
 

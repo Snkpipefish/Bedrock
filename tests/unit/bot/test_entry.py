@@ -18,19 +18,16 @@ Dekker også:
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 from bedrock.bot.config import BotConfig, ReloadableConfig
-from bedrock.bot.ctrader_client import H1_PERIOD, M15_PERIOD
 from bedrock.bot.entry import DEFAULT_CONFIRMATION_STATS_PATH, EntryEngine
 from bedrock.bot.safety import SafetyMonitor
 from bedrock.bot.state import Candle, CandleBuffer, TradePhase, TradeState
-
 
 # ─────────────────────────────────────────────────────────────
 # Fixtures
@@ -52,7 +49,7 @@ def _make_client_stub(
     stub.last_bid = last_bid or {}
     stub.last_ask = last_ask or {}
     stub.spread_history = spread_history or {}
-    stub.symbol_digits = symbol_digits or {sid: 5 for sid in symbol_map.values()}
+    stub.symbol_digits = symbol_digits or dict.fromkeys(symbol_map.values(), 5)
     stub.symbol_price_digits = {}
     stub.symbol_pip = {}
     stub.symbol_info = {}
@@ -162,7 +159,10 @@ def test_agri_signal_not_overridden(
     )
     execute = MagicMock()
     engine = _make_engine(
-        client, safety, config, active_states,
+        client,
+        safety,
+        config,
+        active_states,
         stats_path=tmp_path / "s.json",
         execute_trade=execute,
     )
@@ -192,8 +192,12 @@ def test_agri_signal_not_overridden(
 
     # Lag en lukket candle som trigger evaluation
     candle = Candle(
-        open=4.51, high=4.52, low=4.50, close=4.515, volume=100,
-        timestamp=datetime.now(timezone.utc),
+        open=4.51,
+        high=4.52,
+        low=4.50,
+        close=4.515,
+        volume=100,
+        timestamp=datetime.now(UTC),
     )
     engine._on_candle_closed(10, candle)
 
@@ -220,9 +224,7 @@ def test_technical_signal_also_unchanged(
         last_ask={1: 1.0802},
         spread_history={1: deque([0.00002] * 15, maxlen=20)},
     )
-    engine = _make_engine(
-        client, safety, config, active_states, stats_path=tmp_path / "s.json"
-    )
+    engine = _make_engine(client, safety, config, active_states, stats_path=tmp_path / "s.json")
     engine.on_symbols_ready(client)
 
     signal = {
@@ -242,8 +244,12 @@ def test_technical_signal_also_unchanged(
     engine._on_candle_closed(
         1,
         Candle(
-            open=1.0801, high=1.0802, low=1.0800, close=1.0801, volume=1,
-            timestamp=datetime.now(timezone.utc),
+            open=1.0801,
+            high=1.0802,
+            low=1.0800,
+            close=1.0801,
+            volume=1,
+            timestamp=datetime.now(UTC),
         ),
     )
     assert len(active_states) == 1
@@ -286,8 +292,12 @@ def test_daily_loss_gate_blocks_new_entry(
     engine._on_candle_closed(
         1,
         Candle(
-            open=1.08, high=1.081, low=1.08, close=1.081, volume=1,
-            timestamp=datetime.now(timezone.utc),
+            open=1.08,
+            high=1.081,
+            low=1.08,
+            close=1.081,
+            volume=1,
+            timestamp=datetime.now(UTC),
         ),
     )
     # Daily-loss-gate stopper trade før state opprettes
@@ -312,7 +322,7 @@ def test_ttl_blocks_stale_scalp(
     )
     engine = _make_engine(client, safety, config, active_states, stats_path=tmp_path / "s.json")
     engine.on_symbols_ready(client)
-    old_ts = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
+    old_ts = (datetime.now(UTC) - timedelta(minutes=30)).isoformat()
     signal = {
         "id": "stale-scalp",
         "instrument": "EURUSD",
@@ -329,8 +339,12 @@ def test_ttl_blocks_stale_scalp(
     engine._on_candle_closed(
         1,
         Candle(
-            open=1.08, high=1.081, low=1.08, close=1.081, volume=1,
-            timestamp=datetime.now(timezone.utc),
+            open=1.08,
+            high=1.081,
+            low=1.08,
+            close=1.081,
+            volume=1,
+            timestamp=datetime.now(UTC),
         ),
     )
     assert len(active_states) == 0
@@ -349,7 +363,7 @@ def test_ttl_allows_fresh_swing(
     )
     engine = _make_engine(client, safety, config, active_states, stats_path=tmp_path / "s.json")
     engine.on_symbols_ready(client)
-    ts = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
+    ts = (datetime.now(UTC) - timedelta(minutes=30)).isoformat()
     signal = {
         "id": "fresh-swing",
         "instrument": "EURUSD",
@@ -366,8 +380,12 @@ def test_ttl_allows_fresh_swing(
     engine._on_candle_closed(
         1,
         Candle(
-            open=1.08, high=1.081, low=1.08, close=1.081, volume=1,
-            timestamp=datetime.now(timezone.utc),
+            open=1.08,
+            high=1.081,
+            low=1.08,
+            close=1.081,
+            volume=1,
+            timestamp=datetime.now(UTC),
         ),
     )
     assert len(active_states) == 1
@@ -414,8 +432,12 @@ def test_duplicate_instrument_direction_blocked(
     engine._on_candle_closed(
         1,
         Candle(
-            open=1.08, high=1.081, low=1.08, close=1.081, volume=1,
-            timestamp=datetime.now(timezone.utc),
+            open=1.08,
+            high=1.081,
+            low=1.08,
+            close=1.081,
+            volume=1,
+            timestamp=datetime.now(UTC),
         ),
     )
     # Fortsatt kun 1 state (den gamle) — ny ble blokkert
@@ -441,9 +463,14 @@ def test_filter_spread_cold_start(
     engine = _make_engine(client, safety, config, active_states, stats_path=tmp_path / "s.json")
     engine.signal_data = {"global_state": {}, "rules": {}}
     sig = {
-        "id": "x", "instrument": "EURUSD", "direction": "buy",
-        "alert_level": 1.08, "stop": 1.07, "t1": 1.09,
-        "entry_zone": [1.08, 1.081], "horizon": "SCALP",
+        "id": "x",
+        "instrument": "EURUSD",
+        "direction": "buy",
+        "alert_level": 1.08,
+        "stop": 1.07,
+        "t1": 1.09,
+        "entry_zone": [1.08, 1.081],
+        "horizon": "SCALP",
     }
     assert engine._passes_filters(sig, 1) is False
 
@@ -460,9 +487,14 @@ def test_filter_spread_wide_blocked(
     engine = _make_engine(client, safety, config, active_states, stats_path=tmp_path / "s.json")
     engine.signal_data = {"global_state": {}, "rules": {"stop_multiplier": 3.0}}
     sig = {
-        "id": "x", "instrument": "EURUSD", "direction": "buy",
-        "alert_level": 1.0801, "stop": 1.0750, "t1": 1.0900,
-        "entry_zone": [1.08, 1.081], "horizon": "SCALP",
+        "id": "x",
+        "instrument": "EURUSD",
+        "direction": "buy",
+        "alert_level": 1.0801,
+        "stop": 1.0750,
+        "t1": 1.0900,
+        "entry_zone": [1.08, 1.081],
+        "horizon": "SCALP",
     }
     assert engine._passes_filters(sig, 1) is False
 
@@ -473,15 +505,21 @@ def test_filter_rr_below_min(
     # SWING min R:R = 1.3. Signal med R:R = 0.5 blokkeres
     client = _make_client_stub(
         symbol_map={"EURUSD": 1},
-        last_bid={1: 1.08}, last_ask={1: 1.081},
+        last_bid={1: 1.08},
+        last_ask={1: 1.081},
         spread_history={1: deque([0.00002] * 15, maxlen=20)},
     )
     engine = _make_engine(client, safety, config, active_states, stats_path=tmp_path / "s.json")
     engine.signal_data = {"global_state": {}, "rules": {}}
     sig = {
-        "id": "low-rr", "instrument": "EURUSD", "direction": "buy",
-        "alert_level": 1.08, "stop": 1.07, "t1": 1.085,  # reward=0.005 risk=0.01 → 0.5
-        "entry_zone": [1.08, 1.081], "horizon": "SWING",
+        "id": "low-rr",
+        "instrument": "EURUSD",
+        "direction": "buy",
+        "alert_level": 1.08,
+        "stop": 1.07,
+        "t1": 1.085,  # reward=0.005 risk=0.01 → 0.5
+        "entry_zone": [1.08, 1.081],
+        "horizon": "SWING",
     }
     assert engine._passes_filters(sig, 1) is False
 
@@ -491,15 +529,21 @@ def test_filter_rr_above_min_passes(
 ) -> None:
     client = _make_client_stub(
         symbol_map={"EURUSD": 1},
-        last_bid={1: 1.08}, last_ask={1: 1.0801},
+        last_bid={1: 1.08},
+        last_ask={1: 1.0801},
         spread_history={1: deque([0.00002] * 15, maxlen=20)},
     )
     engine = _make_engine(client, safety, config, active_states, stats_path=tmp_path / "s.json")
     engine.signal_data = {"global_state": {}, "rules": {}}
     sig = {
-        "id": "good-rr", "instrument": "EURUSD", "direction": "buy",
-        "alert_level": 1.08, "stop": 1.07, "t1": 1.10,  # 2:1
-        "entry_zone": [1.08, 1.081], "horizon": "SWING",
+        "id": "good-rr",
+        "instrument": "EURUSD",
+        "direction": "buy",
+        "alert_level": 1.08,
+        "stop": 1.07,
+        "t1": 1.10,  # 2:1
+        "entry_zone": [1.08, 1.081],
+        "horizon": "SWING",
     }
     assert engine._passes_filters(sig, 1) is True
 
@@ -509,20 +553,24 @@ def test_filter_usda_blackout_blocks_agri(
 ) -> None:
     client = _make_client_stub(
         symbol_map={"Corn": 10},
-        last_bid={10: 4.5}, last_ask={10: 4.52},
+        last_bid={10: 4.5},
+        last_ask={10: 4.52},
         spread_history={10: deque([0.001] * 15, maxlen=20)},
     )
     engine = _make_engine(client, safety, config, active_states, stats_path=tmp_path / "s.json")
     engine.signal_data = {
-        "global_state": {
-            "usda_blackout": {"Corn": {"report": "WASDE", "hours_away": 2}}
-        },
+        "global_state": {"usda_blackout": {"Corn": {"report": "WASDE", "hours_away": 2}}},
         "rules": {},
     }
     sig = {
-        "id": "x", "instrument": "Corn", "direction": "buy",
-        "alert_level": 4.51, "stop": 4.4, "t1": 4.9,
-        "entry_zone": [4.5, 4.52], "horizon": "SWING",
+        "id": "x",
+        "instrument": "Corn",
+        "direction": "buy",
+        "alert_level": 4.51,
+        "stop": 4.4,
+        "t1": 4.9,
+        "entry_zone": [4.5, 4.52],
+        "horizon": "SWING",
     }
     assert engine._passes_filters(sig, 10) is False
 
@@ -543,13 +591,19 @@ def test_confirmation_body_threshold(
     engine.atr14_5m[1] = 0.001  # 30% × 0.001 = 0.0003
 
     sig = {
-        "id": "x", "instrument": "EURUSD", "direction": "buy",
+        "id": "x",
+        "instrument": "EURUSD",
+        "direction": "buy",
         "entry_zone": [1.08, 1.081],
     }
     # Body = 0.0005 > 0.0003 (ok), wick-rejection ok, EMA-gradient ok
     candle = Candle(
-        open=1.0802, high=1.0807, low=1.0800, close=1.0807, volume=1,
-        timestamp=datetime.now(timezone.utc),
+        open=1.0802,
+        high=1.0807,
+        low=1.0800,
+        close=1.0807,
+        volume=1,
+        timestamp=datetime.now(UTC),
     )
     assert engine._check_confirmation(sig, 1, candle, min_score=2) is True
 
@@ -565,13 +619,19 @@ def test_confirmation_small_body_fails_strict(
     engine.atr14_5m[1] = 0.010  # 30% × 0.010 = 0.003 → body må være større
 
     sig = {
-        "id": "x", "instrument": "EURUSD", "direction": "buy",
+        "id": "x",
+        "instrument": "EURUSD",
+        "direction": "buy",
         "entry_zone": [1.08, 1.081],
     }
     # Body = 0.0001 < 0.003 (fails body_ok). Wick + EMA ok. Score = 2.
     candle = Candle(
-        open=1.0800, high=1.0802, low=1.0799, close=1.0801, volume=1,
-        timestamp=datetime.now(timezone.utc),
+        open=1.0800,
+        high=1.0802,
+        low=1.0799,
+        close=1.0801,
+        volume=1,
+        timestamp=datetime.now(UTC),
     )
     # min_score=2 → passerer (score=2)
     assert engine._check_confirmation(sig, 1, candle, min_score=2) is True
@@ -587,12 +647,18 @@ def test_confirmation_no_ema_returns_false(
     engine = _make_engine(client, safety, config, active_states, stats_path=tmp_path / "s.json")
     # Ingen EMA9-data
     sig = {
-        "id": "x", "instrument": "EURUSD", "direction": "buy",
+        "id": "x",
+        "instrument": "EURUSD",
+        "direction": "buy",
         "entry_zone": [1.08, 1.081],
     }
     candle = Candle(
-        open=1.08, high=1.081, low=1.08, close=1.081, volume=1,
-        timestamp=datetime.now(timezone.utc),
+        open=1.08,
+        high=1.081,
+        low=1.08,
+        close=1.081,
+        volume=1,
+        timestamp=datetime.now(UTC),
     )
     assert engine._check_confirmation(sig, 1, candle) is False
 
@@ -607,16 +673,17 @@ def test_confirmation_stats_persist_every_20(
     engine.atr14[1] = [0.001]
     engine.atr14_5m[1] = 0.001
 
-    sig = {"id": "x", "instrument": "EURUSD", "direction": "buy",
-           "entry_zone": [1.08, 1.081]}
-    candle = Candle(open=1.0802, high=1.0807, low=1.08, close=1.0807,
-                    volume=1, timestamp=datetime.now(timezone.utc))
+    sig = {"id": "x", "instrument": "EURUSD", "direction": "buy", "entry_zone": [1.08, 1.081]}
+    candle = Candle(
+        open=1.0802, high=1.0807, low=1.08, close=1.0807, volume=1, timestamp=datetime.now(UTC)
+    )
 
     for _ in range(20):
         engine._check_confirmation(sig, 1, candle, min_score=2)
 
     assert stats_path.exists()
     import json
+
     data = json.loads(stats_path.read_text())
     assert data["total"] == 20
 
@@ -635,11 +702,16 @@ def test_update_indicators_needs_14_candles_for_atr(
     # Legg inn 10 candles (under ATR-tak)
     buf = engine.candle_buffers[1]
     for i in range(10):
-        buf.candles.append(Candle(
-            open=1.0 + i * 0.001, high=1.001 + i * 0.001,
-            low=1.0 + i * 0.001, close=1.0 + i * 0.001,
-            volume=1, timestamp=datetime.now(timezone.utc),
-        ))
+        buf.candles.append(
+            Candle(
+                open=1.0 + i * 0.001,
+                high=1.001 + i * 0.001,
+                low=1.0 + i * 0.001,
+                close=1.0 + i * 0.001,
+                volume=1,
+                timestamp=datetime.now(UTC),
+            )
+        )
     engine._update_indicators(1)
     assert len(engine.ema9[1]) == 10  # EMA trenger kun 2
     assert engine.atr14[1] == []  # ATR trenger 14
@@ -653,11 +725,16 @@ def test_update_indicators_ema_and_atr_computed(
     engine.on_symbols_ready(client)
     buf = engine.candle_buffers[1]
     for i in range(20):
-        buf.candles.append(Candle(
-            open=1.0 + i * 0.001, high=1.002 + i * 0.001,
-            low=0.999 + i * 0.001, close=1.001 + i * 0.001,
-            volume=1, timestamp=datetime.now(timezone.utc),
-        ))
+        buf.candles.append(
+            Candle(
+                open=1.0 + i * 0.001,
+                high=1.002 + i * 0.001,
+                low=0.999 + i * 0.001,
+                close=1.001 + i * 0.001,
+                volume=1,
+                timestamp=datetime.now(UTC),
+            )
+        )
     engine._update_indicators(1)
     assert len(engine.ema9[1]) == 20
     assert len(engine.atr14[1]) > 0
@@ -709,13 +786,18 @@ def test_execute_trade_callback_called_on_confirm(
     callback blir kalt én gang med (sig, state, candle)."""
     client = _make_client_stub(
         symbol_map={"EURUSD": 1},
-        last_bid={1: 1.0800}, last_ask={1: 1.0801},
+        last_bid={1: 1.0800},
+        last_ask={1: 1.0801},
         spread_history={1: deque([0.00002] * 15, maxlen=20)},
     )
     execute = MagicMock()
     engine = _make_engine(
-        client, safety, config, active_states,
-        stats_path=tmp_path / "s.json", execute_trade=execute,
+        client,
+        safety,
+        config,
+        active_states,
+        stats_path=tmp_path / "s.json",
+        execute_trade=execute,
     )
     engine.on_symbols_ready(client)
     # Fyll indikatorer for confirm-test
@@ -724,16 +806,26 @@ def test_execute_trade_callback_called_on_confirm(
     engine.atr14_5m[1] = 0.001
 
     signal = {
-        "id": "full", "instrument": "EURUSD", "direction": "buy",
+        "id": "full",
+        "instrument": "EURUSD",
+        "direction": "buy",
         "status": "watchlist",
-        "alert_level": 1.0801, "stop": 1.0750, "t1": 1.0900,
-        "entry_zone": [1.08, 1.081], "horizon": "SCALP", "horizon_config": {},
+        "alert_level": 1.0801,
+        "stop": 1.0750,
+        "t1": 1.0900,
+        "entry_zone": [1.08, 1.081],
+        "horizon": "SCALP",
+        "horizon_config": {},
     }
     engine.signal_data = {"signals": [signal], "global_state": {}, "rules": {}}
 
     candle = Candle(
-        open=1.0802, high=1.0807, low=1.0800, close=1.0807, volume=1,
-        timestamp=datetime.now(timezone.utc),
+        open=1.0802,
+        high=1.0807,
+        low=1.0800,
+        close=1.0807,
+        volume=1,
+        timestamp=datetime.now(UTC),
     )
     engine._on_candle_closed(1, candle)
     execute.assert_called_once()
@@ -750,14 +842,22 @@ def test_manage_open_positions_called_even_without_signals(
     client = _make_client_stub(symbol_map={"EURUSD": 1})
     manage = MagicMock()
     engine = _make_engine(
-        client, safety, config, active_states,
-        stats_path=tmp_path / "s.json", manage_positions=manage,
+        client,
+        safety,
+        config,
+        active_states,
+        stats_path=tmp_path / "s.json",
+        manage_positions=manage,
     )
     engine.on_symbols_ready(client)
     # signal_data = None
     candle = Candle(
-        open=1.08, high=1.081, low=1.08, close=1.081, volume=1,
-        timestamp=datetime.now(timezone.utc),
+        open=1.08,
+        high=1.081,
+        low=1.08,
+        close=1.081,
+        volume=1,
+        timestamp=datetime.now(UTC),
     )
     engine._on_candle_closed(1, candle)
     manage.assert_called_once_with(1, candle)
@@ -770,14 +870,22 @@ def test_server_frozen_still_manages_positions(
     client = _make_client_stub(symbol_map={"EURUSD": 1})
     manage = MagicMock()
     engine = _make_engine(
-        client, safety, config, active_states,
-        stats_path=tmp_path / "s.json", manage_positions=manage,
+        client,
+        safety,
+        config,
+        active_states,
+        stats_path=tmp_path / "s.json",
+        manage_positions=manage,
     )
     engine.on_symbols_ready(client)
     engine.signal_data = {"signals": [], "global_state": {}, "rules": {}}
     candle = Candle(
-        open=1.08, high=1.081, low=1.08, close=1.081, volume=1,
-        timestamp=datetime.now(timezone.utc),
+        open=1.08,
+        high=1.081,
+        low=1.08,
+        close=1.081,
+        volume=1,
+        timestamp=datetime.now(UTC),
     )
     engine._on_candle_closed(1, candle)
     manage.assert_called_once()
@@ -865,17 +973,19 @@ def test_execute_trade_sends_market_order(
         last_ask={1: 1.0801},
         account_balance=100_000.0,
     )
-    client.symbol_info = {
-        1: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}
-    }
+    client.symbol_info = {1: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}}
     client.symbol_price_digits = {1: 5}
     engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
     state = _make_state()
     active_states.append(state)
     sig = _make_signal()
     candle = Candle(
-        open=1.08, high=1.0805, low=1.0798, close=1.0801, volume=1,
-        timestamp=datetime.now(timezone.utc),
+        open=1.08,
+        high=1.0805,
+        low=1.0798,
+        close=1.0801,
+        volume=1,
+        timestamp=datetime.now(UTC),
     )
     engine._execute_trade_impl(sig, state, candle)
 
@@ -907,24 +1017,26 @@ def test_execute_trade_sends_limit_order_when_rule_set(
         last_ask={2: 2050.50},
         account_balance=100_000.0,
     )
-    client.symbol_info = {
-        2: {"lot_size": 100, "min_volume": 1, "step_volume": 1}
-    }
+    client.symbol_info = {2: {"lot_size": 100, "min_volume": 1, "step_volume": 1}}
     client.symbol_price_digits = {2: 2}
     engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
-    state = _make_state(signal_id="gold-1", symbol_id=2, instrument="GOLD",
-                        stop=2040.0, t1=2070.0)
+    state = _make_state(signal_id="gold-1", symbol_id=2, instrument="GOLD", stop=2040.0, t1=2070.0)
     active_states.append(state)
-    sig = _make_signal(sig_id="gold-1", instrument="GOLD", alert=2050.25,
-                      stop=2040.0, t1=2070.0, base_risk=40)
+    sig = _make_signal(
+        sig_id="gold-1", instrument="GOLD", alert=2050.25, stop=2040.0, t1=2070.0, base_risk=40
+    )
     engine.signal_data = {
         "signals": [],
         "global_state": {},
         "rules": {"use_limit_orders": True},
     }
     candle = Candle(
-        open=2050.0, high=2050.5, low=2049.9, close=2050.3, volume=1,
-        timestamp=datetime.now(timezone.utc),
+        open=2050.0,
+        high=2050.5,
+        low=2049.9,
+        close=2050.3,
+        volume=1,
+        timestamp=datetime.now(UTC),
     )
     engine._execute_trade_impl(sig, state, candle)
 
@@ -945,15 +1057,17 @@ def test_execute_trade_blocks_on_zero_risk(
     """entry_price == stop → risk_per_unit=0 → avvis + fjern state."""
     client = _make_client_stub(
         symbol_map={"EURUSD": 1},
-        last_bid={1: 1.0800}, last_ask={1: 1.0800},
+        last_bid={1: 1.0800},
+        last_ask={1: 1.0800},
     )
     client.symbol_info = {1: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}}
     engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
     state = _make_state(stop=1.0800)
     active_states.append(state)
     sig = _make_signal(stop=1.0800)
-    candle = Candle(open=1.08, high=1.081, low=1.079, close=1.08, volume=1,
-                   timestamp=datetime.now(timezone.utc))
+    candle = Candle(
+        open=1.08, high=1.081, low=1.079, close=1.08, volume=1, timestamp=datetime.now(UTC)
+    )
     engine._execute_trade_impl(sig, state, candle)
     client.send_new_order.assert_not_called()
     assert state not in active_states
@@ -968,7 +1082,8 @@ def test_execute_trade_blocks_on_daily_loss(
     """Daily-loss over grense → ordre ikke sendt, state fjernet."""
     client = _make_client_stub(
         symbol_map={"EURUSD": 1},
-        last_bid={1: 1.0799}, last_ask={1: 1.0801},
+        last_bid={1: 1.0799},
+        last_ask={1: 1.0801},
         account_balance=100_000.0,
     )
     client.symbol_info = {1: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}}
@@ -977,8 +1092,9 @@ def test_execute_trade_blocks_on_daily_loss(
     state = _make_state()
     active_states.append(state)
     sig = _make_signal()
-    candle = Candle(open=1.08, high=1.081, low=1.079, close=1.08, volume=1,
-                   timestamp=datetime.now(timezone.utc))
+    candle = Candle(
+        open=1.08, high=1.081, low=1.079, close=1.08, volume=1, timestamp=datetime.now(UTC)
+    )
     engine._execute_trade_impl(sig, state, candle)
     client.send_new_order.assert_not_called()
     assert state not in active_states
@@ -993,13 +1109,15 @@ def test_execute_trade_blocks_oil_geo_warning_with_tight_sl(
     """Oil + geo-advarsel + SL smalere enn min_sl_pips × 0.01 → blokkert."""
     client = _make_client_stub(
         symbol_map={"OIL BRENT": 3},
-        last_bid={3: 85.00}, last_ask={3: 85.05},
+        last_bid={3: 85.00},
+        last_ask={3: 85.05},
         account_balance=100_000.0,
     )
     client.symbol_info = {3: {"lot_size": 100, "min_volume": 1, "step_volume": 1}}
     engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
-    state = _make_state(signal_id="oil-1", symbol_id=3, instrument="OIL BRENT",
-                       stop=85.04)  # SL 1 cent = under 25×0.01 = 0.25
+    state = _make_state(
+        signal_id="oil-1", symbol_id=3, instrument="OIL BRENT", stop=85.04
+    )  # SL 1 cent = under 25×0.01 = 0.25
     active_states.append(state)
     sig = _make_signal(sig_id="oil-1", instrument="OIL BRENT", alert=85.05, stop=85.04, t1=85.40)
     engine.signal_data = {
@@ -1007,8 +1125,9 @@ def test_execute_trade_blocks_oil_geo_warning_with_tight_sl(
         "global_state": {"oil_geo_warning": True},
         "rules": {},
     }
-    candle = Candle(open=85.03, high=85.06, low=85.01, close=85.04, volume=1,
-                   timestamp=datetime.now(timezone.utc))
+    candle = Candle(
+        open=85.03, high=85.06, low=85.01, close=85.04, volume=1, timestamp=datetime.now(UTC)
+    )
     engine._execute_trade_impl(sig, state, candle)
     client.send_new_order.assert_not_called()
 
@@ -1022,16 +1141,22 @@ def test_execute_trade_blocks_total_correlation_limit(
     """max_total posisjoner aktive → ny ordre blokkert."""
     client = _make_client_stub(
         symbol_map={"EURUSD": 1, "USDJPY": 2},
-        last_bid={1: 1.0799}, last_ask={1: 1.0801},
+        last_bid={1: 1.0799},
+        last_ask={1: 1.0801},
         account_balance=100_000.0,
     )
     client.symbol_info = {1: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}}
     # Fyll 6 IN_TRADE states (default max_total)
     for i in range(6):
-        active_states.append(TradeState(
-            signal_id=f"other-{i}", symbol_id=99+i, instrument="USDJPY",
-            phase=TradePhase.IN_TRADE, direction="buy",
-        ))
+        active_states.append(
+            TradeState(
+                signal_id=f"other-{i}",
+                symbol_id=99 + i,
+                instrument="USDJPY",
+                phase=TradePhase.IN_TRADE,
+                direction="buy",
+            )
+        )
     new_state = _make_state(signal_id="new-1")
     active_states.append(new_state)
     engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
@@ -1041,8 +1166,9 @@ def test_execute_trade_blocks_total_correlation_limit(
         "global_state": {"correlation_config": {"max_total": 6}},
         "rules": {},
     }
-    candle = Candle(open=1.08, high=1.081, low=1.079, close=1.08, volume=1,
-                   timestamp=datetime.now(timezone.utc))
+    candle = Candle(
+        open=1.08, high=1.081, low=1.079, close=1.08, volume=1, timestamp=datetime.now(UTC)
+    )
     engine._execute_trade_impl(sig, new_state, candle)
     client.send_new_order.assert_not_called()
     assert new_state not in active_states
@@ -1062,22 +1188,25 @@ def test_execute_trade_agri_size_halved_and_corn_blocked_out_of_session(
         @classmethod
         def now(cls, tz=None):  # type: ignore[override]
             return datetime(2026, 4, 24, 5, 0, 0, tzinfo=tz)
+
     monkeypatch.setattr(entry_mod, "datetime", _FrozenDT)
 
     client = _make_client_stub(
         symbol_map={"Corn": 10},
-        last_bid={10: 4.50}, last_ask={10: 4.52},
+        last_bid={10: 4.50},
+        last_ask={10: 4.52},
         account_balance=100_000.0,
     )
     client.symbol_info = {10: {"lot_size": 5000, "min_volume": 100, "step_volume": 100}}
     engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
-    state = _make_state(signal_id="corn-1", symbol_id=10, instrument="Corn",
-                       stop=4.40, t1=4.90)
+    state = _make_state(signal_id="corn-1", symbol_id=10, instrument="Corn", stop=4.40, t1=4.90)
     active_states.append(state)
-    sig = _make_signal(sig_id="corn-1", instrument="Corn", alert=4.51,
-                      stop=4.40, t1=4.90, base_risk=40)
-    candle = Candle(open=4.51, high=4.52, low=4.50, close=4.515, volume=1,
-                   timestamp=datetime.now(timezone.utc))
+    sig = _make_signal(
+        sig_id="corn-1", instrument="Corn", alert=4.51, stop=4.40, t1=4.90, base_risk=40
+    )
+    candle = Candle(
+        open=4.51, high=4.52, low=4.50, close=4.515, volume=1, timestamp=datetime.now(UTC)
+    )
     engine._execute_trade_impl(sig, state, candle)
     client.send_new_order.assert_not_called()
 
@@ -1096,11 +1225,13 @@ def test_execute_trade_agri_in_session_sends_order(
         @classmethod
         def now(cls, tz=None):  # type: ignore[override]
             return datetime(2026, 4, 24, 14, 0, 0, tzinfo=tz)
+
     monkeypatch.setattr(entry_mod, "datetime", _FrozenDT)
 
     client = _make_client_stub(
         symbol_map={"Corn": 10},
-        last_bid={10: 4.50}, last_ask={10: 4.52},
+        last_bid={10: 4.50},
+        last_ask={10: 4.52},
         spread_history={10: deque([0.01] * 15, maxlen=20)},
         account_balance=100_000.0,
     )
@@ -1109,13 +1240,14 @@ def test_execute_trade_agri_in_session_sends_order(
     engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
     # Populate ATR14 for spreadfilter: må ikke være None, og spread/atr skal passere
     engine.atr14[10] = [0.10] * 15  # ATR14 = 0.10 → maks spread 0.04 > faktisk 0.02
-    state = _make_state(signal_id="corn-ok", symbol_id=10, instrument="Corn",
-                       stop=4.40, t1=4.90)
+    state = _make_state(signal_id="corn-ok", symbol_id=10, instrument="Corn", stop=4.40, t1=4.90)
     active_states.append(state)
-    sig = _make_signal(sig_id="corn-ok", instrument="Corn", alert=4.51,
-                      stop=4.40, t1=4.90, base_risk=40)
-    candle = Candle(open=4.51, high=4.52, low=4.50, close=4.515, volume=1,
-                   timestamp=datetime.now(timezone.utc))
+    sig = _make_signal(
+        sig_id="corn-ok", instrument="Corn", alert=4.51, stop=4.40, t1=4.90, base_risk=40
+    )
+    candle = Candle(
+        open=4.51, high=4.52, low=4.50, close=4.515, volume=1, timestamp=datetime.now(UTC)
+    )
     engine._execute_trade_impl(sig, state, candle)
     client.send_new_order.assert_called_once()
     kwargs = client.send_new_order.call_args.kwargs
@@ -1142,14 +1274,18 @@ def test_monday_gap_blocks_when_gap_large(
         def now(cls, tz=None):  # type: ignore[override]
             # Mandag 2026-04-20 kl. 00:30 CET
             return datetime(2026, 4, 20, 0, 30, 0, tzinfo=tz)
+
     monkeypatch.setattr(entry_mod, "datetime", _FrozenDT)
 
     client = _make_client_stub(symbol_map={"EURUSD": 1}, last_bid={1: 1.100})
     engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
     # H1 buffer med en "fredag"-close på 1.080 og ATR14_h1 = 0.005
     buf = CandleBuffer()
-    buf.candles.append(Candle(open=1.080, high=1.081, low=1.079, close=1.080,
-                              volume=0, timestamp=datetime.now(timezone.utc)))
+    buf.candles.append(
+        Candle(
+            open=1.080, high=1.081, low=1.079, close=1.080, volume=0, timestamp=datetime.now(UTC)
+        )
+    )
     engine.h1_candle_buffers[1] = buf
     engine.atr14_h1[1] = [0.005] * 5  # ATR = 0.005
     # Gap = abs(1.100 - 1.080) = 0.020 > 2.0 × 0.005 = 0.010
@@ -1170,6 +1306,7 @@ def test_monday_gap_false_outside_first_hour(
         def now(cls, tz=None):  # type: ignore[override]
             # Mandag kl. 02:00 → utenfor første time
             return datetime(2026, 4, 20, 2, 0, 0, tzinfo=tz)
+
     monkeypatch.setattr(entry_mod, "datetime", _FrozenDT)
 
     client = _make_client_stub(symbol_map={"EURUSD": 1}, last_bid={1: 1.100})
@@ -1191,6 +1328,7 @@ def test_monday_gap_false_when_not_monday(
         @classmethod
         def now(cls, tz=None):  # type: ignore[override]
             return datetime(2026, 4, 21, 0, 30, 0, tzinfo=tz)  # Tirsdag
+
     monkeypatch.setattr(entry_mod, "datetime", _FrozenDT)
 
     client = _make_client_stub(symbol_map={"EURUSD": 1}, last_bid={1: 1.100})
@@ -1217,6 +1355,7 @@ def test_agri_session_ok_within_hours(
         @classmethod
         def now(cls, tz=None):  # type: ignore[override]
             return datetime(2026, 4, 24, 12, 0, 0, tzinfo=tz)
+
     monkeypatch.setattr(entry_mod, "datetime", _FrozenDT)
 
     client = _make_client_stub(symbol_map={"Corn": 10})
@@ -1237,6 +1376,7 @@ def test_agri_session_ok_outside_hours(
         @classmethod
         def now(cls, tz=None):  # type: ignore[override]
             return datetime(2026, 4, 24, 4, 0, 0, tzinfo=tz)
+
     monkeypatch.setattr(entry_mod, "datetime", _FrozenDT)
 
     client = _make_client_stub(symbol_map={"Corn": 10})
@@ -1268,6 +1408,7 @@ def test_log_trade_opened_writes_json(
     tmp_path: Path,
 ) -> None:
     import json
+
     client = _make_client_stub(symbol_map={"EURUSD": 1})
     client.symbol_info = {1: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}}
     log_path = tmp_path / "signal_log.json"
@@ -1280,9 +1421,17 @@ def test_log_trade_opened_writes_json(
         trade_log_path=log_path,
     )
     state = TradeState(
-        signal_id="trade-1", symbol_id=1, instrument="EURUSD",
-        direction="buy", entry_price=1.0800, stop_price=1.0780, t1_price=1.0850,
-        full_volume=2000, position_id=42, horizon="SWING", risk_pct_used=1.0,
+        signal_id="trade-1",
+        symbol_id=1,
+        instrument="EURUSD",
+        direction="buy",
+        entry_price=1.0800,
+        stop_price=1.0780,
+        t1_price=1.0850,
+        full_volume=2000,
+        position_id=42,
+        horizon="SWING",
+        risk_pct_used=1.0,
     )
     engine._log_trade_opened(state)
     assert log_path.exists()

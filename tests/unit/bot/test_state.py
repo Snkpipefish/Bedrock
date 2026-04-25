@@ -6,7 +6,7 @@ Ren port-test — samme invarianter som ~/scalp_edge/trading_bot.py:335-398.
 from __future__ import annotations
 
 from collections import deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from bedrock.bot.state import Candle, CandleBuffer, TradePhase, TradeState
 
@@ -22,7 +22,7 @@ def test_trade_phase_values() -> None:
 
 
 def test_candle_construction() -> None:
-    ts = datetime(2026, 4, 24, 12, 0, tzinfo=timezone.utc)
+    ts = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
     c = Candle(open=100.0, high=101.5, low=99.5, close=101.0, volume=500, timestamp=ts)
     assert c.open == 100.0
     assert c.close == 101.0
@@ -61,6 +61,6 @@ def test_candle_buffer_independent_deques() -> None:
     """default_factory må gi hver instans sin egen deque."""
     b1 = CandleBuffer()
     b2 = CandleBuffer()
-    ts = datetime(2026, 4, 24, 12, 0, tzinfo=timezone.utc)
+    ts = datetime(2026, 4, 24, 12, 0, tzinfo=UTC)
     b1.candles.append(Candle(1, 2, 0, 1, 10, ts))
     assert len(b2.candles) == 0

@@ -21,14 +21,13 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from bedrock.config.fetch import FetcherSpec
 from bedrock.config.instruments import InstrumentConfig, load_all_instruments
 from bedrock.config.secrets import get_secret
-
 
 _FRED_API_KEY_ENV = "FRED_API_KEY"
 
@@ -126,7 +125,7 @@ def run_fetcher_by_name(
         filtered_key = _find_instrument_key(configs, instrument_filter)
         configs = {filtered_key: configs[filtered_key]}
 
-    effective_to = to_date or datetime.now(timezone.utc).date()
+    effective_to = to_date or datetime.now(UTC).date()
 
     return runner(
         spec=spec,
@@ -137,18 +136,14 @@ def run_fetcher_by_name(
     )
 
 
-def _find_instrument_key(
-    configs: dict[str, InstrumentConfig], target: str
-) -> str:
+def _find_instrument_key(configs: dict[str, InstrumentConfig], target: str) -> str:
     if target in configs:
         return target
     lower = target.lower()
     for key in configs:
         if key.lower() == lower:
             return key
-    raise KeyError(
-        f"Instrument {target!r} not found. Available: {sorted(configs)}"
-    )
+    raise KeyError(f"Instrument {target!r} not found. Available: {sorted(configs)}")
 
 
 # ---------------------------------------------------------------------------
@@ -164,13 +159,9 @@ def _safe_run(
     for item_id, fn in items:
         try:
             written = fn()
-            result.items.append(
-                ItemOutcome(item_id=item_id, ok=True, rows_written=written)
-            )
-        except Exception as exc:  # noqa: BLE001 — per-item resiliens
-            result.items.append(
-                ItemOutcome(item_id=item_id, ok=False, error=str(exc))
-            )
+            result.items.append(ItemOutcome(item_id=item_id, ok=True, rows_written=written))
+        except Exception as exc:
+            result.items.append(ItemOutcome(item_id=item_id, ok=False, error=str(exc)))
 
 
 @register_runner("prices")
@@ -280,11 +271,7 @@ def run_weather(
     def _items():
         for cfg in instruments:
             meta = cfg.instrument
-            if (
-                not meta.weather_region
-                or meta.weather_lat is None
-                or meta.weather_lon is None
-            ):
+            if not meta.weather_region or meta.weather_lat is None or meta.weather_lon is None:
                 continue
 
             def _do(
@@ -326,10 +313,7 @@ def run_fundamentals(
                     ItemOutcome(
                         item_id=f"{cfg.instrument.id}:{series_id}",
                         ok=False,
-                        error=(
-                            f"Mangler FRED_API_KEY — sett env-var eller "
-                            f"~/.bedrock/secrets.env"
-                        ),
+                        error=("Mangler FRED_API_KEY — sett env-var eller ~/.bedrock/secrets.env"),
                     )
                 )
         return result
@@ -371,7 +355,7 @@ def default_from_date(
     nok til å fange gap ved forsinket kjøring uten å hente unødvendig
     langt bak.
     """
-    resolved_now = now or datetime.now(timezone.utc)
+    resolved_now = now or datetime.now(UTC)
     hours = spec.stale_hours * buffer_multiplier
     return (resolved_now - timedelta(hours=hours)).date()
 

@@ -33,7 +33,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # ---------------------------------------------------------------------------
 # Modeller
 # ---------------------------------------------------------------------------
@@ -101,9 +100,7 @@ def get_gate(name: str) -> GateFn:
         return _REGISTRY[name]
     except KeyError:
         known = ", ".join(sorted(_REGISTRY)) or "<none>"
-        raise KeyError(
-            f"Gate {name!r} not registered. Known: {known}"
-        ) from None
+        raise KeyError(f"Gate {name!r} not registered. Known: {known}") from None
 
 
 def all_gate_names() -> list[str]:
@@ -183,9 +180,7 @@ def cap_grade(grade: str, cap: str | None) -> str:
     if norm_grade not in _GRADE_ORDER:
         raise ValueError(f"Unknown grade: {grade!r}")
     if norm_cap not in _GRADE_ORDER:
-        raise ValueError(
-            f"Unknown cap_grade: {cap!r}. Valid: {sorted(VALID_CAP_GRADES)}"
-        )
+        raise ValueError(f"Unknown cap_grade: {cap!r}. Valid: {sorted(VALID_CAP_GRADES)}")
     if _GRADE_ORDER[norm_cap] < _GRADE_ORDER[norm_grade]:
         return norm_cap
     return norm_grade
@@ -246,10 +241,10 @@ def _family_score_below(context: GateContext, params: dict[str, Any]) -> bool:
 
 
 __all__ = [
+    "VALID_CAP_GRADES",
     "GateContext",
     "GateFn",
     "GateSpec",
-    "VALID_CAP_GRADES",
     "all_gate_names",
     "apply_gates",
     "cap_grade",

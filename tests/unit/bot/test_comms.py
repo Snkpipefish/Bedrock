@@ -15,7 +15,6 @@ Dekker:
 
 from __future__ import annotations
 
-import subprocess
 from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -47,9 +46,7 @@ def startup_cfg() -> StartupOnlyConfig:
 
 
 @pytest.fixture
-def comms(
-    safety: SafetyMonitor, startup_cfg: StartupOnlyConfig
-) -> SignalComms:
+def comms(safety: SafetyMonitor, startup_cfg: StartupOnlyConfig) -> SignalComms:
     session = MagicMock(spec=requests.Session)
     return SignalComms(
         startup_cfg=startup_cfg,
@@ -203,9 +200,7 @@ def test_fetch_signals_warns_once_per_unknown_schema(
         comms.fetch_signals()
         comms.fetch_signals()  # andre gang skal IKKE warne igjen
 
-    schema_warnings = [
-        rec for rec in caplog.records if "SCHEMA" in rec.message
-    ]
+    schema_warnings = [rec for rec in caplog.records if "SCHEMA" in rec.message]
     assert len(schema_warnings) == 1
 
 

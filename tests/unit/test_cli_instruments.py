@@ -207,9 +207,7 @@ def test_instruments_help(runner: CliRunner) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_show_resolves_inherits_from_defaults_dir(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_show_resolves_inherits_from_defaults_dir(runner: CliRunner, tmp_path: Path) -> None:
     """`bedrock instruments show` skal rulle opp `inherits:` slik at
     et slankt instrument-YAML viser de arvede familiene/horisontene."""
     defaults = tmp_path / "defaults"
@@ -311,9 +309,7 @@ instrument:
     assert "EURUSD" in result.output
 
 
-def test_show_missing_defaults_dir_on_inherits_errors(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_show_missing_defaults_dir_on_inherits_errors(runner: CliRunner, tmp_path: Path) -> None:
     """Instrument bruker `inherits:` men defaults-dir mangler → tydelig feil."""
     insts = tmp_path / "insts"
     insts.mkdir()

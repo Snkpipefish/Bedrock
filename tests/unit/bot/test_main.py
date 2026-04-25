@@ -13,6 +13,7 @@ Dekker:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -32,7 +33,6 @@ from bedrock.bot.config import (
     apply_reloadable_inplace,
 )
 from bedrock.bot.state import TradePhase, TradeState
-
 
 # ─────────────────────────────────────────────────────────────
 # _apply_kill_ids
@@ -96,16 +96,15 @@ def env_with_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_build_bot_wires_all_modules(
-    env_with_credentials: None, tmp_path: Path,
+    env_with_credentials: None,
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """build_bot skal instansiere alle moduler og koble callbacks."""
     # Peker BEDROCK_BOT_CONFIG mot en ikke-eksisterende fil → defaults
     monkeypatch.setenv("BEDROCK_BOT_CONFIG", str(tmp_path / "missing.yaml"))
 
-    client, comms, entry, exit_engine, bot_config, active_states = build_bot(
-        demo=True
-    )
+    client, comms, entry, exit_engine, bot_config, active_states = build_bot(demo=True)
 
     assert client is not None
     assert comms is not None
@@ -149,7 +148,8 @@ def test_build_bot_warns_when_api_key_missing(
 
 
 def test_build_bot_raises_when_credentials_missing(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     # Fjern alle credentials
     for var in (
@@ -174,7 +174,8 @@ def test_sighup_handler_applies_new_reloadable(
     tmp_path: Path,
 ) -> None:
     yaml_path = tmp_path / "bot.yaml"
-    yaml_path.write_text("""
+    yaml_path.write_text(
+        """
 reloadable:
   confirmation:
     min_score_default: 3
@@ -182,7 +183,8 @@ reloadable:
     body_threshold_atr_pct: 0.4
     ema_gradient_buy_min: -0.05
     ema_gradient_sell_max: 0.05
-""".strip())
+""".strip()
+    )
     bot_config = BotConfig()
     handler = _make_sighup_handler(bot_config, str(yaml_path))
 
@@ -193,14 +195,17 @@ reloadable:
 
 
 def test_sighup_handler_logs_startup_only_diff(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Endring i startup_only skal logges som warning, ikke aktiveres."""
     yaml_path = tmp_path / "bot.yaml"
-    yaml_path.write_text("""
+    yaml_path.write_text(
+        """
 startup_only:
   signal_url: http://other:9999
-""".strip())
+""".strip()
+    )
     bot_config = BotConfig()
     old_url = bot_config.startup_only.signal_url
     handler = _make_sighup_handler(bot_config, str(yaml_path))
@@ -214,7 +219,8 @@ startup_only:
 
 
 def test_sighup_handler_swallows_exceptions(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Ugyldig YAML → handler logger exception, bot fortsetter."""
     yaml_path = tmp_path / "bot.yaml"
@@ -237,9 +243,7 @@ def test_shutdown_handler_calls_reactor_stop() -> None:
     handler = _make_shutdown_handler("SIGTERM")
     mock_reactor = MagicMock()
     mock_reactor.running = True
-    with patch.dict(
-        "sys.modules", {"twisted.internet": MagicMock(reactor=mock_reactor)}
-    ):
+    with patch.dict("sys.modules", {"twisted.internet": MagicMock(reactor=mock_reactor)}):
         handler(15, None)
     mock_reactor.callFromThread.assert_called_once_with(mock_reactor.stop)
 
@@ -249,9 +253,7 @@ def test_shutdown_handler_when_reactor_not_running() -> None:
     handler = _make_shutdown_handler("SIGINT")
     mock_reactor = MagicMock()
     mock_reactor.running = False
-    with patch.dict(
-        "sys.modules", {"twisted.internet": MagicMock(reactor=mock_reactor)}
-    ):
+    with patch.dict("sys.modules", {"twisted.internet": MagicMock(reactor=mock_reactor)}):
         handler(2, None)
     mock_reactor.callFromThread.assert_not_called()
 
@@ -276,9 +278,7 @@ def test_schedule_polling_loop_tick_uses_adaptive_interval() -> None:
     """Etter fetch_once skal neste callLater bruke adaptive_poll_interval."""
     comms = MagicMock()
     # Fersk SCALP-watchlist → scalp_active_seconds (default 20)
-    comms.latest_signals = {
-        "signals": [{"horizon": "SCALP", "status": "watchlist"}]
-    }
+    comms.latest_signals = {"signals": [{"horizon": "SCALP", "status": "watchlist"}]}
     config = ReloadableConfig()
     reactor_mock = MagicMock()
     _schedule_polling_loop(comms, config, reactor_mock)
@@ -361,7 +361,8 @@ def test_main_live_without_ja_returns_zero(
 
 
 def test_main_returns_1_when_credentials_missing(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     for var in (
@@ -375,6 +376,4 @@ def test_main_returns_1_when_credentials_missing(
     with caplog.at_level("ERROR"):
         result = main(["--demo"])
     assert result == 1
-    assert any(
-        "Mangler miljøvariabler" in r.message for r in caplog.records
-    )
+    assert any("Mangler miljøvariabler" in r.message for r in caplog.records)

@@ -61,8 +61,7 @@ def cron_to_oncalendar(cron_expr: str) -> str:
     parts = cron_expr.strip().split()
     if len(parts) != 5:
         raise CronConversionError(
-            f"cron må ha 5 felter (minute hour dom month dow), "
-            f"fikk {len(parts)}: {cron_expr!r}"
+            f"cron må ha 5 felter (minute hour dom month dow), fikk {len(parts)}: {cron_expr!r}"
         )
     minute, hour, dom, month, dow = parts
 
@@ -97,8 +96,7 @@ def _reject_unsupported(value: str, name: str, expr: str) -> None:
     # støtter det, men vi krever numerisk for MVP.
     if any(c.isalpha() for c in value):
         raise CronConversionError(
-            f"named {name}-felter ({value!r}) er ikke støttet; bruk "
-            f"numerisk form. cron={expr!r}"
+            f"named {name}-felter ({value!r}) er ikke støttet; bruk numerisk form. cron={expr!r}"
         )
 
 
@@ -107,9 +105,7 @@ def _field_to_systemd_time(value: str, *, field: str) -> str:
     if value == "*":
         return "*"
     if "," in value or "-" in value:
-        raise CronConversionError(
-            f"range/list i {field}-felt ikke støttet i MVP: {value!r}"
-        )
+        raise CronConversionError(f"range/list i {field}-felt ikke støttet i MVP: {value!r}")
     return f"{int(value):02d}"
 
 
@@ -118,9 +114,7 @@ def _field_to_systemd_date(field: str, *, zero_pad: bool = False) -> str:
     if field == "*":
         return "*"
     if "," in field or "-" in field:
-        raise CronConversionError(
-            f"range/list i dom/month-felt ikke støttet i MVP: {field!r}"
-        )
+        raise CronConversionError(f"range/list i dom/month-felt ikke støttet i MVP: {field!r}")
     n = int(field)
     return f"{n:02d}" if zero_pad else str(n)
 

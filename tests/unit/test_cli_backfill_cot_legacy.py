@@ -37,9 +37,7 @@ def _sample_legacy_df(n: int = 2) -> pd.DataFrame:
 
 def test_backfill_cot_legacy_writes_to_db(runner: CliRunner, tmp_path: Path) -> None:
     db = tmp_path / "bedrock.db"
-    with patch(
-        "bedrock.cli.backfill.fetch_cot_legacy", return_value=_sample_legacy_df(2)
-    ):
+    with patch("bedrock.cli.backfill.fetch_cot_legacy", return_value=_sample_legacy_df(2)):
         result = runner.invoke(
             cli,
             [
@@ -66,9 +64,7 @@ def test_backfill_cot_legacy_writes_to_db(runner: CliRunner, tmp_path: Path) -> 
     assert not store.has_cot("GOLD - COMMODITY EXCHANGE INC.", report="disaggregated")
 
 
-def test_backfill_cot_legacy_dry_run_shows_legacy_url(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_backfill_cot_legacy_dry_run_shows_legacy_url(runner: CliRunner, tmp_path: Path) -> None:
     db = tmp_path / "bedrock.db"
     with patch("bedrock.cli.backfill.fetch_cot_legacy") as mock_fetch:
         result = runner.invoke(
@@ -94,9 +90,7 @@ def test_backfill_cot_legacy_dry_run_shows_legacy_url(
     assert not db.exists()
 
 
-def test_backfill_cot_legacy_empty_result_is_not_error(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_backfill_cot_legacy_empty_result_is_not_error(runner: CliRunner, tmp_path: Path) -> None:
     db = tmp_path / "bedrock.db"
     with patch(
         "bedrock.cli.backfill.fetch_cot_legacy",
@@ -122,9 +116,7 @@ def test_backfill_cot_legacy_empty_result_is_not_error(
 
 
 def test_backfill_cot_legacy_requires_contract(runner: CliRunner) -> None:
-    result = runner.invoke(
-        cli, ["backfill", "cot-legacy", "--from", "2020-01-01"]
-    )
+    result = runner.invoke(cli, ["backfill", "cot-legacy", "--from", "2020-01-01"])
     assert result.exit_code != 0
 
 

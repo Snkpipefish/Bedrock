@@ -54,12 +54,8 @@ def test_append_creates_parent_dirs(tmp_path: Path) -> None:
 
 def test_append_to_existing_preserves_order(tmp_path: Path) -> None:
     path = tmp_path / "signals.json"
-    first = PersistedSignal.model_validate(
-        {**_valid_signal_dict(), "instrument": "Gold"}
-    )
-    second = PersistedSignal.model_validate(
-        {**_valid_signal_dict(), "instrument": "Silver"}
-    )
+    first = PersistedSignal.model_validate({**_valid_signal_dict(), "instrument": "Gold"})
+    second = PersistedSignal.model_validate({**_valid_signal_dict(), "instrument": "Silver"})
     append_signal(path, first)
     append_signal(path, second)
 
@@ -80,9 +76,7 @@ def test_append_atomic_no_tmp_files_left_behind(tmp_path: Path) -> None:
     sig = PersistedSignal.model_validate(_valid_signal_dict())
     append_signal(path, sig)
 
-    leftovers = [
-        p for p in tmp_path.iterdir() if p.name.startswith(".signals")
-    ]
+    leftovers = [p for p in tmp_path.iterdir() if p.name.startswith(".signals")]
     assert leftovers == []
 
 
@@ -104,9 +98,7 @@ def test_append_concurrent_safe_under_sequential_access(tmp_path: Path) -> None:
     """
     path = tmp_path / "signals.json"
     signals = [
-        PersistedSignal.model_validate(
-            {**_valid_signal_dict(), "instrument": f"Sym{i}"}
-        )
+        PersistedSignal.model_validate({**_valid_signal_dict(), "instrument": f"Sym{i}"})
         for i in range(20)
     ]
 

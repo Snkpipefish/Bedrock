@@ -23,7 +23,6 @@ from typing import Literal
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # ---------------------------------------------------------------------------
 # Modeller
 # ---------------------------------------------------------------------------
@@ -98,8 +97,7 @@ def detect_swing_levels(ohlc: pd.DataFrame, window: int = 5) -> list[Level]:
     """
     if "high" not in ohlc.columns or "low" not in ohlc.columns:
         raise ValueError(
-            f"detect_swing_levels: ohlc must have 'high' and 'low'. "
-            f"Got: {sorted(ohlc.columns)}"
+            f"detect_swing_levels: ohlc must have 'high' and 'low'. Got: {sorted(ohlc.columns)}"
         )
 
     n = len(ohlc)
@@ -313,7 +311,7 @@ def detect_round_numbers(
 
 def _round_number_strength(price: float, step: float) -> float:
     """Beregn strength basert på antall trailing-zeros i (price/step)."""
-    n = int(round(price / step))
+    n = round(price / step)
     if n == 0:
         # Spesialtilfelle: price == 0. Stryk ned for å unngå uendelig zeros.
         return 0.5

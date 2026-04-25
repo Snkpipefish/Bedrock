@@ -34,9 +34,7 @@ def _sample_weather_df(region: str = "us_cornbelt", n: int = 3) -> pd.DataFrame:
 
 def test_backfill_weather_writes_to_db(runner: CliRunner, tmp_path: Path) -> None:
     db = tmp_path / "bedrock.db"
-    with patch(
-        "bedrock.cli.backfill.fetch_weather", return_value=_sample_weather_df(n=3)
-    ):
+    with patch("bedrock.cli.backfill.fetch_weather", return_value=_sample_weather_df(n=3)):
         result = runner.invoke(
             cli,
             [
@@ -66,9 +64,7 @@ def test_backfill_weather_writes_to_db(runner: CliRunner, tmp_path: Path) -> Non
     assert out["tmax"].iloc[0] == 30.0
 
 
-def test_backfill_weather_dry_run_shows_url_and_coords(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_backfill_weather_dry_run_shows_url_and_coords(runner: CliRunner, tmp_path: Path) -> None:
     db = tmp_path / "bedrock.db"
     with patch("bedrock.cli.backfill.fetch_weather") as mock_fetch:
         result = runner.invoke(
@@ -102,13 +98,9 @@ def test_backfill_weather_dry_run_shows_url_and_coords(
     assert not db.exists()
 
 
-def test_backfill_weather_empty_result_is_not_error(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_backfill_weather_empty_result_is_not_error(runner: CliRunner, tmp_path: Path) -> None:
     db = tmp_path / "bedrock.db"
-    empty_df = pd.DataFrame(
-        columns=["region", "date", "tmax", "tmin", "precip", "gdd"]
-    )
+    empty_df = pd.DataFrame(columns=["region", "date", "tmax", "tmin", "precip", "gdd"])
     with patch("bedrock.cli.backfill.fetch_weather", return_value=empty_df):
         result = runner.invoke(
             cli,
@@ -140,7 +132,7 @@ def test_backfill_weather_defaults_to_today_when_to_missing(
 
     called = {}
 
-    def capture(region, lat, lon, from_date, to_date):  # noqa: ARG001
+    def capture(region, lat, lon, from_date, to_date):
         called["to"] = to_date
         return _sample_weather_df(n=1)
 

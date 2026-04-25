@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from bedrock.setups.generator import Direction, Horizon, Setup, SetupConfig, build_setup
+from bedrock.setups.generator import Direction, Horizon, Setup, build_setup
 from bedrock.setups.hysteresis import (
     HysteresisConfig,
     SetupSnapshot,
@@ -18,7 +18,6 @@ from bedrock.setups.hysteresis import (
 )
 from bedrock.setups.levels import Level, LevelType
 from bedrock.setups.snapshot import load_snapshot, save_snapshot
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -210,9 +209,7 @@ def test_stabilize_disabled_returns_unchanged() -> None:
     prev = _prev_with(prev_setup)
 
     new = prev_setup.model_copy(update={"sl": 99.75, "tp": 106.4})
-    stable = stabilize_setup(
-        new, previous=prev, now=LATER, config=HysteresisConfig(enabled=False)
-    )
+    stable = stabilize_setup(new, previous=prev, now=LATER, config=HysteresisConfig(enabled=False))
     # Disabled → return new values, ignore prev (first_seen = now siden ignorering)
     assert stable.setup.sl == 99.75
     assert stable.setup.tp == 106.4

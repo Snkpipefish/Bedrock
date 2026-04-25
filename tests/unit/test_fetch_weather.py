@@ -15,7 +15,6 @@ from bedrock.fetch.weather import (
     fetch_weather,
 )
 
-
 # ---------------------------------------------------------------------------
 # Query-bygging
 # ---------------------------------------------------------------------------
@@ -128,12 +127,14 @@ def test_fetch_weather_empty_time_array_returns_empty_df() -> None:
 
 
 def test_fetch_weather_missing_daily_block_raises() -> None:
-    with patch(
-        "bedrock.fetch.weather.http_get_with_retry",
-        return_value=_mock_response({"latitude": 0}),
+    with (
+        patch(
+            "bedrock.fetch.weather.http_get_with_retry",
+            return_value=_mock_response({"latitude": 0}),
+        ),
+        pytest.raises(WeatherFetchError, match="missing 'daily'"),
     ):
-        with pytest.raises(WeatherFetchError, match="missing 'daily'"):
-            fetch_weather("x", 0.0, 0.0, date(2024, 1, 1), date(2024, 1, 2))
+        fetch_weather("x", 0.0, 0.0, date(2024, 1, 1), date(2024, 1, 2))
 
 
 def test_fetch_weather_missing_daily_field_raises() -> None:
@@ -145,38 +146,44 @@ def test_fetch_weather_missing_daily_field_raises() -> None:
             # temperature_2m_max og precipitation_sum mangler
         }
     }
-    with patch(
-        "bedrock.fetch.weather.http_get_with_retry",
-        return_value=_mock_response(payload),
+    with (
+        patch(
+            "bedrock.fetch.weather.http_get_with_retry",
+            return_value=_mock_response(payload),
+        ),
+        pytest.raises(WeatherFetchError, match="missing daily fields"),
     ):
-        with pytest.raises(WeatherFetchError, match="missing daily fields"):
-            fetch_weather("x", 0.0, 0.0, date(2024, 1, 1), date(2024, 1, 1))
+        fetch_weather("x", 0.0, 0.0, date(2024, 1, 1), date(2024, 1, 1))
 
 
 def test_fetch_weather_http_error_raises() -> None:
-    with patch(
-        "bedrock.fetch.weather.http_get_with_retry",
-        return_value=_mock_response({}, status=400),
+    with (
+        patch(
+            "bedrock.fetch.weather.http_get_with_retry",
+            return_value=_mock_response({}, status=400),
+        ),
+        pytest.raises(WeatherFetchError, match="HTTP 400"),
     ):
-        with pytest.raises(WeatherFetchError, match="HTTP 400"):
-            fetch_weather("x", 0.0, 0.0, date(2024, 1, 1), date(2024, 1, 2))
+        fetch_weather("x", 0.0, 0.0, date(2024, 1, 1), date(2024, 1, 2))
 
 
 def test_fetch_weather_network_failure_wrapped() -> None:
     import requests
 
-    with patch(
-        "bedrock.fetch.weather.http_get_with_retry",
-        side_effect=requests.ConnectionError("refused"),
+    with (
+        patch(
+            "bedrock.fetch.weather.http_get_with_retry",
+            side_effect=requests.ConnectionError("refused"),
+        ),
+        pytest.raises(WeatherFetchError, match="Network failure"),
     ):
-        with pytest.raises(WeatherFetchError, match="Network failure"):
-            fetch_weather("x", 0.0, 0.0, date(2024, 1, 1), date(2024, 1, 2))
+        fetch_weather("x", 0.0, 0.0, date(2024, 1, 1), date(2024, 1, 2))
 
 
 def test_fetch_weather_hits_correct_url() -> None:
     called = {}
 
-    def capture(url, params=None, **kw):  # noqa: ARG001
+    def capture(url, params=None, **kw):
         called["url"] = url
         return _mock_response(SAMPLE_RESPONSE)
 

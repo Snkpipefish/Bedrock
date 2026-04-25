@@ -88,14 +88,11 @@ def fetch_weather(
     try:
         response = http_get_with_retry(OPEN_METEO_ARCHIVE_URL, params=params)
     except Exception as exc:
-        raise WeatherFetchError(
-            f"Network failure fetching weather for {region}: {exc}"
-        ) from exc
+        raise WeatherFetchError(f"Network failure fetching weather for {region}: {exc}") from exc
 
     if response.status_code != 200:
         raise WeatherFetchError(
-            f"Open-Meteo returned HTTP {response.status_code} for {region}: "
-            f"{response.text[:200]!r}"
+            f"Open-Meteo returned HTTP {response.status_code} for {region}: {response.text[:200]!r}"
         )
 
     try:
@@ -118,9 +115,7 @@ def _normalize_open_meteo(payload: dict, region: str) -> pd.DataFrame:
     required = ["time", "temperature_2m_max", "temperature_2m_min", "precipitation_sum"]
     missing = [k for k in required if k not in daily]
     if missing:
-        raise WeatherFetchError(
-            f"Open-Meteo response for {region} missing daily fields: {missing}"
-        )
+        raise WeatherFetchError(f"Open-Meteo response for {region} missing daily fields: {missing}")
 
     times = daily["time"]
     n = len(times)

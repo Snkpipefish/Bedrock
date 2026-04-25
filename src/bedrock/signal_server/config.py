@@ -37,9 +37,7 @@ class ServerConfig(BaseModel):
     # Data-paths (senere endepunkter leser/skriver her)
     data_root: Path = Field(default=DEFAULT_DATA_ROOT)
     signals_path: Path = Field(default=DEFAULT_DATA_ROOT / "signals.json")
-    agri_signals_path: Path = Field(
-        default=DEFAULT_DATA_ROOT / "agri_signals.json"
-    )
+    agri_signals_path: Path = Field(default=DEFAULT_DATA_ROOT / "agri_signals.json")
     kill_switch_path: Path = Field(default=DEFAULT_DATA_ROOT / "kills.json")
 
     # DataStore (SQLite)

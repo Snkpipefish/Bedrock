@@ -45,9 +45,7 @@ def _sample_fred_df(series_id: str = "DGS10", n: int = 3) -> pd.DataFrame:
 
 def test_backfill_fundamentals_with_cli_api_key(runner: CliRunner, tmp_path: Path) -> None:
     db = tmp_path / "bedrock.db"
-    with patch(
-        "bedrock.cli.backfill.fetch_fred_series", return_value=_sample_fred_df(n=3)
-    ):
+    with patch("bedrock.cli.backfill.fetch_fred_series", return_value=_sample_fred_df(n=3)):
         result = runner.invoke(
             cli,
             [
@@ -83,7 +81,7 @@ def test_backfill_fundamentals_with_env_var(runner: CliRunner, tmp_path: Path) -
 
     called = {}
 
-    def capture(series_id, api_key, from_date, to_date):  # noqa: ARG001
+    def capture(series_id, api_key, from_date, to_date):
         called["api_key"] = api_key
         return _sample_fred_df(n=1)
 
@@ -106,9 +104,7 @@ def test_backfill_fundamentals_with_env_var(runner: CliRunner, tmp_path: Path) -
     assert called["api_key"] == "env_key_abc"
 
 
-def test_backfill_fundamentals_no_key_no_dry_run_errors(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_backfill_fundamentals_no_key_no_dry_run_errors(runner: CliRunner, tmp_path: Path) -> None:
     """Uten noen nøkkel OG uten --dry-run skal CLI feile tydelig."""
     db = tmp_path / "bedrock.db"
     # Sørg for at heller ikke secrets-fila har nøkkel
@@ -132,16 +128,14 @@ def test_backfill_fundamentals_no_key_no_dry_run_errors(
     assert not db.exists()
 
 
-def test_backfill_fundamentals_cli_key_overrides_env(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_backfill_fundamentals_cli_key_overrides_env(runner: CliRunner, tmp_path: Path) -> None:
     """CLI-arg vinner over env-var."""
     db = tmp_path / "bedrock.db"
     os.environ["FRED_API_KEY"] = "env_loses"
 
     called = {}
 
-    def capture(series_id, api_key, from_date, to_date):  # noqa: ARG001
+    def capture(series_id, api_key, from_date, to_date):
         called["api_key"] = api_key
         return _sample_fred_df(n=1)
 
@@ -228,9 +222,7 @@ def test_dry_run_works_without_api_key(runner: CliRunner, tmp_path: Path) -> Non
     assert "MISSING" in result.output
 
 
-def test_dry_run_reports_key_resolved_when_present(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_dry_run_reports_key_resolved_when_present(runner: CliRunner, tmp_path: Path) -> None:
     db = tmp_path / "bedrock.db"
     os.environ["FRED_API_KEY"] = "ok_key"
 

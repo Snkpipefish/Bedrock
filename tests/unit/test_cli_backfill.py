@@ -96,9 +96,7 @@ def test_backfill_creates_parent_dir_for_db(runner: CliRunner, tmp_path: Path) -
     assert db.exists()
 
 
-def test_backfill_defaults_to_today_when_to_missing(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_backfill_defaults_to_today_when_to_missing(runner: CliRunner, tmp_path: Path) -> None:
     """Uten --to skal default være i dag."""
     db = tmp_path / "bedrock.db"
     called_with: dict = {}

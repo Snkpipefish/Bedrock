@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
@@ -115,8 +116,6 @@ def trade_log() -> Response:
     (entries er allerede nyeste-først fra log-writer).
     """
     data = _read_trade_log()
-    limit_raw = (current_app.test_request_context() if False else None)  # placeholder
-    # Bruker Flask request-object for query-param; importer kun her
     from flask import request
 
     limit_str = request.args.get("limit")
@@ -283,12 +282,19 @@ _FETCHER_GROUPS: dict[str, str] = {
 _DEFAULT_GROUP = "Other"
 
 # Rekkefølge på grupper i UI. Grupper som ikke er i listen havner sist.
-_GROUP_ORDER = ["Core", "Bot-priser", "CFTC", "Ekstern COT", "Fundamentals", "Sektor", "Geo", "Other"]
+_GROUP_ORDER = [
+    "Core",
+    "Bot-priser",
+    "CFTC",
+    "Ekstern COT",
+    "Fundamentals",
+    "Sektor",
+    "Geo",
+    "Other",
+]
 
 
-def _classify_staleness(
-    has_data: bool, age_hours: float | None, stale_hours: float
-) -> str:
+def _classify_staleness(has_data: bool, age_hours: float | None, stale_hours: float) -> str:
     """Klassifiser staleness-nivå.
 
     - missing: ingen observasjoner ennå
@@ -317,7 +323,7 @@ def pipeline_health() -> Response:
     - fetch.yaml mangler / ugyldig → `{"groups": [], "error": "..."}`
     - db-feil per fetcher → status="missing" (row_count=0)
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from bedrock.config.fetch import (
         FetchConfigError,
@@ -327,7 +333,7 @@ def pipeline_health() -> Response:
     from bedrock.data.store import DataStore
 
     cfg = _config()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     try:
         fetch_cfg = load_fetch_config(cfg.fetch_config_path)
@@ -351,7 +357,7 @@ def pipeline_health() -> Response:
     try:
         store = DataStore(cfg.db_path)
         statuses = status_report(fetch_cfg, store, now=now)
-    except Exception as exc:  # noqa: BLE001 — UI skal ikke 500
+    except Exception as exc:
         log.warning("[UI] pipeline_health db-feil: %s", exc)
         statuses = []
 
@@ -365,15 +371,11 @@ def pipeline_health() -> Response:
             "name": st.name,
             "module": st.module,
             "table": st.table,
-            "status": _classify_staleness(
-                st.has_data, st.age_hours, st.stale_hours
-            ),
+            "status": _classify_staleness(st.has_data, st.age_hours, st.stale_hours),
             "stale_hours": st.stale_hours,
             "age_hours": round(st.age_hours, 2) if st.age_hours is not None else None,
             "latest_observation": (
-                st.latest_observation.isoformat()
-                if st.latest_observation is not None
-                else None
+                st.latest_observation.isoformat() if st.latest_observation is not None else None
             ),
             "cron": spec.cron if spec else None,
         }
@@ -387,9 +389,7 @@ def pipeline_health() -> Response:
     ordered_groups: list[dict[str, Any]] = []
     for group_name in _GROUP_ORDER:
         if group_name in groups:
-            ordered_groups.append(
-                {"name": group_name, "sources": groups[group_name]}
-            )
+            ordered_groups.append({"name": group_name, "sources": groups[group_name]})
     # Tilføy grupper som ikke er i _GROUP_ORDER (fremtidige tilskudd)
     for group_name, sources in groups.items():
         if group_name not in _GROUP_ORDER:

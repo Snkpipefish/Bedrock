@@ -96,10 +96,34 @@ select = [
 ]
 ignore = [
     "E501",  # linelength — håndtert av formatter
+    # Norske tegn i docstrings/kommentarer/strings (–, ×, ≥, ≤, →, …, å, ø, æ).
+    # Ruff flagger disse som "ambiguous" fordi de ligner ASCII-tegn, men de
+    # er bevisste valg i prosjektets norske dokumentasjon. False-positives.
+    "RUF001",  # ambiguous-unicode-character-string
+    "RUF002",  # ambiguous-unicode-character-docstring
+    "RUF003",  # ambiguous-unicode-character-comment
+    # Stilvalg — ofte mer lesbart originalt
+    "SIM102",  # collapsible-if (nested ifs er noen ganger klarere)
+    "SIM105",  # suppressible-exception (try/except/pass er tydelig)
+    "SIM108",  # if-else-block-instead-of-if-exp (eksplisitt if/else er ok)
+    "SIM117",  # multiple-with-statements (nested er noen ganger klarere)
+    # Foreslår str-enum / type-alias som ikke gir reell verdi
+    "UP040",   # non-pep695-type-alias
+    "UP042",   # replace-str-enum
+    # Test-mønster: pytest.raises med generisk Exception eller match-pattern
+    # som ikke regex-escape-es er ofte hensiktsmessig i tester
+    "B017",    # assert-raises-exception
+    # Unpack-ignored values: navngitt eksplisitt for klarhet er ofte
+    # mer lesbart enn `_` selv om verdien ikke brukes
+    "RUF059",  # unused-unpacked-variable
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]  # assert OK i tester
+"tests/**" = [
+    "S101",     # assert OK i tester
+    "RUF043",   # pytest.raises ambiguous-pattern (test-mønster, ofte ikke regex)
+    "RUF034",   # useless-if-else (kan være forklarende i test)
+]
 
 [tool.ruff.format]
 quote-style = "double"

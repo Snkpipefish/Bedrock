@@ -20,7 +20,6 @@ from bedrock.signal_server.config import (
     load_from_env,
 )
 
-
 # ---------------------------------------------------------------------------
 # ServerConfig
 # ---------------------------------------------------------------------------
@@ -48,9 +47,7 @@ def test_server_config_rejects_unknown_field() -> None:
 
 
 def test_server_config_custom_values() -> None:
-    cfg = ServerConfig(
-        port=6000, data_root=Path("/tmp/bedrock-test")
-    )
+    cfg = ServerConfig(port=6000, data_root=Path("/tmp/bedrock-test"))
     assert cfg.port == 6000
     assert cfg.data_root == Path("/tmp/bedrock-test")
 

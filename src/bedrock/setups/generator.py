@@ -150,9 +150,7 @@ def compute_atr(ohlc: pd.DataFrame, period: int = 14) -> float:
         raise ValueError(f"compute_atr: ohlc missing columns {sorted(missing)}")
 
     if len(ohlc) < period + 1:
-        raise ValueError(
-            f"compute_atr: need >= period+1 bars ({period + 1}), got {len(ohlc)}"
-        )
+        raise ValueError(f"compute_atr: need >= period+1 bars ({period + 1}), got {len(ohlc)}")
 
     high = ohlc["high"]
     low = ohlc["low"]
@@ -448,14 +446,14 @@ def _compute_rr(
 
 # Re-export for convenience
 __all__ = [
+    "ClusteredLevel",
     "Direction",
     "Horizon",
     "Setup",
     "SetupConfig",
-    "ClusteredLevel",
-    "compute_atr",
-    "cluster_levels",
     "build_setup",
+    "cluster_levels",
+    "compute_atr",
 ]
 
 

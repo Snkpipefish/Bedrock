@@ -159,9 +159,7 @@ def prices_cmd(
     if instrument is None:
         raise click.UsageError("--instrument er påkrevd.")
 
-    resolved_instrument, resolved_ticker = _resolve_prices(
-        instrument, ticker, instruments_dir
-    )
+    resolved_instrument, resolved_ticker = _resolve_prices(instrument, ticker, instruments_dir)
 
     _from: date = from_date.date()
     _to: date = to_date.date() if to_date is not None else date.today()
@@ -171,24 +169,18 @@ def prices_cmd(
         param_str = "&".join(f"{k}={v}" for k, v in params.items())
         click.echo(f"DRY-RUN  URL: {STOOQ_CSV_URL}?{param_str}")
         click.echo(
-            f"DRY-RUN  Would write to: {db_path} "
-            f"(instrument={resolved_instrument}, tf={tf})"
+            f"DRY-RUN  Would write to: {db_path} (instrument={resolved_instrument}, tf={tf})"
         )
         return
 
-    click.echo(
-        f"Fetching {resolved_instrument} ({resolved_ticker}) from {_from} to {_to}..."
-    )
+    click.echo(f"Fetching {resolved_instrument} ({resolved_ticker}) from {_from} to {_to}...")
     df = fetch_prices(resolved_ticker, _from, _to)
     click.echo(f"Fetched {len(df)} bars.")
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     store = DataStore(db_path)
     written = store.append_prices(resolved_instrument, tf, df)
-    click.echo(
-        f"Wrote {written} bars to {db_path} "
-        f"(instrument={resolved_instrument}, tf={tf})."
-    )
+    click.echo(f"Wrote {written} bars to {db_path} (instrument={resolved_instrument}, tf={tf}).")
 
 
 def _resolve_prices(
@@ -226,8 +218,7 @@ def _resolve_prices(
     "--instrument",
     default=None,
     help=(
-        "Bedrock-instrumentnavn. Hvis --contract ikke er gitt, slås "
-        "`cot_contract` opp fra YAML."
+        "Bedrock-instrumentnavn. Hvis --contract ikke er gitt, slås `cot_contract` opp fra YAML."
     ),
 )
 @click.option(
@@ -296,9 +287,7 @@ def cot_disaggregated_cmd(
         click.echo(f"DRY-RUN  Would write to: {db_path}")
         return
 
-    click.echo(
-        f"Fetching COT disaggregated for {resolved_contract!r} from {_from} to {_to}..."
-    )
+    click.echo(f"Fetching COT disaggregated for {resolved_contract!r} from {_from} to {_to}...")
     df = fetch_cot_disaggregated(resolved_contract, _from, _to)
     click.echo(f"Fetched {len(df)} report(s).")
 
@@ -322,8 +311,7 @@ def cot_disaggregated_cmd(
     "--instrument",
     default=None,
     help=(
-        "Bedrock-instrumentnavn. Hvis --contract ikke er gitt, slås "
-        "`cot_contract` opp fra YAML."
+        "Bedrock-instrumentnavn. Hvis --contract ikke er gitt, slås `cot_contract` opp fra YAML."
     ),
 )
 @click.option(
@@ -395,9 +383,7 @@ def cot_legacy_cmd(
         click.echo(f"DRY-RUN  Would write to: {db_path}")
         return
 
-    click.echo(
-        f"Fetching COT legacy for {resolved_contract!r} from {_from} to {_to}..."
-    )
+    click.echo(f"Fetching COT legacy for {resolved_contract!r} from {_from} to {_to}...")
     df = fetch_cot_legacy(resolved_contract, _from, _to)
     click.echo(f"Fetched {len(df)} report(s).")
 
@@ -427,9 +413,7 @@ def _resolve_cot_contract(
     if contract_arg is not None:
         return contract_arg
     if instrument_arg is None:
-        raise click.UsageError(
-            "Enten --contract eller --instrument må gis."
-        )
+        raise click.UsageError("Enten --contract eller --instrument må gis.")
     cfg = find_instrument(instrument_arg, instruments_dir)
     if cfg.instrument.cot_contract is None:
         raise click.UsageError(
@@ -578,9 +562,7 @@ def _resolve_weather(
         )
 
     if instrument_arg is None:
-        raise click.UsageError(
-            "Oppgi enten alle av --region/--lat/--lon eller --instrument."
-        )
+        raise click.UsageError("Oppgi enten alle av --region/--lat/--lon eller --instrument.")
 
     cfg = find_instrument(instrument_arg, instruments_dir)
     meta = cfg.instrument
@@ -748,9 +730,7 @@ def _resolve_fred_series(
     if series_id_arg is not None:
         return [series_id_arg]
     if instrument_arg is None:
-        raise click.UsageError(
-            "Enten --series-id eller --instrument må gis."
-        )
+        raise click.UsageError("Enten --series-id eller --instrument må gis.")
     cfg = find_instrument(instrument_arg, instruments_dir)
     ids = list(cfg.instrument.fred_series_ids)
     if not ids:

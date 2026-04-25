@@ -31,14 +31,13 @@ YAML-form for gate i instrument-reglene:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from bedrock.engine.gates import GateContext, gate_register
-
 
 DEFAULT_CALENDAR_PATH = Path("config/calendars/usda.yaml")
 
@@ -85,8 +84,7 @@ def load_usda_calendar(
         result: dict[str, list[datetime]] = {}
     elif not isinstance(raw, dict):
         raise UsdaCalendarError(
-            f"{absolute}: expected YAML mapping at root, got "
-            f"{type(raw).__name__}"
+            f"{absolute}: expected YAML mapping at root, got {type(raw).__name__}"
         )
     else:
         result = _parse_calendar_dict(raw, source=str(absolute))
@@ -100,15 +98,12 @@ def clear_usda_calendar_cache() -> None:
     _CACHE.clear()
 
 
-def _parse_calendar_dict(
-    raw: dict[str, Any], source: str
-) -> dict[str, list[datetime]]:
+def _parse_calendar_dict(raw: dict[str, Any], source: str) -> dict[str, list[datetime]]:
     result: dict[str, list[datetime]] = {}
     for report_type, dates in raw.items():
         if not isinstance(dates, list):
             raise UsdaCalendarError(
-                f"{source}: {report_type!r} must be a list, got "
-                f"{type(dates).__name__}"
+                f"{source}: {report_type!r} must be a list, got {type(dates).__name__}"
             )
         parsed: list[datetime] = []
         for item in dates:
@@ -126,9 +121,7 @@ def _parse_datetime(value: Any, source: str, report_type: str) -> datetime:
         try:
             dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError as exc:
-            raise UsdaCalendarError(
-                f"{source}: ugyldig dato i {report_type!r}: {value!r}"
-            ) from exc
+            raise UsdaCalendarError(f"{source}: ugyldig dato i {report_type!r}: {value!r}") from exc
     else:
         raise UsdaCalendarError(
             f"{source}: {report_type!r} inneholder ikke-dato-verdi: "
@@ -137,7 +130,7 @@ def _parse_datetime(value: Any, source: str, report_type: str) -> datetime:
 
     # Sikre timezone-awareness — anta UTC hvis ikke spesifisert
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt
 
 
@@ -192,7 +185,7 @@ def _usda_blackout(context: GateContext, params: dict[str, Any]) -> bool:
 
 def _ensure_aware(dt: datetime) -> datetime:
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
+        return dt.replace(tzinfo=UTC)
     return dt
 
 

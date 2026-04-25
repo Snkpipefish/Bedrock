@@ -41,15 +41,15 @@ import logging
 import os
 import tempfile
 from collections import deque
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
-from typing import Any, Callable, Optional
-
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from bedrock.bot.config import ReloadableConfig
-from bedrock.bot.ctrader_client import CtraderClient, H1_PERIOD, M15_PERIOD, M5_PERIOD
+from bedrock.bot.ctrader_client import H1_PERIOD, M5_PERIOD, M15_PERIOD, CtraderClient
 from bedrock.bot.instruments import (
     AGRI_INSTRUMENTS,
     AGRI_SUBGROUPS,
@@ -112,10 +112,10 @@ class EntryEngine:
         safety: SafetyMonitor,
         config: ReloadableConfig,
         active_states: list[TradeState],
-        execute_trade: Optional[ExecuteTradeCallback] = None,
+        execute_trade: ExecuteTradeCallback | None = None,
         manage_open_positions: ManagePositionsCallback = _noop,
-        stats_path: Optional[Path] = None,
-        trade_log_path: Optional[Path] = None,
+        stats_path: Path | None = None,
+        trade_log_path: Path | None = None,
     ) -> None:
         self._client = client
         self._safety = safety
@@ -143,7 +143,7 @@ class EntryEngine:
         self.atr14_h1: dict[int, list[float]] = {}
 
         # Siste signal-data (satt av on_signals-callback fra comms)
-        self.signal_data: Optional[dict[str, Any]] = None
+        self.signal_data: dict[str, Any] | None = None
 
         # Stats for empirisk min_score-kalibrering
         self._confirmation_stats: dict[str, Any] = _initial_confirmation_stats()
@@ -152,7 +152,7 @@ class EntryEngine:
         self._usd_dir_missing_logged: set[str] = set()
         self._spread_cold_logged: set[int] = set()
         self._ttl_logged: set[str] = set()
-        self._last_expiry_log: Optional[datetime] = None
+        self._last_expiry_log: datetime | None = None
         self._daily_loss_logged: bool = False
 
         self._lock = Lock()
@@ -188,9 +188,7 @@ class EntryEngine:
         period = res.period if res.HasField("period") else M15_PERIOD
 
         buf = (
-            self.h1_candle_buffers.get(sid)
-            if period == H1_PERIOD
-            else self.candle_buffers.get(sid)
+            self.h1_candle_buffers.get(sid) if period == H1_PERIOD else self.candle_buffers.get(sid)
         )
         if not buf:
             return
@@ -204,7 +202,7 @@ class EntryEngine:
             close = close_i / div
             open_ = open_i / div
             high = high_i / div
-            ts = datetime.fromtimestamp(bar.utcTimestampInMinutes * 60, tz=timezone.utc)
+            ts = datetime.fromtimestamp(bar.utcTimestampInMinutes * 60, tz=UTC)
             buf.candles.append(
                 Candle(
                     open=open_,
@@ -216,14 +214,10 @@ class EntryEngine:
                 )
             )
 
-        name = next(
-            (k for k, v in self._client.symbol_map.items() if v == sid), str(sid)
-        )
+        name = next((k for k, v in self._client.symbol_map.items() if v == sid), str(sid))
         if period == H1_PERIOD:
             self._update_indicators_h1(sid)
-            ema_str = (
-                f"{self.ema9_h1[sid][-1]:.5f}" if self.ema9_h1.get(sid) else "N/A"
-            )
+            ema_str = f"{self.ema9_h1[sid][-1]:.5f}" if self.ema9_h1.get(sid) else "N/A"
             log.info(
                 "[INIT-1H] %s: %d 1H-candles lastet, EMA9=%s",
                 name,
@@ -250,9 +244,7 @@ class EntryEngine:
             if bar.period == M15_PERIOD:
                 self._handle_trendbar(sid, bar, self.candle_buffers, fire_on_close=True)
             elif bar.period == M5_PERIOD:
-                self._handle_trendbar(
-                    sid, bar, self.m5_candle_buffers, fire_on_close=False
-                )
+                self._handle_trendbar(sid, bar, self.m5_candle_buffers, fire_on_close=False)
             elif bar.period == H1_PERIOD:
                 self._handle_trendbar_h1(sid, bar)
 
@@ -285,7 +277,7 @@ class EntryEngine:
         if buf.current_ts is None or bar.utcTimestampInMinutes != buf.current_ts:
             # Lukk forrige candle
             if buf.current_ts is not None:
-                prev_ts = datetime.fromtimestamp(buf.current_ts * 60, tz=timezone.utc)
+                prev_ts = datetime.fromtimestamp(buf.current_ts * 60, tz=UTC)
                 closed_candle = Candle(
                     open=buf.current_open or 0.0,
                     high=buf.current_high or 0.0,
@@ -324,7 +316,7 @@ class EntryEngine:
             return
         if buf.current_ts is None or bar.utcTimestampInMinutes != buf.current_ts:
             if buf.current_ts is not None:
-                prev_ts = datetime.fromtimestamp(buf.current_ts * 60, tz=timezone.utc)
+                prev_ts = datetime.fromtimestamp(buf.current_ts * 60, tz=UTC)
                 buf.candles.append(
                     Candle(
                         open=buf.current_open or 0.0,
@@ -442,29 +434,27 @@ class EntryEngine:
             atr = (atr * 13 + tr) / 14
         self.atr14_5m[symbol_id] = atr
 
-    def get_ema9(self, symbol_id: int, offset: int = 0) -> Optional[float]:
+    def get_ema9(self, symbol_id: int, offset: int = 0) -> float | None:
         """offset=0 = siste lukkede bar, offset=1 = nest siste."""
         emas = self.ema9.get(symbol_id, [])
         idx = -(offset + 1)
         return emas[idx] if len(emas) >= abs(idx) else None
 
-    def get_atr14(self, symbol_id: int) -> Optional[float]:
+    def get_atr14(self, symbol_id: int) -> float | None:
         atrs = self.atr14.get(symbol_id, [])
         return atrs[-1] if atrs else None
 
-    def get_atr14_h1(self, symbol_id: int) -> Optional[float]:
+    def get_atr14_h1(self, symbol_id: int) -> float | None:
         atrs = self.atr14_h1.get(symbol_id, [])
         return atrs[-1] if atrs else None
 
-    def get_ema9_h1(self, symbol_id: int, offset: int = 0) -> Optional[float]:
+    def get_ema9_h1(self, symbol_id: int, offset: int = 0) -> float | None:
         """1H EMA9 — brukes av ExitEngine for SWING/MAKRO P4 (EMA9-kryss)."""
         emas = self.ema9_h1.get(symbol_id, [])
         idx = -(offset + 1)
         return emas[idx] if len(emas) >= abs(idx) else None
 
-    def set_manage_open_positions(
-        self, callback: ManagePositionsCallback
-    ) -> None:
+    def set_manage_open_positions(self, callback: ManagePositionsCallback) -> None:
         """Sett (eller bytt ut) manage_open_positions-callbacken etter
         konstruksjon. Brukes i `bot/__main__.py` for å koble ExitEngine
         inn etter at begge er instansiert (sirkulær dep: ExitEngine
@@ -491,7 +481,7 @@ class EntryEngine:
         if self._safety.bot_locked:
             if (
                 self._safety.bot_locked_until is None
-                or datetime.now(timezone.utc) < self._safety.bot_locked_until
+                or datetime.now(UTC) < self._safety.bot_locked_until
             ):
                 self._manage_open_positions(symbol_id, candle)
                 return
@@ -513,8 +503,8 @@ class EntryEngine:
         if valid_until:
             try:
                 exp = datetime.fromisoformat(valid_until.replace("Z", "+00:00"))
-                if datetime.now(timezone.utc) > exp:
-                    now_min = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+                if datetime.now(UTC) > exp:
+                    now_min = datetime.now(UTC).replace(second=0, microsecond=0)
                     if self._last_expiry_log != now_min:
                         log.info("[UTLØPT] Signalfilen er utgått — venter på nye signaler.")
                         self._last_expiry_log = now_min
@@ -557,11 +547,8 @@ class EntryEngine:
                 self._usd_dir_missing_logged.add(instrument)
 
         # Tidlig daily-loss-gate
-        if (
-            self._client.account_balance > 0
-            and self._safety.daily_loss_exceeded(
-                self._client.account_balance, self._config.daily_loss
-            )
+        if self._client.account_balance > 0 and self._safety.daily_loss_exceeded(
+            self._client.account_balance, self._config.daily_loss
         ):
             if not self._daily_loss_logged:
                 limit = self._safety.daily_loss_limit(
@@ -582,7 +569,7 @@ class EntryEngine:
         if created_at:
             try:
                 ca = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-                age = (datetime.now(timezone.utc) - ca).total_seconds()
+                age = (datetime.now(UTC) - ca).total_seconds()
                 ttl = self._horizon_ttl_seconds(horizon)
                 if age > ttl:
                     sig_id = sig.get("id", "?")
@@ -632,9 +619,7 @@ class EntryEngine:
                 elif "exit_timeout_full_hours" in hcfg_init:
                     exp_candles = int(hcfg_init["exit_timeout_full_hours"] / 0.25)
                 else:
-                    group = self._config.group_params.get(
-                        _group_key(instrument, self._config)
-                    )
+                    group = self._config.group_params.get(_group_key(instrument, self._config))
                     default_expiry = group.expiry if group else 32
                     exp_candles = sig.get("expiry_candles", default_expiry)
 
@@ -741,8 +726,7 @@ class EntryEngine:
             # non_agri_multiplier_of_stop brukes som × stop_multiplier
             # (matcher gammel bot: stop_multiplier × 2)
             spread_mult = (
-                rules.get("stop_multiplier", 3.0)
-                * self._config.spread.non_agri_multiplier_of_stop
+                rules.get("stop_multiplier", 3.0) * self._config.spread.non_agri_multiplier_of_stop
             )
         max_spread = spread_mult * normal_spread
         if normal_spread > 0 and current_spread > max_spread:
@@ -844,9 +828,7 @@ class EntryEngine:
         if new_usd:
             for s in self._active_states:
                 if s.phase == TradePhase.IN_TRADE:
-                    existing_usd = net_usd_direction(
-                        getattr(s, "instrument", ""), s.direction
-                    )
+                    existing_usd = net_usd_direction(getattr(s, "instrument", ""), s.direction)
                     if existing_usd and existing_usd != new_usd:
                         required = strict_score
                         log.info(
@@ -884,7 +866,7 @@ class EntryEngine:
         """Atomic write av confirmation-stats."""
         try:
             stats = dict(self._confirmation_stats)
-            stats["last_updated"] = datetime.now(timezone.utc).isoformat()
+            stats["last_updated"] = datetime.now(UTC).isoformat()
             if stats["total"] > 0:
                 stats["pass_rate"] = round(stats["passed"] / stats["total"], 3)
             self._stats_path.parent.mkdir(parents=True, exist_ok=True)
@@ -978,9 +960,7 @@ class EntryEngine:
     # _execute_trade — gates + sizing + ordre-sending
     # ─────────────────────────────────────────────────────────
 
-    def _execute_trade_impl(
-        self, sig: dict[str, Any], state: TradeState, candle: Candle
-    ) -> None:
+    def _execute_trade_impl(self, sig: dict[str, Any], state: TradeState, candle: Candle) -> None:
         """Gater, sizer og sender ordre.
 
         Portert fra `trading_bot.py:_execute_trade` (1491-1732) per
@@ -1030,13 +1010,12 @@ class EntryEngine:
             oil_cfg = self._config.oil
             min_sl_pips = rules.get("oil_min_sl_pips", oil_cfg.min_sl_pips)
             max_spread_m = rules.get("oil_max_spread_mult", oil_cfg.max_spread_mult)
-            spread = self._client.last_ask.get(
+            spread = self._client.last_ask.get(state.symbol_id, 0) - self._client.last_bid.get(
                 state.symbol_id, 0
-            ) - self._client.last_bid.get(state.symbol_id, 0)
+            )
             if risk_per_unit < min_sl_pips * 0.01:
                 log.warning(
-                    "[GEO-OLJE BLOKKERT] %s — SL for smal (%.3f < %d pips) "
-                    "under geo-advarsel.",
+                    "[GEO-OLJE BLOKKERT] %s — SL for smal (%.3f < %d pips) under geo-advarsel.",
                     sig["id"],
                     risk_per_unit,
                     min_sl_pips,
@@ -1045,8 +1024,7 @@ class EntryEngine:
                 return
             if spread > 0 and risk_per_unit < max_spread_m * spread:
                 log.warning(
-                    "[GEO-OLJE BLOKKERT] %s — SL (%.3f) < %.1f× spread (%.3f) "
-                    "under geo-advarsel.",
+                    "[GEO-OLJE BLOKKERT] %s — SL (%.3f) < %.1f× spread (%.3f) under geo-advarsel.",
                     sig["id"],
                     risk_per_unit,
                     max_spread_m,
@@ -1057,13 +1035,10 @@ class EntryEngine:
 
         # ── Daglig tapsgrense ─────────────────────────────────
         balance = self._client.account_balance
-        if balance > 0 and self._safety.daily_loss_exceeded(
-            balance, self._config.daily_loss
-        ):
+        if balance > 0 and self._safety.daily_loss_exceeded(balance, self._config.daily_loss):
             limit = self._safety.daily_loss_limit(balance, self._config.daily_loss)
             log.warning(
-                "[DAGLIG TAP] Grense nådd (%.0f ≥ %.0f). "
-                "Ingen nye trades i dag.",
+                "[DAGLIG TAP] Grense nådd (%.0f ≥ %.0f). Ingen nye trades i dag.",
                 self._safety.daily_loss,
                 limit,
             )
@@ -1117,8 +1092,7 @@ class EntryEngine:
                     1
                     for s in self._active_states
                     if s.phase == TradePhase.IN_TRADE
-                    and AGRI_SUBGROUPS.get(getattr(s, "instrument", ""), "")
-                    == this_subgroup
+                    and AGRI_SUBGROUPS.get(getattr(s, "instrument", ""), "") == this_subgroup
                 )
                 if subgroup_active >= agri_cfg.max_per_subgroup:
                     log.info(
@@ -1151,8 +1125,7 @@ class EntryEngine:
                 spread = ask - bid if ask > bid else 0.0
                 if spread > agri_cfg.max_spread_atr_ratio * atr:
                     log.info(
-                        "[AGRI] %s blokkert — spread for vid: %.5f > "
-                        "%.0f%%×ATR (%.5f).",
+                        "[AGRI] %s blokkert — spread for vid: %.5f > %.0f%%×ATR (%.5f).",
                         sig["id"],
                         spread,
                         agri_cfg.max_spread_atr_ratio * 100,
@@ -1162,9 +1135,7 @@ class EntryEngine:
                     return
 
         # ── Korrelasjonsgating ────────────────────────────────
-        this_group = sig.get("correlation_group") or INSTRUMENT_GROUP.get(
-            instr_name, ""
-        )
+        this_group = sig.get("correlation_group") or INSTRUMENT_GROUP.get(instr_name, "")
         corr_cfg = gs.get("correlation_config", {})
         if this_group:
             group_count = 0
@@ -1188,8 +1159,7 @@ class EntryEngine:
             max_in_group = max_per_grp.get(this_group, default_per_group)
             if group_count >= max_in_group:
                 log.info(
-                    "[KORRELASJON] %s blokkert — %d/%d i %s allerede aktiv "
-                    "(regime=%s).",
+                    "[KORRELASJON] %s blokkert — %d/%d i %s allerede aktiv (regime=%s).",
                     sig["id"],
                     group_count,
                     max_in_group,
@@ -1201,13 +1171,10 @@ class EntryEngine:
 
         # Total posisjonsgrense
         max_total = corr_cfg.get("max_total", 6)
-        total_active = sum(
-            1 for s in self._active_states if s.phase == TradePhase.IN_TRADE
-        )
+        total_active = sum(1 for s in self._active_states if s.phase == TradePhase.IN_TRADE)
         if total_active >= max_total:
             log.info(
-                "[KORRELASJON] %s blokkert — %d/%d total posisjoner aktive "
-                "(regime=%s).",
+                "[KORRELASJON] %s blokkert — %d/%d total posisjoner aktive (regime=%s).",
                 sig["id"],
                 total_active,
                 max_total,
@@ -1274,8 +1241,7 @@ class EntryEngine:
         # Phase settes til IN_TRADE kun etter bekreftelse i on_execution
 
         log.info(
-            "[ORDRE] %s | %s %d enheter @ %.5f | SL=%.5f | T1=%.5f | "
-            "Risk=%.2f (%s%%)",
+            "[ORDRE] %s | %s %d enheter @ %.5f | SL=%.5f | T1=%.5f | Risk=%.2f (%s%%)",
             sig["id"],
             sig["direction"].upper(),
             volume_units,
@@ -1314,7 +1280,7 @@ class EntryEngine:
                 data = json.loads(self._trade_log_path.read_text(encoding="utf-8"))
             else:
                 data = {"entries": []}
-            now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
             entry = {
                 "timestamp": now,
                 "closed_at": None,
@@ -1337,7 +1303,7 @@ class EntryEngine:
                     "grade": getattr(state, "grade", None),
                 },
             }
-            data["entries"] = [entry] + data.get("entries", [])
+            data["entries"] = [entry, *data.get("entries", [])]
             data["last_updated"] = now
             self._trade_log_path.parent.mkdir(parents=True, exist_ok=True)
             fd, tmp = tempfile.mkstemp(

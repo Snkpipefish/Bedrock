@@ -164,7 +164,7 @@ def test_prices_instrument_yaml_lookup(
     db = tmp_path / "bedrock.db"
     captured: dict[str, object] = {}
 
-    def fake_fetch(ticker, from_date, to_date, interval="d"):  # noqa: ARG001
+    def fake_fetch(ticker, from_date, to_date, interval="d"):
         captured["ticker"] = ticker
         return _sample_bars(2)
 
@@ -199,7 +199,7 @@ def test_prices_explicit_ticker_bypasses_yaml(
     db = tmp_path / "bedrock.db"
     captured: dict[str, object] = {}
 
-    def fake_fetch(ticker, from_date, to_date, interval="d"):  # noqa: ARG001
+    def fake_fetch(ticker, from_date, to_date, interval="d"):
         captured["ticker"] = ticker
         return _sample_bars(1)
 
@@ -260,7 +260,7 @@ def test_cot_disagg_instrument_yaml_lookup(
     db = tmp_path / "bedrock.db"
     captured: dict[str, object] = {}
 
-    def fake_fetch(contract, from_date, to_date):  # noqa: ARG001
+    def fake_fetch(contract, from_date, to_date):
         captured["contract"] = contract
         return _sample_cot_disagg()
 
@@ -291,7 +291,9 @@ def test_cot_disagg_instrument_without_cot_contract_errors(
     """Corn.yaml har ikke cot_contract → tydelig feil når --instrument Corn brukes."""
     # Overskriv corn.yaml uten cot_contract
     (instruments_dir / "corn.yaml").write_text(
-        (instruments_dir / "corn.yaml").read_text().replace(
+        (instruments_dir / "corn.yaml")
+        .read_text()
+        .replace(
             'cot_contract: "CORN - CHICAGO BOARD OF TRADE"\n  cot_report: disaggregated\n',
             "",
         )
@@ -317,9 +319,7 @@ def test_cot_disagg_instrument_without_cot_contract_errors(
     assert "cot_contract" in result.output.lower()
 
 
-def test_cot_without_contract_or_instrument_errors(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_cot_without_contract_or_instrument_errors(runner: CliRunner, tmp_path: Path) -> None:
     db = tmp_path / "bedrock.db"
     result = runner.invoke(
         cli,
@@ -346,7 +346,7 @@ def test_weather_instrument_yaml_lookup(
     db = tmp_path / "bedrock.db"
     captured: dict[str, object] = {}
 
-    def fake_fetch(region, lat, lon, from_date, to_date):  # noqa: ARG001
+    def fake_fetch(region, lat, lon, from_date, to_date):
         captured["region"] = region
         captured["lat"] = lat
         captured["lon"] = lon
@@ -399,9 +399,7 @@ def test_weather_instrument_without_weather_metadata_errors(
     assert "weather" in result.output.lower()
 
 
-def test_weather_without_instrument_or_coords_errors(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_weather_without_instrument_or_coords_errors(runner: CliRunner, tmp_path: Path) -> None:
     db = tmp_path / "bedrock.db"
     result = runner.invoke(
         cli,
@@ -430,7 +428,7 @@ def test_fundamentals_instrument_iterates_all_series(
 
     calls: list[str] = []
 
-    def fake_fetch(series_id, api_key, from_date, to_date):  # noqa: ARG001
+    def fake_fetch(series_id, api_key, from_date, to_date):
         calls.append(series_id)
         return _sample_fred(series_id, n=2)
 
@@ -467,7 +465,7 @@ def test_fundamentals_instrument_one_failure_continues(
     db = tmp_path / "bedrock.db"
     os.environ["FRED_API_KEY"] = "ok"
 
-    def fake_fetch(series_id, api_key, from_date, to_date):  # noqa: ARG001
+    def fake_fetch(series_id, api_key, from_date, to_date):
         if series_id == "DTWEXBGS":
             raise RuntimeError("HTTP 429 Too Many Requests")
         return _sample_fred(series_id, n=2)
@@ -514,7 +512,7 @@ def test_fundamentals_series_id_overrides_instrument(
 
     calls: list[str] = []
 
-    def fake_fetch(series_id, api_key, from_date, to_date):  # noqa: ARG001
+    def fake_fetch(series_id, api_key, from_date, to_date):
         calls.append(series_id)
         return _sample_fred(series_id, n=1)
 

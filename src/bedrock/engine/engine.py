@@ -199,9 +199,7 @@ class Engine:
         horizon: str | None,
     ) -> GroupResult:
         if horizon is None:
-            raise ValueError(
-                "FinancialRules require a `horizon` argument (e.g. 'SWING')."
-            )
+            raise ValueError("FinancialRules require a `horizon` argument (e.g. 'SWING').")
 
         horizon_spec = rules.horizons.get(horizon)
         if horizon_spec is None:

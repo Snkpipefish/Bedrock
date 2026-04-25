@@ -13,14 +13,11 @@ from textwrap import dedent
 import pandas as pd
 import pytest
 
-from bedrock.data.store import DataStore
-from bedrock.engine.engine import AgriRules, FinancialRules
-
 # Importeres som side-effekt: registrerer sma200_align og momentum_z
 import bedrock.engine.drivers  # noqa: F401
+from bedrock.data.store import DataStore
 from bedrock.orchestrator import score_instrument
 from bedrock.orchestrator.score import OrchestratorError
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -253,9 +250,7 @@ def test_score_missing_instrument_file(
         )
 
 
-def test_score_missing_instruments_dir(
-    store_with_prices: DataStore, tmp_path: Path
-) -> None:
+def test_score_missing_instruments_dir(store_with_prices: DataStore, tmp_path: Path) -> None:
     with pytest.raises(OrchestratorError, match="not found"):
         score_instrument(
             "Gold",

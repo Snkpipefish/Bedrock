@@ -23,7 +23,6 @@ from __future__ import annotations
 
 from bedrock.setups.generator import Direction, Horizon
 
-
 # ---------------------------------------------------------------------------
 # Timeframe-normalisering
 # ---------------------------------------------------------------------------
@@ -34,9 +33,7 @@ _INTRADAY_TFS: frozenset[str] = frozenset(
 )
 
 # Mid-frame (over intraday, opp til daglig)
-_MID_TFS: frozenset[str] = frozenset(
-    {"1h", "4h", "h1", "h4", "H1", "H4", "1H", "4H"}
-)
+_MID_TFS: frozenset[str] = frozenset({"1h", "4h", "h1", "h4", "H1", "H4", "1H", "4H"})
 
 # Daglig og lengre
 _DAILY_PLUS_TFS: frozenset[str] = frozenset(
@@ -187,10 +184,10 @@ def apply_horizon_hysteresis(
 
 
 __all__ = [
+    "apply_horizon_hysteresis",
     "classify_horizon",
     "estimate_expected_hold_days",
     "is_score_sufficient",
-    "apply_horizon_hysteresis",
 ]
 
 

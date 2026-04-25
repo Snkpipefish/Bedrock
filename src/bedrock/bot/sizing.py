@@ -12,7 +12,7 @@ migrasjons-plan (`docs/migration/bot_refactor.md § 3.3 + 8 punkt 4-5`).
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from bedrock.bot.config import RiskPctConfig
 from bedrock.bot.instruments import AGRI_INSTRUMENTS
@@ -91,9 +91,7 @@ def compute_desired_lots(sig: dict[str, Any], risk_pct: float) -> float:
     return lots
 
 
-def lots_to_volume_units(
-    desired_lots: float, symbol_info: Optional[dict[str, Any]]
-) -> int:
+def lots_to_volume_units(desired_lots: float, symbol_info: dict[str, Any] | None) -> int:
     """Konverter lots til cTrader API-enheter med stepVolume-rounding.
 
     Portert fra `_execute_trade` (trading_bot.py:1572-1585). Hvis
@@ -112,9 +110,7 @@ def lots_to_volume_units(
     return max(raw, step_volume if step_volume > 0 else min_volume)
 
 
-def volume_to_lots(
-    volume: int, symbol_info: Optional[dict[str, Any]]
-) -> Optional[float]:
+def volume_to_lots(volume: int, symbol_info: dict[str, Any] | None) -> float | None:
     """Invers av `lots_to_volume_units` — brukes for trade-logging.
 
     Portert fra `_volume_to_lots` (trading_bot.py:1837-1845). Returnerer

@@ -112,9 +112,7 @@ def load_instrument_config(
     if not target.exists():
         raise FileNotFoundError(f"Instrument config not found: {target}")
 
-    resolved_defaults = (
-        Path(defaults_dir) if defaults_dir is not None else DEFAULT_DEFAULTS_DIR
-    )
+    resolved_defaults = Path(defaults_dir) if defaults_dir is not None else DEFAULT_DEFAULTS_DIR
 
     with target.open(encoding="utf-8") as f:
         data = yaml.safe_load(f)
@@ -125,9 +123,7 @@ def load_instrument_config(
         )
 
     if "inherits" in data:
-        data = _resolve_inherits(
-            data, resolved_defaults, source=str(target), chain=[]
-        )
+        data = _resolve_inherits(data, resolved_defaults, source=str(target), chain=[])
 
     return _parse_instrument_dict(data, source=str(target))
 
@@ -148,24 +144,17 @@ def load_instrument_from_yaml_string(
     try:
         data = yaml.safe_load(yaml_content)
     except yaml.YAMLError as exc:
-        raise InstrumentConfigError(
-            f"{source_name}: ugyldig YAML: {exc}"
-        ) from exc
+        raise InstrumentConfigError(f"{source_name}: ugyldig YAML: {exc}") from exc
 
     if not isinstance(data, dict):
         raise InstrumentConfigError(
-            f"{source_name}: expected YAML mapping at root, got "
-            f"{type(data).__name__}"
+            f"{source_name}: expected YAML mapping at root, got {type(data).__name__}"
         )
 
-    resolved_defaults = (
-        Path(defaults_dir) if defaults_dir is not None else DEFAULT_DEFAULTS_DIR
-    )
+    resolved_defaults = Path(defaults_dir) if defaults_dir is not None else DEFAULT_DEFAULTS_DIR
 
     if "inherits" in data:
-        data = _resolve_inherits(
-            data, resolved_defaults, source=source_name, chain=[]
-        )
+        data = _resolve_inherits(data, resolved_defaults, source=source_name, chain=[])
 
     return _parse_instrument_dict(data, source=source_name)
 
@@ -190,8 +179,7 @@ def load_all_instruments(
         inst_id = cfg.instrument.id
         if inst_id in result:
             raise InstrumentConfigError(
-                f"Duplicate instrument id {inst_id!r} in "
-                f"{yaml_path.name} (also in earlier file)"
+                f"Duplicate instrument id {inst_id!r} in {yaml_path.name} (also in earlier file)"
             )
         result[inst_id] = cfg
 
@@ -231,15 +219,12 @@ def _resolve_inherits(
 
     if not isinstance(parent_name, str):
         raise InstrumentConfigError(
-            f"{source}: `inherits` must be a string, got "
-            f"{type(parent_name).__name__}"
+            f"{source}: `inherits` must be a string, got {type(parent_name).__name__}"
         )
 
     if parent_name in chain:
         cycle = " → ".join([*chain, parent_name])
-        raise InstrumentConfigError(
-            f"{source}: circular inherits chain: {cycle}"
-        )
+        raise InstrumentConfigError(f"{source}: circular inherits chain: {cycle}")
 
     parent_path = defaults_dir / f"{parent_name}.yaml"
     if not parent_path.exists():
@@ -253,8 +238,7 @@ def _resolve_inherits(
 
     if not isinstance(parent_raw, dict):
         raise InstrumentConfigError(
-            f"{parent_path}: expected YAML mapping at root, got "
-            f"{type(parent_raw).__name__}"
+            f"{parent_path}: expected YAML mapping at root, got {type(parent_raw).__name__}"
         )
 
     # Recursively resolve parent's own `inherits` first
@@ -325,9 +309,7 @@ _DEFERRED_KEYS: frozenset[str] = frozenset(
 def _parse_instrument_dict(data: dict[str, Any], source: str) -> InstrumentConfig:
     """Konverter rå YAML-dict til `InstrumentConfig`."""
     if "instrument" not in data:
-        raise InstrumentConfigError(
-            f"{source}: missing required 'instrument' block"
-        )
+        raise InstrumentConfigError(f"{source}: missing required 'instrument' block")
 
     metadata = InstrumentMetadata.model_validate(data["instrument"])
 
@@ -368,9 +350,9 @@ def _parse_instrument_dict(data: dict[str, Any], source: str) -> InstrumentConfi
 
 __all__ = [
     "DEFAULT_DEFAULTS_DIR",
-    "InstrumentMetadata",
     "InstrumentConfig",
     "InstrumentConfigError",
-    "load_instrument_config",
+    "InstrumentMetadata",
     "load_all_instruments",
+    "load_instrument_config",
 ]

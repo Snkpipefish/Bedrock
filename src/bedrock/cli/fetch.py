@@ -7,7 +7,7 @@ session(er) legger til `run <fetcher>` og `run --all`.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import click
@@ -84,13 +84,12 @@ def status_cmd(
         # OK — alle fetchere vil rapporteres som NO_DATA. Stille i
         # --json-modus for å bevare rent JSON-output.
         click.echo(
-            f"(DB finnes ikke: {db_path} — alle fetchere vil rapporteres "
-            f"som NO_DATA)",
+            f"(DB finnes ikke: {db_path} — alle fetchere vil rapporteres som NO_DATA)",
             err=True,
         )
 
     store = DataStore(db_path) if db_path.exists() else _DummyStore()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     report = status_report(config, store, now=now)
 
@@ -120,10 +119,7 @@ def _to_json(status: FetcherStatus) -> dict:
 def _print_table(config: FetchConfig, report: list[FetcherStatus], now: datetime) -> None:
     click.echo(f"Fetch status  (now: {now.isoformat()})")
     click.echo("")
-    header = (
-        f"{'fetcher':<22} {'status':<9} {'last_obs':<26} "
-        f"{'age_h':>8}  {'stale_h':>8}"
-    )
+    header = f"{'fetcher':<22} {'status':<9} {'last_obs':<26} {'age_h':>8}  {'stale_h':>8}"
     click.echo(header)
     click.echo("-" * len(header))
 
@@ -141,10 +137,7 @@ def _print_table(config: FetchConfig, report: list[FetcherStatus], now: datetime
             last_obs = s.latest_observation.isoformat()
             age = f"{s.age_hours:.1f}"
 
-        click.echo(
-            f"{s.name:<22} {status_text:<9} {last_obs:<26} "
-            f"{age:>8}  {s.stale_hours:>8.1f}"
-        )
+        click.echo(f"{s.name:<22} {status_text:<9} {last_obs:<26} {age:>8}  {s.stale_hours:>8.1f}")
 
 
 @fetch.command("run")
@@ -229,14 +222,13 @@ def run_cmd(
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     store = DataStore(db_path)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Bestem hvilke fetchere å kjøre
     if fetcher_name is not None:
         if fetcher_name not in config.fetchers:
             raise click.UsageError(
-                f"Ukjent fetcher {fetcher_name!r}. Tilgjengelige: "
-                f"{sorted(config.fetchers.keys())}"
+                f"Ukjent fetcher {fetcher_name!r}. Tilgjengelige: {sorted(config.fetchers.keys())}"
             )
         targets = [fetcher_name]
     else:
@@ -258,15 +250,10 @@ def run_cmd(
     for name in targets:
         spec = config.fetchers[name]
         from_resolved = (
-            from_date.date()
-            if from_date is not None
-            else default_from_date(spec, now=now)
+            from_date.date() if from_date is not None else default_from_date(spec, now=now)
         )
 
-        click.echo(
-            f"=== Running {name} ({spec.module}) from {from_resolved} "
-            f"to {to_resolved} ==="
-        )
+        click.echo(f"=== Running {name} ({spec.module}) from {from_resolved} to {to_resolved} ===")
 
         try:
             result = run_fetcher_by_name(

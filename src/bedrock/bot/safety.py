@@ -35,10 +35,10 @@ import logging
 import os
 import tempfile
 import time
-from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Callable, Optional
 
 from bedrock.bot.config import DailyLossConfig
 
@@ -49,9 +49,7 @@ log = logging.getLogger("bedrock.bot.safety")
 # Default-sti for daily-loss persistens
 # ─────────────────────────────────────────────────────────────
 
-DEFAULT_DAILY_LOSS_STATE_PATH = (
-    Path.home() / "bedrock" / "data" / "bot" / "daily_loss_state.json"
-)
+DEFAULT_DAILY_LOSS_STATE_PATH = Path.home() / "bedrock" / "data" / "bot" / "daily_loss_state.json"
 
 
 # ─────────────────────────────────────────────────────────────
@@ -86,7 +84,7 @@ class _PersistedState:
         )
 
     @classmethod
-    def from_json(cls, text: str) -> "_PersistedState":
+    def from_json(cls, text: str) -> _PersistedState:
         data = json.loads(text)
         return cls(
             date=date.fromisoformat(data["date"]),
@@ -104,25 +102,25 @@ class SafetyMonitor:
     def __init__(
         self,
         *,
-        state_path: Optional[Path] = None,
-        on_rollover: Optional[DayRolloverCallback] = None,
+        state_path: Path | None = None,
+        on_rollover: DayRolloverCallback | None = None,
     ) -> None:
         self._state_path = state_path or DEFAULT_DAILY_LOSS_STATE_PATH
         self._on_rollover = on_rollover or _noop_rollover
 
         # Daily-loss state (lastes fra disk ved oppstart)
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         self._state = _PersistedState(date=today, daily_loss=0.0)
         self._load_state()
 
         # Flagg satt av andre lag
         self.server_frozen: bool = False
         self.bot_locked: bool = False
-        self.bot_locked_until: Optional[datetime] = None
+        self.bot_locked_until: datetime | None = None
 
         # Fetch-fail-eskalering
         self._fetch_fail_count: int = 0
-        self._fetch_frozen_since: Optional[float] = None
+        self._fetch_frozen_since: float | None = None
 
     # ─────────────────────────────────────────────────────────
     # Daily-loss state
@@ -155,7 +153,7 @@ class SafetyMonitor:
         `on_rollover(prev_date, new_date)` BEFORE state resettes til 0,
         slik at callback kan bruke gårsdagens dato til commit-melding.
         """
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         if today <= self._state.date:
             return False
         prev_date = self._state.date
@@ -192,18 +190,14 @@ class SafetyMonitor:
         return self._fetch_fail_count
 
     @property
-    def fetch_frozen_since(self) -> Optional[float]:
+    def fetch_frozen_since(self) -> float | None:
         return self._fetch_frozen_since
 
     def record_fetch_success(self) -> None:
         """Kalles når signal-fetch lykkes. Logger gjenoppretting hvis vi
         har vært frosne, og resetter tellerne."""
         if self.server_frozen or self._fetch_fail_count > 0:
-            frozen_for = (
-                time.time() - self._fetch_frozen_since
-                if self._fetch_frozen_since
-                else 0
-            )
+            frozen_for = time.time() - self._fetch_frozen_since if self._fetch_frozen_since else 0
             log.info(
                 "[SERVER] Gjenopprettet kontakt — var frossen i %.0fs (%d feil).",
                 frozen_for,
@@ -265,7 +259,7 @@ class SafetyMonitor:
             log.warning("[SAFETY] Kunne ikke laste daily_loss_state: %s", e)
             return
 
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         if saved.date == today:
             self._state = saved
             log.info(
@@ -277,8 +271,7 @@ class SafetyMonitor:
             # State er fra tidligere dag — ignorer, men trigger ikke
             # rollover-callback ennå (det gjøres ved første
             # reset_daily_loss_if_new_day-kall i normal flyt).
-            log.info("[SAFETY] Daglig-tap-state er fra %s — ignorerer.",
-                     saved.date.isoformat())
+            log.info("[SAFETY] Daglig-tap-state er fra %s — ignorerer.", saved.date.isoformat())
 
     def _save_state(self) -> None:
         """Atomic write: skriv til temp + os.replace."""

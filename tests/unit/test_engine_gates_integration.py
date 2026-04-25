@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 # Importer for side-effekt (registrer drivere + gates)
-import bedrock.engine.drivers  # noqa: F401
+import bedrock.engine.drivers
 import bedrock.engine.gates  # noqa: F401
 from bedrock.engine.drivers import register
 from bedrock.engine.engine import (
@@ -27,7 +27,7 @@ from bedrock.engine.grade import (
 
 # Registrer en dummy-driver én gang for disse testene
 @register("always_one")
-def _always_one(store, instrument, params):  # noqa: ANN001
+def _always_one(store, instrument, params):
     return 1.0
 
 
@@ -47,12 +47,8 @@ def _financial_rules(gates: list[GateSpec] | None = None) -> FinancialRules:
             )
         },
         families={
-            "trend": FinancialFamilySpec(
-                drivers=[DriverSpec(name="always_one", weight=1.0)]
-            ),
-            "positioning": FinancialFamilySpec(
-                drivers=[DriverSpec(name="always_one", weight=1.0)]
-            ),
+            "trend": FinancialFamilySpec(drivers=[DriverSpec(name="always_one", weight=1.0)]),
+            "positioning": FinancialFamilySpec(drivers=[DriverSpec(name="always_one", weight=1.0)]),
         },
         grade_thresholds=GradeThresholds(
             a_plus=GradeThreshold(min_pct_of_max=0.75, min_families=2),
@@ -101,12 +97,8 @@ def test_financial_score_without_gates() -> None:
 
 def test_financial_triggered_gate_caps_grade() -> None:
     """Gate som utløses kapper grade fra A+ til A."""
-    gates = [
-        GateSpec(name="min_active_families", params={"min_count": 5}, cap_grade="A")
-    ]
-    result = Engine().score(
-        "Test", store=None, rules=_financial_rules(gates), horizon="SWING"
-    )
+    gates = [GateSpec(name="min_active_families", params={"min_count": 5}, cap_grade="A")]
+    result = Engine().score("Test", store=None, rules=_financial_rules(gates), horizon="SWING")
     # Score fortsatt 2.0, men grade kappet
     assert result.score == pytest.approx(2.0)
     assert result.grade == "A"
@@ -114,12 +106,8 @@ def test_financial_triggered_gate_caps_grade() -> None:
 
 
 def test_financial_untriggered_gate_no_cap() -> None:
-    gates = [
-        GateSpec(name="min_active_families", params={"min_count": 1}, cap_grade="B")
-    ]
-    result = Engine().score(
-        "Test", store=None, rules=_financial_rules(gates), horizon="SWING"
-    )
+    gates = [GateSpec(name="min_active_families", params={"min_count": 1}, cap_grade="B")]
+    result = Engine().score("Test", store=None, rules=_financial_rules(gates), horizon="SWING")
     assert result.grade == "A+"
     assert result.gates_triggered == []
 
@@ -129,21 +117,15 @@ def test_financial_multiple_gates_lowest_cap_wins() -> None:
         GateSpec(name="min_active_families", params={"min_count": 5}, cap_grade="A"),
         GateSpec(name="score_below", params={"threshold": 100.0}, cap_grade="B"),
     ]
-    result = Engine().score(
-        "Test", store=None, rules=_financial_rules(gates), horizon="SWING"
-    )
+    result = Engine().score("Test", store=None, rules=_financial_rules(gates), horizon="SWING")
     assert result.grade == "B"
     assert result.gates_triggered == ["min_active_families", "score_below"]
 
 
 def test_financial_cap_higher_than_grade_no_effect() -> None:
     """Gate med cap=A_plus på grade=A_plus endrer ingenting."""
-    gates = [
-        GateSpec(name="min_active_families", params={"min_count": 5}, cap_grade="A+")
-    ]
-    result = Engine().score(
-        "Test", store=None, rules=_financial_rules(gates), horizon="SWING"
-    )
+    gates = [GateSpec(name="min_active_families", params={"min_count": 5}, cap_grade="A+")]
+    result = Engine().score("Test", store=None, rules=_financial_rules(gates), horizon="SWING")
     assert result.grade == "A+"
     assert result.gates_triggered == ["min_active_families"]
 
@@ -164,9 +146,7 @@ def test_agri_score_without_gates() -> None:
 
 def test_agri_triggered_gate_caps() -> None:
     """Cap A-grade ned til B via score-below-gate."""
-    gates = [
-        GateSpec(name="score_below", params={"threshold": 10.0}, cap_grade="B")
-    ]
+    gates = [GateSpec(name="score_below", params={"threshold": 10.0}, cap_grade="B")]
     result = Engine().score("Test", store=None, rules=_agri_rules_simple(gates))
     assert result.score == pytest.approx(5.0)
     assert result.grade == "B"
@@ -183,8 +163,6 @@ def test_gates_triggered_populates_explain() -> None:
     gates = [
         GateSpec(name="min_active_families", params={"min_count": 5}, cap_grade="A"),
     ]
-    result = Engine().score(
-        "Gold", store=None, rules=_financial_rules(gates), horizon="SWING"
-    )
+    result = Engine().score("Gold", store=None, rules=_financial_rules(gates), horizon="SWING")
     assert "min_active_families" in result.gates_triggered
     assert result.grade == "A"

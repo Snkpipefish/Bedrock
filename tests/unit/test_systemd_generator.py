@@ -21,7 +21,6 @@ from bedrock.systemd.generator import (
     write_units,
 )
 
-
 # ---------------------------------------------------------------------------
 # Cron-konverter
 # ---------------------------------------------------------------------------
@@ -244,9 +243,7 @@ def test_cli_generate_writes_all_files(
     assert "Skrev 4 filer" in result.output
 
 
-def test_cli_generate_unsupported_cron_errors(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_cli_generate_unsupported_cron_errors(runner: CliRunner, tmp_path: Path) -> None:
     config = tmp_path / "fetch.yaml"
     config.write_text(
         dedent(
@@ -295,9 +292,7 @@ def test_cli_list_shows_generated(
         ],
     )
 
-    result = runner.invoke(
-        cli, ["systemd", "list", "--units-dir", str(output)]
-    )
+    result = runner.invoke(cli, ["systemd", "list", "--units-dir", str(output)])
     assert result.exit_code == 0
     assert "bedrock-fetch-prices.timer" in result.output
     assert "bedrock-fetch-weather.timer" in result.output
@@ -305,16 +300,12 @@ def test_cli_list_shows_generated(
 
 
 def test_cli_list_missing_dir(runner: CliRunner, tmp_path: Path) -> None:
-    result = runner.invoke(
-        cli, ["systemd", "list", "--units-dir", str(tmp_path / "nope")]
-    )
+    result = runner.invoke(cli, ["systemd", "list", "--units-dir", str(tmp_path / "nope")])
     assert result.exit_code == 0
     assert "mangler" in result.output
 
 
-def test_cli_install_dry_run(
-    runner: CliRunner, tmp_path: Path, fetch_config_file: Path
-) -> None:
+def test_cli_install_dry_run(runner: CliRunner, tmp_path: Path, fetch_config_file: Path) -> None:
     output = tmp_path / "systemd"
     runner.invoke(
         cli,
@@ -373,14 +364,11 @@ def test_cli_install_runs_systemctl(
     )
 
     successful = MagicMock(returncode=0, stdout="", stderr="")
-    with patch(
-        "bedrock.cli.systemd.subprocess.run", return_value=successful
-    ) as mock_run, patch(
-        "bedrock.cli.systemd.shutil.which", return_value="/usr/bin/systemctl"
+    with (
+        patch("bedrock.cli.systemd.subprocess.run", return_value=successful) as mock_run,
+        patch("bedrock.cli.systemd.shutil.which", return_value="/usr/bin/systemctl"),
     ):
-        result = runner.invoke(
-            cli, ["systemd", "install", "--units-dir", str(output)]
-        )
+        result = runner.invoke(cli, ["systemd", "install", "--units-dir", str(output)])
 
     assert result.exit_code == 0, result.output
     assert mock_run.call_count == 4  # 2 .service + 2 .timer
@@ -412,9 +400,7 @@ def test_cli_install_missing_systemctl_errors(
         ],
     )
     with patch("bedrock.cli.systemd.shutil.which", return_value=None):
-        result = runner.invoke(
-            cli, ["systemd", "install", "--units-dir", str(output)]
-        )
+        result = runner.invoke(cli, ["systemd", "install", "--units-dir", str(output)])
     assert result.exit_code != 0
     assert "systemctl" in result.output
 
@@ -442,11 +428,10 @@ def test_cli_install_propagates_systemctl_failure(
     failing = subprocess.CompletedProcess(
         args=["systemctl"], returncode=1, stdout="", stderr="permission denied"
     )
-    with patch(
-        "bedrock.cli.systemd.subprocess.run", return_value=failing
-    ), patch("bedrock.cli.systemd.shutil.which", return_value="/usr/bin/systemctl"):
-        result = runner.invoke(
-            cli, ["systemd", "install", "--units-dir", str(output)]
-        )
+    with (
+        patch("bedrock.cli.systemd.subprocess.run", return_value=failing),
+        patch("bedrock.cli.systemd.shutil.which", return_value="/usr/bin/systemctl"),
+    ):
+        result = runner.invoke(cli, ["systemd", "install", "--units-dir", str(output)])
     assert result.exit_code != 0
     assert "permission denied" in result.output
