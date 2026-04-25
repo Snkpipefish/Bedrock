@@ -23,10 +23,12 @@ from datetime import date, datetime
 from pathlib import Path
 
 import click
+import pandas as pd
 
 from bedrock.cli._instrument_lookup import DEFAULT_INSTRUMENTS_DIR, find_instrument
 from bedrock.cli._iteration import run_with_summary
 from bedrock.config.secrets import get_secret
+from bedrock.data.schemas import WEATHER_MONTHLY_COLS
 from bedrock.data.store import DataStore
 from bedrock.fetch.cot_cftc import (
     CFTC_DISAGGREGATED_URL,
@@ -35,6 +37,7 @@ from bedrock.fetch.cot_cftc import (
     fetch_cot_disaggregated,
     fetch_cot_legacy,
 )
+from bedrock.fetch.enso import NOAA_ONI_URL, fetch_noaa_oni
 from bedrock.fetch.fred import (
     FRED_OBSERVATIONS_URL,
     build_fred_params,
@@ -46,6 +49,7 @@ from bedrock.fetch.weather import (
     build_open_meteo_params,
     fetch_weather,
 )
+from bedrock.fetch.yahoo import build_yahoo_url, fetch_yahoo_prices
 
 _FRED_API_KEY_ENV = "FRED_API_KEY"
 _MASKED_API_KEY = "***"
@@ -118,10 +122,27 @@ def backfill() -> None:
     help="Slutt-dato (YYYY-MM-DD) inklusiv. Default: i dag.",
 )
 @click.option(
+    "--source",
+    type=click.Choice(["yahoo", "stooq"], case_sensitive=False),
+    default="yahoo",
+    show_default=True,
+    help=(
+        "Pris-kilde. yahoo (default, ingen API-nøkkel) eller stooq "
+        "(legacy, krever API-nøkkel etter april 2026)."
+    ),
+)
+@click.option(
+    "--interval",
+    type=click.Choice(["1d", "1wk", "1mo"], case_sensitive=False),
+    default="1d",
+    show_default=True,
+    help="Yahoo-intervall (kun gyldig for --source yahoo). Stooq har bare daglig.",
+)
+@click.option(
     "--tf",
     default="D1",
     show_default=True,
-    help="Timeframe-tag lagret i DB (info, ikke Stooq-param).",
+    help="Timeframe-tag lagret i DB (info, ikke fetch-param).",
 )
 @click.option(
     "--db",
@@ -142,39 +163,59 @@ def prices_cmd(
     ticker: str | None,
     from_date: datetime,
     to_date: datetime | None,
+    source: str,
+    interval: str,
     tf: str,
     db_path: Path,
     instruments_dir: Path,
     dry_run: bool,
 ) -> None:
-    """Backfill prisbarer fra Stooq til SQLite.
+    """Backfill prisbarer til SQLite (Yahoo Finance default, Stooq legacy).
 
     Eksempel:
 
-        bedrock backfill prices --instrument Gold --ticker xauusd --from 2016-01-01
-        bedrock backfill prices --instrument Gold --from 2016-01-01  # ticker fra YAML
+        bedrock backfill prices --instrument Gold --from 2010-01-01
+        bedrock backfill prices --instrument Gold --source stooq --ticker xauusd --from 2016-01-01
 
     `--dry-run` bygger og viser URL uten å gjøre HTTP-kall eller skrive til DB.
+
+    Per Fase 10 session 58: Yahoo er nå default. Stooq begynte å kreve
+    API-nøkkel som ble en blocker; cot-explorers Yahoo-port gjenbrukes
+    som primærkilde (port av build_price_history.py — verifisert
+    produksjon gjennom 15 års historikk-bygging).
     """
     if instrument is None:
         raise click.UsageError("--instrument er påkrevd.")
 
-    resolved_instrument, resolved_ticker = _resolve_prices(instrument, ticker, instruments_dir)
+    resolved_instrument, resolved_ticker = _resolve_prices(
+        instrument, ticker, instruments_dir, source.lower()
+    )
 
     _from: date = from_date.date()
     _to: date = to_date.date() if to_date is not None else date.today()
 
     if dry_run:
-        params = build_stooq_url_params(resolved_ticker, _from, _to)
-        param_str = "&".join(f"{k}={v}" for k, v in params.items())
-        click.echo(f"DRY-RUN  URL: {STOOQ_CSV_URL}?{param_str}")
+        if source.lower() == "yahoo":
+            url = build_yahoo_url(resolved_ticker, _from, _to, interval=interval.lower())  # type: ignore[arg-type]
+            click.echo(f"DRY-RUN  URL: {url}")
+        else:
+            params = build_stooq_url_params(resolved_ticker, _from, _to)
+            param_str = "&".join(f"{k}={v}" for k, v in params.items())
+            click.echo(f"DRY-RUN  URL: {STOOQ_CSV_URL}?{param_str}")
         click.echo(
-            f"DRY-RUN  Would write to: {db_path} (instrument={resolved_instrument}, tf={tf})"
+            f"DRY-RUN  Would write to: {db_path} "
+            f"(instrument={resolved_instrument}, tf={tf}, source={source.lower()})"
         )
         return
 
-    click.echo(f"Fetching {resolved_instrument} ({resolved_ticker}) from {_from} to {_to}...")
-    df = fetch_prices(resolved_ticker, _from, _to)
+    click.echo(
+        f"Fetching {resolved_instrument} ({resolved_ticker}) "
+        f"from {_from} to {_to} via {source.lower()} interval={interval}..."
+    )
+    if source.lower() == "yahoo":
+        df = fetch_yahoo_prices(resolved_ticker, _from, _to, interval=interval.lower())  # type: ignore[arg-type]
+    else:
+        df = fetch_prices(resolved_ticker, _from, _to)
     click.echo(f"Fetched {len(df)} bars.")
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -187,24 +228,27 @@ def _resolve_prices(
     instrument_arg: str,
     ticker_arg: str | None,
     instruments_dir: Path,
+    source: str = "yahoo",
 ) -> tuple[str, str]:
-    """Returner (DB-instrument-tag, stooq-ticker) etter --instrument + YAML-
-    oppslag.
+    """Returner (DB-instrument-tag, ticker) etter --instrument + YAML-oppslag.
 
     Regler:
 
     - Eksplisitt `--ticker` vinner: (instrument_arg, ticker_arg). YAML røres
       ikke — lar brukere kjøre mot DB uten å skrive YAML først.
-    - Uten `--ticker`: slå opp YAML ved `--instrument`. Bruk
-      `instrument.id` (kanonisk casing) som DB-tag og
-      `stooq_ticker or ticker` som fetch-arg.
+    - Uten `--ticker`: slå opp YAML. Per source velges:
+      - yahoo: `yahoo_ticker or ticker`
+      - stooq: `stooq_ticker or ticker`
     """
     if ticker_arg is not None:
         return instrument_arg, ticker_arg
 
     cfg = find_instrument(instrument_arg, instruments_dir)
     meta = cfg.instrument
-    resolved_ticker = meta.stooq_ticker or meta.ticker
+    if source == "yahoo":
+        resolved_ticker = meta.yahoo_ticker or meta.ticker
+    else:
+        resolved_ticker = meta.stooq_ticker or meta.ticker
     return meta.id, resolved_ticker
 
 
@@ -756,6 +800,376 @@ def _fundamentals_dry_run(
         click.echo(f"DRY-RUN  Would write to: {db_path} (series_id={sid})")
     key_state = "resolved" if api_key else "MISSING (live run vil feile)"
     click.echo(f"DRY-RUN  API-key: {key_state}")
+
+
+# ---------------------------------------------------------------------------
+# enso (Fase 10 ADR-005) — NOAA ONI til fundamentals-tabellen
+# ---------------------------------------------------------------------------
+
+
+@backfill.command("enso")
+@click.option(
+    "--db",
+    "db_path",
+    default=DEFAULT_DB_PATH,
+    show_default=True,
+    type=click.Path(path_type=Path),
+    help="Path til SQLite-databasen.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Vis URL som ville blitt hentet. Ingen HTTP-kall, ingen skriving.",
+)
+def enso_cmd(db_path: Path, dry_run: bool) -> None:
+    """Backfill NOAA ONI ENSO-indeks til SQLite (`fundamentals`-tabellen).
+
+    Per ADR-005 lagres ONI som `series_id="NOAA_ONI"` i den eksisterende
+    `fundamentals`-tabellen — ikke i en egen tabell. Dette gjenbruker
+    (key, date, value)-skjemaet og krever ingen ny DataStore-getter.
+
+    Eksempel:
+
+        bedrock backfill enso
+
+    Endepunktet er åpent (ingen API-nøkkel). NOAA publiserer historikk
+    fra 1950 og oppdaterer månedlig (~10. i måneden). Idempotent via
+    INSERT OR REPLACE på (series_id, date).
+    """
+    from bedrock.fetch.enso import NOAA_ONI_SERIES_ID
+
+    if dry_run:
+        click.echo(f"DRY-RUN  URL: {NOAA_ONI_URL}")
+        click.echo(f"DRY-RUN  Would write to: {db_path} (series_id={NOAA_ONI_SERIES_ID})")
+        return
+
+    df = fetch_noaa_oni()
+    if df.empty:
+        click.echo("noaa_oni: ingen rader returnert (uventet)")
+        return
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    store = DataStore(db_path)
+    n = store.append_fundamentals(df)
+    click.echo(
+        f"noaa_oni: {n} rader skrevet  (range: {df['date'].iloc[0]} .. {df['date'].iloc[-1]})"
+    )
+
+
+# ---------------------------------------------------------------------------
+# weather-monthly (Fase 10 ADR-005) — migrere ~/cot-explorer/agri_history/
+# ---------------------------------------------------------------------------
+
+
+_DEFAULT_AGRI_HISTORY_DIR = Path.home() / "cot-explorer" / "data" / "agri_history"
+"""Default-kilde for migrering av månedlig vær-aggregat."""
+
+_AGRI_HISTORY_FIELD_MAP: dict[str, str] = {
+    "temp_mean": "temp_mean",
+    "temp_max": "temp_max",
+    "precip_mm": "precip_mm",
+    "et0_mm": "et0_mm",
+    "hot_days": "hot_days",
+    "dry_days": "dry_days",
+    "wet_days": "wet_days",
+    "water_bal": "water_bal",
+}
+"""Mapping fra agri_history-JSON-felt til WeatherMonthlyRow-kolonne.
+
+Det 9. JSON-feltet (`days`, antall dager i måneden) droppes per
+session 58-beslutning — kan beregnes trivielt fra `month`-stringen
+ved behov og er ikke i § 6.5.
+"""
+
+
+@backfill.command("weather-monthly")
+@click.option(
+    "--source-dir",
+    default=_DEFAULT_AGRI_HISTORY_DIR,
+    show_default=True,
+    type=click.Path(path_type=Path),
+    help="Kilde-katalog med <region>.json-filer fra cot-explorer/data/agri_history/.",
+)
+@click.option(
+    "--region",
+    default=None,
+    help="Filtrer til én region (matches mot filnavn uten .json). Default: alle.",
+)
+@click.option(
+    "--db",
+    "db_path",
+    default=DEFAULT_DB_PATH,
+    show_default=True,
+    type=click.Path(path_type=Path),
+    help="Path til SQLite-databasen.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Vis hvilke filer som ville blitt migrert. Ingen DB-skriving.",
+)
+def weather_monthly_cmd(
+    source_dir: Path,
+    region: str | None,
+    db_path: Path,
+    dry_run: bool,
+) -> None:
+    """Migrere pre-aggregert månedlig vær fra cot-explorer til Bedrock.
+
+    Per ADR-005 B2: cot-explorer/data/agri_history/<region>.json har 14
+    regioner med 184+ måneder ferdig pre-aggregert (temp_mean, hot_days,
+    water_bal, etc.). Dette migreres til ny `weather_monthly`-tabell.
+    9. felt `days` droppes (kan beregnes fra `month`).
+
+    Eksempel:
+
+        bedrock backfill weather-monthly
+        bedrock backfill weather-monthly --region us_cornbelt
+
+    Idempotent via INSERT OR REPLACE på (region, month).
+    """
+    if not source_dir.exists():
+        raise click.UsageError(f"Source dir not found: {source_dir}")
+
+    files = sorted(source_dir.glob("*.json"))
+    if region is not None:
+        files = [f for f in files if f.stem == region]
+        if not files:
+            raise click.UsageError(f"Region {region!r} not found in {source_dir}")
+
+    if dry_run:
+        for f in files:
+            click.echo(f"DRY-RUN  Would migrate: {f.name}")
+        click.echo(f"DRY-RUN  Total: {len(files)} regioner → {db_path}")
+        return
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    store = DataStore(db_path)
+    total = 0
+    for f in files:
+        df = _load_agri_history_to_weather_monthly(f)
+        if df.empty:
+            click.echo(f"{f.stem}: 0 rader (skipped)")
+            continue
+        n = store.append_weather_monthly(df)
+        total += n
+        click.echo(
+            f"{f.stem}: {n} rader skrevet  ({df['month'].iloc[0]} .. {df['month'].iloc[-1]})"
+        )
+
+    click.echo(f"weather-monthly: {total} rader totalt fra {len(files)} regioner")
+
+
+def _load_agri_history_to_weather_monthly(path: Path) -> pd.DataFrame:
+    """Les én agri_history JSON-fil og returner WeatherMonthlyRow-DataFrame.
+
+    JSON-format:
+        {"region_id": "us_cornbelt", "monthly": {"2011-01": {"temp_mean": ..., ...}}}
+
+    Tom `monthly` → tom DataFrame med riktig kolonne-sett.
+    """
+    import json
+
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    region = raw.get("region_id") or path.stem
+    monthly = raw.get("monthly") or {}
+
+    cols = list(WEATHER_MONTHLY_COLS)
+    if not monthly:
+        return pd.DataFrame(columns=cols)
+
+    rows: list[dict[str, object]] = []
+    for month_key in sorted(monthly.keys()):
+        obs = monthly[month_key] or {}
+        row: dict[str, object] = {"region": region, "month": month_key}
+        for json_field, schema_field in _AGRI_HISTORY_FIELD_MAP.items():
+            row[schema_field] = obs.get(json_field)
+        rows.append(row)
+
+    return pd.DataFrame(rows, columns=cols)
+
+
+# ---------------------------------------------------------------------------
+# outcomes (Fase 10 ADR-005) — beregne forward_return + max_drawdown
+# ---------------------------------------------------------------------------
+
+
+@backfill.command("outcomes")
+@click.option(
+    "--instrument",
+    "instruments",
+    multiple=True,
+    required=True,
+    help="Bedrock-instrument-ID. Kan gjentas: --instrument Gold --instrument Corn.",
+)
+@click.option(
+    "--horizons",
+    default="30,90",
+    show_default=True,
+    help="Komma-separert liste av forward-horisonter i dager.",
+)
+@click.option(
+    "--tf",
+    default="D1",
+    show_default=True,
+    help="Pris-timeframe å lese fra `prices`-tabellen.",
+)
+@click.option(
+    "--db",
+    "db_path",
+    default=DEFAULT_DB_PATH,
+    show_default=True,
+    type=click.Path(path_type=Path),
+    help="Path til SQLite-databasen.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Vis hva som ville blitt beregnet. Ingen DB-skriving.",
+)
+def outcomes_cmd(
+    instruments: tuple[str, ...],
+    horizons: str,
+    tf: str,
+    db_path: Path,
+    dry_run: bool,
+) -> None:
+    """Beregne forward-return + max-drawdown for analog-matching.
+
+    Per ADR-005 B3: for hver dato i `prices`-tabellen, beregn
+    forward_return_pct (close_t+H / close_t - 1) * 100 og
+    max_drawdown_pct (min(close_t..t+H) / close_t - 1) * 100 for hver
+    horisont H i `--horizons`. Skrives til `analog_outcomes`-tabellen.
+
+    Datoer som ikke har full forward-vindu (siste H dager før i dag)
+    får ikke rad for den horisonten — caller (K-NN) trenger ikke
+    håndtere "missing future".
+
+    Eksempel:
+
+        bedrock backfill outcomes --instrument Gold --instrument Corn
+        bedrock backfill outcomes --instrument Gold --horizons 30,60,90,180
+
+    Idempotent via INSERT OR REPLACE på (instrument, ref_date, horizon_days).
+    Re-kjør etter at `prices` er oppdatert for å få nye outcomes.
+    """
+    horizon_list = _parse_horizons(horizons)
+
+    if dry_run:
+        for inst in instruments:
+            for h in horizon_list:
+                click.echo(
+                    f"DRY-RUN  Would compute outcomes: instrument={inst} "
+                    f"horizon_days={h} tf={tf} db={db_path}"
+                )
+        return
+
+    if not db_path.exists():
+        raise click.UsageError(f"DB not found: {db_path}. Kjør `bedrock backfill prices` først.")
+
+    store = DataStore(db_path)
+    grand_total = 0
+    for inst in instruments:
+        try:
+            prices = store.get_prices(inst, tf=tf)
+        except KeyError:
+            click.echo(f"{inst}: ingen prises-data (skipped)")
+            continue
+        if prices.empty:
+            click.echo(f"{inst}: tom pris-serie (skipped)")
+            continue
+        for h in horizon_list:
+            df = _compute_outcomes(inst, prices, h)
+            if df.empty:
+                click.echo(f"{inst} h={h}d: 0 outcomes (kort historikk)")
+                continue
+            n = store.append_outcomes(df)
+            grand_total += n
+            click.echo(
+                f"{inst} h={h}d: {n} outcomes skrevet  "
+                f"({df['ref_date'].iloc[0]} .. {df['ref_date'].iloc[-1]})"
+            )
+
+    click.echo(f"outcomes: {grand_total} rader totalt")
+
+
+def _parse_horizons(raw: str) -> list[int]:
+    """Parse '30,60,90' → [30, 60, 90]. Avviser tomme/0/negative."""
+    out: list[int] = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            v = int(part)
+        except ValueError as exc:
+            raise click.UsageError(f"Ugyldig horizon: {part!r}") from exc
+        if v <= 0:
+            raise click.UsageError(f"Horizon må være positiv, fikk: {v}")
+        out.append(v)
+    if not out:
+        raise click.UsageError("Minst én horisont må gis i --horizons.")
+    return out
+
+
+def _compute_outcomes(
+    instrument: str,
+    prices: pd.Series,
+    horizon_days: int,
+) -> pd.DataFrame:
+    """Beregn forward_return + max_drawdown for hver dato i pris-serien.
+
+    `prices` er pd.Series indeksert på datetime (close-priser). Vi bruker
+    enkel posisjons-basert offset (rolling window) — slik at horizon_days
+    er antall bars, ikke kalender-dager. For D1-data er forskjellen
+    helger og helligdager (~5/7 av kalender-dager). Dette matcher
+    intuitiv "30 trading-days forward".
+
+    Returnerer DataFrame matching ANALOG_OUTCOMES_COLS. Datoer uten
+    full forward-vindu (siste horizon_days bars) er ekskludert.
+    """
+    if len(prices) < horizon_days + 1:
+        return pd.DataFrame(
+            columns=[
+                "instrument",
+                "ref_date",
+                "horizon_days",
+                "forward_return_pct",
+                "max_drawdown_pct",
+            ]
+        )
+
+    # Sortér defensiv (DataStore.get_prices returnerer ASC, men sikrer)
+    series = prices.sort_index()
+    n = len(series)
+
+    rows: list[dict[str, object]] = []
+    values = series.values
+    index = series.index
+
+    for i in range(n - horizon_days):
+        close_t = float(values[i])
+        if close_t <= 0.0:
+            continue
+        window_end = i + horizon_days + 1  # inkluder t+H
+        window = values[i:window_end]
+        close_t_plus_h = float(window[-1])
+        min_in_window = float(window.min())
+
+        forward_return_pct = (close_t_plus_h / close_t - 1.0) * 100.0
+        max_drawdown_pct = (min_in_window / close_t - 1.0) * 100.0
+
+        rows.append(
+            {
+                "instrument": instrument,
+                "ref_date": index[i],
+                "horizon_days": horizon_days,
+                "forward_return_pct": forward_return_pct,
+                "max_drawdown_pct": max_drawdown_pct,
+            }
+        )
+
+    return pd.DataFrame(rows)
 
 
 # ---------------------------------------------------------------------------

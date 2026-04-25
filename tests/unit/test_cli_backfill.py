@@ -50,6 +50,8 @@ def test_backfill_prices_writes_to_db(runner: CliRunner, tmp_path: Path) -> None
             [
                 "backfill",
                 "prices",
+                "--source",
+                "stooq",
                 "--instrument",
                 "Gold",
                 "--ticker",
@@ -81,6 +83,8 @@ def test_backfill_creates_parent_dir_for_db(runner: CliRunner, tmp_path: Path) -
             [
                 "backfill",
                 "prices",
+                "--source",
+                "stooq",
                 "--instrument",
                 "Gold",
                 "--ticker",
@@ -112,6 +116,8 @@ def test_backfill_defaults_to_today_when_to_missing(runner: CliRunner, tmp_path:
             [
                 "backfill",
                 "prices",
+                "--source",
+                "stooq",
                 "--instrument",
                 "Gold",
                 "--ticker",
@@ -135,6 +141,8 @@ def test_backfill_respects_tf_option(runner: CliRunner, tmp_path: Path) -> None:
             [
                 "backfill",
                 "prices",
+                "--source",
+                "stooq",
                 "--instrument",
                 "Gold",
                 "--ticker",
@@ -168,6 +176,8 @@ def test_dry_run_shows_url_without_http_call(runner: CliRunner, tmp_path: Path) 
             [
                 "backfill",
                 "prices",
+                "--source",
+                "stooq",
                 "--instrument",
                 "Gold",
                 "--ticker",
@@ -203,6 +213,8 @@ def test_dry_run_shows_destination_db_path(runner: CliRunner, tmp_path: Path) ->
         [
             "backfill",
             "prices",
+            "--source",
+            "stooq",
             "--instrument",
             "EURUSD",
             "--ticker",
@@ -249,6 +261,8 @@ def test_invalid_date_format_errors(runner: CliRunner) -> None:
         [
             "backfill",
             "prices",
+            "--source",
+            "stooq",
             "--instrument",
             "Gold",
             "--ticker",

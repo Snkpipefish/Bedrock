@@ -174,6 +174,8 @@ def test_prices_instrument_yaml_lookup(
             [
                 "backfill",
                 "prices",
+                "--source",
+                "stooq",
                 "--instrument",
                 "gold",  # lowercase → case-insensitive YAML-lookup
                 "--from",
@@ -209,6 +211,8 @@ def test_prices_explicit_ticker_bypasses_yaml(
             [
                 "backfill",
                 "prices",
+                "--source",
+                "stooq",
                 "--instrument",
                 "Silver",  # ikke i YAML, men --ticker bypasser lookup
                 "--ticker",

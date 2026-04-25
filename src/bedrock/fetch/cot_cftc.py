@@ -49,8 +49,12 @@ CFTC_LEGACY_URL = "https://publicreporting.cftc.gov/resource/6dca-aqww.json"
 _DISAGG_FIELD_MAP: dict[str, str] = {
     "report_date_as_yyyy_mm_dd": "report_date",
     "market_and_exchange_names": "contract",
-    "m_money_positions_long": "mm_long",
-    "m_money_positions_short": "mm_short",
+    # CFTC endret feltnavn (oppdaget 2026-04-25): m_money_positions_*_all
+    # erstatter m_money_positions_* (de splittet "all" / "old" / "other"
+    # for kontrakter med hyphenert termin-struktur). Vi bruker _all
+    # (combined) — matcher Bedrock-skjemaets `mm_long`/`mm_short`.
+    "m_money_positions_long_all": "mm_long",
+    "m_money_positions_short_all": "mm_short",
     "other_rept_positions_long": "other_long",
     "other_rept_positions_short": "other_short",
     "prod_merc_positions_long": "comm_long",

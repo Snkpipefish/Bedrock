@@ -52,8 +52,8 @@ SAMPLE_SOCRATA_ROWS = [
     {
         "report_date_as_yyyy_mm_dd": "2024-01-02T00:00:00.000",
         "market_and_exchange_names": "GOLD - COMMODITY EXCHANGE INC.",
-        "m_money_positions_long": "150000",
-        "m_money_positions_short": "60000",
+        "m_money_positions_long_all": "150000",
+        "m_money_positions_short_all": "60000",
         "other_rept_positions_long": "30000",
         "other_rept_positions_short": "25000",
         "prod_merc_positions_long": "200000",
@@ -65,8 +65,8 @@ SAMPLE_SOCRATA_ROWS = [
     {
         "report_date_as_yyyy_mm_dd": "2024-01-09T00:00:00.000",
         "market_and_exchange_names": "GOLD - COMMODITY EXCHANGE INC.",
-        "m_money_positions_long": "152000",
-        "m_money_positions_short": "61000",
+        "m_money_positions_long_all": "152000",
+        "m_money_positions_short_all": "61000",
         "other_rept_positions_long": "30500",
         "other_rept_positions_short": "25500",
         "prod_merc_positions_long": "201000",
