@@ -7,7 +7,7 @@
   - **Spor A — analog-matching (sessions 57-61):** A-D besvart 2026-04-25 (M/B2/U/split). Re-numrert til 5 sessions etter D-splitt:
     - **57:** ADR-005 + skjema + DataStore-utvidelse + ENSO-fetcher (pure kode). **LUKKET 2026-04-25**
     - **58:** backfill-eksekvering (3 nye CLI + Yahoo-port + full backfill). **LUKKET 2026-04-25**
-    - **59:** `find_analog_cases`-impl + asset-klasse-dim-mapping
+    - **59:** `find_analog_cases`-impl + asset-klasse-dim-mapping. **LUKKET 2026-04-25**
     - **60:** `analog`-driver-familie + YAML-integrasjon
     - **61:** UI-rendering (modal-utvidelse + `analog`-felt på SignalEntry)
 - **Phase:** 9 **LUKKET 2026-04-25** (UI: 4 faner + admin-editor). Struktureres som tre runder per bruker-beslutning 2026-04-24:
@@ -27,9 +27,10 @@
 - Session 56 lukket — Fase 10 spor B (audit). `docs/data_audit_2026-04.md` levert: kilde × leses-av-tabell + K-NN-feasibility per asset-klasse mot PLAN § 6.5. Hovedfunn: bedrock.db er tom (0 rader), 4 av 5 DataStore-getters har ingen konsument (kun get_prices brukes), 3 brudd mot § 6.5 flagget (energy backwardation/supply, grains/softs ENSO, softs UNICA). Fire beslutninger til bruker (A-D) blokkerer session 57.
 - Session 57 lukket — ADR-005 + skjema + DataStore-utvidelse + ENSO-fetcher. Pure kode + 45 nye tester (1038/1038 grønt). Ingen backfill-eksekvering (det er session 58). Beslutninger A-D besvart: A=M (NOAA ONI-fetcher), B=B2 (migrer agri_history månedlig, ny `weather_monthly`-tabell), C=U (utsett energy/softs), D=split (57=kode, 58=backfill).
 - Session 58 lukket — full backfill kjørt. To kilder krevde fix underveis: (a) Stooq begynte å kreve API-nøkkel → port av cot-explorers `build_price_history.py` til ny `bedrock/fetch/yahoo.py`, Yahoo nå default for prices; (b) CFTC endret feltnavn `m_money_positions_long` → `..._long_all` → `_DISAGG_FIELD_MAP` rebased. 3 nye CLI-er: `bedrock backfill enso/weather-monthly/outcomes`. DB vokste fra 0 → 3.54 MB med 46 569 rader. 1085/1085 tester grønne (+47 nye). Se `docs/backfill_2026-04.md` for full statistikk.
+- Session 59 lukket — `find_analog_cases`-impl. Ny modul `bedrock/data/analog.py` (320 linjer) med ASSET_CLASS_DIMS (§ 6.5 slavisk), 6 implementerte DIM_EXTRACTORS, `extract_query_from_latest`, og K-NN (weighted Euclidean over z-normaliserte verdier). ADR-005-avvik dokumentert: funksjonen ble frittstående (ikke DataStore-metode) for å unngå data → config-kobling. Sanity mot ekte Gold/Corn-data: topp-5 sims 0.88-0.95 (Gold), 0.70-0.72 (Corn). 1129/1129 tester (+44 nye fordelt på 3 filer).
 - **Branch:** `main` (jobber direkte på main under utvikling, Nivå 1-modus)
 - **Blocked:** nei
-- **Next task:** **Session 59** = `find_analog_cases`-impl + asset-klasse-dim-mapping. Per ADR-005 B4: weighted Euclidean K-NN over normaliserte dim-verdier per asset-klasse (per § 6.5-tabellen). Drivere skrives ikke i 59 (det er 60), men feature-extractor som henter `query_dims` fra DataStore for ferskeste observasjoner per asset-klasse. Test-feedback-loop: ekte naboer for Gold med (DGS10, DTWEXBGS, T10YIE-DGS10, COT mm-pct) over 4071 ref-datoer.
+- **Next task:** **Session 60** = `analog`-driver-familie + YAML-integrasjon. Skriv `analog_hit_rate` og `analog_avg_return` (og evt. `analog_match_count`) som drivere registrert i `bedrock.engine.drivers.analog`. Drivere kaller `find_analog_cases` via `extract_query_from_latest`. Per ADR-005 B5: hit-terskel + horizon-vindu + K via driver-params (overstyrbar via `config/defaults/`-inheritance). Utvid `gold.yaml` + `corn.yaml` med en `analog`-familie-blokk. Tester: driver-output mot fixture-DB med kjente neighbors → kjent score; explain-trace har analog-felt.
 - **Git-modus:** Nivå 1 (commit direkte til main, auto-push aktiv). Bytter til Nivå 3 (feature-branches + PR) ved Fase 10-11.
 
 ## Open questions to user
@@ -117,6 +118,124 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 59: Fase 10 spor A — find_analog_cases-impl + dim-mapping (LUKKET)
+
+**Scope:** Andre kode-session i Spor A. Ny modul som binder
+DataStore + InstrumentMetadata til K-NN-resultater. Per ADR-005 B4
++ B5-skiss klar for driver-laget i session 60.
+
+**Endret denne session (commit `3a60d16`):**
+
+`src/bedrock/data/analog.py` (ny, 320 linjer):
+- `ASSET_CLASS_DIMS: dict[str, list[str]]` per § 6.5-tabellen
+  slavisk (5 asset-klasser × 4 dim hver). Per Q2-instruks: streng
+  kontrakt — ingen utvidelse uten godkjenning.
+- `DIM_EXTRACTORS: dict[str, Callable]` med 6 implementerte:
+  `dxy_chg5d`, `real_yield_chg5d`, `term_spread`, `cot_mm_pct`,
+  `enso_regime`, `weather_stress(_key_region)` (alias). Resterende
+  6 kaster `MissingExtractorError` slik at driver-laget kan
+  håndtere uten å krasje.
+- `extract_query_from_latest(store, meta, asset_class, dims=None,
+  skip_missing=True)` — bygg `query_dims` fra ferskeste obs per
+  dim. Kun de dim som faktisk har data returneres når
+  skip_missing=True.
+- `find_analog_cases(store, instrument, meta, asset_class,
+  query_dims, *, k=5, dim_weights=None, horizon_days=30,
+  min_history_days=365)` — frittstående funksjon (ikke DataStore-
+  metode, se ADR-avvik nedenfor). Returnerer DataFrame med
+  `ref_date, similarity, forward_return_pct, max_drawdown_pct`.
+  Similarity = `1/(1+weighted_euclidean)`, så høyere er bedre,
+  max 1.0.
+- Validering: query_dims sjekkes mot ASSET_CLASS_DIMS for
+  asset-klassen — ekstra dim (utenfor § 6.5) gir ValueError.
+
+`docs/decisions/005-analog-data-schema.md`:
+- B4-tillegg: `find_analog_cases` ble frittstående, ikke
+  DataStore-metode. Begrunnelse: extractors trenger
+  `InstrumentMetadata` (cot_contract, weather_region), og å la
+  DataStore importere fra config-laget hadde innført unødvendig
+  modul-kobling. Funksjonen tar `store` + `meta` eksplisitt.
+
+`tests/unit/test_analog_dims.py` (ny, 25 tester):
+- § 6.5-konformitet (alle 5 asset-klasser, 4 dim hver, slavisk navn-match)
+- DIM_EXTRACTORS coverage (kun de 6 implementerte)
+- get_extractor + MissingExtractorError for ikke-impl dim
+- Hver extractor mot fixture-DB (real_yield, term_spread, dxy,
+  cot_mm_pct med 0/0-håndtering, enso, weather_stress)
+- Manglende cot_contract/weather_region kaster MissingDataError
+- extract_query_from_latest med skip_missing + eksplisitt
+  dims-overstyring
+
+`tests/unit/test_analog_knn.py` (ny, 13 tester):
+- Top-K returneres sortert på similarity descending
+- Similarity i [0, 1]-range
+- Perfect match → similarity > 0.999
+- Validering av query_dims mot asset_class
+- min_history_days filter
+- dim_weights skewer K-NN mot vektet dim
+- horizon_days isolerer outcomes
+- Tom outcomes → tom DataFrame (ikke exception)
+- Ingen dim-overlap → InsufficientHistoryError
+
+`tests/unit/test_analog_realdata.py` (ny, 6 tester):
+- Auto-skip via `pytest.mark.skipif` hvis bedrock.db ikke finnes
+  (slik at CI uten data ikke faller)
+- Sanity Gold + Corn × 30d/90d mot ekte backfilt data
+- Verifiser at query-dim-navn er subset av ASSET_CLASS_DIMS
+
+**Designvalg:**
+
+- **Frittstående funksjon, ikke DataStore-metode** (avvik fra
+  ADR-005 B4 originalt). Begrunnelse i ADR-tillegget. Decision-rule
+  fra CLAUDE.md: "modul-struktur, klasser vs funksjoner — optimer
+  for lesbarhet og test-isolering". DataStore-API kan utvides
+  hvis ADR justeres senere.
+- **Z-score-normalisering med ddof=0** (befolknings-std, vanlig i
+  ML). std=0 → erstatt med 1 for å unngå 0-divisjon ved konstant
+  dim.
+- **`similarity = 1/(1+distance)`** — bedre enn `1 - distance/max`
+  fordi den ikke krever maks-distance og monotont avtagende.
+- **Forward-fill av ukentlig/månedlig data** (CFTC, ENSO, weather)
+  til daglig granularitet — gir alle dim sammenlignbar tids-
+  oppløsning.
+- **Outcomes inner-join på `_match_date`** (date-normalisert,
+  tz-strippet) — håndterer at outcomes har timezone-bearing
+  timestamps fra prices-tabellen (Yahoo) mens dim-history er
+  rene datoer.
+
+**Sanity mot ekte data (manuelt verifisert):**
+- Gold metals (3 av 4 dim, vix mangler):
+  - 30d: K=5 sims 0.88-0.95, hit-rate(≥3%)=40%, avg ret +1.0%
+  - 90d: K=5 sims 0.88-0.95, hit-rate(≥3%)=60%, avg ret +9.0%
+- Corn grains (3 av 4 dim, conab mangler):
+  - 30d: K=5 sims 0.70-0.72, hit-rate(≥3%)=0%, avg ret -13.7%
+  - 90d: samme sims, hit-rate 0%, avg ret -30.7%
+
+Lavere similarity for Corn er forventet (vær-stress er volatil).
+Negative avg-returns reflekterer at K-NN identifiserer historiske
+match for nåværende corn-tilstand som ikke har vært bullish for
+30/90d-vindu — meningsfull signal som driver-laget kan score lavt.
+
+**Verifisert:**
+- pytest full → 1129/1129 (var 1085, +44 nye)
+- ruff check + format → grønt
+- Pre-commit hook → grønt
+- Auto-push → `origin/main`
+- Manuell sanity (3 separate kjøringer mot data/bedrock.db)
+
+**Neste session (60):**
+- Skriv `bedrock/engine/drivers/analog.py` med to drivere:
+  - `analog_hit_rate`: returnerer (n_hits / k) som driver-score
+  - `analog_avg_return`: avg forward_return mappet til 0..1-score
+  - Evt. `analog_match_count`: confidence-multiplier basert på k
+- Drivere kaller `find_analog_cases` med driver-params (k,
+  horizon_days, outcome_threshold_pct)
+- Utvid `gold.yaml` + `corn.yaml` med `analog`-familie-blokk
+- Tester: driver-output mot kjent fixture, explain-trace har
+  analog-felt
+
+---
 
 ### 2026-04-25 — Session 58: Fase 10 spor A — full backfill + 3 nye CLI + Yahoo-port + CFTC-fix (LUKKET)
 
