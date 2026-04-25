@@ -56,8 +56,18 @@ families:
       - {name: momentum_z, weight: 0.5, params: {window: 20}}
   positioning:
     drivers:
-      # Forelopig placeholder — ekte positioning-drivere kommer i senere fase
-      - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+      # Sub-fase 12.5 session 70: ekte positioning-drivere fra COT.
+      # Bruker MM net % av OI for å unngå scale-bias når OI varierer.
+      - name: positioning_mm_pct
+        weight: 0.6
+        params:
+          metric: mm_net_pct
+          lookback_weeks: 52
+      - name: cot_z_score
+        weight: 0.4
+        params:
+          metric: mm_net_pct
+          lookback_weeks: 52
   macro:
     drivers:
       - {name: sma200_align, weight: 1.0, params: {tf: D1}}
