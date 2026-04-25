@@ -8,8 +8,9 @@
   - **69:** prices-fetcher Stooq → Yahoo. **LUKKET 2026-04-25**
 - **Sub-fase 12.5 ÅPEN 2026-04-25** — debt-rydding før observasjonsvinduet kan gi mening. Roadmap: Block A drivere (~3-4 sessioner), Block B agri-drivere (~4-5), Block C instrumenter (~3-5), Block D polish (~2-3). Totalt 12-17 sessioner.
   - **70:** Block A — positioning-drivere (`positioning_mm_pct` + `cot_z_score`). Erstatter placeholder i Gold positioning-familien. **LUKKET 2026-04-25**
-  - **71:** Block A — macro-drivere (`real_yield` + `dxy_chg5d` + `vix_regime`). Backfilt VIXCLS i fundamentals. Erstatter placeholder i Gold macro-familien. End-to-end: Gold MAKRO+SWING degradert fra A+ til A. **LUKKET 2026-04-25**
-  - **72 (neste):** Block A fortsetter — structure + risk-familier i Gold. Vurder om vi trenger ekte drivere her eller hopper direkte til Block B (Corn agri-drivere) siden Gold er ferdigstilt for trend/positioning/macro/analog.
+  - **71:** Block A — macro-drivere (`real_yield` + `dxy_chg5d` + `vix_regime`). Backfilt VIXCLS. Erstatter placeholder i Gold macro-familien. **LUKKET 2026-04-25**
+  - **72:** Block B start — agri-drivere (`weather_stress` + `enso_regime`). Erstatter placeholder i Corn weather + enso-familier. End-to-end: Corn weather=0.10, enso=0.50, total=13.21/20 grade A. **LUKKET 2026-04-25**
+  - **73 (neste):** Block B fortsetter eller Block C. Alternativer: (a) `conab_yoy`/`usda_export_pace`/`crop_progress` for Corn outlook/yield/conab/cross; (b) konfigurere Cotton/Coffee/Soybean/Sugar/Wheat YAMLer; (c) Fase 11 backtest re-run for å verifisere Corn-inversjon er fixet.
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -47,9 +48,9 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `feat/macro-drivers` (Nivå 3 — session 71). PR #1-#4 merget. Branch-protection på `main` i GitHub UI er **ikke automatisert**.
+- **Branch:** `feat/agri-drivers` (Nivå 3 — session 72). PR #1-#5 merget. Branch-protection på `main` i GitHub UI er **ikke automatisert**.
 - **Blocked:** nei.
-- **Next task:** **Session 72 — Block A polish: structure + risk drivere.** Vurder om vi trenger ekte drivere her eller hopper direkte til Block B (Corn agri-drivere) siden Gold er ferdigstilt for trend/positioning/macro/analog.
+- **Next task:** **Session 73.** Velg mellom (a) flere agri-drivere (`conab_yoy`, `usda_export_pace`, `crop_progress`); (b) Block C — nye instrumenter (Cotton/Coffee/Soybean/Sugar/Wheat); (c) Fase 11 backtest re-run for å bekrefte Corn-inversjon er fixet.
 - **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
 ## Open questions to user
@@ -137,6 +138,62 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-25 — Session 72: Sub-fase 12.5 Block B — agri-drivere (LUKKET)
+
+**Scope:** Block B start. Erstatter sma200_align placeholder i Corn
+weather + enso-familier med ekte drivere fra weather_monthly + NOAA ONI.
+
+**Endret denne session (feature-branch `feat/agri-drivers`):**
+
+`src/bedrock/engine/drivers/agri.py` (ny, ~225 linjer):
+- `@register("weather_stress")`: kombinert hot_days + dry_days +
+  water_bal-underskudd til 0..1 stress-score. Bruker
+  `DataStore.get_weather_monthly()`. ``invert``-param for crops der
+  lite stress er bull. ``weights``-override for asset-spesifikk just.
+- `@register("enso_regime")`: NOAA ONI klassifikator (NOAA-konvensjoner
+  ±0.5 nøytral/event, ±1.0 sterk). Default-mapping (Corn): La Niña →
+  bull, El Niño → bear. ``invert`` for argentinsk hvete osv.
+- Felles helper `_resolve_weather_region` (lazy-import-pattern).
+- Defensive 0.0-fallbacks ved alle feiltilstander.
+
+`src/bedrock/engine/drivers/__init__.py`:
+- Auto-import: `agri, analog, currency, macro, positioning, trend`.
+
+`config/instruments/corn.yaml`:
+- weather-familie: `weather_stress` (1.0 weight, lookback_months=1).
+- enso-familie: `enso_regime` (1.0 weight, default-mapping).
+
+`tests/unit/test_drivers_agri.py` (ny, 17 tester):
+- weather_stress: 8 tester (normal/drought/invert/water-surplus/
+  missing-region/no-data/None-water_bal/custom-weights)
+- enso_regime: 7 tester (sterk-La-Niña/sterk-El-Niño/nøytral/invert/
+  missing-series/empty/custom-thresholds)
+- 2 registry-tester
+
+**End-to-end mot ekte data:**
+
+```
+Corn scoring etter session 72:
+  alle horisonter buy/sell: total=13.206 grade=A
+    weather=0.103 enso=0.500
+```
+
+- weather_stress = 0.10 — april 2026 er lavt-stress i us_cornbelt
+  (0 hot_days, 8 dry_days, water_bal=72.1 vått). Ingen Corn-bull
+  fra værsiden akkurat nå.
+- enso_regime = 0.50 — ONI -0.16 (siste fra februar) nøytral.
+
+**Tester:** 1340/1340 grønne (+17 nye).
+
+**Beslutninger:**
+- Bruker `weather_monthly` (15+ års historikk) i stedet for `weather`
+  (kun 3 dager backfilt). Månedlig stress-score er mest robust.
+- ``hot_days/30``, ``dry_days/31``, ``-water_bal/150``-normalisering
+  klippet til [0..1]. Default-vekter 0.4+0.4+0.2=1.0.
+- ENSO-thresholds følger NOAA-konvensjoner.
+- Ingen `conab_yoy`, `usda_export_pace`, `crop_progress`-drivere
+  ennå. Disse trenger nye fetchere — utsatt til senere session.
 
 ### 2026-04-25 — Session 71: Sub-fase 12.5 Block A — macro-drivere (LUKKET)
 
