@@ -70,6 +70,7 @@ families:
         weight: 1.0
         params: {period: 14, lookback: 252, mode: high_is_bull}
   analog:
+    polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     drivers:
       - name: analog_hit_rate
         weight: 0.5

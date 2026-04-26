@@ -96,7 +96,8 @@ def test_engine_driver_trace_records_contributions(minimal_rules: FinancialRules
 
 
 def test_engine_passes_params_to_driver(minimal_rules: FinancialRules) -> None:
-    """Params fra YAML skal videresendes uendret til driver-funksjonen."""
+    """Params fra YAML skal videresendes til driver, pluss internt
+    `_direction`-felt fra session 100 (ADR-006 spesialtilfeller)."""
     received: dict[str, dict] = {}
 
     @drivers.register("mock_full")
@@ -116,7 +117,10 @@ def test_engine_passes_params_to_driver(minimal_rules: FinancialRules) -> None:
     )
 
     Engine().score("Gold", None, rules, "SWING")
-    assert received["full"] == {"tf": "D1", "lookback": 200}
+    # YAML-params bevares; engine legger til `_direction` (default BUY).
+    assert received["full"]["tf"] == "D1"
+    assert received["full"]["lookback"] == 200
+    assert received["full"]["_direction"] == "buy"
 
 
 def test_engine_unknown_horizon_raises_keyerror(minimal_rules: FinancialRules) -> None:

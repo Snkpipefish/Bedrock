@@ -105,20 +105,24 @@ def test_grains_query_has_expected_dim_names() -> None:
 
 @_skip_no_data
 def test_unknown_instrument_no_outcomes_returns_empty() -> None:
-    """Et instrument uten outcomes (f.eks. Silver, ikke backfilt) skal
-    gi tom DataFrame."""
+    """Et instrument uten outcomes skal gi tom DataFrame.
+
+    Etter session 99-backfilling har alle whitelist-instrumenter outcomes.
+    Bruker derfor en oppdiktet instrument-id ("Foobar") for å verifisere
+    defensiv håndtering ved manglende outcomes.
+    """
     from bedrock.config.instruments import InstrumentMetadata
 
     store = DataStore(_DB)
-    silver_meta = InstrumentMetadata(
-        id="Silver",
+    fake_meta = InstrumentMetadata(
+        id="Foobar",
         asset_class="metals",
-        ticker="XAGUSD",
+        ticker="XYZUSD",
         cot_contract="GOLD - COMMODITY EXCHANGE INC.",  # gjenbruk Gold COT for å unngå crash på extractor
         cot_report="disaggregated",
     )
     cfg = load_instrument_config(_GOLD_YAML)  # låner extractor-config fra gull
     query = extract_query_from_latest(store, cfg.instrument, "metals", skip_missing=True)
-    result = find_analog_cases(store, "Silver", silver_meta, "metals", query, k=5)
-    # Silver mangler outcomes → tom DataFrame
+    result = find_analog_cases(store, "Foobar", fake_meta, "metals", query, k=5)
+    # Foobar mangler outcomes → tom DataFrame
     assert result.empty

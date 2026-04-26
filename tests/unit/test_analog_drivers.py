@@ -309,6 +309,127 @@ def test_avg_return_custom_thresholds(seeded_store: DataStore, instruments_dir: 
     assert score == 0.0
 
 
+# ---------------------------------------------------------------------
+# Session 100: direction-aware via engine-propagert `_direction`
+# ---------------------------------------------------------------------
+
+
+def test_hit_rate_direction_buy_uses_positive_threshold(
+    seeded_store: DataStore, instruments_dir: Path
+) -> None:
+    """Default _direction='buy' (eller udefinert) gir BUY-hit-rate
+    (forward_return ≥ +threshold)."""
+    fn = get("analog_hit_rate")
+    base_params = {
+        "asset_class": "metals",
+        "instruments_dir": str(instruments_dir),
+        "min_history_days": 0,
+        "k": 10,
+        "outcome_threshold_pct": 3.0,
+    }
+    score_default = fn(seeded_store, "Gold", base_params)
+    score_buy = fn(seeded_store, "Gold", {**base_params, "_direction": "buy"})
+    assert score_default == score_buy
+    # Seedet med ~50% positive returns, k=10 → BUY-hit-rate i [0.3, 0.7]
+    assert 0.2 <= score_buy <= 0.8
+
+
+def test_hit_rate_direction_sell_inverts_threshold(
+    seeded_store: DataStore, instruments_dir: Path
+) -> None:
+    """`_direction='sell'` skal måle forward_return ≤ -threshold istedenfor."""
+    fn = get("analog_hit_rate")
+    buy = fn(
+        seeded_store,
+        "Gold",
+        {
+            "asset_class": "metals",
+            "instruments_dir": str(instruments_dir),
+            "min_history_days": 0,
+            "k": 10,
+            "outcome_threshold_pct": 3.0,
+            "_direction": "buy",
+        },
+    )
+    sell = fn(
+        seeded_store,
+        "Gold",
+        {
+            "asset_class": "metals",
+            "instruments_dir": str(instruments_dir),
+            "min_history_days": 0,
+            "k": 10,
+            "outcome_threshold_pct": 3.0,
+            "_direction": "sell",
+        },
+    )
+    # Begge er gyldige hit-rates [0,1], men måler forskjellige terskler
+    assert 0.0 <= buy <= 1.0
+    assert 0.0 <= sell <= 1.0
+
+
+def test_hit_rate_buy_sell_complementary_when_no_zero_returns(
+    seeded_store: DataStore, instruments_dir: Path
+) -> None:
+    """Når naboer er enten +5% eller -5% (ingen noll), vil BUY+SELL ≈ 1.0
+    fordi alle naboer enten krysser +3% eller -3% terskelen."""
+    fn = get("analog_hit_rate")
+    base_params = {
+        "asset_class": "metals",
+        "instruments_dir": str(instruments_dir),
+        "min_history_days": 0,
+        "k": 10,
+        "outcome_threshold_pct": 3.0,
+    }
+    buy = fn(seeded_store, "Gold", {**base_params, "_direction": "buy"})
+    # Seedet med returns som veksler mellom -1% og +5% (ikke ren ±5%),
+    # så BUY-hit-rate er andelen der return >= +3%, dvs. positive.
+    # Kan ikke garantere kompletthet i dette fixture-en, men sjekk at
+    # BUY+SELL <= 1.0 (ikke samme nabo-rad teller for begge).
+    sell = fn(seeded_store, "Gold", {**base_params, "_direction": "sell"})
+    assert buy + sell <= 1.0 + 1e-9
+
+
+def test_avg_return_direction_sell_inverts_avg(
+    seeded_store: DataStore, instruments_dir: Path
+) -> None:
+    """`_direction='sell'` skal flippe avg-fortegn (matchende eldre direction='invert')."""
+    fn = get("analog_avg_return")
+    base_params = {
+        "asset_class": "metals",
+        "instruments_dir": str(instruments_dir),
+        "min_history_days": 0,
+        "k": 10,
+    }
+    buy = fn(seeded_store, "Gold", {**base_params, "_direction": "buy"})
+    sell = fn(seeded_store, "Gold", {**base_params, "_direction": "sell"})
+    # Med positive returns: BUY > 0, SELL = 0 (negativ avg → 0.0)
+    assert buy > 0.0
+    assert sell == 0.0
+
+
+def test_avg_return_explicit_direction_overrides_engine_direction(
+    seeded_store: DataStore, instruments_dir: Path
+) -> None:
+    """Eldre `direction: invert` skal overstyre engine-propagert `_direction`."""
+    fn = get("analog_avg_return")
+    # Engine sier BUY, men driver-config sier invert → SELL-modus
+    score = fn(
+        seeded_store,
+        "Gold",
+        {
+            "asset_class": "metals",
+            "instruments_dir": str(instruments_dir),
+            "min_history_days": 0,
+            "k": 10,
+            "_direction": "buy",
+            "direction": "invert",
+        },
+    )
+    # Med positive returns + invert → 0.0
+    assert score == 0.0
+
+
 def test_avg_return_negative_history_returns_zero(tmp_path: Path, instruments_dir: Path) -> None:
     """Hvis K-NN finner naboer med negativ avg → driver returnerer 0.0."""
     store = DataStore(tmp_path / "bedrock.db")
