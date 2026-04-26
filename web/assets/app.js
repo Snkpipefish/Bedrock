@@ -98,6 +98,11 @@ function _fmt2(n) { return (n == null || isNaN(n)) ? '–' : Number(n).toFixed(2
 function _fmt5(n) { return (n == null || isNaN(n)) ? '–' : Number(n).toFixed(5); }
 function _fmt1(n) { return (n == null || isNaN(n)) ? '–' : Number(n).toFixed(1); }
 
+// `_extractSetupLevels` lastes fra setup_levels.js (pure, DOM-fri, testbar).
+// Dette skriptet er lastet via <script> før app.js i index.html og setter
+// window.extractSetupLevels.
+const _extractSetupLevels = window.extractSetupLevels;
+
 function _pctOf(score, max) {
   if (!max || max <= 0) return 0;
   return Math.max(0, Math.min(100, (score / max) * 100));
@@ -193,6 +198,7 @@ function openSetupModal(entry) {
   const m = _modalEl();
   if (!m || !entry) return;
   const setupWrap = entry.setup || null;
+  const lv = _extractSetupLevels(entry);
   const setup = setupWrap ? (setupWrap.setup || setupWrap) : null;
   const families = entry.families || {};
   const familyKeys = Object.keys(families);
@@ -231,18 +237,18 @@ function openSetupModal(entry) {
 
     ${_analogHtml(entry.analog)}
 
-    ${setup ? `
+    ${lv ? `
     <section class="modal-section">
       <h3>Setup</h3>
       <table class="modal-kv">
-        <tr><th>Entry</th><td>${_fmt5(setup.entry)}</td></tr>
-        <tr><th>Stop</th><td>${_fmt5(setup.sl ?? setup.stop_loss ?? setup.stop)}</td></tr>
-        <tr><th>T1 / TP</th><td>${_fmt5(setup.tp ?? setup.target_1 ?? setup.t1)}</td></tr>
-        <tr><th>R:R</th><td>${_fmt2(setup.rr ?? setup.rr_t1)}</td></tr>
-        <tr><th>ATR</th><td>${_fmt5(setup.atr)}</td></tr>
+        <tr><th>Entry</th><td>${_fmt5(lv.entry)}</td></tr>
+        <tr><th>Stop</th><td>${_fmt5(lv.sl)}</td></tr>
+        <tr><th>T1 / TP</th><td>${lv.tp == null ? '<span class="meta">trailing only (MAKRO)</span>' : _fmt5(lv.tp)}</td></tr>
+        <tr><th>R:R</th><td>${lv.rr == null ? '<span class="meta">–</span>' : _fmt2(lv.rr)}</td></tr>
+        <tr><th>ATR</th><td>${_fmt5(lv.atr)}</td></tr>
       </table>
-      ${setup.entry_cluster_types ? `<p class="meta" style="margin-top:6px">Entry-nivå: ${(setup.entry_cluster_types || []).join(', ') || '–'}</p>` : ''}
-      ${setup.tp_cluster_types ? `<p class="meta">TP-nivå: ${(setup.tp_cluster_types || []).join(', ') || '–'}</p>` : ''}
+      ${lv.entry_cluster_types ? `<p class="meta" style="margin-top:6px">Entry-nivå: ${(lv.entry_cluster_types || []).join(', ') || '–'}</p>` : ''}
+      ${lv.tp_cluster_types ? `<p class="meta">TP-nivå: ${(lv.tp_cluster_types || []).join(', ') || '–'}</p>` : ''}
     </section>` : ''}
 
     ${setupWrap && setupWrap.first_seen ? `
@@ -546,11 +552,11 @@ function renderSetupCards(containerId, setups, totalBeforeFilter) {
   // i denne lista er nøkkelen.
   el.__bedrockSetups = setups;
   el.innerHTML = setups.map(s => {
-    const setup = s.setup || {};
-    const entry = setup.entry;
-    const sl = setup.stop_loss ?? setup.sl ?? setup.stop;
-    const t1 = setup.target_1 ?? setup.t1;
-    const rr = setup.rr_t1 ?? setup.rr;
+    const lv = _extractSetupLevels(s) || {};
+    const entry = lv.entry;
+    const sl = lv.sl;
+    const t1 = lv.tp;
+    const rr = lv.rr;
     const dirCls = (s.direction || '').toLowerCase() === 'sell' ? 'dir-sell' : 'dir-buy';
     const gradeCls = `grade-${(s.grade || 'x').replace('+', 'plus').toLowerCase()}`;
     const idx = setups.indexOf(s);

@@ -385,8 +385,13 @@ main {
   text-transform: uppercase;
   color: var(--c-ink-muted);
   letter-spacing: 0.6px;
-  font-weight: 500;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--r-sm);
+  background: var(--c-border);
 }
+.setup-card.dir-buy .direction { background: var(--c-pos-soft); color: var(--c-pos); }
+.setup-card.dir-sell .direction { background: var(--c-neg-soft); color: var(--c-neg); }
 .setup-card .grade {
   font-weight: 600;
   padding: 1px 8px;
