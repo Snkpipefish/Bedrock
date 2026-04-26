@@ -1,0 +1,46 @@
+# Bot whitelist + navne-mapping
+#
+# Liste over instrumenter som skal pushes til scalp_edge-boten.
+# Bedrock kan generere signaler for flere instrumenter (eksperimenter,
+# crypto, base metals etc.), men kun de som står her sendes til bot.
+#
+# Kilde: ``~/scalp_edge/signal_server.py:VALID_INSTRUMENTS``
+#
+# Format: bedrock-instrument-id → bot-instrument-name. Hvis bedrock-id
+# matcher bot-navn nøyaktig (f.eks. "Corn"), bruk samme verdi.
+#
+# `bedrock signals-all --bot-only` filtrerer signals.json til kun disse
+# instrumentene + transformerer instrument-id til bot-navn.
+
+mapping:
+  # FX (4 stk — bedrock-id matcher bot-navn)
+  EURUSD: EURUSD
+  USDJPY: USDJPY
+  GBPUSD: GBPUSD
+  AUDUSD: AUDUSD
+
+  # Metals
+  Gold: GOLD
+  Silver: SILVER
+
+  # Energy
+  CrudeOil: "OIL WTI"
+  Brent: "OIL BRENT"
+
+  # Indices
+  SP500: SPX500
+  Nasdaq: US100
+
+  # Agri (7 stk — bedrock-id matcher bot-navn nøyaktig)
+  Corn: Corn
+  Wheat: Wheat
+  Soybean: Soybean
+  Coffee: Coffee
+  Cotton: Cotton
+  Sugar: Sugar
+  Cocoa: Cocoa
+
+# Instrumenter NOT i whitelist (genereres av bedrock men ikke pushes):
+# - Copper, Platinum (eksperimentelle metals)
+# - NaturalGas (energy, men ikke aktivert i bot)
+# - BTC, ETH (crypto, ikke aktivert i bot)
