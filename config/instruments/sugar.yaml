@@ -58,11 +58,12 @@ families:
         weight: 1.0
         params: {}
   cross:
-    # Sugar er BRL-eksponert (samme som coffee). USD-styrke = BRL-
-    # svakhet = bull for sukker-eksport.
+    # Sub-fase 12.5+ session 80: erstattet DXY-proxy med direkte BRL-
+    # måling via DEXBZUS. USDBRL UP = BRL svakhet = bull for sukker-
+    # eksport (Brasil ~40% global sukker-produksjon).
     weight: 2
     drivers:
-      - name: dxy_chg5d
+      - name: brl_chg5d
         weight: 1.0
         params:
           bull_when: positive

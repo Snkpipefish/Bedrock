@@ -223,6 +223,93 @@ def dxy_chg5d(store: Any, instrument: str, params: dict) -> float:
 
 
 # ---------------------------------------------------------------------------
+# brl_chg5d
+# ---------------------------------------------------------------------------
+
+
+# BRL er ~2x mer volatil enn DXY (5d stdev: BRL 2.06% vs DXY ~0.8%).
+# Terskler skalert deretter, basert på empirisk percentil-fordeling
+# 2010-2026: p90=+2.65%, p75=+1.28%, p25=-1.10%, p10=-2.28%.
+_DEFAULT_BRL_THRESHOLDS_POSITIVE: tuple[tuple[float, float], ...] = (
+    # USDBRL UP = BRL svakhet → bull for brasiliansk-eksport (sukker, kaffe)
+    (2.5, 1.0),
+    (1.0, 0.75),
+    (-1.0, 0.5),  # ±1% = nøytral
+    (-2.5, 0.25),
+)
+
+
+_DEFAULT_BRL_THRESHOLDS_NEGATIVE: tuple[tuple[float, float], ...] = (
+    # USDBRL DOWN = BRL styrke → bull for BRL-positive assets
+    (-2.5, 1.0),
+    (-1.0, 0.75),
+    (1.0, 0.5),
+    (2.5, 0.25),
+)
+
+
+@register("brl_chg5d")
+def brl_chg5d(store: Any, instrument: str, params: dict) -> float:
+    """5-dager % endring i USD/BRL (DEXBZUS), mappet til 0..1.
+
+    Sub-fase 12.5+ session 80: erstatter DXY-proxy for BRL-eksponerte
+    softs (sukker, kaffe). DEXBZUS = "Brazilian Reals to One U.S.
+    Dollar" — altså DEXBZUS UP = BRL svakhet.
+
+    Params:
+        series: FRED-serie (default ``DEXBZUS``)
+        window: rolling-vindu i dager (default 5)
+        bull_when: ``"positive"`` (default — USDBRL UP = BRL-svakhet
+            = bull for brasiliansk-eksport: sukker, kaffe) eller
+            ``"negative"`` (BRL-styrke er bull).
+        thresholds: optional override.
+
+    Defensiv 0.0-retur ved manglende serie eller for kort historikk.
+    """
+    series_id = params.get("series", "DEXBZUS")
+    window = int(params.get("window", 5))
+    bull_when = params.get("bull_when", "positive")
+
+    try:
+        series = store.get_fundamentals(series_id).dropna()
+    except KeyError:
+        _log.warning("brl_chg5d.series_missing", instrument=instrument, series=series_id)
+        return 0.0
+    except Exception as exc:
+        _log.warning("brl_chg5d.fetch_failed", instrument=instrument, error=str(exc))
+        return 0.0
+
+    if len(series) < window + 1:
+        _log.debug("brl_chg5d.short_history", instrument=instrument, n=len(series), window=window)
+        return 0.0
+
+    pct_change = (series.iloc[-1] - series.iloc[-window - 1]) / series.iloc[-window - 1] * 100
+    if pd.isna(pct_change):
+        return 0.0
+    current = float(pct_change)
+
+    user_thresholds = params.get("thresholds")
+    if user_thresholds is None:
+        steps = (
+            _DEFAULT_BRL_THRESHOLDS_POSITIVE
+            if bull_when == "positive"
+            else _DEFAULT_BRL_THRESHOLDS_NEGATIVE
+        )
+    else:
+        steps = tuple((float(t), float(s)) for t, s in user_thresholds)
+
+    if bull_when == "positive":
+        for threshold, score in sorted(steps, key=lambda t: -t[0]):
+            if current >= threshold:
+                return float(score)
+    else:
+        for threshold, score in sorted(steps, key=lambda t: t[0]):
+            if current <= threshold:
+                return float(score)
+    return 0.0
+
+
+# ---------------------------------------------------------------------------
 # vix_regime
 # ---------------------------------------------------------------------------
 

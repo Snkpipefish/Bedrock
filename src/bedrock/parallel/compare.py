@@ -133,27 +133,45 @@ def normalize_bedrock(item: dict[str, Any]) -> NormalizedSignal:
     )
 
 
-def normalize_old(item: dict[str, Any]) -> NormalizedSignal:
-    """Konverter en cot-explorer signal-dict til NormalizedSignal.
+def normalize_old(item: dict[str, Any]) -> list[NormalizedSignal]:
+    """Konverter en cot-explorer signal-dict til en eller flere NormalizedSignals.
 
-    Foretrekker ``name`` over ``key`` for instrument-felt fordi
-    bedrock bruker norsk-eller-engelsk-display-navn (f.eks.
-    "Gold"/"Cotton") som ofte matcher ``key`` i cot-explorer.
+    Cot-explorer's instrument-feltet er inkonsistent:
+    - Agri: ``key="Coffee"``, ``name="Kaffe"`` — match via key
+    - Financial: ``key="NAS100"``, ``name="Nasdaq"`` — match via name
+
+    For å matche begge mønstre returnerer vi en NormalizedSignal per
+    tilgjengelig kandidat (key og name). Compare-logikken bygger
+    map-en og overskriver duplikater — alle kandidater matches mot
+    bedrock-id-en.
     """
-    instrument_raw = item.get("key") or item.get("name") or ""
     horizon_raw = item.get("horizon") or item.get("timeframe") or ""
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for fname in ("key", "name"):
+        v = item.get(fname)
+        if v and isinstance(v, str) and v.strip():
+            normalized = _norm_str(v)
+            if normalized not in seen:
+                seen.add(normalized)
+                candidates.append(v.strip())
+    if not candidates:
+        candidates = [""]
 
-    return NormalizedSignal(
-        instrument=_norm_str(instrument_raw),
-        horizon=_norm_str(horizon_raw),
-        direction=_norm_str(item.get("action")),
-        grade=item.get("grade"),
-        score=_safe_float(item.get("score")),
-        max_score=_safe_float(item.get("max_score")),
-        entry=_safe_optional_float(item.get("entry")),
-        sl=_safe_optional_float(item.get("sl")),
-        source="old",
-    )
+    return [
+        NormalizedSignal(
+            instrument=_norm_str(name),
+            horizon=_norm_str(horizon_raw),
+            direction=_norm_str(item.get("action")),
+            grade=item.get("grade"),
+            score=_safe_float(item.get("score")),
+            max_score=_safe_float(item.get("max_score")),
+            entry=_safe_optional_float(item.get("entry")),
+            sl=_safe_optional_float(item.get("sl")),
+            source="old",
+        )
+        for name in candidates
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -186,7 +204,11 @@ def load_old_signals(path: Path) -> list[NormalizedSignal]:
         signals = raw
     else:
         return []
-    return [normalize_old(item) for item in signals if isinstance(item, dict)]
+    out: list[NormalizedSignal] = []
+    for item in signals:
+        if isinstance(item, dict):
+            out.extend(normalize_old(item))
+    return out
 
 
 # ---------------------------------------------------------------------------

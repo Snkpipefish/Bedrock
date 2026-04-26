@@ -106,16 +106,30 @@ def test_normalize_bedrock_lowercases_keys() -> None:
 
 def test_normalize_old_uses_action_for_direction() -> None:
     entry = _old_entry(action="SELL", timeframe="SWING")
-    norm = normalize_old(entry)
+    norms = normalize_old(entry)
+    # Returnerer en NormalizedSignal per kandidat (key, name).
+    assert len(norms) >= 1
+    norm = norms[0]
     assert norm.direction == "sell"
     assert norm.horizon == "swing"
 
 
 def test_normalize_old_handles_missing_max_score() -> None:
     entry = {"key": "X", "action": "BUY", "horizon": "MAKRO", "score": 10}
-    norm = normalize_old(entry)
+    norms = normalize_old(entry)
+    assert len(norms) == 1
+    norm = norms[0]
     assert norm.max_score == 0.0
     assert norm.score == 10.0
+
+
+def test_normalize_old_returns_both_key_and_name_candidates() -> None:
+    """Cot-explorer financial-signaler har key=ticker, name=display.
+    Begge skal returneres som matchekandidater."""
+    entry = {"key": "NAS100", "name": "Nasdaq", "action": "BUY", "horizon": "SWING"}
+    norms = normalize_old(entry)
+    instruments = {n.instrument for n in norms}
+    assert instruments == {"nas100", "nasdaq"}
 
 
 def test_normalize_bedrock_handles_missing_setup() -> None:
