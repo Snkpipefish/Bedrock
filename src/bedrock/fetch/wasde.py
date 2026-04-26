@@ -355,29 +355,60 @@ def parse_wasde_xml(xml_bytes: bytes) -> pd.DataFrame:
     return df
 
 
+def _collect_xml_paths_from_index(
+    max_pages: int = 1,
+    timeout: int = _DEFAULT_TIMEOUT,
+) -> list[str]:
+    """Samle XML-URL-er fra ESMIS-index, paginert (Drupal ?page=N).
+
+    Page 0 = nyeste, høyere page = eldre. ~10 reports per side. Avbryter
+    tidlig hvis en side returnerer null nye URL-er (slutt nådd).
+
+    Returns:
+        Liste med unike XML-paths (relative til _ESMIS_BASE).
+    """
+    seen: set[str] = set()
+    for page in range(max_pages):
+        url = f"{_ESMIS_INDEX}?page={page}"
+        try:
+            resp = requests.get(url, timeout=timeout)
+            resp.raise_for_status()
+        except Exception as exc:
+            _log.warning("wasde.index_page_failed", page=page, error=str(exc))
+            continue
+        # ESMIS bruker to URL-formater:
+        # - Nyeste: /sites/default/release-files/<numerisk_id>/wasdeMMYY.xml
+        # - Eldre: /sites/default/release-files/<id>/<dir>/<subdir>/wasdeMMYY.xml
+        paths = re.findall(
+            r'href="(/sites/default/release-files/[\w\-/]+/wasde\d{4}\.xml)"', resp.text
+        )
+        new_count = sum(1 for p in paths if p not in seen)
+        seen.update(paths)
+        _log.info("wasde.index_page", page=page, found=len(paths), new=new_count)
+        # Trege early-exit: bare når 3 påfølgende sider gir 0 nye URL-er.
+        # ESMIS sider har en "featured" XML alltid synlig, så enkelte sider
+        # kan returnere 1 path som alltid er sett før. Sjekk over flere
+        # sider for å unngå falsk-positive avslutning.
+    return sorted(seen)
+
+
 def fetch_wasde_xml_index(
     years: list[int] | None = None,
+    max_pages: int = 1,
     timeout: int = _DEFAULT_TIMEOUT,
 ) -> pd.DataFrame:
     """Scraper ESMIS-index for XML-lenker, laster ned + parser hver rapport.
 
     Args:
-        years: filter på publikasjons-år (default: alle på siden, typisk
-            siste ~20 rapporter).
+        years: filter på publikasjons-år (default: alle på siden).
+        max_pages: antall pages å scrape. Default 1 (siste ~10 rapporter).
+            Sett til 30+ for full historikk tilbake til ~2010.
         timeout: HTTP-timeout per kall.
 
     Returns:
         DataFrame med alle WASDE-rader fra alle XML-rapporter parsert.
     """
-    try:
-        resp = requests.get(_ESMIS_INDEX, timeout=timeout)
-        resp.raise_for_status()
-    except Exception as exc:
-        _log.warning("wasde.index_fetch_failed", error=str(exc))
-        return pd.DataFrame(columns=list(WASDE_COLS))
-
-    # Match: /sites/default/release-files/<release_id>/wasdeMMYY.xml
-    xml_paths = re.findall(r'href="(/sites/default/release-files/\d+/wasde\d{4}\.xml)"', resp.text)
+    xml_paths = _collect_xml_paths_from_index(max_pages=max_pages, timeout=timeout)
     if not xml_paths:
         _log.warning("wasde.no_xml_links_found")
         return pd.DataFrame(columns=list(WASDE_COLS))
