@@ -18,7 +18,8 @@
   - **78:** Block D ferdigstillelse — monitor- + compare-timere (06:30 og 06:35) installert via NOPASSWD-sudo. Daglig pipeline-helse + signal-diff skrives til data/_meta/ med dato-suffix. .gitignore oppdatert (daglige filer ignoreres; baseline-filer beholdes). Initial baseline tatt 2026-04-26. **Obs-vinduet er nå fullstendig automatisert.** **LUKKET 2026-04-26**.
   - **79:** Block A polish — `range_position` (structure) + `vol_regime` (risk) erstatter sma200_align placeholder i Gold. **Gold scorer nå reelt i alle 6 familier.** 13 nye tester. **LUKKET 2026-04-26**. **Sub-fase 12.5 ferdig — alle 4 blocks fullført.**
   - **80:** Sub-fase 12.5+ — gjeld-clearing fortsatt. Backfilt DEXBZUS (USD/BRL), nytt `brl_chg5d`-driver, byttet Coffee+Sugar fra DXY-proxy til ekte BRL. Lagt til Nasdaq som 8. instrument (4103 prices + 631+225 legacy COT). Utvidet positioning-driver med `noncomm_net`/`noncomm_net_pct` for legacy COT (indekser). Compare-script fikset for `key` + `name`-matching (cot-explorer financial bruker key=ticker, agri bruker key=engelsk-navn). **6 → 7 felles signaler vs cot-explorer.** 10 nye tester. **LUKKET 2026-04-26**.
-  - **81 (neste):** USDA NASS Crop Progress-fetcher (PLAN § 7.3 Fase-4 item) eller flere financial instrumenter (EURUSD/SP500/BTC).
+  - **81:** Sub-fase 12.5+ — EURUSD + SP500 som 9. og 10. instrument (FX og indices asset-klasser). Backfilt prices + legacy COT for begge. Bumpet monitor's grade-endring-terskel fra 50% til 80% (bedrock er strengere by design). **LUKKET 2026-04-26**.
+  - **82 (neste):** USDA NASS Crop Progress-fetcher krever API-key (manuell registrering). WASDE-fetcher krever PDF-parsing. Resterende auto-doable: BTC-instrument, ICE softs COT-utvidelse, branch-protection-setup på GitHub UI (manuelt). Kandidat: cot_legacy backfill for de 6 agri-instrumentene som har disaggregated (gir bridge-historikk pre-2010 og redundans).
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -56,12 +57,12 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `feat/brl-driver` (Nivå 3 — session 80, ble utvidet til Nasdaq + compare-fix). PR #1-#13 merget.
+- **Branch:** `feat/eurusd-sp500-instruments` (Nivå 3 — session 81). PR #1-#14 merget.
 - **Blocked:** nei.
 - **Aktive systemd-timere:** 9 totalt.
-- **Instrumenter:** 8 totalt (Gold, Corn, Cotton, Coffee, Soybean, Sugar, Wheat, Nasdaq).
-- **Compare overlap:** 7 felles signaler vs cot-explorer (Nasdaq + 6 agri).
-- **Next task:** **Session 81.** USDA NASS Crop Progress-fetcher (PLAN § 7.3 Fase-4) eller flere financial instrumenter (EURUSD/SP500/BTC).
+- **Instrumenter:** 10 totalt (Gold, Corn, Cotton, Coffee, Soybean, Sugar, Wheat, Nasdaq, EURUSD, SP500).
+- **Compare overlap:** 7 felles signaler vs cot-explorer (cot-explorer dekker kun 7 unike — vi matcher alle).
+- **Next task:** **Session 82.** Auto-doable kandidater: cot_legacy backfill (bridge-historikk + redundans), BTC-instrument, eller mindre infra-tasks. NASS Crop Progress + WASDE krever manuell API-key/PDF-parsing.
 - **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
 ## Open questions to user
@@ -149,6 +150,71 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-26 — Session 81: Sub-fase 12.5+ — EURUSD + SP500 + monitor-threshold (LUKKET)
+
+**Scope:** Utvide instrument-coverage med FX (EURUSD) og bredere
+equity-eksponering (SP500). Justere monitor's grade-endring-terskel
+til realistisk nivå nå som bedrock er strengere enn cot-explorer.
+
+**Endret denne session (feature-branch `feat/eurusd-sp500-instruments`):**
+
+`config/instruments/eurusd.yaml` (ny):
+- asset_class: fx (første FX-instrument)
+- cot_contract: "EURO FX - CHICAGO MERCANTILE EXCHANGE", legacy
+- macro: real_yield bull_when=low (lav rente støtter ikke-USD-valuta);
+  dxy_chg5d bull_when=negative (USD svakhet = bull EURUSD).
+- max_score: 4.9-5.8 per horizon.
+
+`config/instruments/sp500.yaml` (ny):
+- asset_class: indices, samme som Nasdaq men bredere markedsbarometer.
+- Lavere DGS10-vekt (0.3) enn Nasdaq (0.4) — mindre tech/duration-tunge.
+- Identiske structure + risk-drivere (range_position + vol_regime).
+
+`src/bedrock/parallel/monitor.py`:
+- `_GRADE_DIFF_RATIO_FAIL`: 0.5 → 0.8.
+- Rationale: bedrock er by design strengere (real drivers vs
+  placeholders, kalibrerte terskler). 50-70% grade-endring er
+  forventet. > 80% flagger systemiske problemer (regresjon, bug).
+
+**Backfill:**
+
+| Instrument | Prices | COT |
+|---|---:|---:|
+| EURUSD | 4247 | 851 |
+| SP500 | 4103 | 631 |
+
+**End-to-end (april 2026):**
+
+```
+EURUSD makro buy: total=1.90 grade=C
+  trend=0.60 positioning=0.06 macro=0.55
+  structure=0.69 risk=0.30 analog=0.00
+
+SP500 makro buy: total=3.67 grade=A
+  trend=0.88 positioning=0.88 macro=0.60
+  structure=0.99 risk=0.73 analog=0.00
+```
+
+EURUSD: EUR moderat-svakt miljø, lav vol = lav risk-score (vol_regime
+high_is_bull). SP500: Nær ATH som forventet april 2026 (structure
+0.99), specs net long (positioning 0.88).
+
+**signals.json:** 60 entries fra 10/10 instrumenter (var 48 fra 8/8).
+
+**Tester:** 1382/1382 grønt (ingen nye tester — kun YAML-config og
+en threshold-bump). Pyright 0/0.
+
+**Beslutninger:**
+- EURUSD og SP500 var ikke i cot-explorer's coverage, så compare-
+  overlap forblir 7. Verdien er ikke obs-vindu-overlap men
+  engine-validering på FX og bredere equity (asset-class-bredde).
+- SP500 cot_contract er "E-MINI S&P 500 STOCK INDEX" (ikke "E-MINI
+  S&P 500" eller "STOCK INDEX (MINI)"). CFTC har flere varianter;
+  valgte den eldste/mest stabile.
+- Threshold-bump 0.5 → 0.8 ikke 1.0 fordi vi vil fortsatt fange
+  systemiske bugs (f.eks. en regresjon der alle bedrock-grades
+  plutselig kollapser til C).
 
 ### 2026-04-26 — Session 80: Sub-fase 12.5+ — BRL driver + Nasdaq + compare-fix (LUKKET)
 
