@@ -89,11 +89,26 @@ families:
         params:
           invert: true  # Gold er safe-haven; høy VIX er bull
   structure:
+    # Sub-fase 12.5 Block A polish session 79: range_position erstatter
+    # sma200_align (sma er trend, ikke structure). 20-dagers range-posisjon
+    # er klassisk struktur-mål: nær top = trend-continuation.
     drivers:
-      - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+      - name: range_position
+        weight: 1.0
+        params:
+          window: 20
+          mode: continuation
   risk:
+    # Sub-fase 12.5 Block A polish session 79: vol_regime erstatter
+    # sma200_align (sma har null risk-info). ATR(14)-percentil over 252
+    # dager. Høy vol = trade-friendly miljø (trend-tolkning).
     drivers:
-      - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+      - name: vol_regime
+        weight: 1.0
+        params:
+          period: 14
+          lookback: 252
+          mode: high_is_bull
   analog:
     # K-NN over historiske dim-verdier per § 6.5 (Fase 10 ADR-005).
     # Bruker dim som faktisk er backfilt: real_yield, dxy, cot mm-pct.
