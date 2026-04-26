@@ -36,7 +36,13 @@ DEFAULT_BOT_LOG = Path.home() / "scalp_edge" / "bot.log"
 DEFAULT_PIPELINE_LOG = Path("logs/pipeline.log")
 
 # Heuristikk-terskler
-_GRADE_DIFF_RATIO_FAIL = 0.5  # > 50 % grade-endring → fail
+# Sub-fase 12.5+ session 81: bumpet fra 0.5 til 0.8.
+# Rationale: bedrock er by design strengere enn cot-explorer (real drivers
+# vs placeholders, kalibrerte grade-terskler). 50-70 % grade-endring er
+# forventet under obs-vinduet og ikke en feil. > 80 % er fortsatt en
+# meningsfull terskel som flagger systemiske problemer (f.eks. en
+# regresjon der bedrock plutselig graderer alt som C).
+_GRADE_DIFF_RATIO_FAIL = 0.8
 _PIPELINE_LOG_TAIL_LINES = 1000
 _BOT_LOG_TAIL_LINES = 5000
 

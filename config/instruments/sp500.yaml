@@ -1,0 +1,86 @@
+# S&P 500 — financial instrument (indices)
+# Sub-fase 12.5+ session 81: 10. instrument. Bredere equity-coverage
+# (Nasdaq er tech-tung; SP500 er bredere markedsbarometer).
+
+inherits: family_financial
+
+instrument:
+  id: SP500
+  asset_class: indices
+  ticker: ES
+  cfd_ticker: SPX500
+  yahoo_ticker: ES=F
+  cot_contract: "E-MINI S&P 500 STOCK INDEX - CHICAGO MERCANTILE EXCHANGE"
+  cot_report: legacy
+  fred_series_ids:
+    - DGS10
+    - T10YIE
+    - DTWEXBGS
+    - VIXCLS
+
+aggregation: weighted_horizon
+
+horizons:
+  SCALP:
+    family_weights: {trend: 1.2, positioning: 0.5, macro: 0.8, structure: 1.3, risk: 0.8, analog: 0.3}
+    max_score: 4.9
+    min_score_publish: 1.5
+  SWING:
+    family_weights: {trend: 1.0, positioning: 1.0, macro: 1.0, structure: 1.0, risk: 1.0, analog: 0.8}
+    max_score: 5.8
+    min_score_publish: 2.5
+  MAKRO:
+    family_weights: {trend: 0.8, positioning: 1.2, macro: 1.4, structure: 0.5, risk: 0.8, analog: 1.2}
+    max_score: 5.9
+    min_score_publish: 3.5
+
+families:
+  trend:
+    drivers:
+      - {name: sma200_align, weight: 0.5, params: {tf: D1}}
+      - {name: momentum_z, weight: 0.5, params: {window: 20}}
+  positioning:
+    drivers:
+      - name: positioning_mm_pct
+        weight: 0.6
+        params: {metric: noncomm_net_pct, lookback_weeks: 52}
+      - name: cot_z_score
+        weight: 0.4
+        params: {metric: noncomm_net_pct, lookback_weeks: 52}
+  macro:
+    # Equity-tolkning identisk Nasdaq men med fokus på rente-følsomhet
+    # (SP500 er bredere, mindre tech-tung). Lavere DGS10-følsomhet
+    # enn Nasdaq men fortsatt risk-on-asset.
+    drivers:
+      - name: real_yield
+        weight: 0.3
+        params: {bull_when: low}
+      - name: dxy_chg5d
+        weight: 0.4
+        params: {bull_when: negative, window: 5}
+      - name: vix_regime
+        weight: 0.3
+        params: {invert: false}  # Lav VIX = bull SP500
+  structure:
+    drivers:
+      - name: range_position
+        weight: 1.0
+        params: {window: 20, mode: continuation}
+  risk:
+    drivers:
+      - name: vol_regime
+        weight: 1.0
+        params: {period: 14, lookback: 252, mode: high_is_bull}
+  analog:
+    drivers:
+      - name: analog_hit_rate
+        weight: 0.5
+        params: {asset_class: indices, k: 5, horizon_days: 30, outcome_threshold_pct: 3.0, min_history_days: 365}
+      - name: analog_avg_return
+        weight: 0.5
+        params: {asset_class: indices, k: 5, horizon_days: 30, min_history_days: 365}
+
+grade_thresholds:
+  A_plus: {min_pct_of_max: 0.75, min_families: 4}
+  A:      {min_pct_of_max: 0.55, min_families: 3}
+  B:      {min_pct_of_max: 0.35, min_families: 2}
