@@ -86,9 +86,22 @@ def test_cron_named_dow_rejected() -> None:
         cron_to_oncalendar("0 3 * * MON")
 
 
-def test_cron_range_in_minute_rejected() -> None:
-    with pytest.raises(CronConversionError, match="range/list"):
-        cron_to_oncalendar("0-30 * * * *")
+def test_cron_range_in_minute_supported() -> None:
+    """Sub-fase 12.5+ session 105: minute/hour-feltene støtter nå range/list."""
+    out = cron_to_oncalendar("0-30 * * * *")
+    assert "00..30" in out
+
+
+def test_cron_hour_list_supported() -> None:
+    """Hour-list `6,18` → `06,18` (kalender-fetcher 06:15+18:15)."""
+    out = cron_to_oncalendar("15 6,18 * * *")
+    assert "06,18:15:00" in out
+
+
+def test_cron_hour_range_supported() -> None:
+    """Hour-range `9-17` → `09..17`."""
+    out = cron_to_oncalendar("0 9-17 * * 1-5")
+    assert "09..17:00:00" in out
 
 
 def test_cron_dow_out_of_range_raises() -> None:

@@ -101,11 +101,20 @@ def _reject_unsupported(value: str, name: str, expr: str) -> None:
 
 
 def _field_to_systemd_time(value: str, *, field: str) -> str:
-    """Konverter minute/hour-felt: `*` → `*`, tall → nullpadded tall."""
+    """Konverter minute/hour-felt: `*` → `*`, tall → nullpadded tall.
+
+    Sub-fase 12.5+ session 105: støtter også range (`6-18` → `06..18`)
+    og list (`6,18` → `06,18`) — nødvendig for kalender-fetcher som
+    fyrer både morgen + ettermiddag for å fange forecast/previous-
+    oppdateringer rundt event-publisering.
+    """
     if value == "*":
         return "*"
-    if "," in value or "-" in value:
-        raise CronConversionError(f"range/list i {field}-felt ikke støttet i MVP: {value!r}")
+    if "-" in value:
+        start, end = value.split("-", maxsplit=1)
+        return f"{int(start):02d}..{int(end):02d}"
+    if "," in value:
+        return ",".join(f"{int(p):02d}" for p in value.split(","))
     return f"{int(value):02d}"
 
 
