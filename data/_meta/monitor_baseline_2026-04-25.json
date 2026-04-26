@@ -1,0 +1,60 @@
+{
+  "generated_utc": "2026-04-25T18:20:56.329580+00:00",
+  "overall_ok": false,
+  "checks": [
+    {
+      "name": "fetcher_freshness",
+      "ok": false,
+      "detail": "4 fresh; 1 aging: prices; 1 missing: cot_legacy",
+      "data": {
+        "fresh": [
+          "cot_disaggregated",
+          "enso",
+          "fundamentals",
+          "weather"
+        ],
+        "aging": [
+          "prices"
+        ],
+        "stale": [],
+        "missing": [
+          "cot_legacy"
+        ]
+      }
+    },
+    {
+      "name": "pipeline_log_errors",
+      "ok": true,
+      "detail": "log mangler (logs/pipeline.log) \u2014 ingen feil rapportert",
+      "data": {
+        "errors_found": 0,
+        "log_exists": false
+      }
+    },
+    {
+      "name": "agri_tp_override",
+      "ok": true,
+      "detail": "bot-log mangler (/home/pc/scalp_edge/bot.log) \u2014 ingen overrides rapportert",
+      "data": {
+        "matches": 0,
+        "log_exists": false
+      }
+    },
+    {
+      "name": "signal_diff",
+      "ok": true,
+      "detail": "0 felles, 0 endret, 0 grade-endring (0%)",
+      "data": {
+        "n_old": 12,
+        "n_new": 6,
+        "n_common": 0,
+        "n_only_old": 6,
+        "n_only_new": 6,
+        "n_changed": 0,
+        "n_grade_diff": 0,
+        "grade_change_ratio": 0.0,
+        "grade_diff_ratio_fail_threshold": 0.5
+      }
+    }
+  ]
+}

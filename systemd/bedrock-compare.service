@@ -1,0 +1,16 @@
+# Generert av Block D session 78. Daglig signal-diff bedrock vs cot-explorer.
+# Skriver markdown til data/_meta/compare_<dato>.md.
+[Unit]
+Description=Bedrock compare: daglig signal-diff bedrock vs cot-explorer
+After=network-online.target bedrock-signals-all.service bedrock-monitor.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/pc/bedrock
+ExecStart=/bin/bash -c 'mkdir -p data/_meta && PYTHONPATH=src /home/pc/bedrock/.venv/bin/python scripts/compare_signals_daily.py --output data/_meta/compare_$(date +%%F).md'
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,16 @@
+# Generert av Block D session 78. Daglig pipeline-helse-monitor.
+# Skriver JSON-rapport til data/_meta/monitor_<dato>.json + tekst til journal.
+[Unit]
+Description=Bedrock monitor: daglig pipeline-helse-sjekk
+After=network-online.target bedrock-signals-all.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/pc/bedrock
+ExecStart=/bin/bash -c 'mkdir -p data/_meta && PYTHONPATH=src /home/pc/bedrock/.venv/bin/python scripts/monitor_pipeline.py --report json --output data/_meta/monitor_$(date +%%F).json; PYTHONPATH=src /home/pc/bedrock/.venv/bin/python scripts/monitor_pipeline.py'
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
