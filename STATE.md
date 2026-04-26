@@ -28,8 +28,9 @@
   - **88:** Wire `disease_pressure` + `export_event_active` inn i Coffee + Wheat YAMLs. Coffee yield: weather 70% + disease 30% (coffee rust er historisk yield-trussel). Wheat yield: weather 40% + WASDE 40% + disease 10% + eksport-events 10% (stripe rust + locust + Ukraine corridor). Sample-data fra session 83 er for gammel for default 90-180d lookback; infrastruktur er klar når fersk data kommer. **LUKKET 2026-04-26**.
   - **89:** **BDI auto-fetcher via BDRY ETF (Yahoo) — gratis-løsning på det vi trodde var kommersielt.** Breakwave Dry Bulk Shipping ETF tracker BDI med ~0.9 korrelasjon. 2034 rader 2018-2026 backfilt. Driver bdi_chg30d returnerer score basert på BDRY-prisendring. 4 nye tester. **LUKKET 2026-04-26**.
   - **90:** **Full system-demonstrasjon.** Wire bdi_chg30d inn i 4 agri-YAMLs (Corn/Wheat/Cotton/Soybean cross-familien, sub-vekt 20%). Regenerert signals.json (66 entries × 11 instrumenter). Compare vs cot-explorer (7 felles, 5 grade-endringer). Backtest-validering 12 mnd × 5 instrumenter × 2 horisonter: **Gold 100% hit-rate 90d (12/12). Corn ikke lenger invertert** (var A+ -2.4% i Fase 11, nå normal B/C-distribusjon). Sammendragsrapport: `docs/system_status_2026-04-26.md`. **Systemet er produksjonsklart.** **LUKKET 2026-04-26**.
-  - **91:** **Instrument-utvidelse — 11 → 21 instrumenter.** 10 nye lagt til: Silver, Copper, Platinum (metals), CrudeOil, NaturalGas (energy — NY asset class), Cocoa (softs), GBPUSD, USDJPY, AUDUSD (FX), ETH (crypto). Backfilt prices (4100-4247 bars per inst) + COT (220-851 reports per inst) for alle. 21 YAMLer aktive. 126 signal-entries generert. **LUKKET 2026-04-26**.
-  - **92 (neste):** Wire BDI inn i agri-YAMLs til Cocoa, eller backfill analog_outcomes for ikke-validert instrumenter, eller backtest-valideringen av nye instrumenter.
+  - **91:** **Instrument-utvidelse — 11 → 21 instrumenter.** 10 nye lagt til: Silver, Copper, Platinum (metals), CrudeOil, NaturalGas (energy — NY asset class), Cocoa (softs), GBPUSD, USDJPY, AUDUSD (FX), ETH (crypto). Backfilt prices + COT for alle. **LUKKET 2026-04-26**.
+  - **92:** **Bot-whitelist + Brent.** Brent (OIL BRENT) lagt til som 22. instrument (4071 prices + 220 COT). Ny `config/bot_whitelist.yaml` med 17 bot-godkjente instrumenter + bedrock-id → bot-navn-mapping (Gold→GOLD, CrudeOil→OIL WTI, SP500→SPX500, Nasdaq→US100 etc). Ny `bedrock signals-all --bot-only` kommando filtrerer signals.json til kun whitelist-instrumenter og transformerer instrument-id til bot-navn. Systemd-service kjører nå dobbel ExecStart: full signals.json (alle 22) + bot-only signals_bot.json (kun 17). Cocoa, Copper, Platinum, NaturalGas, BTC, ETH genereres men pushes IKKE til bot. 6 nye tester. **LUKKET 2026-04-26**.
+  - **93 (neste):** Backtest-validering av alle whitelist-instrumenter, eller analog_outcomes-backfill for nye instrumenter, eller branch-protection på main.
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -163,6 +164,84 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-26 — Session 92: Bot-whitelist + Brent (LUKKET)
+
+**Scope:** Bruker rapporterte at bedrock genererte signaler for
+instrumenter (BTC, ETH, Copper, Platinum, NaturalGas, Cocoa) som
+ikke står i scalp-edge-bot's whitelist. Trengte (a) Brent som
+manglende whitelist-instrument, (b) eksplisitt push-filtrering så
+eksperimentelle instrumenter ikke sendes til bot.
+
+**Endringer (feature-branch `feat/bot-whitelist-and-brent`):**
+
+`config/instruments/brent.yaml` (ny): Financial-instrument med
+yahoo_ticker BZ=F, CFTC contract "BRENT LAST DAY - NEW YORK
+MERCANTILE EXCHANGE", energy asset-class. Backfilt 4071 prices
+(2010-2026) + 220 COT reports.
+
+`config/bot_whitelist.yaml` (ny): 17 instrumenter mapper til
+bot-navn:
+- Metals: Gold→GOLD, Silver→SILVER
+- Energy: CrudeOil→"OIL WTI", Brent→"OIL BRENT"
+- Indices: SP500→SPX500, Nasdaq→US100
+- FX (4): EURUSD/USDJPY/GBPUSD/AUDUSD (1:1)
+- Agri (7): Corn/Wheat/Soybean/Coffee/Cotton/Sugar/Cocoa (1:1)
+
+Ikke i whitelist (genereres men ikke sendes til bot): Copper,
+Platinum, NaturalGas, BTC, ETH.
+
+`src/bedrock/cli/signals_all.py`:
+- `_load_bot_whitelist()`: laster YAML, returnerer dict[bedrock-id,
+  bot-name]. Defensive feilmeldinger ved manglende fil eller
+  fraværende `mapping:`-key.
+- `--bot-only` flag: filtrerer instruments-liste til kun whitelist-
+  matches og setter `entry["instrument"] = bot_name` i output.
+- `--whitelist` flag: konfigurerbar path (default
+  `config/bot_whitelist.yaml`).
+
+`tests/unit/test_signals_all_bot_whitelist.py` (ny, 6 tester):
+- Whitelist-loading happy path
+- Manglende fil → ClickException
+- Manglende `mapping:`-key → ClickException
+- Tom YAML → ClickException
+- Numeriske verdier coerced til str
+- Repo-faktiske whitelist.yaml er valid + har forventet mapping
+
+`systemd/bedrock-signals-all.service`: To `ExecStart`-linjer
+(systemd kjører dem sekvensielt for `Type=oneshot`):
+1. `bedrock signals-all` → data/signals.json (alle 22 inst)
+2. `bedrock signals-all --bot-only --output data/signals_bot.json`
+   → kun whitelist (17 inst, bot-navn)
+
+Service installert via NOPASSWD-sudo + `daemon-reload`.
+
+**Verifisering:**
+
+```
+bedrock signals-all --bot-only --output /tmp/signals_bot.json
+Wrote 102 entries from 17/17 instruments
+
+Unique instrument-names:
+  AUDUSD, Cocoa, Coffee, Corn, Cotton, EURUSD, GBPUSD, GOLD,
+  OIL BRENT, OIL WTI, SILVER, SPX500, Soybean, Sugar, US100,
+  USDJPY, Wheat
+```
+
+22 totalt YAMLer; 17 i bot-output (5 eksperimentelle filtrert ut).
+Bot-navn matcher scalp-edge-bot's `VALID_INSTRUMENTS`.
+
+**Beslutninger:**
+- Whitelist + mapping i én YAML (ikke separate filer) — én kilde,
+  enkel review.
+- Filtreringen skjer på CLI-nivå, ikke i bot-kode. Bot trenger
+  ikke endring; bedrock-siden kontrollerer hva som sendes.
+- Beholdt eksperimentelle instrumenter (Copper, BTC etc.) i
+  data/signals.json for compare/UI-bruk. Kun bot-push er begrenset.
+- `cfd_ticker`-feltet i YAMLer redundant nå, men beholdt for
+  bakoverkompatibilitet og fremtidig CFD-broker-integrasjon.
+
+
 
 ### 2026-04-26 — Session 91: Instrument-utvidelse 11 → 21 (LUKKET)
 

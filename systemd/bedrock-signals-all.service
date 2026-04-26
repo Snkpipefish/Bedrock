@@ -9,7 +9,12 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=/home/pc/bedrock
+# Generer to filer:
+#   data/signals.json     — alle 22 instrumenter (for compare/UI)
+#   data/signals_bot.json — kun whitelist-instrumenter med bot-navn
+#                           (kun denne pushes til scalp-edge-bot)
 ExecStart=/home/pc/bedrock/.venv/bin/bedrock signals-all
+ExecStart=/home/pc/bedrock/.venv/bin/bedrock signals-all --bot-only --output data/signals_bot.json
 StandardOutput=journal
 StandardError=journal
 
