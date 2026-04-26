@@ -26,6 +26,7 @@ from bedrock.config.instruments import (
     load_instrument_config,
 )
 from bedrock.engine.engine import AgriRules, Engine, FinancialRules, GroupResult
+from bedrock.setups.generator import Direction
 
 DEFAULT_INSTRUMENTS_DIR = Path("config/instruments")
 
@@ -42,6 +43,7 @@ def score_instrument(
     instruments_dir: Path | str | None = None,
     defaults_dir: Path | str | None = None,
     engine: Engine | None = None,
+    direction: Direction = Direction.BUY,
 ) -> GroupResult:
     """Last `config/instruments/<id>.yaml` og scoring via Engine.
 
@@ -53,6 +55,8 @@ def score_instrument(
     - `instruments_dir`: default `config/instruments/`.
     - `defaults_dir`: default `config/defaults/` (brukt til `inherits:`).
     - `engine`: valgfri eksplisitt Engine-instans (default ny tom).
+    - `direction`: BUY (default) eller SELL — propageres til Engine.score
+      for ADR-006 direction-asymmetric scoring.
 
     Reiser `OrchestratorError` ved manglende YAML, mismatch mellom
     rules-type og horisont-arg, eller ukjent horisont. Pydantic-
@@ -70,7 +74,7 @@ def score_instrument(
     # Engine tar det kanoniske instrument-ID-et fra YAML (ikke request-
     # strengen) — gir konsistens i GroupResult.instrument uansett om
     # caller brukte "gold" eller "Gold"
-    return eng.score(cfg.instrument.id, store, cfg.rules, horizon=horizon)
+    return eng.score(cfg.instrument.id, store, cfg.rules, horizon=horizon, direction=direction)
 
 
 def _find_yaml(instrument_id: str, instruments_dir: Path) -> Path:

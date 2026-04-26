@@ -10,8 +10,8 @@
     "published": false,
     "setup": {
       "setup_id": "8a69313f2fbf",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "AUDUSD",
         "direction": "buy",
@@ -139,21 +139,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "AUDUSD",
     "direction": "sell",
     "horizon": "makro",
-    "score": 3.455782557451082,
-    "grade": "A",
+    "score": 2.5187194345807913,
+    "grade": "B",
     "max_score": 5.8,
     "min_score_publish": 3.5,
     "published": false,
     "setup": {
       "setup_id": "ff1aad9b96c6",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "AUDUSD",
         "direction": "sell",
@@ -177,73 +178,73 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.8,
+        "score": 0.2,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
-            "value": 0.6,
+            "value": 0.4,
             "weight": 0.5,
-            "contribution": 0.3
+            "contribution": 0.2
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.931,
+        "score": 0.06899999999999999,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.885,
+            "value": 0.11499999999999999,
             "weight": 0.6,
-            "contribution": 0.531
+            "contribution": 0.06899999999999999
           },
           {
             "name": "cot_z_score",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.4,
-            "contribution": 0.4
+            "contribution": 0.0
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.6000000000000001,
+        "score": 0.39999999999999997,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.3,
-            "contribution": 0.075
+            "contribution": 0.22499999999999998
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           },
           {
             "name": "vix_regime",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.2,
-            "contribution": 0.15000000000000002
+            "contribution": 0.05
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.82266312287029,
+        "score": 0.17733687712971002,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.82266312287029,
+            "value": 0.17733687712971002,
             "weight": 1.0,
-            "contribution": 0.82266312287029
+            "contribution": 0.17733687712971002
           }
         ]
       },
@@ -261,25 +262,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "AUDUSD",
@@ -292,8 +294,8 @@
     "published": true,
     "setup": {
       "setup_id": "b8bfa24881fe",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "AUDUSD",
         "direction": "buy",
@@ -424,21 +426,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "AUDUSD",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 3.482213055747313,
-    "grade": "A",
+    "score": 1.5922889362845591,
+    "grade": "C",
     "max_score": 4.9,
     "min_score_publish": 1.5,
     "published": true,
     "setup": {
       "setup_id": "59c6ba31c7d0",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "AUDUSD",
         "direction": "sell",
@@ -467,73 +470,73 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.8,
+        "score": 0.2,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
-            "value": 0.6,
+            "value": 0.4,
             "weight": 0.5,
-            "contribution": 0.3
+            "contribution": 0.2
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.931,
+        "score": 0.06899999999999999,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.885,
+            "value": 0.11499999999999999,
             "weight": 0.6,
-            "contribution": 0.531
+            "contribution": 0.06899999999999999
           },
           {
             "name": "cot_z_score",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.4,
-            "contribution": 0.4
+            "contribution": 0.0
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.6000000000000001,
+        "score": 0.39999999999999997,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.3,
-            "contribution": 0.075
+            "contribution": 0.22499999999999998
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           },
           {
             "name": "vix_regime",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.2,
-            "contribution": 0.15000000000000002
+            "contribution": 0.05
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.82266312287029,
+        "score": 0.17733687712971002,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.82266312287029,
+            "value": 0.17733687712971002,
             "weight": 1.0,
-            "contribution": 0.82266312287029
+            "contribution": 0.17733687712971002
           }
         ]
       },
@@ -551,25 +554,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "AUDUSD",
@@ -688,21 +692,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "AUDUSD",
     "direction": "sell",
     "horizon": "swing",
-    "score": 3.7899977842248718,
-    "grade": "A",
+    "score": 2.2426715384842915,
+    "grade": "B",
     "max_score": 5.8,
     "min_score_publish": 2.5,
-    "published": true,
+    "published": false,
     "setup": {
       "setup_id": "91294c95aee0",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "AUDUSD",
         "direction": "sell",
@@ -730,73 +735,73 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.8,
+        "score": 0.2,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
-            "value": 0.6,
+            "value": 0.4,
             "weight": 0.5,
-            "contribution": 0.3
+            "contribution": 0.2
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.931,
+        "score": 0.06899999999999999,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.885,
+            "value": 0.11499999999999999,
             "weight": 0.6,
-            "contribution": 0.531
+            "contribution": 0.06899999999999999
           },
           {
             "name": "cot_z_score",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.4,
-            "contribution": 0.4
+            "contribution": 0.0
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.6000000000000001,
+        "score": 0.39999999999999997,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.3,
-            "contribution": 0.075
+            "contribution": 0.22499999999999998
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           },
           {
             "name": "vix_regime",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.2,
-            "contribution": 0.15000000000000002
+            "contribution": 0.05
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.82266312287029,
+        "score": 0.17733687712971002,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.82266312287029,
+            "value": 0.17733687712971002,
             "weight": 1.0,
-            "contribution": 0.82266312287029
+            "contribution": 0.17733687712971002
           }
         ]
       },
@@ -814,25 +819,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "OIL BRENT",
@@ -845,8 +851,8 @@
     "published": false,
     "setup": {
       "setup_id": "c0344c475848",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Brent",
         "direction": "buy",
@@ -974,21 +980,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "energy"
   },
   {
     "instrument": "OIL BRENT",
     "direction": "sell",
     "horizon": "makro",
-    "score": 2.877488548908924,
-    "grade": "B",
+    "score": 3.675897905274343,
+    "grade": "A",
     "max_score": 5.9,
     "min_score_publish": 3.5,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "3a5179214f2c",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Brent",
         "direction": "sell",
@@ -1014,31 +1021,31 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.65,
+        "score": 0.35,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
-            "value": 0.3,
+            "value": 0.7,
             "weight": 0.5,
-            "contribution": 0.15
+            "contribution": 0.35
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.5228,
+        "score": 0.47719999999999996,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.538,
+            "value": 0.46199999999999997,
             "weight": 0.6,
-            "contribution": 0.32280000000000003
+            "contribution": 0.27719999999999995
           },
           {
             "name": "cot_z_score",
@@ -1054,33 +1061,33 @@
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.2,
-            "contribution": 0.05
+            "contribution": 0.15000000000000002
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           },
           {
             "name": "vix_regime",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.3,
-            "contribution": 0.075
+            "contribution": 0.22499999999999998
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.39319064363458067,
+        "score": 0.6068093563654193,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.39319064363458067,
+            "value": 0.6068093563654193,
             "weight": 1.0,
-            "contribution": 0.39319064363458067
+            "contribution": 0.6068093563654193
           }
         ]
       },
@@ -1098,25 +1105,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "energy"
   },
   {
     "instrument": "OIL BRENT",
@@ -1129,8 +1137,8 @@
     "published": true,
     "setup": {
       "setup_id": "ecd512ad2749",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Brent",
         "direction": "buy",
@@ -1263,21 +1271,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "energy"
   },
   {
     "instrument": "OIL BRENT",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 2.6792410638165887,
-    "grade": "B",
+    "score": 2.8741453903666785,
+    "grade": "A",
     "max_score": 4.9,
     "min_score_publish": 1.5,
     "published": true,
     "setup": {
       "setup_id": "db16f77d0b8e",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Brent",
         "direction": "sell",
@@ -1308,31 +1317,31 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.65,
+        "score": 0.35,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
-            "value": 0.3,
+            "value": 0.7,
             "weight": 0.5,
-            "contribution": 0.15
+            "contribution": 0.35
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.5228,
+        "score": 0.47719999999999996,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.538,
+            "value": 0.46199999999999997,
             "weight": 0.6,
-            "contribution": 0.32280000000000003
+            "contribution": 0.27719999999999995
           },
           {
             "name": "cot_z_score",
@@ -1348,33 +1357,33 @@
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.2,
-            "contribution": 0.05
+            "contribution": 0.15000000000000002
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           },
           {
             "name": "vix_regime",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.3,
-            "contribution": 0.075
+            "contribution": 0.22499999999999998
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.39319064363458067,
+        "score": 0.6068093563654193,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.39319064363458067,
+            "value": 0.6068093563654193,
             "weight": 1.0,
-            "contribution": 0.39319064363458067
+            "contribution": 0.6068093563654193
           }
         ]
       },
@@ -1392,25 +1401,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "energy"
   },
   {
     "instrument": "OIL BRENT",
@@ -1529,14 +1539,15 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "energy"
   },
   {
     "instrument": "OIL BRENT",
     "direction": "sell",
     "horizon": "swing",
-    "score": 3.0789171774991226,
-    "grade": "B",
+    "score": 3.5378158902299615,
+    "grade": "A",
     "max_score": 5.8,
     "min_score_publish": 2.5,
     "published": false,
@@ -1546,31 +1557,31 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.65,
+        "score": 0.35,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
-            "value": 0.3,
+            "value": 0.7,
             "weight": 0.5,
-            "contribution": 0.15
+            "contribution": 0.35
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.5228,
+        "score": 0.47719999999999996,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.538,
+            "value": 0.46199999999999997,
             "weight": 0.6,
-            "contribution": 0.32280000000000003
+            "contribution": 0.27719999999999995
           },
           {
             "name": "cot_z_score",
@@ -1586,33 +1597,33 @@
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.2,
-            "contribution": 0.05
+            "contribution": 0.15000000000000002
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           },
           {
             "name": "vix_regime",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.3,
-            "contribution": 0.075
+            "contribution": 0.22499999999999998
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.39319064363458067,
+        "score": 0.6068093563654193,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.39319064363458067,
+            "value": 0.6068093563654193,
             "weight": 1.0,
-            "contribution": 0.39319064363458067
+            "contribution": 0.6068093563654193
           }
         ]
       },
@@ -1630,25 +1641,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "energy"
   },
   {
     "instrument": "Cocoa",
@@ -1661,8 +1673,8 @@
     "published": false,
     "setup": {
       "setup_id": "3ae143d12a09",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Cocoa",
         "direction": "buy",
@@ -1774,21 +1786,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Cocoa",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 5.4915,
-    "grade": "C",
+    "score": 10.5085,
+    "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "67ffb68c3a91",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Cocoa",
         "direction": "sell",
@@ -1816,37 +1829,37 @@
     "families": {
       "outlook": {
         "name": "outlook",
-        "score": 0.7,
+        "score": 0.30000000000000004,
         "drivers": [
           {
             "name": "seasonal_stage",
-            "value": 0.7,
+            "value": 0.30000000000000004,
             "weight": 1.0,
-            "contribution": 0.7
+            "contribution": 0.30000000000000004
           }
         ]
       },
       "yield": {
         "name": "yield",
-        "score": 0.0903,
+        "score": 0.9097,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.0903,
+            "value": 0.9097,
             "weight": 1.0,
-            "contribution": 0.0903
+            "contribution": 0.9097
           }
         ]
       },
       "weather": {
         "name": "weather",
-        "score": 0.0903,
+        "score": 0.9097,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.0903,
+            "value": 0.9097,
             "weight": 1.0,
-            "contribution": 0.0903
+            "contribution": 0.9097
           }
         ]
       },
@@ -1864,43 +1877,44 @@
       },
       "cross": {
         "name": "cross",
-        "score": 0.27,
+        "score": 0.7300000000000001,
         "drivers": [
           {
             "name": "dxy_chg5d",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.8,
-            "contribution": 0.2
+            "contribution": 0.6000000000000001
           },
           {
             "name": "bdi_chg30d",
-            "value": 0.35,
+            "value": 0.65,
             "weight": 0.2,
-            "contribution": 0.06999999999999999
+            "contribution": 0.13
           }
         ]
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Cocoa",
@@ -1913,8 +1927,8 @@
     "published": false,
     "setup": {
       "setup_id": "aeb8b647dc5d",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Cocoa",
         "direction": "buy",
@@ -2027,21 +2041,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Cocoa",
     "direction": "sell",
     "horizon": "swing",
-    "score": 5.4915,
-    "grade": "C",
+    "score": 10.5085,
+    "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "918bc859fa35",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Cocoa",
         "direction": "sell",
@@ -2068,37 +2083,37 @@
     "families": {
       "outlook": {
         "name": "outlook",
-        "score": 0.7,
+        "score": 0.30000000000000004,
         "drivers": [
           {
             "name": "seasonal_stage",
-            "value": 0.7,
+            "value": 0.30000000000000004,
             "weight": 1.0,
-            "contribution": 0.7
+            "contribution": 0.30000000000000004
           }
         ]
       },
       "yield": {
         "name": "yield",
-        "score": 0.0903,
+        "score": 0.9097,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.0903,
+            "value": 0.9097,
             "weight": 1.0,
-            "contribution": 0.0903
+            "contribution": 0.9097
           }
         ]
       },
       "weather": {
         "name": "weather",
-        "score": 0.0903,
+        "score": 0.9097,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.0903,
+            "value": 0.9097,
             "weight": 1.0,
-            "contribution": 0.0903
+            "contribution": 0.9097
           }
         ]
       },
@@ -2116,43 +2131,44 @@
       },
       "cross": {
         "name": "cross",
-        "score": 0.27,
+        "score": 0.7300000000000001,
         "drivers": [
           {
             "name": "dxy_chg5d",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.8,
-            "contribution": 0.2
+            "contribution": 0.6000000000000001
           },
           {
             "name": "bdi_chg30d",
-            "value": 0.35,
+            "value": 0.65,
             "weight": 0.2,
-            "contribution": 0.06999999999999999
+            "contribution": 0.13
           }
         ]
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Cocoa",
@@ -2165,8 +2181,8 @@
     "published": false,
     "setup": {
       "setup_id": "cb58f433e5db",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Cocoa",
         "direction": "buy",
@@ -2276,21 +2292,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Cocoa",
     "direction": "sell",
     "horizon": "makro",
-    "score": 5.4915,
-    "grade": "C",
+    "score": 10.5085,
+    "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "625a908665a4",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Cocoa",
         "direction": "sell",
@@ -2313,37 +2330,37 @@
     "families": {
       "outlook": {
         "name": "outlook",
-        "score": 0.7,
+        "score": 0.30000000000000004,
         "drivers": [
           {
             "name": "seasonal_stage",
-            "value": 0.7,
+            "value": 0.30000000000000004,
             "weight": 1.0,
-            "contribution": 0.7
+            "contribution": 0.30000000000000004
           }
         ]
       },
       "yield": {
         "name": "yield",
-        "score": 0.0903,
+        "score": 0.9097,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.0903,
+            "value": 0.9097,
             "weight": 1.0,
-            "contribution": 0.0903
+            "contribution": 0.9097
           }
         ]
       },
       "weather": {
         "name": "weather",
-        "score": 0.0903,
+        "score": 0.9097,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.0903,
+            "value": 0.9097,
             "weight": 1.0,
-            "contribution": 0.0903
+            "contribution": 0.9097
           }
         ]
       },
@@ -2361,43 +2378,44 @@
       },
       "cross": {
         "name": "cross",
-        "score": 0.27,
+        "score": 0.7300000000000001,
         "drivers": [
           {
             "name": "dxy_chg5d",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.8,
-            "contribution": 0.2
+            "contribution": 0.6000000000000001
           },
           {
             "name": "bdi_chg30d",
-            "value": 0.35,
+            "value": 0.65,
             "weight": 0.2,
-            "contribution": 0.06999999999999999
+            "contribution": 0.13
           }
         ]
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Coffee",
@@ -2410,8 +2428,8 @@
     "published": false,
     "setup": {
       "setup_id": "15ae7b135cdb",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Coffee",
         "direction": "buy",
@@ -2526,21 +2544,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Coffee",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 4.8202300000000005,
-    "grade": "C",
+    "score": 11.17977,
+    "grade": "A+",
     "max_score": 16.0,
     "min_score_publish": 6.0,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "0f11acf694f2",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Coffee",
         "direction": "sell",
@@ -2571,25 +2590,25 @@
     "families": {
       "outlook": {
         "name": "outlook",
-        "score": 0.4,
+        "score": 0.6,
         "drivers": [
           {
             "name": "seasonal_stage",
-            "value": 0.4,
+            "value": 0.6,
             "weight": 1.0,
-            "contribution": 0.4
+            "contribution": 0.6
           }
         ]
       },
       "yield": {
         "name": "yield",
-        "score": 0.21321,
+        "score": 0.78679,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.0903,
+            "value": 0.9097,
             "weight": 0.7,
-            "contribution": 0.06321
+            "contribution": 0.63679
           },
           {
             "name": "disease_pressure",
@@ -2601,13 +2620,13 @@
       },
       "weather": {
         "name": "weather",
-        "score": 0.0903,
+        "score": 0.9097,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.0903,
+            "value": 0.9097,
             "weight": 1.0,
-            "contribution": 0.0903
+            "contribution": 0.9097
           }
         ]
       },
@@ -2637,25 +2656,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Coffee",
@@ -2668,8 +2688,8 @@
     "published": false,
     "setup": {
       "setup_id": "207ac4d4907e",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Coffee",
         "direction": "buy",
@@ -2782,14 +2802,15 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Coffee",
     "direction": "sell",
     "horizon": "swing",
-    "score": 4.8202300000000005,
-    "grade": "C",
+    "score": 11.17977,
+    "grade": "A+",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": false,
@@ -2799,25 +2820,25 @@
     "families": {
       "outlook": {
         "name": "outlook",
-        "score": 0.4,
+        "score": 0.6,
         "drivers": [
           {
             "name": "seasonal_stage",
-            "value": 0.4,
+            "value": 0.6,
             "weight": 1.0,
-            "contribution": 0.4
+            "contribution": 0.6
           }
         ]
       },
       "yield": {
         "name": "yield",
-        "score": 0.21321,
+        "score": 0.78679,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.0903,
+            "value": 0.9097,
             "weight": 0.7,
-            "contribution": 0.06321
+            "contribution": 0.63679
           },
           {
             "name": "disease_pressure",
@@ -2829,13 +2850,13 @@
       },
       "weather": {
         "name": "weather",
-        "score": 0.0903,
+        "score": 0.9097,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.0903,
+            "value": 0.9097,
             "weight": 1.0,
-            "contribution": 0.0903
+            "contribution": 0.9097
           }
         ]
       },
@@ -2865,25 +2886,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Coffee",
@@ -2896,8 +2918,8 @@
     "published": false,
     "setup": {
       "setup_id": "465e0d69acf3",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Coffee",
         "direction": "buy",
@@ -3007,21 +3029,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Coffee",
     "direction": "sell",
     "horizon": "makro",
-    "score": 4.8202300000000005,
-    "grade": "C",
+    "score": 11.17977,
+    "grade": "A+",
     "max_score": 16.0,
     "min_score_publish": 6.0,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "7d3c943f8050",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Coffee",
         "direction": "sell",
@@ -3047,25 +3070,25 @@
     "families": {
       "outlook": {
         "name": "outlook",
-        "score": 0.4,
+        "score": 0.6,
         "drivers": [
           {
             "name": "seasonal_stage",
-            "value": 0.4,
+            "value": 0.6,
             "weight": 1.0,
-            "contribution": 0.4
+            "contribution": 0.6
           }
         ]
       },
       "yield": {
         "name": "yield",
-        "score": 0.21321,
+        "score": 0.78679,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.0903,
+            "value": 0.9097,
             "weight": 0.7,
-            "contribution": 0.06321
+            "contribution": 0.63679
           },
           {
             "name": "disease_pressure",
@@ -3077,13 +3100,13 @@
       },
       "weather": {
         "name": "weather",
-        "score": 0.0903,
+        "score": 0.9097,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.0903,
+            "value": 0.9097,
             "weight": 1.0,
-            "contribution": 0.0903
+            "contribution": 0.9097
           }
         ]
       },
@@ -3113,25 +3136,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Corn",
@@ -3144,8 +3168,8 @@
     "published": false,
     "setup": {
       "setup_id": "0d0c1eb594ff",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Corn",
         "direction": "buy",
@@ -3316,21 +3340,22 @@
           "max_drawdown_pct": -6.432748538011701
         }
       ]
-    }
+    },
+    "asset_class": "grains"
   },
   {
     "instrument": "Corn",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 6.856,
-    "grade": "C",
+    "score": 11.144,
+    "grade": "A",
     "max_score": 20.0,
     "min_score_publish": 7.0,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "368004fb1cf2",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Corn",
         "direction": "sell",
@@ -3360,37 +3385,37 @@
     "families": {
       "outlook": {
         "name": "outlook",
-        "score": 0.6,
+        "score": 0.4,
         "drivers": [
           {
             "name": "seasonal_stage",
-            "value": 0.6,
+            "value": 0.4,
             "weight": 1.0,
-            "contribution": 0.6
+            "contribution": 0.4
           }
         ]
       },
       "yield": {
         "name": "yield",
-        "score": 0.1032,
+        "score": 0.8968,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.1032,
+            "value": 0.8968,
             "weight": 1.0,
-            "contribution": 0.1032
+            "contribution": 0.8968
           }
         ]
       },
       "weather": {
         "name": "weather",
-        "score": 0.1032,
+        "score": 0.8968,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.1032,
+            "value": 0.8968,
             "weight": 1.0,
-            "contribution": 0.1032
+            "contribution": 0.8968
           }
         ]
       },
@@ -3420,42 +3445,42 @@
       },
       "cross": {
         "name": "cross",
-        "score": 0.67,
+        "score": 0.33,
         "drivers": [
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.8,
-            "contribution": 0.6000000000000001
+            "contribution": 0.2
           },
           {
             "name": "bdi_chg30d",
-            "value": 0.35,
+            "value": 0.65,
             "weight": 0.2,
-            "contribution": 0.06999999999999999
+            "contribution": 0.13
           }
         ]
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 6,
+    "active_families": 7,
     "analog": {
       "asset_class": "grains",
       "horizon_days": 30,
@@ -3501,7 +3526,8 @@
           "max_drawdown_pct": -6.432748538011701
         }
       ]
-    }
+    },
+    "asset_class": "grains"
   },
   {
     "instrument": "Corn",
@@ -3514,8 +3540,8 @@
     "published": false,
     "setup": {
       "setup_id": "539caf06b933",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Corn",
         "direction": "buy",
@@ -3684,21 +3710,22 @@
           "max_drawdown_pct": -6.432748538011701
         }
       ]
-    }
+    },
+    "asset_class": "grains"
   },
   {
     "instrument": "Corn",
     "direction": "sell",
     "horizon": "swing",
-    "score": 6.856,
-    "grade": "C",
+    "score": 11.144,
+    "grade": "A",
     "max_score": 20.0,
     "min_score_publish": 7.0,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "43ea6126bbda",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Corn",
         "direction": "sell",
@@ -3726,37 +3753,37 @@
     "families": {
       "outlook": {
         "name": "outlook",
-        "score": 0.6,
+        "score": 0.4,
         "drivers": [
           {
             "name": "seasonal_stage",
-            "value": 0.6,
+            "value": 0.4,
             "weight": 1.0,
-            "contribution": 0.6
+            "contribution": 0.4
           }
         ]
       },
       "yield": {
         "name": "yield",
-        "score": 0.1032,
+        "score": 0.8968,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.1032,
+            "value": 0.8968,
             "weight": 1.0,
-            "contribution": 0.1032
+            "contribution": 0.8968
           }
         ]
       },
       "weather": {
         "name": "weather",
-        "score": 0.1032,
+        "score": 0.8968,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.1032,
+            "value": 0.8968,
             "weight": 1.0,
-            "contribution": 0.1032
+            "contribution": 0.8968
           }
         ]
       },
@@ -3786,42 +3813,42 @@
       },
       "cross": {
         "name": "cross",
-        "score": 0.67,
+        "score": 0.33,
         "drivers": [
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.8,
-            "contribution": 0.6000000000000001
+            "contribution": 0.2
           },
           {
             "name": "bdi_chg30d",
-            "value": 0.35,
+            "value": 0.65,
             "weight": 0.2,
-            "contribution": 0.06999999999999999
+            "contribution": 0.13
           }
         ]
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 6,
+    "active_families": 7,
     "analog": {
       "asset_class": "grains",
       "horizon_days": 30,
@@ -3867,7 +3894,8 @@
           "max_drawdown_pct": -6.432748538011701
         }
       ]
-    }
+    },
+    "asset_class": "grains"
   },
   {
     "instrument": "Corn",
@@ -3880,8 +3908,8 @@
     "published": false,
     "setup": {
       "setup_id": "4bd0d7305574",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Corn",
         "direction": "buy",
@@ -4048,21 +4076,22 @@
           "max_drawdown_pct": -6.432748538011701
         }
       ]
-    }
+    },
+    "asset_class": "grains"
   },
   {
     "instrument": "Corn",
     "direction": "sell",
     "horizon": "makro",
-    "score": 6.856,
-    "grade": "C",
+    "score": 11.144,
+    "grade": "A",
     "max_score": 20.0,
     "min_score_publish": 7.0,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "e91154dd0c19",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Corn",
         "direction": "sell",
@@ -4087,37 +4116,37 @@
     "families": {
       "outlook": {
         "name": "outlook",
-        "score": 0.6,
+        "score": 0.4,
         "drivers": [
           {
             "name": "seasonal_stage",
-            "value": 0.6,
+            "value": 0.4,
             "weight": 1.0,
-            "contribution": 0.6
+            "contribution": 0.4
           }
         ]
       },
       "yield": {
         "name": "yield",
-        "score": 0.1032,
+        "score": 0.8968,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.1032,
+            "value": 0.8968,
             "weight": 1.0,
-            "contribution": 0.1032
+            "contribution": 0.8968
           }
         ]
       },
       "weather": {
         "name": "weather",
-        "score": 0.1032,
+        "score": 0.8968,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.1032,
+            "value": 0.8968,
             "weight": 1.0,
-            "contribution": 0.1032
+            "contribution": 0.8968
           }
         ]
       },
@@ -4147,42 +4176,42 @@
       },
       "cross": {
         "name": "cross",
-        "score": 0.67,
+        "score": 0.33,
         "drivers": [
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.8,
-            "contribution": 0.6000000000000001
+            "contribution": 0.2
           },
           {
             "name": "bdi_chg30d",
-            "value": 0.35,
+            "value": 0.65,
             "weight": 0.2,
-            "contribution": 0.06999999999999999
+            "contribution": 0.13
           }
         ]
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 6,
+    "active_families": 7,
     "analog": {
       "asset_class": "grains",
       "horizon_days": 30,
@@ -4228,7 +4257,8 @@
           "max_drawdown_pct": -6.432748538011701
         }
       ]
-    }
+    },
+    "asset_class": "grains"
   },
   {
     "instrument": "Cotton",
@@ -4241,8 +4271,8 @@
     "published": true,
     "setup": {
       "setup_id": "aa1b46da1e29",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Cotton",
         "direction": "buy",
@@ -4359,21 +4389,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Cotton",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 6.40655,
-    "grade": "B",
+    "score": 9.59345,
+    "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": true,
     "setup": {
       "setup_id": "2b5d3e82ac1d",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Cotton",
         "direction": "sell",
@@ -4412,13 +4443,13 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.36665000000000003,
+        "score": 0.63335,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.2333,
+            "value": 0.7666999999999999,
             "weight": 0.5,
-            "contribution": 0.11665
+            "contribution": 0.38334999999999997
           },
           {
             "name": "wasde_s2u_change",
@@ -4430,13 +4461,13 @@
       },
       "weather": {
         "name": "weather",
-        "score": 0.2333,
+        "score": 0.7666999999999999,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.2333,
+            "value": 0.7666999999999999,
             "weight": 1.0,
-            "contribution": 0.2333
+            "contribution": 0.7666999999999999
           }
         ]
       },
@@ -4454,43 +4485,44 @@
       },
       "cross": {
         "name": "cross",
-        "score": 0.67,
+        "score": 0.33,
         "drivers": [
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.8,
-            "contribution": 0.6000000000000001
+            "contribution": 0.2
           },
           {
             "name": "bdi_chg30d",
-            "value": 0.35,
+            "value": 0.65,
             "weight": 0.2,
-            "contribution": 0.06999999999999999
+            "contribution": 0.13
           }
         ]
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Cotton",
@@ -4503,8 +4535,8 @@
     "published": true,
     "setup": {
       "setup_id": "86981309c8d2",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Cotton",
         "direction": "buy",
@@ -4620,21 +4652,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Cotton",
     "direction": "sell",
     "horizon": "swing",
-    "score": 6.40655,
-    "grade": "B",
+    "score": 9.59345,
+    "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": true,
     "setup": {
       "setup_id": "d9802663e8b5",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Cotton",
         "direction": "sell",
@@ -4674,13 +4707,13 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.36665000000000003,
+        "score": 0.63335,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.2333,
+            "value": 0.7666999999999999,
             "weight": 0.5,
-            "contribution": 0.11665
+            "contribution": 0.38334999999999997
           },
           {
             "name": "wasde_s2u_change",
@@ -4692,13 +4725,13 @@
       },
       "weather": {
         "name": "weather",
-        "score": 0.2333,
+        "score": 0.7666999999999999,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.2333,
+            "value": 0.7666999999999999,
             "weight": 1.0,
-            "contribution": 0.2333
+            "contribution": 0.7666999999999999
           }
         ]
       },
@@ -4716,43 +4749,44 @@
       },
       "cross": {
         "name": "cross",
-        "score": 0.67,
+        "score": 0.33,
         "drivers": [
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.8,
-            "contribution": 0.6000000000000001
+            "contribution": 0.2
           },
           {
             "name": "bdi_chg30d",
-            "value": 0.35,
+            "value": 0.65,
             "weight": 0.2,
-            "contribution": 0.06999999999999999
+            "contribution": 0.13
           }
         ]
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Cotton",
@@ -4765,8 +4799,8 @@
     "published": true,
     "setup": {
       "setup_id": "3cfa32473b01",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Cotton",
         "direction": "buy",
@@ -4880,21 +4914,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Cotton",
     "direction": "sell",
     "horizon": "makro",
-    "score": 6.40655,
-    "grade": "B",
+    "score": 9.59345,
+    "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": true,
     "setup": {
       "setup_id": "d8fdd615cadf",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Cotton",
         "direction": "sell",
@@ -4930,13 +4965,13 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.36665000000000003,
+        "score": 0.63335,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.2333,
+            "value": 0.7666999999999999,
             "weight": 0.5,
-            "contribution": 0.11665
+            "contribution": 0.38334999999999997
           },
           {
             "name": "wasde_s2u_change",
@@ -4948,13 +4983,13 @@
       },
       "weather": {
         "name": "weather",
-        "score": 0.2333,
+        "score": 0.7666999999999999,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.2333,
+            "value": 0.7666999999999999,
             "weight": 1.0,
-            "contribution": 0.2333
+            "contribution": 0.7666999999999999
           }
         ]
       },
@@ -4972,43 +5007,44 @@
       },
       "cross": {
         "name": "cross",
-        "score": 0.67,
+        "score": 0.33,
         "drivers": [
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.8,
-            "contribution": 0.6000000000000001
+            "contribution": 0.2
           },
           {
             "name": "bdi_chg30d",
-            "value": 0.35,
+            "value": 0.65,
             "weight": 0.2,
-            "contribution": 0.06999999999999999
+            "contribution": 0.13
           }
         ]
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "OIL WTI",
@@ -5021,8 +5057,8 @@
     "published": false,
     "setup": {
       "setup_id": "82d28450ea12",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "CrudeOil",
         "direction": "buy",
@@ -5150,21 +5186,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "energy"
   },
   {
     "instrument": "OIL WTI",
     "direction": "sell",
     "horizon": "makro",
-    "score": 2.6258033973835806,
-    "grade": "B",
+    "score": 3.9594555667598454,
+    "grade": "A",
     "max_score": 5.9,
     "min_score_publish": 3.5,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "bf0980f49e85",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "CrudeOil",
         "direction": "sell",
@@ -5188,37 +5225,37 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.65,
+        "score": 0.35,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
-            "value": 0.3,
+            "value": 0.7,
             "weight": 0.5,
-            "contribution": 0.15
+            "contribution": 0.35
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.351,
+        "score": 0.649,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.385,
+            "value": 0.615,
             "weight": 0.6,
-            "contribution": 0.23099999999999998
+            "contribution": 0.369
           },
           {
             "name": "cot_z_score",
-            "value": 0.3,
+            "value": 0.7,
             "weight": 0.4,
-            "contribution": 0.12
+            "contribution": 0.27999999999999997
           }
         ]
       },
@@ -5228,33 +5265,33 @@
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.2,
-            "contribution": 0.05
+            "contribution": 0.15000000000000002
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           },
           {
             "name": "vix_regime",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.3,
-            "contribution": 0.075
+            "contribution": 0.22499999999999998
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.37334783062373544,
+        "score": 0.6266521693762646,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.37334783062373544,
+            "value": 0.6266521693762646,
             "weight": 1.0,
-            "contribution": 0.37334783062373544
+            "contribution": 0.6266521693762646
           }
         ]
       },
@@ -5272,25 +5309,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "energy"
   },
   {
     "instrument": "OIL WTI",
@@ -5303,8 +5341,8 @@
     "published": true,
     "setup": {
       "setup_id": "5557d9dda7d8",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "CrudeOil",
         "direction": "buy",
@@ -5435,21 +5473,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "energy"
   },
   {
     "instrument": "OIL WTI",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 2.5834816618825696,
-    "grade": "B",
+    "score": 3.001777302260857,
+    "grade": "A",
     "max_score": 4.9,
     "min_score_publish": 1.5,
     "published": true,
     "setup": {
       "setup_id": "3ff0483a5443",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "CrudeOil",
         "direction": "sell",
@@ -5478,37 +5517,37 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.65,
+        "score": 0.35,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
-            "value": 0.3,
+            "value": 0.7,
             "weight": 0.5,
-            "contribution": 0.15
+            "contribution": 0.35
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.351,
+        "score": 0.649,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.385,
+            "value": 0.615,
             "weight": 0.6,
-            "contribution": 0.23099999999999998
+            "contribution": 0.369
           },
           {
             "name": "cot_z_score",
-            "value": 0.3,
+            "value": 0.7,
             "weight": 0.4,
-            "contribution": 0.12
+            "contribution": 0.27999999999999997
           }
         ]
       },
@@ -5518,33 +5557,33 @@
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.2,
-            "contribution": 0.05
+            "contribution": 0.15000000000000002
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           },
           {
             "name": "vix_regime",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.3,
-            "contribution": 0.075
+            "contribution": 0.22499999999999998
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.37334783062373544,
+        "score": 0.6266521693762646,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.37334783062373544,
+            "value": 0.6266521693762646,
             "weight": 1.0,
-            "contribution": 0.37334783062373544
+            "contribution": 0.6266521693762646
           }
         ]
       },
@@ -5562,25 +5601,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "energy"
   },
   {
     "instrument": "OIL WTI",
@@ -5699,14 +5739,15 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "energy"
   },
   {
     "instrument": "OIL WTI",
     "direction": "sell",
     "horizon": "swing",
-    "score": 2.8728346832133766,
-    "grade": "B",
+    "score": 3.783739021965906,
+    "grade": "A",
     "max_score": 5.8,
     "min_score_publish": 2.5,
     "published": false,
@@ -5716,37 +5757,37 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.65,
+        "score": 0.35,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
-            "value": 0.3,
+            "value": 0.7,
             "weight": 0.5,
-            "contribution": 0.15
+            "contribution": 0.35
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.351,
+        "score": 0.649,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.385,
+            "value": 0.615,
             "weight": 0.6,
-            "contribution": 0.23099999999999998
+            "contribution": 0.369
           },
           {
             "name": "cot_z_score",
-            "value": 0.3,
+            "value": 0.7,
             "weight": 0.4,
-            "contribution": 0.12
+            "contribution": 0.27999999999999997
           }
         ]
       },
@@ -5756,33 +5797,33 @@
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.2,
-            "contribution": 0.05
+            "contribution": 0.15000000000000002
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           },
           {
             "name": "vix_regime",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.3,
-            "contribution": 0.075
+            "contribution": 0.22499999999999998
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.37334783062373544,
+        "score": 0.6266521693762646,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.37334783062373544,
+            "value": 0.6266521693762646,
             "weight": 1.0,
-            "contribution": 0.37334783062373544
+            "contribution": 0.6266521693762646
           }
         ]
       },
@@ -5800,25 +5841,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "energy"
   },
   {
     "instrument": "EURUSD",
@@ -5831,8 +5873,8 @@
     "published": false,
     "setup": {
       "setup_id": "2cd634a6c654",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "EURUSD",
         "direction": "buy",
@@ -5960,21 +6002,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "EURUSD",
     "direction": "sell",
     "horizon": "makro",
-    "score": 1.897805227175961,
-    "grade": "C",
+    "score": 3.660760509875832,
+    "grade": "A",
     "max_score": 5.8,
     "min_score_publish": 3.5,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "d54f0c247b45",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "EURUSD",
         "direction": "sell",
@@ -5997,73 +6040,73 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.6,
+        "score": 0.4,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 0.6,
+            "value": 0.4,
             "weight": 0.5,
-            "contribution": 0.3
+            "contribution": 0.2
           },
           {
             "name": "momentum_z",
-            "value": 0.6,
+            "value": 0.4,
             "weight": 0.5,
-            "contribution": 0.3
+            "contribution": 0.2
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.0576,
+        "score": 0.9424,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.096,
+            "value": 0.904,
             "weight": 0.6,
-            "contribution": 0.0576
+            "contribution": 0.5424
           },
           {
             "name": "cot_z_score",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.4,
-            "contribution": 0.0
+            "contribution": 0.4
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.55,
+        "score": 0.45000000000000007,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.4,
-            "contribution": 0.1
+            "contribution": 0.30000000000000004
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           },
           {
             "name": "vix_regime",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.1,
-            "contribution": 0.07500000000000001
+            "contribution": 0.025
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.6888047173001287,
+        "score": 0.3111952826998713,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.6888047173001287,
+            "value": 0.3111952826998713,
             "weight": 1.0,
-            "contribution": 0.6888047173001287
+            "contribution": 0.3111952826998713
           }
         ]
       },
@@ -6081,25 +6124,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "EURUSD",
@@ -6112,8 +6156,8 @@
     "published": true,
     "setup": {
       "setup_id": "75927dda0402",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "EURUSD",
         "direction": "buy",
@@ -6243,21 +6287,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "EURUSD",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 2.3735290010160637,
+    "score": 2.2850367360357295,
     "grade": "B",
     "max_score": 4.9,
     "min_score_publish": 1.5,
     "published": true,
     "setup": {
       "setup_id": "755ff4a33fa4",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "EURUSD",
         "direction": "sell",
@@ -6285,73 +6330,73 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.6,
+        "score": 0.4,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 0.6,
+            "value": 0.4,
             "weight": 0.5,
-            "contribution": 0.3
+            "contribution": 0.2
           },
           {
             "name": "momentum_z",
-            "value": 0.6,
+            "value": 0.4,
             "weight": 0.5,
-            "contribution": 0.3
+            "contribution": 0.2
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.0576,
+        "score": 0.9424,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.096,
+            "value": 0.904,
             "weight": 0.6,
-            "contribution": 0.0576
+            "contribution": 0.5424
           },
           {
             "name": "cot_z_score",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.4,
-            "contribution": 0.0
+            "contribution": 0.4
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.55,
+        "score": 0.45000000000000007,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.4,
-            "contribution": 0.1
+            "contribution": 0.30000000000000004
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           },
           {
             "name": "vix_regime",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.1,
-            "contribution": 0.07500000000000001
+            "contribution": 0.025
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.6888047173001287,
+        "score": 0.3111952826998713,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.6888047173001287,
+            "value": 0.3111952826998713,
             "weight": 1.0,
-            "contribution": 0.6888047173001287
+            "contribution": 0.3111952826998713
           }
         ]
       },
@@ -6369,25 +6414,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "EURUSD",
@@ -6400,8 +6446,8 @@
     "published": false,
     "setup": {
       "setup_id": "3f80d00f3ae7",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "EURUSD",
         "direction": "buy",
@@ -6532,21 +6578,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "EURUSD",
     "direction": "sell",
     "horizon": "swing",
-    "score": 2.2454485420013244,
-    "grade": "B",
+    "score": 3.2326391074010665,
+    "grade": "A",
     "max_score": 5.8,
     "min_score_publish": 2.5,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "d61515d760f4",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "EURUSD",
         "direction": "sell",
@@ -6572,73 +6619,73 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.6,
+        "score": 0.4,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 0.6,
+            "value": 0.4,
             "weight": 0.5,
-            "contribution": 0.3
+            "contribution": 0.2
           },
           {
             "name": "momentum_z",
-            "value": 0.6,
+            "value": 0.4,
             "weight": 0.5,
-            "contribution": 0.3
+            "contribution": 0.2
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.0576,
+        "score": 0.9424,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.096,
+            "value": 0.904,
             "weight": 0.6,
-            "contribution": 0.0576
+            "contribution": 0.5424
           },
           {
             "name": "cot_z_score",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.4,
-            "contribution": 0.0
+            "contribution": 0.4
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.55,
+        "score": 0.45000000000000007,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.4,
-            "contribution": 0.1
+            "contribution": 0.30000000000000004
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           },
           {
             "name": "vix_regime",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.1,
-            "contribution": 0.07500000000000001
+            "contribution": 0.025
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.6888047173001287,
+        "score": 0.3111952826998713,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.6888047173001287,
+            "value": 0.3111952826998713,
             "weight": 1.0,
-            "contribution": 0.6888047173001287
+            "contribution": 0.3111952826998713
           }
         ]
       },
@@ -6656,25 +6703,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "GBPUSD",
@@ -6687,8 +6735,8 @@
     "published": false,
     "setup": {
       "setup_id": "6cc9cedf8cda",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "GBPUSD",
         "direction": "buy",
@@ -6816,14 +6864,15 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "GBPUSD",
     "direction": "sell",
     "horizon": "makro",
-    "score": 2.0617398005372003,
-    "grade": "B",
+    "score": 3.396427530140091,
+    "grade": "A",
     "max_score": 5.8,
     "min_score_publish": 3.5,
     "published": false,
@@ -6833,73 +6882,73 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.6,
+        "score": 0.4,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 0.6,
+            "value": 0.4,
             "weight": 0.5,
-            "contribution": 0.3
+            "contribution": 0.2
           },
           {
             "name": "momentum_z",
-            "value": 0.6,
+            "value": 0.4,
             "weight": 0.5,
-            "contribution": 0.3
+            "contribution": 0.2
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.17279999999999998,
+        "score": 0.8271999999999999,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.288,
+            "value": 0.712,
             "weight": 0.6,
-            "contribution": 0.17279999999999998
+            "contribution": 0.42719999999999997
           },
           {
             "name": "cot_z_score",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.4,
-            "contribution": 0.0
+            "contribution": 0.4
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.55,
+        "score": 0.45000000000000007,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.4,
-            "contribution": 0.1
+            "contribution": 0.30000000000000004
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           },
           {
             "name": "vix_regime",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.1,
-            "contribution": 0.07500000000000001
+            "contribution": 0.025
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.8405922703971089,
+        "score": 0.15940772960289107,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.8405922703971089,
+            "value": 0.15940772960289107,
             "weight": 1.0,
-            "contribution": 0.8405922703971089
+            "contribution": 0.15940772960289107
           }
         ]
       },
@@ -6917,25 +6966,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "GBPUSD",
@@ -7054,13 +7104,14 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "GBPUSD",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 2.5782536168548873,
+    "score": 1.9799137138224037,
     "grade": "B",
     "max_score": 4.9,
     "min_score_publish": 1.5,
@@ -7071,73 +7122,73 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.6,
+        "score": 0.4,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 0.6,
+            "value": 0.4,
             "weight": 0.5,
-            "contribution": 0.3
+            "contribution": 0.2
           },
           {
             "name": "momentum_z",
-            "value": 0.6,
+            "value": 0.4,
             "weight": 0.5,
-            "contribution": 0.3
+            "contribution": 0.2
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.17279999999999998,
+        "score": 0.8271999999999999,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.288,
+            "value": 0.712,
             "weight": 0.6,
-            "contribution": 0.17279999999999998
+            "contribution": 0.42719999999999997
           },
           {
             "name": "cot_z_score",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.4,
-            "contribution": 0.0
+            "contribution": 0.4
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.55,
+        "score": 0.45000000000000007,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.4,
-            "contribution": 0.1
+            "contribution": 0.30000000000000004
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           },
           {
             "name": "vix_regime",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.1,
-            "contribution": 0.07500000000000001
+            "contribution": 0.025
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.8405922703971089,
+        "score": 0.15940772960289107,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.8405922703971089,
+            "value": 0.15940772960289107,
             "weight": 1.0,
-            "contribution": 0.8405922703971089
+            "contribution": 0.15940772960289107
           }
         ]
       },
@@ -7155,25 +7206,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "GBPUSD",
@@ -7292,13 +7344,14 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "GBPUSD",
     "direction": "sell",
     "horizon": "swing",
-    "score": 2.4455038241819693,
+    "score": 2.8987192833877513,
     "grade": "B",
     "max_score": 5.8,
     "min_score_publish": 2.5,
@@ -7309,73 +7362,73 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.6,
+        "score": 0.4,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 0.6,
+            "value": 0.4,
             "weight": 0.5,
-            "contribution": 0.3
+            "contribution": 0.2
           },
           {
             "name": "momentum_z",
-            "value": 0.6,
+            "value": 0.4,
             "weight": 0.5,
-            "contribution": 0.3
+            "contribution": 0.2
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.17279999999999998,
+        "score": 0.8271999999999999,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.288,
+            "value": 0.712,
             "weight": 0.6,
-            "contribution": 0.17279999999999998
+            "contribution": 0.42719999999999997
           },
           {
             "name": "cot_z_score",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.4,
-            "contribution": 0.0
+            "contribution": 0.4
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.55,
+        "score": 0.45000000000000007,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.4,
-            "contribution": 0.1
+            "contribution": 0.30000000000000004
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           },
           {
             "name": "vix_regime",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.1,
-            "contribution": 0.07500000000000001
+            "contribution": 0.025
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.8405922703971089,
+        "score": 0.15940772960289107,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.8405922703971089,
+            "value": 0.15940772960289107,
             "weight": 1.0,
-            "contribution": 0.8405922703971089
+            "contribution": 0.15940772960289107
           }
         ]
       },
@@ -7393,25 +7446,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "GOLD",
@@ -7424,8 +7478,8 @@
     "published": false,
     "setup": {
       "setup_id": "6c31c3050a04",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Gold",
         "direction": "buy",
@@ -7598,21 +7652,22 @@
           "max_drawdown_pct": -3.517741075517178
         }
       ]
-    }
+    },
+    "asset_class": "metals"
   },
   {
     "instrument": "GOLD",
     "direction": "sell",
     "horizon": "makro",
-    "score": 3.1689364119803507,
+    "score": 3.1549679704897695,
     "grade": "B",
     "max_score": 5.9,
     "min_score_publish": 3.5,
     "published": false,
     "setup": {
       "setup_id": "3fda2ff82185",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Gold",
         "direction": "sell",
@@ -7638,13 +7693,13 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.75,
+        "score": 0.25,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
@@ -7656,55 +7711,55 @@
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.3852,
+        "score": 0.6148,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.442,
+            "value": 0.558,
             "weight": 0.6,
-            "contribution": 0.2652
+            "contribution": 0.33480000000000004
           },
           {
             "name": "cot_z_score",
-            "value": 0.3,
+            "value": 0.7,
             "weight": 0.4,
-            "contribution": 0.12
+            "contribution": 0.27999999999999997
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.45,
+        "score": 0.55,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
-            "weight": 0.4,
-            "contribution": 0.1
-          },
-          {
-            "name": "dxy_chg5d",
             "value": 0.75,
             "weight": 0.4,
             "contribution": 0.30000000000000004
           },
           {
-            "name": "vix_regime",
+            "name": "dxy_chg5d",
             "value": 0.25,
+            "weight": 0.4,
+            "contribution": 0.1
+          },
+          {
+            "name": "vix_regime",
+            "value": 0.75,
             "weight": 0.2,
-            "contribution": 0.05
+            "contribution": 0.15000000000000002
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.6624484414905815,
+        "score": 0.33755155850941854,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.6624484414905815,
+            "value": 0.33755155850941854,
             "weight": 1.0,
-            "contribution": 0.6624484414905815
+            "contribution": 0.33755155850941854
           }
         ]
       },
@@ -7722,13 +7777,13 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.45,
+        "score": 0.55,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.4,
+            "value": 0.6,
             "weight": 0.5,
-            "contribution": 0.2
+            "contribution": 0.3
           },
           {
             "name": "analog_avg_return",
@@ -7785,7 +7840,8 @@
           "max_drawdown_pct": -3.517741075517178
         }
       ]
-    }
+    },
+    "asset_class": "metals"
   },
   {
     "instrument": "GOLD",
@@ -7798,8 +7854,8 @@
     "published": true,
     "setup": {
       "setup_id": "962a747af62a",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Gold",
         "direction": "buy",
@@ -7977,21 +8033,22 @@
           "max_drawdown_pct": -3.517741075517178
         }
       ]
-    }
+    },
+    "asset_class": "metals"
   },
   {
     "instrument": "GOLD",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 3.015735165172816,
-    "grade": "A",
+    "score": 2.208169217297304,
+    "grade": "B",
     "max_score": 4.8,
     "min_score_publish": 1.5,
     "published": true,
     "setup": {
       "setup_id": "fafb483fd101",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Gold",
         "direction": "sell",
@@ -8022,13 +8079,13 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.75,
+        "score": 0.25,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
@@ -8040,55 +8097,55 @@
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.3852,
+        "score": 0.6148,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.442,
+            "value": 0.558,
             "weight": 0.6,
-            "contribution": 0.2652
+            "contribution": 0.33480000000000004
           },
           {
             "name": "cot_z_score",
-            "value": 0.3,
+            "value": 0.7,
             "weight": 0.4,
-            "contribution": 0.12
+            "contribution": 0.27999999999999997
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.45,
+        "score": 0.55,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
-            "weight": 0.4,
-            "contribution": 0.1
-          },
-          {
-            "name": "dxy_chg5d",
             "value": 0.75,
             "weight": 0.4,
             "contribution": 0.30000000000000004
           },
           {
-            "name": "vix_regime",
+            "name": "dxy_chg5d",
             "value": 0.25,
+            "weight": 0.4,
+            "contribution": 0.1
+          },
+          {
+            "name": "vix_regime",
+            "value": 0.75,
             "weight": 0.2,
-            "contribution": 0.05
+            "contribution": 0.15000000000000002
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.6624484414905815,
+        "score": 0.33755155850941854,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.6624484414905815,
+            "value": 0.33755155850941854,
             "weight": 1.0,
-            "contribution": 0.6624484414905815
+            "contribution": 0.33755155850941854
           }
         ]
       },
@@ -8106,13 +8163,13 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.45,
+        "score": 0.55,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.4,
+            "value": 0.6,
             "weight": 0.5,
-            "contribution": 0.2
+            "contribution": 0.3
           },
           {
             "name": "analog_avg_return",
@@ -8169,7 +8226,8 @@
           "max_drawdown_pct": -3.517741075517178
         }
       ]
-    }
+    },
+    "asset_class": "metals"
   },
   {
     "instrument": "GOLD",
@@ -8182,8 +8240,8 @@
     "published": true,
     "setup": {
       "setup_id": "88ba06a2bad0",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Gold",
         "direction": "buy",
@@ -8359,21 +8417,22 @@
           "max_drawdown_pct": -3.517741075517178
         }
       ]
-    }
+    },
+    "asset_class": "metals"
   },
   {
     "instrument": "GOLD",
     "direction": "sell",
     "horizon": "swing",
-    "score": 3.3725886805344056,
-    "grade": "A",
+    "score": 2.957291797553243,
+    "grade": "B",
     "max_score": 5.8,
     "min_score_publish": 2.5,
     "published": true,
     "setup": {
       "setup_id": "1e0339ce4a76",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Gold",
         "direction": "sell",
@@ -8402,13 +8461,13 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.75,
+        "score": 0.25,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
@@ -8420,55 +8479,55 @@
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.3852,
+        "score": 0.6148,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.442,
+            "value": 0.558,
             "weight": 0.6,
-            "contribution": 0.2652
+            "contribution": 0.33480000000000004
           },
           {
             "name": "cot_z_score",
-            "value": 0.3,
+            "value": 0.7,
             "weight": 0.4,
-            "contribution": 0.12
+            "contribution": 0.27999999999999997
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.45,
+        "score": 0.55,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
-            "weight": 0.4,
-            "contribution": 0.1
-          },
-          {
-            "name": "dxy_chg5d",
             "value": 0.75,
             "weight": 0.4,
             "contribution": 0.30000000000000004
           },
           {
-            "name": "vix_regime",
+            "name": "dxy_chg5d",
             "value": 0.25,
+            "weight": 0.4,
+            "contribution": 0.1
+          },
+          {
+            "name": "vix_regime",
+            "value": 0.75,
             "weight": 0.2,
-            "contribution": 0.05
+            "contribution": 0.15000000000000002
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.6624484414905815,
+        "score": 0.33755155850941854,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.6624484414905815,
+            "value": 0.33755155850941854,
             "weight": 1.0,
-            "contribution": 0.6624484414905815
+            "contribution": 0.33755155850941854
           }
         ]
       },
@@ -8486,13 +8545,13 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.45,
+        "score": 0.55,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.4,
+            "value": 0.6,
             "weight": 0.5,
-            "contribution": 0.2
+            "contribution": 0.3
           },
           {
             "name": "analog_avg_return",
@@ -8549,7 +8608,8 @@
           "max_drawdown_pct": -3.517741075517178
         }
       ]
-    }
+    },
+    "asset_class": "metals"
   },
   {
     "instrument": "US100",
@@ -8562,8 +8622,8 @@
     "published": false,
     "setup": {
       "setup_id": "8a1947eadd65",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Nasdaq",
         "direction": "buy",
@@ -8688,14 +8748,15 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "indices"
   },
   {
     "instrument": "US100",
     "direction": "sell",
     "horizon": "makro",
-    "score": 2.634663051592785,
-    "grade": "B",
+    "score": 3.6063728049809214,
+    "grade": "A",
     "max_score": 5.9,
     "min_score_publish": 3.5,
     "published": false,
@@ -8705,73 +8766,73 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.875,
+        "score": 0.125,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.081,
+        "score": 0.919,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.135,
+            "value": 0.865,
             "weight": 0.6,
-            "contribution": 0.081
+            "contribution": 0.519
           },
           {
             "name": "cot_z_score",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.4,
-            "contribution": 0.0
+            "contribution": 0.4
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.55,
+        "score": 0.45,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
-            "weight": 0.4,
-            "contribution": 0.1
-          },
-          {
-            "name": "dxy_chg5d",
             "value": 0.75,
             "weight": 0.4,
             "contribution": 0.30000000000000004
           },
           {
+            "name": "dxy_chg5d",
+            "value": 0.25,
+            "weight": 0.4,
+            "contribution": 0.1
+          },
+          {
             "name": "vix_regime",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.2,
-            "contribution": 0.15000000000000002
+            "contribution": 0.05
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.993890246611864,
+        "score": 0.006109753388136019,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.993890246611864,
+            "value": 0.006109753388136019,
             "weight": 1.0,
-            "contribution": 0.993890246611864
+            "contribution": 0.006109753388136019
           }
         ]
       },
@@ -8789,25 +8850,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "indices"
   },
   {
     "instrument": "US100",
@@ -8926,14 +8988,15 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "indices"
   },
   {
     "instrument": "US100",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 3.3930752488822753,
-    "grade": "A",
+    "score": 1.8479606076914294,
+    "grade": "B",
     "max_score": 4.9,
     "min_score_publish": 1.5,
     "published": false,
@@ -8943,73 +9006,73 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.875,
+        "score": 0.125,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.081,
+        "score": 0.919,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.135,
+            "value": 0.865,
             "weight": 0.6,
-            "contribution": 0.081
+            "contribution": 0.519
           },
           {
             "name": "cot_z_score",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.4,
-            "contribution": 0.0
+            "contribution": 0.4
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.55,
+        "score": 0.45,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
-            "weight": 0.4,
-            "contribution": 0.1
-          },
-          {
-            "name": "dxy_chg5d",
             "value": 0.75,
             "weight": 0.4,
             "contribution": 0.30000000000000004
           },
           {
+            "name": "dxy_chg5d",
+            "value": 0.25,
+            "weight": 0.4,
+            "contribution": 0.1
+          },
+          {
             "name": "vix_regime",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.2,
-            "contribution": 0.15000000000000002
+            "contribution": 0.05
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.993890246611864,
+        "score": 0.006109753388136019,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.993890246611864,
+            "value": 0.006109753388136019,
             "weight": 1.0,
-            "contribution": 0.993890246611864
+            "contribution": 0.006109753388136019
           }
         ]
       },
@@ -9027,25 +9090,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "indices"
   },
   {
     "instrument": "US100",
@@ -9164,14 +9228,15 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "indices"
   },
   {
     "instrument": "US100",
     "direction": "sell",
     "horizon": "swing",
-    "score": 3.21303765697043,
-    "grade": "A",
+    "score": 3.013257163746702,
+    "grade": "B",
     "max_score": 5.8,
     "min_score_publish": 2.5,
     "published": false,
@@ -9181,73 +9246,73 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.875,
+        "score": 0.125,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.081,
+        "score": 0.919,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.135,
+            "value": 0.865,
             "weight": 0.6,
-            "contribution": 0.081
+            "contribution": 0.519
           },
           {
             "name": "cot_z_score",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.4,
-            "contribution": 0.0
+            "contribution": 0.4
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.55,
+        "score": 0.45,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
-            "weight": 0.4,
-            "contribution": 0.1
-          },
-          {
-            "name": "dxy_chg5d",
             "value": 0.75,
             "weight": 0.4,
             "contribution": 0.30000000000000004
           },
           {
+            "name": "dxy_chg5d",
+            "value": 0.25,
+            "weight": 0.4,
+            "contribution": 0.1
+          },
+          {
             "name": "vix_regime",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.2,
-            "contribution": 0.15000000000000002
+            "contribution": 0.05
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.993890246611864,
+        "score": 0.006109753388136019,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.993890246611864,
+            "value": 0.006109753388136019,
             "weight": 1.0,
-            "contribution": 0.993890246611864
+            "contribution": 0.006109753388136019
           }
         ]
       },
@@ -9265,25 +9330,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "indices"
   },
   {
     "instrument": "SILVER",
@@ -9296,8 +9362,8 @@
     "published": false,
     "setup": {
       "setup_id": "337d8fc8918a",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Silver",
         "direction": "buy",
@@ -9425,21 +9491,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "metals"
   },
   {
     "instrument": "SILVER",
     "direction": "sell",
     "horizon": "makro",
-    "score": 2.196884089346835,
-    "grade": "B",
+    "score": 4.005904755274679,
+    "grade": "A",
     "max_score": 5.9,
     "min_score_publish": 3.5,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "d2b98ab97a91",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Silver",
         "direction": "sell",
@@ -9463,13 +9530,13 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.75,
+        "score": 0.25,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
@@ -9481,19 +9548,19 @@
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.081,
+        "score": 0.919,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.135,
+            "value": 0.865,
             "weight": 0.6,
-            "contribution": 0.081
+            "contribution": 0.519
           },
           {
             "name": "cot_z_score",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.4,
-            "contribution": 0.0
+            "contribution": 0.4
           }
         ]
       },
@@ -9503,33 +9570,33 @@
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.3,
-            "contribution": 0.075
+            "contribution": 0.22499999999999998
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           },
           {
             "name": "vix_regime",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.2,
-            "contribution": 0.05
+            "contribution": 0.15000000000000002
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.5803793340721554,
+        "score": 0.41962066592784464,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.5803793340721554,
+            "value": 0.41962066592784464,
             "weight": 1.0,
-            "contribution": 0.5803793340721554
+            "contribution": 0.41962066592784464
           }
         ]
       },
@@ -9547,25 +9614,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "metals"
   },
   {
     "instrument": "SILVER",
@@ -9578,8 +9646,8 @@
     "published": true,
     "setup": {
       "setup_id": "d0bf0b5f3295",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Silver",
         "direction": "buy",
@@ -9710,21 +9778,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "metals"
   },
   {
     "instrument": "SILVER",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 2.596387556604559,
+    "score": 2.506401288016955,
     "grade": "B",
     "max_score": 4.8,
     "min_score_publish": 1.5,
     "published": true,
     "setup": {
       "setup_id": "e6eef3d6b12f",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Silver",
         "direction": "sell",
@@ -9753,13 +9822,13 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.75,
+        "score": 0.25,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
@@ -9771,19 +9840,19 @@
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.081,
+        "score": 0.919,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.135,
+            "value": 0.865,
             "weight": 0.6,
-            "contribution": 0.081
+            "contribution": 0.519
           },
           {
             "name": "cot_z_score",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.4,
-            "contribution": 0.0
+            "contribution": 0.4
           }
         ]
       },
@@ -9793,33 +9862,33 @@
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.3,
-            "contribution": 0.075
+            "contribution": 0.22499999999999998
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           },
           {
             "name": "vix_regime",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.2,
-            "contribution": 0.05
+            "contribution": 0.15000000000000002
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.5803793340721554,
+        "score": 0.41962066592784464,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.5803793340721554,
+            "value": 0.41962066592784464,
             "weight": 1.0,
-            "contribution": 0.5803793340721554
+            "contribution": 0.41962066592784464
           }
         ]
       },
@@ -9837,25 +9906,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "metals"
   },
   {
     "instrument": "SILVER",
@@ -9868,8 +9938,8 @@
     "published": true,
     "setup": {
       "setup_id": "97f15fba33df",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Silver",
         "direction": "buy",
@@ -9999,21 +10069,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "metals"
   },
   {
     "instrument": "SILVER",
     "direction": "sell",
     "horizon": "swing",
-    "score": 2.6006223619606015,
-    "grade": "B",
+    "score": 3.5778636938162904,
+    "grade": "A",
     "max_score": 5.8,
     "min_score_publish": 2.5,
     "published": true,
     "setup": {
       "setup_id": "45c05e3a8683",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Silver",
         "direction": "sell",
@@ -10040,13 +10111,13 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.75,
+        "score": 0.25,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
@@ -10058,19 +10129,19 @@
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.081,
+        "score": 0.919,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.135,
+            "value": 0.865,
             "weight": 0.6,
-            "contribution": 0.081
+            "contribution": 0.519
           },
           {
             "name": "cot_z_score",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.4,
-            "contribution": 0.0
+            "contribution": 0.4
           }
         ]
       },
@@ -10080,33 +10151,33 @@
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.3,
-            "contribution": 0.075
+            "contribution": 0.22499999999999998
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           },
           {
             "name": "vix_regime",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.2,
-            "contribution": 0.05
+            "contribution": 0.15000000000000002
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.5803793340721554,
+        "score": 0.41962066592784464,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.5803793340721554,
+            "value": 0.41962066592784464,
             "weight": 1.0,
-            "contribution": 0.5803793340721554
+            "contribution": 0.41962066592784464
           }
         ]
       },
@@ -10124,25 +10195,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "metals"
   },
   {
     "instrument": "Soybean",
@@ -10155,8 +10227,8 @@
     "published": false,
     "setup": {
       "setup_id": "5555e8dc18d0",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Soybean",
         "direction": "buy",
@@ -10274,21 +10346,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "grains"
   },
   {
     "instrument": "Soybean",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 5.9512,
-    "grade": "C",
+    "score": 10.0488,
+    "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "f8092f733812",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Soybean",
         "direction": "sell",
@@ -10328,13 +10401,13 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.3016,
+        "score": 0.6984,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.1032,
+            "value": 0.8968,
             "weight": 0.5,
-            "contribution": 0.0516
+            "contribution": 0.4484
           },
           {
             "name": "wasde_s2u_change",
@@ -10346,13 +10419,13 @@
       },
       "weather": {
         "name": "weather",
-        "score": 0.1032,
+        "score": 0.8968,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.1032,
+            "value": 0.8968,
             "weight": 1.0,
-            "contribution": 0.1032
+            "contribution": 0.8968
           }
         ]
       },
@@ -10370,43 +10443,44 @@
       },
       "cross": {
         "name": "cross",
-        "score": 0.67,
+        "score": 0.33,
         "drivers": [
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.8,
-            "contribution": 0.6000000000000001
+            "contribution": 0.2
           },
           {
             "name": "bdi_chg30d",
-            "value": 0.35,
+            "value": 0.65,
             "weight": 0.2,
-            "contribution": 0.06999999999999999
+            "contribution": 0.13
           }
         ]
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "grains"
   },
   {
     "instrument": "Soybean",
@@ -10419,8 +10493,8 @@
     "published": false,
     "setup": {
       "setup_id": "719652a4fa27",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Soybean",
         "direction": "buy",
@@ -10538,21 +10612,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "grains"
   },
   {
     "instrument": "Soybean",
     "direction": "sell",
     "horizon": "swing",
-    "score": 5.9512,
-    "grade": "C",
+    "score": 10.0488,
+    "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "ffeb5957ba09",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Soybean",
         "direction": "sell",
@@ -10591,13 +10666,13 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.3016,
+        "score": 0.6984,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.1032,
+            "value": 0.8968,
             "weight": 0.5,
-            "contribution": 0.0516
+            "contribution": 0.4484
           },
           {
             "name": "wasde_s2u_change",
@@ -10609,13 +10684,13 @@
       },
       "weather": {
         "name": "weather",
-        "score": 0.1032,
+        "score": 0.8968,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.1032,
+            "value": 0.8968,
             "weight": 1.0,
-            "contribution": 0.1032
+            "contribution": 0.8968
           }
         ]
       },
@@ -10633,43 +10708,44 @@
       },
       "cross": {
         "name": "cross",
-        "score": 0.67,
+        "score": 0.33,
         "drivers": [
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.8,
-            "contribution": 0.6000000000000001
+            "contribution": 0.2
           },
           {
             "name": "bdi_chg30d",
-            "value": 0.35,
+            "value": 0.65,
             "weight": 0.2,
-            "contribution": 0.06999999999999999
+            "contribution": 0.13
           }
         ]
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "grains"
   },
   {
     "instrument": "Soybean",
@@ -10682,8 +10758,8 @@
     "published": false,
     "setup": {
       "setup_id": "dd456ae33312",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Soybean",
         "direction": "buy",
@@ -10799,21 +10875,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "grains"
   },
   {
     "instrument": "Soybean",
     "direction": "sell",
     "horizon": "makro",
-    "score": 5.9512,
-    "grade": "C",
+    "score": 10.0488,
+    "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "f96b6b2db67b",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Soybean",
         "direction": "sell",
@@ -10848,13 +10925,13 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.3016,
+        "score": 0.6984,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.1032,
+            "value": 0.8968,
             "weight": 0.5,
-            "contribution": 0.0516
+            "contribution": 0.4484
           },
           {
             "name": "wasde_s2u_change",
@@ -10866,13 +10943,13 @@
       },
       "weather": {
         "name": "weather",
-        "score": 0.1032,
+        "score": 0.8968,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.1032,
+            "value": 0.8968,
             "weight": 1.0,
-            "contribution": 0.1032
+            "contribution": 0.8968
           }
         ]
       },
@@ -10890,43 +10967,44 @@
       },
       "cross": {
         "name": "cross",
-        "score": 0.67,
+        "score": 0.33,
         "drivers": [
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.8,
-            "contribution": 0.6000000000000001
+            "contribution": 0.2
           },
           {
             "name": "bdi_chg30d",
-            "value": 0.35,
+            "value": 0.65,
             "weight": 0.2,
-            "contribution": 0.06999999999999999
+            "contribution": 0.13
           }
         ]
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "grains"
   },
   {
     "instrument": "SPX500",
@@ -10939,8 +11017,8 @@
     "published": true,
     "setup": {
       "setup_id": "2b8207df1f96",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "SP500",
         "direction": "buy",
@@ -11065,14 +11143,15 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "indices"
   },
   {
     "instrument": "SPX500",
     "direction": "sell",
     "horizon": "makro",
-    "score": 3.672513600904732,
-    "grade": "A",
+    "score": 2.594020263637101,
+    "grade": "B",
     "max_score": 5.9,
     "min_score_publish": 3.5,
     "published": false,
@@ -11082,73 +11161,73 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.875,
+        "score": 0.125,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.8772,
+        "score": 0.12280000000000002,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.962,
+            "value": 0.038000000000000034,
             "weight": 0.6,
-            "contribution": 0.5771999999999999
+            "contribution": 0.022800000000000018
           },
           {
             "name": "cot_z_score",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.4,
-            "contribution": 0.30000000000000004
+            "contribution": 0.1
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.6000000000000001,
+        "score": 0.39999999999999997,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
-            "weight": 0.3,
-            "contribution": 0.075
-          },
-          {
-            "name": "dxy_chg5d",
-            "value": 0.75,
-            "weight": 0.4,
-            "contribution": 0.30000000000000004
-          },
-          {
-            "name": "vix_regime",
             "value": 0.75,
             "weight": 0.3,
             "contribution": 0.22499999999999998
+          },
+          {
+            "name": "dxy_chg5d",
+            "value": 0.25,
+            "weight": 0.4,
+            "contribution": 0.1
+          },
+          {
+            "name": "vix_regime",
+            "value": 0.25,
+            "weight": 0.3,
+            "contribution": 0.075
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.9932133372676306,
+        "score": 0.006786662732369386,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.9932133372676306,
+            "value": 0.006786662732369386,
             "weight": 1.0,
-            "contribution": 0.9932133372676306
+            "contribution": 0.006786662732369386
           }
         ]
       },
@@ -11166,25 +11245,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "indices"
   },
   {
     "instrument": "SPX500",
@@ -11303,14 +11383,15 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "indices"
   },
   {
     "instrument": "SPX500",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 3.8430442707188366,
-    "grade": "A+",
+    "score": 1.4234895938229968,
+    "grade": "C",
     "max_score": 4.9,
     "min_score_publish": 1.5,
     "published": false,
@@ -11320,73 +11401,73 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.875,
+        "score": 0.125,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.8772,
+        "score": 0.12280000000000002,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.962,
+            "value": 0.038000000000000034,
             "weight": 0.6,
-            "contribution": 0.5771999999999999
+            "contribution": 0.022800000000000018
           },
           {
             "name": "cot_z_score",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.4,
-            "contribution": 0.30000000000000004
+            "contribution": 0.1
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.6000000000000001,
+        "score": 0.39999999999999997,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
-            "weight": 0.3,
-            "contribution": 0.075
-          },
-          {
-            "name": "dxy_chg5d",
-            "value": 0.75,
-            "weight": 0.4,
-            "contribution": 0.30000000000000004
-          },
-          {
-            "name": "vix_regime",
             "value": 0.75,
             "weight": 0.3,
             "contribution": 0.22499999999999998
+          },
+          {
+            "name": "dxy_chg5d",
+            "value": 0.25,
+            "weight": 0.4,
+            "contribution": 0.1
+          },
+          {
+            "name": "vix_regime",
+            "value": 0.25,
+            "weight": 0.3,
+            "contribution": 0.075
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.9932133372676306,
+        "score": 0.006786662732369386,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.9932133372676306,
+            "value": 0.006786662732369386,
             "weight": 1.0,
-            "contribution": 0.9932133372676306
+            "contribution": 0.006786662732369386
           }
         ]
       },
@@ -11404,25 +11485,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "indices"
   },
   {
     "instrument": "SPX500",
@@ -11541,14 +11623,15 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "indices"
   },
   {
     "instrument": "SPX500",
     "direction": "sell",
     "horizon": "swing",
-    "score": 4.074497002606276,
-    "grade": "A",
+    "score": 2.183670328071015,
+    "grade": "B",
     "max_score": 5.8,
     "min_score_publish": 2.5,
     "published": false,
@@ -11558,73 +11641,73 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.875,
+        "score": 0.125,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.5,
-            "contribution": 0.375
+            "contribution": 0.125
           }
         ]
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.8772,
+        "score": 0.12280000000000002,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.962,
+            "value": 0.038000000000000034,
             "weight": 0.6,
-            "contribution": 0.5771999999999999
+            "contribution": 0.022800000000000018
           },
           {
             "name": "cot_z_score",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.4,
-            "contribution": 0.30000000000000004
+            "contribution": 0.1
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.6000000000000001,
+        "score": 0.39999999999999997,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.25,
-            "weight": 0.3,
-            "contribution": 0.075
-          },
-          {
-            "name": "dxy_chg5d",
-            "value": 0.75,
-            "weight": 0.4,
-            "contribution": 0.30000000000000004
-          },
-          {
-            "name": "vix_regime",
             "value": 0.75,
             "weight": 0.3,
             "contribution": 0.22499999999999998
+          },
+          {
+            "name": "dxy_chg5d",
+            "value": 0.25,
+            "weight": 0.4,
+            "contribution": 0.1
+          },
+          {
+            "name": "vix_regime",
+            "value": 0.25,
+            "weight": 0.3,
+            "contribution": 0.075
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.9932133372676306,
+        "score": 0.006786662732369386,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.9932133372676306,
+            "value": 0.006786662732369386,
             "weight": 1.0,
-            "contribution": 0.9932133372676306
+            "contribution": 0.006786662732369386
           }
         ]
       },
@@ -11642,25 +11725,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "indices"
   },
   {
     "instrument": "Sugar",
@@ -11673,8 +11757,8 @@
     "published": true,
     "setup": {
       "setup_id": "3b08af07825b",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Sugar",
         "direction": "buy",
@@ -11787,21 +11871,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Sugar",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 7.461049999999999,
-    "grade": "B",
+    "score": 8.53895,
+    "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": true,
     "setup": {
       "setup_id": "799bd2fe8d49",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Sugar",
         "direction": "sell",
@@ -11830,25 +11915,25 @@
     "families": {
       "outlook": {
         "name": "outlook",
-        "score": 0.9,
+        "score": 0.09999999999999998,
         "drivers": [
           {
             "name": "seasonal_stage",
-            "value": 0.9,
+            "value": 0.09999999999999998,
             "weight": 1.0,
-            "contribution": 0.9
+            "contribution": 0.09999999999999998
           }
         ]
       },
       "yield": {
         "name": "yield",
-        "score": 0.28015,
+        "score": 0.71985,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.0603,
+            "value": 0.9397,
             "weight": 0.5,
-            "contribution": 0.03015
+            "contribution": 0.46985
           },
           {
             "name": "wasde_s2u_change",
@@ -11860,13 +11945,13 @@
       },
       "weather": {
         "name": "weather",
-        "score": 0.0603,
+        "score": 0.9397,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.0603,
+            "value": 0.9397,
             "weight": 1.0,
-            "contribution": 0.0603
+            "contribution": 0.9397
           }
         ]
       },
@@ -11896,25 +11981,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Sugar",
@@ -11927,8 +12013,8 @@
     "published": true,
     "setup": {
       "setup_id": "37a78e1e5b73",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Sugar",
         "direction": "buy",
@@ -12038,14 +12124,15 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Sugar",
     "direction": "sell",
     "horizon": "swing",
-    "score": 7.461049999999999,
-    "grade": "B",
+    "score": 8.53895,
+    "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": false,
@@ -12055,25 +12142,25 @@
     "families": {
       "outlook": {
         "name": "outlook",
-        "score": 0.9,
+        "score": 0.09999999999999998,
         "drivers": [
           {
             "name": "seasonal_stage",
-            "value": 0.9,
+            "value": 0.09999999999999998,
             "weight": 1.0,
-            "contribution": 0.9
+            "contribution": 0.09999999999999998
           }
         ]
       },
       "yield": {
         "name": "yield",
-        "score": 0.28015,
+        "score": 0.71985,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.0603,
+            "value": 0.9397,
             "weight": 0.5,
-            "contribution": 0.03015
+            "contribution": 0.46985
           },
           {
             "name": "wasde_s2u_change",
@@ -12085,13 +12172,13 @@
       },
       "weather": {
         "name": "weather",
-        "score": 0.0603,
+        "score": 0.9397,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.0603,
+            "value": 0.9397,
             "weight": 1.0,
-            "contribution": 0.0603
+            "contribution": 0.9397
           }
         ]
       },
@@ -12121,25 +12208,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Sugar",
@@ -12152,8 +12240,8 @@
     "published": true,
     "setup": {
       "setup_id": "254674fb129d",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Sugar",
         "direction": "buy",
@@ -12261,21 +12349,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "Sugar",
     "direction": "sell",
     "horizon": "makro",
-    "score": 7.461049999999999,
-    "grade": "B",
+    "score": 8.53895,
+    "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": true,
     "setup": {
       "setup_id": "3ff3f4313719",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Sugar",
         "direction": "sell",
@@ -12301,25 +12390,25 @@
     "families": {
       "outlook": {
         "name": "outlook",
-        "score": 0.9,
+        "score": 0.09999999999999998,
         "drivers": [
           {
             "name": "seasonal_stage",
-            "value": 0.9,
+            "value": 0.09999999999999998,
             "weight": 1.0,
-            "contribution": 0.9
+            "contribution": 0.09999999999999998
           }
         ]
       },
       "yield": {
         "name": "yield",
-        "score": 0.28015,
+        "score": 0.71985,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.0603,
+            "value": 0.9397,
             "weight": 0.5,
-            "contribution": 0.03015
+            "contribution": 0.46985
           },
           {
             "name": "wasde_s2u_change",
@@ -12331,13 +12420,13 @@
       },
       "weather": {
         "name": "weather",
-        "score": 0.0603,
+        "score": 0.9397,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.0603,
+            "value": 0.9397,
             "weight": 1.0,
-            "contribution": 0.0603
+            "contribution": 0.9397
           }
         ]
       },
@@ -12367,25 +12456,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "softs"
   },
   {
     "instrument": "USDJPY",
@@ -12398,8 +12488,8 @@
     "published": false,
     "setup": {
       "setup_id": "34bfb94ef6e5",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "USDJPY",
         "direction": "buy",
@@ -12527,14 +12617,15 @@
       }
     },
     "active_families": 3,
-    "analog": null
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "USDJPY",
     "direction": "sell",
     "horizon": "makro",
-    "score": 1.6330926195208373,
-    "grade": "C",
+    "score": 3.5669073804791633,
+    "grade": "A",
     "max_score": 5.8,
     "min_score_publish": 3.5,
     "published": false,
@@ -12544,13 +12635,13 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.75,
+        "score": 0.25,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
@@ -12562,55 +12653,55 @@
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.6,
-            "contribution": 0.0
+            "contribution": 0.6
           },
           {
             "name": "cot_z_score",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.4,
-            "contribution": 0.0
+            "contribution": 0.4
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.45000000000000007,
+        "score": 0.55,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.4,
-            "contribution": 0.30000000000000004
+            "contribution": 0.1
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.5,
-            "contribution": 0.125
+            "contribution": 0.375
           },
           {
             "name": "vix_regime",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.1,
-            "contribution": 0.025
+            "contribution": 0.07500000000000001
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.7161852390416743,
+        "score": 0.2838147609583257,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.7161852390416743,
+            "value": 0.2838147609583257,
             "weight": 1.0,
-            "contribution": 0.7161852390416743
+            "contribution": 0.2838147609583257
           }
         ]
       },
@@ -12628,25 +12719,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 3,
-    "analog": null
+    "active_families": 5,
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "USDJPY",
@@ -12765,13 +12857,14 @@
       }
     },
     "active_families": 3,
-    "analog": null
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "USDJPY",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 2.2810408107541766,
+    "score": 2.0189591892458236,
     "grade": "B",
     "max_score": 4.9,
     "min_score_publish": 1.5,
@@ -12782,13 +12875,13 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.75,
+        "score": 0.25,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
@@ -12800,55 +12893,55 @@
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.6,
-            "contribution": 0.0
+            "contribution": 0.6
           },
           {
             "name": "cot_z_score",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.4,
-            "contribution": 0.0
+            "contribution": 0.4
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.45000000000000007,
+        "score": 0.55,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.4,
-            "contribution": 0.30000000000000004
+            "contribution": 0.1
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.5,
-            "contribution": 0.125
+            "contribution": 0.375
           },
           {
             "name": "vix_regime",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.1,
-            "contribution": 0.025
+            "contribution": 0.07500000000000001
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.7161852390416743,
+        "score": 0.2838147609583257,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.7161852390416743,
+            "value": 0.2838147609583257,
             "weight": 1.0,
-            "contribution": 0.7161852390416743
+            "contribution": 0.2838147609583257
           }
         ]
       },
@@ -12866,25 +12959,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 3,
-    "analog": null
+    "active_families": 5,
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "USDJPY",
@@ -13003,14 +13097,15 @@
       }
     },
     "active_families": 3,
-    "analog": null
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "USDJPY",
     "direction": "sell",
     "horizon": "swing",
-    "score": 2.0061852390416743,
-    "grade": "C",
+    "score": 2.993814760958326,
+    "grade": "B",
     "max_score": 5.8,
     "min_score_publish": 2.5,
     "published": false,
@@ -13020,13 +13115,13 @@
     "families": {
       "trend": {
         "name": "trend",
-        "score": 0.75,
+        "score": 0.25,
         "drivers": [
           {
             "name": "sma200_align",
-            "value": 1.0,
+            "value": 0.0,
             "weight": 0.5,
-            "contribution": 0.5
+            "contribution": 0.0
           },
           {
             "name": "momentum_z",
@@ -13038,55 +13133,55 @@
       },
       "positioning": {
         "name": "positioning",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "positioning_mm_pct",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.6,
-            "contribution": 0.0
+            "contribution": 0.6
           },
           {
             "name": "cot_z_score",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.4,
-            "contribution": 0.0
+            "contribution": 0.4
           }
         ]
       },
       "macro": {
         "name": "macro",
-        "score": 0.45000000000000007,
+        "score": 0.55,
         "drivers": [
           {
             "name": "real_yield",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.4,
-            "contribution": 0.30000000000000004
+            "contribution": 0.1
           },
           {
             "name": "dxy_chg5d",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.5,
-            "contribution": 0.125
+            "contribution": 0.375
           },
           {
             "name": "vix_regime",
-            "value": 0.25,
+            "value": 0.75,
             "weight": 0.1,
-            "contribution": 0.025
+            "contribution": 0.07500000000000001
           }
         ]
       },
       "structure": {
         "name": "structure",
-        "score": 0.7161852390416743,
+        "score": 0.2838147609583257,
         "drivers": [
           {
             "name": "range_position",
-            "value": 0.7161852390416743,
+            "value": 0.2838147609583257,
             "weight": 1.0,
-            "contribution": 0.7161852390416743
+            "contribution": 0.2838147609583257
           }
         ]
       },
@@ -13104,25 +13199,26 @@
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 3,
-    "analog": null
+    "active_families": 5,
+    "analog": null,
+    "asset_class": "fx"
   },
   {
     "instrument": "Wheat",
@@ -13135,8 +13231,8 @@
     "published": true,
     "setup": {
       "setup_id": "9d89c2ebeb8c",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Wheat",
         "direction": "buy",
@@ -13267,21 +13363,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "grains"
   },
   {
     "instrument": "Wheat",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 8.4984,
-    "grade": "A",
+    "score": 7.501600000000001,
+    "grade": "B",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": true,
     "setup": {
       "setup_id": "6b599aaa7ace",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Wheat",
         "direction": "sell",
@@ -13310,25 +13407,25 @@
     "families": {
       "outlook": {
         "name": "outlook",
-        "score": 0.9,
+        "score": 0.09999999999999998,
         "drivers": [
           {
             "name": "seasonal_stage",
-            "value": 0.9,
+            "value": 0.09999999999999998,
             "weight": 1.0,
-            "contribution": 0.9
+            "contribution": 0.09999999999999998
           }
         ]
       },
       "yield": {
         "name": "yield",
-        "score": 0.3948,
+        "score": 0.6052000000000002,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.237,
+            "value": 0.763,
             "weight": 0.4,
-            "contribution": 0.0948
+            "contribution": 0.3052
           },
           {
             "name": "wasde_s2u_change",
@@ -13352,13 +13449,13 @@
       },
       "weather": {
         "name": "weather",
-        "score": 0.237,
+        "score": 0.763,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.237,
+            "value": 0.763,
             "weight": 1.0,
-            "contribution": 0.237
+            "contribution": 0.763
           }
         ]
       },
@@ -13376,43 +13473,44 @@
       },
       "cross": {
         "name": "cross",
-        "score": 0.67,
+        "score": 0.33,
         "drivers": [
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.8,
-            "contribution": 0.6000000000000001
+            "contribution": 0.2
           },
           {
             "name": "bdi_chg30d",
-            "value": 0.35,
+            "value": 0.65,
             "weight": 0.2,
-            "contribution": 0.06999999999999999
+            "contribution": 0.13
           }
         ]
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "grains"
   },
   {
     "instrument": "Wheat",
@@ -13531,14 +13629,15 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "grains"
   },
   {
     "instrument": "Wheat",
     "direction": "sell",
     "horizon": "swing",
-    "score": 8.4984,
-    "grade": "A",
+    "score": 7.501600000000001,
+    "grade": "B",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": false,
@@ -13548,25 +13647,25 @@
     "families": {
       "outlook": {
         "name": "outlook",
-        "score": 0.9,
+        "score": 0.09999999999999998,
         "drivers": [
           {
             "name": "seasonal_stage",
-            "value": 0.9,
+            "value": 0.09999999999999998,
             "weight": 1.0,
-            "contribution": 0.9
+            "contribution": 0.09999999999999998
           }
         ]
       },
       "yield": {
         "name": "yield",
-        "score": 0.3948,
+        "score": 0.6052000000000002,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.237,
+            "value": 0.763,
             "weight": 0.4,
-            "contribution": 0.0948
+            "contribution": 0.3052
           },
           {
             "name": "wasde_s2u_change",
@@ -13590,13 +13689,13 @@
       },
       "weather": {
         "name": "weather",
-        "score": 0.237,
+        "score": 0.763,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.237,
+            "value": 0.763,
             "weight": 1.0,
-            "contribution": 0.237
+            "contribution": 0.763
           }
         ]
       },
@@ -13614,43 +13713,44 @@
       },
       "cross": {
         "name": "cross",
-        "score": 0.67,
+        "score": 0.33,
         "drivers": [
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.8,
-            "contribution": 0.6000000000000001
+            "contribution": 0.2
           },
           {
             "name": "bdi_chg30d",
-            "value": 0.35,
+            "value": 0.65,
             "weight": 0.2,
-            "contribution": 0.06999999999999999
+            "contribution": 0.13
           }
         ]
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "grains"
   },
   {
     "instrument": "Wheat",
@@ -13663,8 +13763,8 @@
     "published": true,
     "setup": {
       "setup_id": "2ee41753938a",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Wheat",
         "direction": "buy",
@@ -13792,21 +13892,22 @@
       }
     },
     "active_families": 5,
-    "analog": null
+    "analog": null,
+    "asset_class": "grains"
   },
   {
     "instrument": "Wheat",
     "direction": "sell",
     "horizon": "makro",
-    "score": 8.4984,
-    "grade": "A",
+    "score": 7.501600000000001,
+    "grade": "B",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": true,
     "setup": {
       "setup_id": "f982b283c623",
-      "first_seen": "2026-04-26T10:43:30.012883Z",
-      "last_updated": "2026-04-26T10:43:30.012883Z",
+      "first_seen": "2026-04-26T15:21:19.100525Z",
+      "last_updated": "2026-04-26T15:21:19.100525Z",
       "setup": {
         "instrument": "Wheat",
         "direction": "sell",
@@ -13830,25 +13931,25 @@
     "families": {
       "outlook": {
         "name": "outlook",
-        "score": 0.9,
+        "score": 0.09999999999999998,
         "drivers": [
           {
             "name": "seasonal_stage",
-            "value": 0.9,
+            "value": 0.09999999999999998,
             "weight": 1.0,
-            "contribution": 0.9
+            "contribution": 0.09999999999999998
           }
         ]
       },
       "yield": {
         "name": "yield",
-        "score": 0.3948,
+        "score": 0.6052000000000002,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.237,
+            "value": 0.763,
             "weight": 0.4,
-            "contribution": 0.0948
+            "contribution": 0.3052
           },
           {
             "name": "wasde_s2u_change",
@@ -13872,13 +13973,13 @@
       },
       "weather": {
         "name": "weather",
-        "score": 0.237,
+        "score": 0.763,
         "drivers": [
           {
             "name": "weather_stress",
-            "value": 0.237,
+            "value": 0.763,
             "weight": 1.0,
-            "contribution": 0.237
+            "contribution": 0.763
           }
         ]
       },
@@ -13896,42 +13997,43 @@
       },
       "cross": {
         "name": "cross",
-        "score": 0.67,
+        "score": 0.33,
         "drivers": [
           {
             "name": "dxy_chg5d",
-            "value": 0.75,
+            "value": 0.25,
             "weight": 0.8,
-            "contribution": 0.6000000000000001
+            "contribution": 0.2
           },
           {
             "name": "bdi_chg30d",
-            "value": 0.35,
+            "value": 0.65,
             "weight": 0.2,
-            "contribution": 0.06999999999999999
+            "contribution": 0.13
           }
         ]
       },
       "analog": {
         "name": "analog",
-        "score": 0.0,
+        "score": 1.0,
         "drivers": [
           {
             "name": "analog_hit_rate",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           },
           {
             "name": "analog_avg_return",
-            "value": 0.0,
+            "value": 1.0,
             "weight": 0.5,
-            "contribution": 0.0
+            "contribution": 0.5
           }
         ]
       }
     },
-    "active_families": 5,
-    "analog": null
+    "active_families": 6,
+    "analog": null,
+    "asset_class": "grains"
   }
 ]

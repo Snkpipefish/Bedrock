@@ -99,6 +99,7 @@ families:
           window: 20
           mode: continuation
   risk:
+    polarity: neutral  # ADR-006: vol_regime trend-friendly begge retninger
     # Sub-fase 12.5 Block A polish session 79: vol_regime erstatter
     # sma200_align (sma har null risk-info). ATR(14)-percentil over 252
     # dager. Høy vol = trade-friendly miljø (trend-tolkning).

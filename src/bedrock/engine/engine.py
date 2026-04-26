@@ -38,6 +38,7 @@ from bedrock.engine.gates import (
     apply_gates,
     cap_grade,
 )
+from bedrock.setups.generator import Direction
 
 # ---------------------------------------------------------------------------
 # Felles modeller
@@ -59,10 +60,22 @@ class DriverSpec(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+FamilyPolarity = Literal["directional", "neutral"]
+
+
 class FinancialFamilySpec(BaseModel):
-    """Familie-spesifikasjon for financial. Vekt kommer fra horisonten."""
+    """Familie-spesifikasjon for financial. Vekt kommer fra horisonten.
+
+    `polarity` styrer direction-asymmetri (ADR-006 session 95b):
+    - ``directional`` (default): drivere returnerer "bull-of-instrument-
+      confidence". For ``direction=SELL`` flippes hver drivers value til
+      ``1 - value`` og familie-scoren reaggregreres.
+    - ``neutral``: familien er kontekst (eks. vol_regime som er trend-
+      friendly begge retninger). Score er identisk for BUY og SELL.
+    """
 
     drivers: list[DriverSpec]
+    polarity: FamilyPolarity = "directional"
 
 
 class HorizonSpec(BaseModel):
@@ -94,10 +107,15 @@ class FinancialRules(BaseModel):
 
 
 class AgriFamilySpec(BaseModel):
-    """Familie-spesifikasjon for agri. `weight` er familiens absolutte cap."""
+    """Familie-spesifikasjon for agri. `weight` er familiens absolutte cap.
+
+    `polarity` styrer direction-asymmetri (ADR-006 session 95b) — se
+    ``FinancialFamilySpec.polarity`` for semantikk.
+    """
 
     weight: float = Field(gt=0.0)
     drivers: list[DriverSpec]
+    polarity: FamilyPolarity = "directional"
 
 
 class AgriRules(BaseModel):
@@ -179,17 +197,25 @@ class Engine:
         store: Any,
         rules: Rules,
         horizon: str | None = None,
+        direction: Direction = Direction.BUY,
     ) -> GroupResult:
         """Scorer `instrument` mot `rules`.
 
         For `FinancialRules` må `horizon` oppgis. For `AgriRules` ignoreres
         `horizon` (agri har ikke horisont-splitt på scoring-siden — det
         bestemmes senere av setup-generator).
+
+        `direction` (ADR-006 session 95b): ``BUY`` (default) bruker driver-
+        verdier as-is. ``SELL`` flipper hver drivers value til ``1 - value``
+        på familier med ``polarity="directional"``; familier med
+        ``polarity="neutral"`` er identiske mellom retninger. Default
+        BUY bevarer bakoverkompatibilitet med tester som ikke bryr seg
+        om retning.
         """
         if isinstance(rules, FinancialRules):
-            return self._score_financial(instrument, store, rules, horizon)
+            return self._score_financial(instrument, store, rules, horizon, direction)
         if isinstance(rules, AgriRules):
-            return self._score_agri(instrument, store, rules)
+            return self._score_agri(instrument, store, rules, direction)
         raise TypeError(f"Unknown rules type: {type(rules).__name__}")
 
     # -- financial ----------------------------------------------------------
@@ -200,6 +226,7 @@ class Engine:
         store: Any,
         rules: FinancialRules,
         horizon: str | None,
+        direction: Direction,
     ) -> GroupResult:
         if horizon is None:
             raise ValueError("FinancialRules require a `horizon` argument (e.g. 'SWING').")
@@ -209,7 +236,9 @@ class Engine:
             known = ", ".join(sorted(rules.horizons)) or "<none>"
             raise KeyError(f"Horizon '{horizon}' not defined in rules. Known: {known}")
 
-        family_results, family_scores = self._score_families(store, instrument, rules.families)
+        family_results, family_scores = self._score_families(
+            store, instrument, rules.families, direction
+        )
 
         total_score = aggregators.weighted_horizon(family_scores, horizon_spec.family_weights)
         active_families = self._count_active(family_scores)
@@ -249,8 +278,11 @@ class Engine:
         instrument: str,
         store: Any,
         rules: AgriRules,
+        direction: Direction,
     ) -> GroupResult:
-        family_results, family_scores = self._score_families(store, instrument, rules.families)
+        family_results, family_scores = self._score_families(
+            store, instrument, rules.families, direction
+        )
 
         family_caps = {name: spec.weight for name, spec in rules.families.items()}
         total_score = aggregators.additive_sum(family_scores, family_caps)
@@ -290,21 +322,29 @@ class Engine:
         store: Any,
         instrument: str,
         families: dict[str, _AnyFamilySpec],
+        direction: Direction,
     ) -> tuple[dict[str, FamilyResult], dict[str, float]]:
         """Kjør alle drivere per familie. Felles for financial og agri.
 
-        Begge FamilySpec-klasser har attributtet `.drivers: list[DriverSpec]`.
+        Begge FamilySpec-klasser har attributtet `.drivers: list[DriverSpec]`
+        og `.polarity: FamilyPolarity`. For ``direction=SELL`` på familier
+        med ``polarity="directional"`` flippes hver drivers ``value`` til
+        ``1 - value`` (se ADR-006). ``polarity="neutral"`` er identisk for
+        BUY og SELL.
         """
         family_results: dict[str, FamilyResult] = {}
         family_scores: dict[str, float] = {}
+        flip = direction == Direction.SELL
 
         for family_name, family_spec in families.items():
             driver_results: list[DriverResult] = []
             family_score = 0.0
+            do_flip = flip and family_spec.polarity == "directional"
 
             for driver_spec in family_spec.drivers:
                 fn = drivers.get(driver_spec.name)
-                value = fn(store, instrument, driver_spec.params)
+                raw_value = fn(store, instrument, driver_spec.params)
+                value = (1.0 - raw_value) if do_flip else raw_value
                 contribution = value * driver_spec.weight
                 driver_results.append(
                     DriverResult(
