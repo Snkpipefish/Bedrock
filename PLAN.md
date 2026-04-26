@@ -7,6 +7,17 @@ Referanser: `NYTT_PROSJEKT_UTKAST.md` (i cot-explorer), `AGRI_KARTLEGGING.md` (i
 
 ## Endringshistorikk (etter initial godkjenning)
 
+**2026-04-27 (session 105 follow-up):** § 7.3 og § 7.4 utvidet:
+- § 7.3 tabell fikk ny kolonne `systemd-timer?` som markerer
+  faktisk system-deployment (skiller kode-nivå-runner fra
+  installert timer). 9 av 10 ⚠ generert-ikke-installert.
+- § 7.4 splittet i tre subsections: 7.4.1 runner-registry-
+  mønster (kontrakt + responsibilities), 7.4.2 smart-schedule-
+  prinsipper (TZ, stale_hours, off-:00/:30, conservative cadence,
+  cron-konverter-funksjoner), 7.4.3 audit-funn fra session 105
+  om generert vs installert + aksjonsplan til ADR-009.
+- calendar_ff lagt til som 10. fetcher (eneste system-deployed).
+
 **2026-04-27 (session 104):** Docs-cleanup etter audit:
 - § 3.1 mappetre oppdatert til faktisk struktur (signal_server/ ikke server/,
   orchestrator/ ikke pipeline/+signals/, setups/hysteresis.py ikke persistence.py,
@@ -754,52 +765,142 @@ Pipeline-runner leser yaml, orkestrerer. Ingen shell-if-else.
 
 Alle viktige per dine ord. Implementeres i faser (se § 13).
 
-**Status etter session 103:** 6 av 8 har auto-fetcher (live), 1 manuell CSV
+**Status etter session 105:** 6 av 8 har auto-fetcher (live), 1 manuell CSV
 sample, 1 betalt/manuell import. ICE softs COT er live via `cot_disaggregated`-
 runneren; full ICE-COT-fetcher (Brent/Gasoil/TTF) kommer i session 106 — se § 7.5.
 
-| Kilde | Hva | Implementering | Fase | Auto-fetcher? |
-|---|---|---|---|---|
-| USDA WASDE | Ending stocks, yield-prognoser, S2U | XML-parser fra ESMIS (sessions 85, 87) + manuell CSV-fallback | 4 | Ja (`wasde`-runner, session 103) |
-| USDA Crop Progress | % planted/silked/harvested ukentlig | NASS QuickStats API (session 97-98) | 4 | Ja (`crop_progress`-runner, session 103) |
-| Eksport-policy-tracker | India/Indonesia/Ivory Coast-hendelser | Manuell CSV (`export_events`) | 5 | Nei (manuell CSV) |
-| BRL/USD aktivt drivet | Pris-feed + som driver for softs | DEXBZUS via FRED (session 80) | 4 | Ja (gjennom `fundamentals`-runner) |
-| Baltic Dry til agri | Kobling BDI → grain-eksport-pris | BDRY ETF via Yahoo (session 89) | 5 | Ja (`bdi`-runner, session 103) |
-| Disease/pest-varsling | Coffee rust, wheat stripe rust | Manuell CSV (`disease_alerts`) | 6 | Nei (manuell CSV) |
-| ICE softs COT | Sukker/kaffe-spesifikk | Finnes delvis; utvid | 4 | Ja (gjennom `cot_disaggregated`) |
-| IGC rapporter | International Grains Council | Månedlig PDF-parse (session 84) | 5 | Nei (manuell import) |
-| NOAA ONI (ENSO) | El Niño / La Niña-regime | NOAA-ASCII (session 57) | 4 | Ja (`enso`-runner, session 103) |
+`Auto-fetcher?`-kolonnen markerer om vi har en `register_runner`-implementasjon
+(kode-nivå). `systemd-timer?`-kolonnen markerer om timer-unit faktisk er
+installert i `/etc/systemd/system/` (system-nivå). Audit i session 105 avdekket
+at de fleste runners er kode-nivå-implementert men ikke deployed som timer
+ennå — se § 7.4.3 for full status og handlingsplan.
+
+| Kilde | Hva | Implementering | Fase | Auto-fetcher? | systemd-timer? |
+|---|---|---|---|---|---|
+| USDA WASDE | Ending stocks, yield-prognoser, S2U | XML-parser fra ESMIS (sessions 85, 87) + manuell CSV-fallback | 4 | Ja (`wasde`-runner, session 103) | ⚠ generert, ikke installert |
+| USDA Crop Progress | % planted/silked/harvested ukentlig | NASS QuickStats API (session 97-98) | 4 | Ja (`crop_progress`-runner, session 103) | ⚠ generert, ikke installert |
+| Eksport-policy-tracker | India/Indonesia/Ivory Coast-hendelser | Manuell CSV (`export_events`) | 5 | Nei (manuell CSV) | N/A (manuell) |
+| BRL/USD aktivt drivet | Pris-feed + som driver for softs | DEXBZUS via FRED (session 80) | 4 | Ja (gjennom `fundamentals`-runner) | ⚠ generert, ikke installert |
+| Baltic Dry til agri | Kobling BDI → grain-eksport-pris | BDRY ETF via Yahoo (session 89) | 5 | Ja (`bdi`-runner, session 103) | ⚠ generert, ikke installert |
+| Disease/pest-varsling | Coffee rust, wheat stripe rust | Manuell CSV (`disease_alerts`) | 6 | Nei (manuell CSV) | N/A (manuell) |
+| ICE softs COT | Sukker/kaffe-spesifikk | Finnes delvis; utvid | 4 | Ja (gjennom `cot_disaggregated`) | ⚠ generert, ikke installert |
+| IGC rapporter | International Grains Council | Månedlig PDF-parse (session 84) | 5 | Nei (manuell import) | N/A (manuell) |
+| NOAA ONI (ENSO) | El Niño / La Niña-regime | NOAA-ASCII (session 57) | 4 | Ja (`enso`-runner, session 103) | ⚠ generert, ikke installert |
+| Forex Factory kalender | High/medium-impact econ events | JSON via faireconomy.media (session 105) | 12.5+ | Ja (`calendar_ff`-runner, session 105) | ✅ installert (session 105) |
 
 ### 7.4 Runner-registry og fetch-schedule
+
+#### 7.4.1 Runner-registry-mønster
 
 `bedrock fetch run <name>` dispatcher via `register_runner`-decorator i
 `src/bedrock/config/fetch_runner.py`. Alle navn i `fetch.yaml` må ha en
 matchende runner — manglende runner gir hard FAIL (oppdaget i session 103
 da `enso`-timeren feilet hver måned uten registrert runner).
 
+Runner-kontrakt:
+
+```python
+@register_runner("calendar_ff")
+def run_calendar_ff(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult: ...
+```
+
+Runner-funksjonen er ansvarlig for:
+1. Iterere over instrumenter som faktisk trenger dataen (skip-on-missing-
+   metadata; ikke-instrument-spesifikke kilder kjører som single item).
+2. Per item: kalle stateless `fetch_*`-funksjon → DataFrame.
+3. Skrive via `store.append_*` (idempotent INSERT OR REPLACE på PK).
+4. Fange exceptions per item (`_safe_run`-helper) — én feilet
+   instrument stopper ikke resten.
+5. Returnere `FetchRunResult` med per-item-status (ok/fail, rows_written).
+
+Per ADR-007 § 4: HTML-skrapere og PDF-parsere må ha manuell CSV-fallback
+fra dag 1. Runner-funksjonen velger primær eller fallback basert på
+om primær returnerer tom DataFrame eller kaster exception.
+
+#### 7.4.2 Smart-schedule-prinsipper
+
 systemd-timers genereres fra `fetch.yaml` via `bedrock systemd generate`
 + `... install`. `Persistent=true` på alle timers → catch-up ved boot
-hvis fyrings-tiden ble missed. **OnCalendar tolkes i lokal TZ (Oslo);
-cron-verdier i fetch.yaml må derfor settes i lokal-tid, ikke UTC.**
+hvis fyrings-tiden ble missed.
 
-Gjeldende fetcher-liste (etter session 103, 9 totalt):
+**Tidsone-konvensjon:** OnCalendar tolkes i lokal TZ (Oslo: CEST/CET).
+Cron-verdier i fetch.yaml må settes i lokal-tid, ikke UTC, slik at
+firing lander etter publiseringstidspunkt på kilden — ikke før.
 
-| Fetcher | Cadence | OnCalendar | Stale_hours |
-|---|---|---|---|
-| prices | hverdager hver time | `Mon-Fri *-*-* *:40:00` | 30 |
-| cot_disaggregated | ukentlig | `Fri *-*-* 22:00:00` | 168 |
-| cot_legacy | ukentlig | `Fri *-*-* 22:00:00` | 168 |
-| fundamentals | daglig | `*-*-* 02:30:00` | 48 |
-| weather | daglig | `*-*-* 03:00:00` | 30 |
-| enso | månedlig | `*-*-12 06:00:00` | 720 |
-| wasde | månedlig | `*-*-13 19:00:00` | 840 |
-| crop_progress | ukentlig (apr-nov) | `Mon *-04..11-* 23:00:00` | 200 |
-| bdi | hverdager | `Mon-Fri *-*-* 23:30:00` | 30 |
+**Stale_hours-konvensjon:** representerer "alder data kan ha før vi
+betrakter det som stale". UI Kartrommet bruker dette til å klassifisere
+fersk/aging/stale per `_classify_staleness`. Setter:
+- daglige fetchere → `stale_hours = cron-periode + 6h slack` (typisk 30)
+- ukentlige → cron-periode + 1 dag (typisk 168 for ukentlig)
+- månedlige → cron-periode + 1 uke (typisk 720-840)
 
-Cron-konverteren (`cron_to_oncalendar`) støtter siden session 103 også
-range/list i dom- og month-feltene (f.eks. `4-11` → `04..11`), nødvendig
-for å gi NASS Crop Progress en vekstsesong-aware schedule som ikke fyrer
-nyttesløst i desember-mars.
+**Off-:00/:30 minutt-konvensjon (ADR-008):** unngå minutt 0 og 30 når
+mulig — alle som ber om "kl 09" får `0 9 * * *` og lander på samme
+sekund som mange andre fetchere globalt. Minutt 15/35/45 gir bedre
+last-fordeling. Kun bruk :00 når kilden eksplisitt publiserer på hel
+time.
+
+**Conservative cadence:** fetch ikke oftere enn nødvendig. Forex
+Factory JSON oppdateres når events legges til eller forecast/previous
+fylles inn 1-2 timer før release; daglig 2× (06:15 + 18:15 Oslo) er
+nok for `event_distance`-driverens timing-krav (4-24t). Aggressiv
+fetching koster nettverk uten verdi.
+
+**Cron-konverteren** (`cron_to_oncalendar`) støtter:
+- range/list i dom- og month-feltene siden session 103 (`4-11` → `04..11`),
+  nødvendig for vekstsesong-aware schedules som NASS Crop Progress.
+- range/list i hour- og minute-feltene siden session 105 (`6,18` →
+  `06,18`), nødvendig for fetchere som fyrer flere ganger daglig
+  (calendar_ff).
+- DOW-felt med navngitte dager (`MON-FRI`) → systemd `Mon-Fri`-prefix.
+
+Gjeldende fetcher-liste (etter session 105, 10 totalt):
+
+| Fetcher | Cadence | OnCalendar | Stale_hours | Source |
+|---|---|---|---|---|
+| prices | hverdager hver time | `Mon-Fri *-*-* *:40:00` | 30 | Yahoo |
+| cot_disaggregated | ukentlig | `Fri *-*-* 22:00:00` | 168 | CFTC |
+| cot_legacy | ukentlig | `Fri *-*-* 22:00:00` | 168 | CFTC |
+| fundamentals | daglig | `*-*-* 02:30:00` | 48 | FRED |
+| weather | daglig | `*-*-* 03:00:00` | 30 | ERA5 |
+| enso | månedlig | `*-*-12 06:00:00` | 720 | NOAA ONI |
+| wasde | månedlig | `*-*-13 19:00:00` | 840 | USDA ESMIS |
+| crop_progress | ukentlig (apr-nov) | `Mon *-04..11-* 23:00:00` | 200 | NASS API |
+| bdi | hverdager | `Mon-Fri *-*-* 23:30:00` | 30 | BDRY ETF (Yahoo) |
+| calendar_ff | daglig 2× | `*-*-* 06,18:15:00` | 14 | Forex Factory |
+
+#### 7.4.3 Generert vs systemd-installert (audit-funn session 105)
+
+**Status:** `bedrock systemd generate` skriver timer/service-filer til
+`/home/pc/bedrock/systemd/` (gitignored). `bedrock systemd install` (eller
+manuell `cp + systemctl daemon-reload + enable --now`) deployer dem til
+`/etc/systemd/system/`. De to stegene er forskjellige.
+
+Audit i session 105 avdekket at av de 10 fetchere over er kun
+**calendar_ff** faktisk system-deployed (installert i session 105).
+De øvrige 9 fetcherne har genererte timer-filer i repoet, men ingen
+har blitt installert — de kjøres antagelig manuelt eller via annen
+mekanisme (cron i $HOME, manuell `bedrock fetch run <name>`).
+
+| Status | Fetchere |
+|---|---|
+| ✅ Installert + aktiv timer | calendar_ff (session 105) |
+| ⚠ Generert, ikke installert | prices, cot_disaggregated, cot_legacy, fundamentals, weather, enso, wasde, crop_progress, bdi |
+
+**Aksjonsplan:** før Fase 13 cutover må alle 9 ⚠-fetchere installeres
+som systemd-timers eller bekreftes-å-kjøres-via-annen-mekanisme. Dette
+ryddes i ADR-009 cutover-readiness audit (session 117).
+
+Service-relaterte units som ER installert per session 105:
+`bedrock-server.service` (24/7 UI), `bedrock-signals-all.timer`
+(daglig signal-generering), `bedrock-monitor.timer` (06:30 pipeline-
+helse), `bedrock-compare.timer` (06:35 signal-diff vs cot-explorer).
 
 ### 7.5 Ikke-portede fetchere fra cot-explorer (sub-fase 12.5+ roadmap)
 
