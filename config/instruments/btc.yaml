@@ -1,0 +1,96 @@
+# Bitcoin — financial instrument (crypto)
+# Sub-fase 12.5+ session 82: 11. instrument, første crypto-asset-class.
+# CME Bitcoin futures startet 2017-12; COT-historikk derfor kortere
+# enn andre instrumenter. Pris-historikk fra 2014.
+
+inherits: family_financial
+
+instrument:
+  id: BTC
+  asset_class: crypto
+  ticker: BTC
+  cfd_ticker: BTC
+  yahoo_ticker: BTC-USD
+  cot_contract: "BITCOIN - CHICAGO MERCANTILE EXCHANGE"
+  cot_report: legacy
+  fred_series_ids:
+    - DGS10
+    - T10YIE
+    - DTWEXBGS
+    - VIXCLS
+
+aggregation: weighted_horizon
+
+horizons:
+  SCALP:
+    family_weights: {trend: 1.5, positioning: 0.4, macro: 0.5, structure: 1.4, risk: 0.7, analog: 0.3}
+    max_score: 4.8
+    min_score_publish: 1.5
+  SWING:
+    family_weights: {trend: 1.2, positioning: 0.8, macro: 0.7, structure: 1.0, risk: 1.0, analog: 0.7}
+    max_score: 5.4
+    min_score_publish: 2.5
+  MAKRO:
+    family_weights: {trend: 1.0, positioning: 1.0, macro: 1.0, structure: 0.5, risk: 0.8, analog: 1.2}
+    max_score: 5.5
+    min_score_publish: 3.0
+
+families:
+  trend:
+    # BTC er trend-tungt asset; trend-familien dominerer SCALP/SWING.
+    drivers:
+      - {name: sma200_align, weight: 0.5, params: {tf: D1}}
+      - {name: momentum_z, weight: 0.5, params: {window: 20}}
+  positioning:
+    # CME BTC har short COT-historikk (2017-12-onward, n=420). Bruker
+    # noncomm_net_pct som spec-metric. Med kort historikk bruker vi
+    # kortere lookback (26 ukes minimum, ikke 52).
+    drivers:
+      - name: positioning_mm_pct
+        weight: 0.6
+        params: {metric: noncomm_net_pct, lookback_weeks: 52}
+      - name: cot_z_score
+        weight: 0.4
+        params: {metric: noncomm_net_pct, lookback_weeks: 52}
+  macro:
+    # BTC-tolkning: lav real yield = bull (alt-asset i lav-rente-miljø);
+    # USD-svakhet = bull (BTC priset i USD); lav VIX = bull (risk-on).
+    # Empirisk er disse mindre presise enn for equity, men retning er
+    # robust.
+    drivers:
+      - name: real_yield
+        weight: 0.4
+        params: {bull_when: low}
+      - name: dxy_chg5d
+        weight: 0.4
+        params: {bull_when: negative, window: 5}
+      - name: vix_regime
+        weight: 0.2
+        params: {invert: false}  # Lav VIX = risk-on = bull BTC
+  structure:
+    # 20-dagers range-position fungerer bra på BTC også — høy volatilitet
+    # gjør range-bredder dynamiske, men relative posisjonen er meningsfull.
+    drivers:
+      - name: range_position
+        weight: 1.0
+        params: {window: 20, mode: continuation}
+  risk:
+    # BTC har inherent høy vol; kalibrer lookback til 252 dager som
+    # fanger både bull- og bear-regimer.
+    drivers:
+      - name: vol_regime
+        weight: 1.0
+        params: {period: 14, lookback: 252, mode: high_is_bull}
+  analog:
+    drivers:
+      - name: analog_hit_rate
+        weight: 0.5
+        params: {asset_class: crypto, k: 5, horizon_days: 30, outcome_threshold_pct: 5.0, min_history_days: 365}
+      - name: analog_avg_return
+        weight: 0.5
+        params: {asset_class: crypto, k: 5, horizon_days: 30, min_history_days: 365}
+
+grade_thresholds:
+  A_plus: {min_pct_of_max: 0.75, min_families: 4}
+  A:      {min_pct_of_max: 0.55, min_families: 3}
+  B:      {min_pct_of_max: 0.35, min_families: 2}
