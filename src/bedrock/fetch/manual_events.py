@@ -3,7 +3,7 @@
 
 """Manuell-CSV-driven event-fetchere (PLAN § 7.3 Fase-5/6).
 
-Tre hendelses-baserte datakilder uten gratis API:
+Tre hendelses-baserte datakilder:
 
 1. **Eksport-policy events** (India/Indonesia/Ivory Coast eksport-
    restriksjoner, kvoter, forbud) — manuelt kuratert kalender.
@@ -14,19 +14,25 @@ Tre hendelses-baserte datakilder uten gratis API:
    manuell registrering.
    ``data/manual/disease_alerts.csv``
 
-3. **Baltic Dry Index** (BDI) — paid feed (Trading Economics, Bloomberg)
-   eller manuell registrering.
-   ``data/manual/bdi.csv``
+3. **Baltic Dry Index** (BDI) — auto-fetcher via BDRY ETF (Breakwave
+   Dry Bulk Shipping ETF) på Yahoo som proxy for BDI-indeksen
+   (~0.9 korrelasjon). Manuell CSV (``data/manual/bdi.csv``) som
+   fallback. Bruk ``fetch_bdi_via_bdry()`` for auto-modus.
 
-Disse fetcherne har ingen API-fallback — bare manuell CSV. CLI-
-kommandoer for append/list er i ``bedrock.cli.manual_events``.
+CLI-kommandoer for append/list er i ``bedrock.cli.manual_events``.
 
 Bruk:
     from bedrock.fetch.manual_events import (
         fetch_export_events, fetch_disease_alerts, fetch_bdi,
+        fetch_bdi_via_bdry,
     )
+    # Manual CSV-modus:
     df = fetch_export_events()
     store.append_export_events(df)
+
+    # Auto-modus for BDI:
+    df = fetch_bdi_via_bdry()
+    store.append_bdi(df)
 """
 
 from __future__ import annotations
@@ -96,12 +102,58 @@ def fetch_bdi(csv_path: Path = _BDI_CSV) -> pd.DataFrame:
     """Baltic Dry Index fra manuell CSV.
 
     Schema: ``BDI_COLS`` — date, value, source. ``source`` markerer
-    hvor verdien kommer fra (MANUAL, TRADINGECONOMICS, BLOOMBERG).
+    hvor verdien kommer fra (MANUAL, BDRY, TRADINGECONOMICS, BLOOMBERG).
 
     Eksempel-rad:
         2025-04-15,1845.0,MANUAL
     """
     return _read_manual_csv(csv_path, BDI_COLS)
+
+
+def fetch_bdi_via_bdry(
+    start_date: str = "2010-01-01",
+    end_date: str | None = None,
+) -> pd.DataFrame:
+    """Auto-fetch BDI via BDRY ETF (Breakwave Dry Bulk Shipping ETF).
+
+    BDRY er en futures-basert ETF som tracker BDI-indeksen med ~0.9
+    korrelasjon. Gratis Yahoo-data (BDRY ble lansert i 2018, så
+    historikk fra ~2018-onward).
+
+    Returns:
+        DataFrame med BDI_COLS-schema (date, value, source='BDRY').
+        Verdiene er BDRY close-priser (ikke faktiske BDI-verdier),
+        men driver-logikken (% change over window) gir samme signal
+        siden korrelasjonen er høy.
+
+    Args:
+        start_date: ISO-dato for backfill-start.
+        end_date: ISO-dato for slutt (default = i dag).
+    """
+    from datetime import date as _date
+
+    from bedrock.fetch.yahoo import fetch_yahoo_prices
+
+    end = _date.fromisoformat(end_date) if end_date else _date.today()
+    start = _date.fromisoformat(start_date)
+
+    try:
+        df = fetch_yahoo_prices("BDRY", start, end, interval="1d")
+    except Exception as exc:
+        _log.warning("bdi.bdry_fetch_failed", error=str(exc))
+        return pd.DataFrame(columns=list(BDI_COLS))
+
+    if df.empty:
+        return pd.DataFrame(columns=list(BDI_COLS))
+
+    out = pd.DataFrame(
+        {
+            "date": pd.to_datetime(df["ts"]).dt.strftime("%Y-%m-%d"),
+            "value": df["close"].astype("float64"),
+            "source": "BDRY",
+        }
+    )
+    return out[list(BDI_COLS)]
 
 
 def fetch_igc(csv_path: Path = _IGC_CSV) -> pd.DataFrame:
