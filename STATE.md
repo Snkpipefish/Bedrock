@@ -91,6 +91,17 @@
 - **Next task:** **Session 91.** AsOfDateStore.get_wasde+get_bdi proxy-metoder så backtest-rammeverket bruker WASDE/BDI-driverne. Eller: backfill analog_outcomes for Wheat/Cotton/Soybean.
 - **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
+## Workflow-notes (2026-04-26)
+
+- **Session 103 commit-struktur:** STATE.md-endringen for session 103
+  endte ved en feil i `feat(fetch)`-commit `a701778` istedenfor en
+  separat `state:`-commit (mot CLAUDE.md). Årsak: pre-commit-hook
+  reformaterte filer, jeg kjørte `git add -u` ved retry og dro med
+  STATE.md uten å sjekke. Denne `state:`-commiten er rene
+  workflow-noter; selve session 103-entryet ligger i `a701778`.
+  **Fremtidig disiplin:** etter pre-commit-format-failure, alltid
+  `git status` før retry; aldri `git add -u`.
+
 ## Open questions to user
 
 ### Eldre, fortsatt åpne
