@@ -343,7 +343,17 @@ class Engine:
 
             for driver_spec in family_spec.drivers:
                 fn = drivers.get(driver_spec.name)
-                raw_value = fn(store, instrument, driver_spec.params)
+                # Propagér direction via en intern `_direction`-key i en
+                # kopi av params. Drivere som er direction-aware (eks.
+                # analog_*) leser dette; andre ignorerer det.
+                # Session 100: gjør det mulig for analog-driver å invertere
+                # forward-return-threshold for SELL istedenfor mekanisk
+                # 1-x-flip på engine-siden (se ADR-006 § Spesialtilfeller).
+                params_with_dir = {
+                    **driver_spec.params,
+                    "_direction": direction.value,
+                }
+                raw_value = fn(store, instrument, params_with_dir)
                 value = (1.0 - raw_value) if do_flip else raw_value
                 contribution = value * driver_spec.weight
                 driver_results.append(

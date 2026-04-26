@@ -76,6 +76,7 @@ families:
           bull_when: positive
           window: 5
   analog:
+    polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     weight: 2
     drivers:
       - name: analog_hit_rate

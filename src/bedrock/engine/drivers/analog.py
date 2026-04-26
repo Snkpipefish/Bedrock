@@ -139,19 +139,22 @@ def _knn(store: Any, instrument: str, params: dict) -> tuple[list[dict] | None, 
 
 @register("analog_hit_rate")
 def analog_hit_rate(store: Any, instrument: str, params: dict) -> float:
-    """Andelen av K nærmeste naboer der forward_return ≥ outcome_threshold_pct.
+    """Andelen av K nærmeste naboer der forward_return krysser terskelen.
 
-    Returnerer 0..1 direkte (0/k = 0.0, k/k = 1.0). Ingen ytterligere
-    mapping — caller (familie-vekting) skalerer.
+    Returnerer 0..1 direkte. Direction-aware (session 100, ADR-006
+    spesialtilfeller):
 
-    Eksempel: med k=5 og outcome_threshold_pct=3.0:
-    - 5 naboer der 3 har forward_return ≥ 3% → 0.6
-    - 5 naboer der 0 har forward_return ≥ 3% → 0.0
+    - BUY: hits = forward_return ≥ +outcome_threshold_pct
+    - SELL: hits = forward_return ≤ -outcome_threshold_pct
+
+    Engine setter `_direction` i params (BUY/SELL); default BUY.
+    Forutsetter at family har `polarity: neutral` i YAML — driveren
+    håndterer asymmetrien selv (ikke 1-x-flip på engine-siden).
 
     Per ADR-005 B5: terskel er driver-config, ikke lagret i data.
-    Lar oss tune terskel uten å re-backfille `analog_outcomes`.
     """
     threshold = float(params.get("outcome_threshold_pct", 3.0))
+    direction = str(params.get("_direction", "buy")).lower()
 
     rows, err = _knn(store, instrument, params)
     if rows is None:
@@ -159,7 +162,10 @@ def analog_hit_rate(store: Any, instrument: str, params: dict) -> float:
         return 0.0
 
     n = len(rows)
-    hits = sum(1 for r in rows if r["forward_return_pct"] >= threshold)
+    if direction == "sell":
+        hits = sum(1 for r in rows if r["forward_return_pct"] <= -threshold)
+    else:
+        hits = sum(1 for r in rows if r["forward_return_pct"] >= threshold)
     return hits / n
 
 
@@ -185,29 +191,29 @@ _DEFAULT_AVG_RETURN_THRESHOLDS: list[tuple[float, float]] = [
 def analog_avg_return(store: Any, instrument: str, params: dict) -> float:
     """Gjennomsnittlig forward_return blant K naboer mappet til 0..1.
 
-    Unidirectional bull — score reflekterer "hvor positivt har historien
-    vært i tilsvarende situasjoner". Caller velger bear-variant ved å
-    sette `direction: invert` (flipper fortegn på avg_return før mapping)
-    — matcher `currency_cross_trend`-konvensjonen.
+    Direction-aware (session 100, ADR-006 spesialtilfeller):
+    Engine propagerer `_direction` (BUY/SELL) i params. For SELL flippes
+    fortegn på avg-return før threshold-mapping, slik at terskel-trappen
+    måler "hvor negativt forward-return har vært" (= bull SELL).
 
-    Mapping (default):
+    Param `direction: "direct"|"invert"` (eldre konvensjon) overstyrer
+    `_direction` for backwards-kompatibilitet.
+
+    Mapping (default — beholdes for begge retninger; "≥ +X%" tolkes som
+    "≥ +X% i preferert retning"):
     - avg ≥ +5%  → 1.0
     - avg ≥ +3%  → 0.8
     - avg ≥ +2%  → 0.65
     - avg ≥ +1%  → 0.5
     - avg ≥ 0%   → 0.4 (marginalt positiv)
     - avg < 0%   → 0.0 (negativ historikk)
-
-    Caller kan overstyre via `score_thresholds`-param som
-    `dict[str, float]` med terskel som key (str-formattert pct, prefix
-    "+" eller "-"), score som value.
     """
-    direction = params.get("direction", "direct")
-    if direction not in ("direct", "invert"):
+    explicit = params.get("direction")  # eldre param, hvis satt overstyrer
+    if explicit is not None and explicit not in ("direct", "invert"):
         _log.warning(
             "analog_avg_return.unknown_direction",
             instrument=instrument,
-            direction=direction,
+            direction=explicit,
         )
         return 0.0
 
@@ -219,7 +225,18 @@ def analog_avg_return(store: Any, instrument: str, params: dict) -> float:
         return 0.0
 
     avg = sum(r["forward_return_pct"] for r in rows) / len(rows)
-    if direction == "invert":
+
+    # Bestem invertering: eldre `direction: invert` har prioritet, ellers
+    # bruk engine-propagert `_direction` (BUY = direct, SELL = invert).
+    if explicit == "invert":
+        invert = True
+    elif explicit == "direct":
+        invert = False
+    else:
+        engine_dir = str(params.get("_direction", "buy")).lower()
+        invert = engine_dir == "sell"
+
+    if invert:
         avg = -avg
 
     return _map_avg_to_score(avg, thresholds)

@@ -85,6 +85,7 @@ families:
           window_days: 30
           bull_when: negative
   analog:
+    polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     weight: 2
     # K-NN per § 6.5 softs: weather_stress + enso + dxy_chg5d
     # (unica_mix_change og brl_chg5d ikke implementert — utsatt).

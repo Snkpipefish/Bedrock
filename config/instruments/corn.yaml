@@ -91,6 +91,7 @@ families:
           window_days: 30
           bull_when: negative
   analog:
+    polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     weight: 2
     # K-NN per § 6.5 grains: weather_stress + enso + dxy_chg5d
     # (conab_yoy mangler kilde, hoppes over via skip_missing).
