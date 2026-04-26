@@ -108,11 +108,17 @@ families:
     # dager. Høy vol = trade-friendly miljø (trend-tolkning).
     drivers:
       - name: vol_regime
-        weight: 1.0
+        weight: 0.7
         params:
           period: 14
           lookback: 252
           mode: high_is_bull
+      - name: event_distance
+        weight: 0.3
+        params:
+          countries: [USD]
+          impact_levels: [High]
+          min_hours: 4
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     # K-NN over historiske dim-verdier per § 6.5 (Fase 10 ADR-005).

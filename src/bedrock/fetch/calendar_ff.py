@@ -1,3 +1,6 @@
+# pyright: reportArgumentType=false
+# pandas-stubs typer DataFrame-konstruktor med columns=list[str] dårlig.
+
 """Forex Factory økonomisk kalender — fetcher for `econ_events`-tabellen.
 
 Sub-fase 12.5+ session 105 (ADR-007/008) — port av

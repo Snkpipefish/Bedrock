@@ -75,10 +75,16 @@ families:
     weight: 2
     drivers:
       - name: brl_chg5d
-        weight: 1.0
+        weight: 0.9
         params:
           bull_when: positive
           window: 5
+      - name: event_distance
+        weight: 0.1
+        params:
+          countries: [USD]
+          impact_levels: [High]
+          min_hours: 4
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     weight: 2
