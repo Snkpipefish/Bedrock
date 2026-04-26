@@ -140,8 +140,18 @@ def wasde_s2u_change(store: Any, instrument: str, params: dict) -> float:
     if len(df) < 2:
         return 0.5
 
-    latest = float(df["value"].iloc[-1])
-    prev = float(df["value"].iloc[-2])
+    # Filter til siste marketing year (typisk "Proj." for nåværende sesong).
+    # Data sorted by report_date ASC, så vi henter siste rapport's MY-er
+    # og bruker den for å sammenligne på tvers av rapporter.
+    latest_report = df["report_date"].max()
+    latest_my = df[df["report_date"] == latest_report]["marketing_year"].max()
+
+    same_my = df[df["marketing_year"] == latest_my].sort_values("report_date")
+    if len(same_my) < 2:
+        return 0.5
+
+    latest = float(same_my["value"].iloc[-1])
+    prev = float(same_my["value"].iloc[-2])
     if prev == 0:
         return 0.5
 
