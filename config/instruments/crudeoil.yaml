@@ -20,18 +20,21 @@ instrument:
 aggregation: weighted_horizon
 
 horizons:
+  # Session 102: mild asymmetrisk floor. Backtest (session 99): CrudeOil
+  # BUY-hr 41.7% vs SELL-hr 36.4% (90d) — +5.3pp BUY-bias (long-term
+  # uptrend siden 2020-Covid-bunn). Marginal asymmetri — modest justering.
   SCALP:
     family_weights: {trend: 1.2, positioning: 0.5, macro: 0.8, structure: 1.3, risk: 0.8, analog: 0.3}
     max_score: 4.9
-    min_score_publish: 1.5
+    min_score_publish: {buy: 1.4, sell: 1.7}
   SWING:
     family_weights: {trend: 1.0, positioning: 1.2, macro: 1.0, structure: 1.0, risk: 1.0, analog: 0.6}
     max_score: 5.8
-    min_score_publish: 2.5
+    min_score_publish: {buy: 2.3, sell: 2.8}
   MAKRO:
     family_weights: {trend: 0.8, positioning: 1.5, macro: 1.3, structure: 0.5, risk: 0.8, analog: 1.0}
     max_score: 5.9
-    min_score_publish: 3.5
+    min_score_publish: {buy: 3.2, sell: 3.8}
 
 families:
   trend:
