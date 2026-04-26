@@ -395,17 +395,28 @@ def _compute_scores(
     return out
 
 
-def _get_min_score_publish(cfg: InstrumentConfig, horizon: Horizon) -> float:
-    """Publish-gulv per horisont.
+def _get_min_score_publish(cfg: InstrumentConfig, horizon: Horizon, direction: Direction) -> float:
+    """Publish-gulv per (horisont, retning).
 
-    - Financial: fra `HorizonSpec.min_score_publish` (YAML-nøkkel er
-      uppercase, mapper fra enum)
-    - Agri: fra `AgriRules.min_score_publish` (felles for alle horisonter)
+    - Financial: fra `HorizonSpec.get_publish_floor(direction)` —
+      asymmetrisk hvis YAML har dict-form, ellers felles float.
+    - Agri: fra `AgriRules.min_score_publish`. Støtter også dict-form
+      (felles for alle horisonter, men kan være per-direction).
+
+    Session 101: asymmetrisk floor for instrumenter med strukturell
+    direction-bias (SP500/Nasdaq BUY-bias 40-50pp per session 99).
     """
     if isinstance(cfg.rules, FinancialRules):
-        return cfg.rules.horizons[_yaml_key_from_horizon(horizon)].min_score_publish
+        spec = cfg.rules.horizons[_yaml_key_from_horizon(horizon)]
+        return spec.get_publish_floor(direction.value)
     assert isinstance(cfg.rules, AgriRules)  # nosec B101
-    return cfg.rules.min_score_publish
+    raw = cfg.rules.min_score_publish
+    if isinstance(raw, dict):
+        key = direction.value.lower()
+        if key in raw:
+            return float(raw[key])
+        return float(max(raw.values()))
+    return float(raw)
 
 
 def _build_analog_trace(
@@ -542,7 +553,7 @@ def _build_entry(
     har en `analog`-familie i YAML. None → analog-trace skippes (matcher
     eldre call-sites + tester som ikke trenger K-NN).
     """
-    min_publish = _get_min_score_publish(cfg, horizon)
+    min_publish = _get_min_score_publish(cfg, horizon, direction)
     published = group_result.score >= min_publish
 
     analog_trace = _build_analog_trace(cfg, store) if store is not None else None
