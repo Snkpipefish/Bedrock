@@ -16,7 +16,8 @@
   - **76:** Block D start — `bedrock signals-all`-CLI + systemd-timer (Mon-Fri 03:30). 7 nye tester. Timer aktivert via NOPASSWD-sudo. **LUKKET 2026-04-26**.
   - **77a:** Block D fortsettelse — pyright-cleanup. **202 → 0 errors.** Pyright nå **blocking i CI**. **LUKKET 2026-04-26**.
   - **78:** Block D ferdigstillelse — monitor- + compare-timere (06:30 og 06:35) installert via NOPASSWD-sudo. Daglig pipeline-helse + signal-diff skrives til data/_meta/ med dato-suffix. .gitignore oppdatert (daglige filer ignoreres; baseline-filer beholdes). Initial baseline tatt 2026-04-26. **Obs-vinduet er nå fullstendig automatisert.** **LUKKET 2026-04-26**.
-  - **79 (neste):** Block A polish (Gold structure+risk-familier — fortsatt placeholder), eller passiv obs-vindu-venting (sub-session 68, ~2 uker per PLAN § 12.1).
+  - **79:** Block A polish — `range_position` (structure) + `vol_regime` (risk) erstatter sma200_align placeholder i Gold. **Gold scorer nå reelt i alle 6 familier.** 13 nye tester. **LUKKET 2026-04-26**. **Sub-fase 12.5 ferdig — alle 4 blocks fullført.**
+  - **80 (neste):** Sub-fase 12.5 LUKKES, tag `v0.12.5-debt-cleanup`. Deretter: passiv obs-vindu-venting (~2 uker), eller eventuelle små polish-tasks (cot_legacy backfill, branch-protection setup).
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -54,11 +55,11 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `feat/obs-window-timers-block-d` (Nivå 3 — session 78). PR #1-#11 merget.
+- **Branch:** `feat/gold-structure-risk-block-a` (Nivå 3 — session 79). PR #1-#12 merget.
 - **Blocked:** nei.
-- **Aktive systemd-timere:** 9 totalt. 6 fetch-timere (mandag-fredag, ulike kl), `bedrock-signals-all` (Mon-Fri 03:30), `bedrock-monitor` (daglig 06:30), `bedrock-compare` (daglig 06:35). NOPASSWD-sudo aktivert.
-- **Initial baseline:** `data/_meta/{monitor,compare}_baseline_2026-04-25.{json,md}` (commitet). Daglige filer skrives til samme mappe med dato-suffix (gitignored).
-- **Next task:** **Session 79.** Block A polish (Gold structure+risk-familier — fortsatt placeholder) eller passiv venting på obs-vinduet (sub-session 68, ~2 uker per PLAN § 12.1).
+- **Aktive systemd-timere:** 9 totalt (6 fetch + signals-all + monitor + compare).
+- **Sub-fase 12.5 status:** alle 4 blocks fullført. 10 nye drivere, 7 instrumenter, pyright 0/0, 9 timere, obs-vindu fullstendig automatisert.
+- **Next task:** **Session 80.** Tag `v0.12.5-debt-cleanup`. Deretter passiv obs-vindu-venting eller small-task som cot_legacy backfill / branch-protection-setup.
 - **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
 ## Open questions to user
@@ -146,6 +147,90 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-26 — Session 79: Sub-fase 12.5 Block A polish — Gold structure + risk (LUKKET)
+
+**Scope:** Erstatte sma200_align placeholder i Gold structure- og
+risk-familier med ekte drivere. Avslutter sub-fase 12.5 med Gold som
+fullstendig real-driver-konfigurert (alle 6 familier).
+
+**Endret denne session (feature-branch `feat/gold-structure-risk-block-a`):**
+
+`src/bedrock/engine/drivers/structure.py` (ny, ~85 linjer):
+- `@register("range_position")`: hvor i N-dagers high/low-range er
+  prisen? Score 0..1 = (close - low_n) / (high_n - low_n).
+- Modes: `continuation` (default — høy score = nær top = bull) eller
+  `mean_revert` (høy score = nær bunn = bull).
+- Defensive: kort historikk → 0.0; flatt range → 0.0.
+
+`src/bedrock/engine/drivers/risk.py` (ny, ~110 linjer):
+- `@register("vol_regime")`: Wilder ATR(14)-percentil over 252 dager.
+- Modes: `high_is_bull` (default — trend-tolkning, høy vol = trade-
+  friendly) eller `low_is_bull` (mean-revert / kompresjon-bull).
+- Pyright-suppression for `reportReturnType` (pandas-stubs typer
+  `concat([...]).max(axis=1)` som Union, i praksis Series).
+
+`src/bedrock/engine/drivers/__init__.py`:
+- Auto-import oppdatert: `agri, analog, currency, macro, positioning,
+  risk, seasonal, structure, trend`.
+
+`config/instruments/gold.yaml`:
+- structure (vekt 1.3 SCALP/1.0 SWING/0.5 MAKRO): sma200_align →
+  range_position(window=20, mode=continuation)
+- risk (vekt 0.8 SCALP/1.0 SWING/0.8 MAKRO): sma200_align →
+  vol_regime(period=14, lookback=252, mode=high_is_bull)
+
+`tests/unit/test_drivers_structure_risk.py` (ny, 13 tester):
+- range_position: at_top, at_bottom, midrange, mean_revert-invert,
+  short_history, flat_range, store_error.
+- vol_regime: high_vol→høy, low_vol→lav, low_is_bull-invert,
+  short_history, store_error.
+- registry-presence-test.
+
+**End-to-end Gold (april 2026):**
+
+```
+SCALP buy:  total=3.016 grade=A
+SWING buy:  total=3.373 grade=A
+MAKRO buy:  total=3.169 grade=B
+  trend=0.75 positioning=0.39 macro=0.45
+  structure=0.66 risk=0.76 analog=0.45
+```
+
+Vs session 71 (kun trend/positioning/macro real):
+- structure 0.66 (Gold ~66% opp i 20d range — trend-pågående men ikke
+  ekstrem)
+- risk 0.76 (vol-percentil 76 av 252 dager — moderat-høy vol, trade-
+  friendly)
+- Realistisk distribusjon, ingen score klipping mot 1.0
+
+**Tester:** 1359 → 1372 (+13). 1372/1372 grønne.
+
+**Pyright:** 0 errors (CI-blocking holder).
+
+**Beslutninger:**
+- Beholdt unidirectional bull-tolkning — caller kan invertere via
+  YAML-modes (`mean_revert` for structure, `low_is_bull` for risk).
+- ATR-period 14 og lookback 252 dager er finansbransje-standard for
+  daglig data; ikke parametrert i YAML utover `period`/`lookback`.
+- Pyright-suppression i risk.py er minimum-scope (kun
+  `reportReturnType` for pd.concat-output). Ikke modul-bredt.
+- `range_position` valgte OHLCV high/low (ikke kun close) — tar
+  hensyn til intra-bar-ekstremer som er viktige for struktur.
+
+**Sub-fase 12.5 OPPSUMMERING (10 sessioner, 70-79):**
+
+| Block | Sessions | Drivere | Tester | Effekt |
+|---|---|---|---:|---|
+| A | 70-71 | positioning_mm_pct, cot_z_score, real_yield, dxy_chg5d, vix_regime | +58 | Gold real i 4/6 familier |
+| B | 72-74 | weather_stress, enso_regime, seasonal_stage | +29 | Corn-inversjon fjernet |
+| C | 75 | (5 nye instrumenter) | 0 | 0→6 felles signaler vs cot-explorer |
+| D | 76, 77a, 78 | signals-all CLI + 3 timere + pyright cleanup | +7 | Daglig signals.json + 202→0 type-errors |
+| A polish | 79 | range_position, vol_regime | +13 | Gold real i 6/6 familier |
+
+Total: 12 nye drivere, 5 nye instrumenter, +107 tester, 7 nye PR-er.
+
+**Tagging:** `v0.12.5-debt-cleanup` markeres i session 80.
 
 ### 2026-04-26 — Session 78: Sub-fase 12.5 Block D ferdigstillelse — monitor + compare-timere (LUKKET)
 

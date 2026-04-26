@@ -99,4 +99,14 @@ def is_registered(name: str) -> bool:
 # ---------------------------------------------------------------------------
 
 # ruff: noqa: E402, F401
-from bedrock.engine.drivers import agri, analog, currency, macro, positioning, seasonal, trend
+from bedrock.engine.drivers import (
+    agri,
+    analog,
+    currency,
+    macro,
+    positioning,
+    risk,
+    seasonal,
+    structure,
+    trend,
+)
