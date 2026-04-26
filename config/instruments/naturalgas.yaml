@@ -41,13 +41,21 @@ families:
       - {name: sma200_align, weight: 0.5, params: {tf: D1}}
       - {name: momentum_z, weight: 0.5, params: {window: 20}}
   positioning:
+    # Sub-fase 12.5+ session 106: NaturalGas (NG=F = Henry Hub NYMEX) er
+    # primær CFTC, men ICE TTF Gas er det viktigste EU-benchmarket.
+    # Splitt: 0.7 CFTC / 0.3 ICE-TTF (CFTC dominerer fordi NG=F er Henry
+    # Hub-prising; TTF gir cross-region-positioning-signal som
+    # secondary).
     drivers:
       - name: positioning_mm_pct
-        weight: 0.6
+        weight: 0.42  # 0.6 * 0.7 — CFTC NYMEX NG
         params: {metric: mm_net_pct, lookback_weeks: 52}
       - name: cot_z_score
-        weight: 0.4
+        weight: 0.28  # 0.4 * 0.7 — CFTC NYMEX NG
         params: {metric: mm_net_pct, lookback_weeks: 52}
+      - name: cot_ice_mm_pct
+        weight: 0.3   # ICE TTF overlay (cross-region)
+        params: {contract: ice ttf gas, metric: mm_net_pct, lookback_weeks: 52}
   macro:
     drivers:
       - name: dxy_chg5d

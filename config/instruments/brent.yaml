@@ -40,10 +40,14 @@ families:
       - {name: sma200_align, weight: 0.5, params: {tf: D1}}
       - {name: momentum_z, weight: 0.5, params: {window: 20}}
   positioning:
+    # Sub-fase 12.5+ session 106: Brent er ICE-listet (XBRUSD = ICE Brent
+    # Last Day), så ICE-COT er primær kilde. CFTC's "Brent Last Day -
+    # NYMEX" er en US-mini-kontrakt med lav likviditet — beholdes kun
+    # som sekundær cross-validering via cot_z_score.
     drivers:
-      - name: positioning_mm_pct
+      - name: cot_ice_mm_pct
         weight: 0.6
-        params: {metric: mm_net_pct, lookback_weeks: 52}
+        params: {contract: ice brent crude, metric: mm_net_pct, lookback_weeks: 52}
       - name: cot_z_score
         weight: 0.4
         params: {metric: mm_net_pct, lookback_weeks: 52}
