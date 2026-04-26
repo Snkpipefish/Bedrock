@@ -1,3 +1,6 @@
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportReturnType=false, reportGeneralTypeIssues=false, reportIndexIssue=false, reportOperatorIssue=false
+# pandas-stubs false-positives — se data/store.py for kontekst.
+
 """Analog-matching: K-NN over historiske dim-verdier (ADR-005, Fase 10 session 59).
 
 Per PLAN § 6.5: for hver asset-klasse defineres et fast sett av dimensjoner

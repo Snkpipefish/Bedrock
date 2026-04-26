@@ -1,3 +1,6 @@
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportCallIssue=false
+# pandas-stubs false-positives — se data/store.py for kontekst.
+
 """Weather-fetcher mot Open-Meteo Archive API.
 
 Ingen auth, ingen API-nøkkel. Dekker 1940-present (ERA5 reanalysis) for

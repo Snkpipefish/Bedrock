@@ -1,3 +1,6 @@
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportCallIssue=false
+# pandas-stubs false-positives — se data/store.py for kontekst.
+
 """Yahoo Finance pris-fetcher.
 
 Port av cot-explorers `build_price_history.py` (verifisert i produksjon

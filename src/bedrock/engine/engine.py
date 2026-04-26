@@ -1,3 +1,6 @@
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportCallIssue=false
+# pandas-stubs false-positives — se data/store.py for kontekst.
+
 """Engine — hovedklasse for scoring.
 
 Kontrakt:

@@ -1,3 +1,6 @@
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportCallIssue=false
+# pandas-stubs false-positives — se data/store.py for kontekst.
+
 """`generate_signals` — full E2E-orchestrator: score + setup + hysterese.
 
 Fase 5 session 24 (del 2): knytter `score_instrument` til setup-generator

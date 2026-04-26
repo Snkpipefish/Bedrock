@@ -1,3 +1,6 @@
+# pyright: reportReturnType=false, reportCallIssue=false, reportAttributeAccessIssue=false, reportArgumentType=false
+# pandas-stubs false-positives på .loc/iloc-narrowing — se data/store.py for kontekst.
+
 """AsOfDateStore — wrapper rundt DataStore som klipper alle getters
 til en gitt as-of-date.
 

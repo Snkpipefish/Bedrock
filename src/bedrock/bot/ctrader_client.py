@@ -1,3 +1,8 @@
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false
+# ctrader-open-api 0.9.2 er installert med --no-deps (ADR-konflikt med
+# protobuf-versjon, se STATE session 41) og leverer ingen type-stubs.
+# Pyright kan ikke se proto-symbolene; runtime-import fungerer fint.
+
 """cTrader Open API transport-lag for Bedrock trading-bot.
 
 Portert fra `~/scalp_edge/trading_bot.py` session 41 per migrasjons-

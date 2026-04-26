@@ -1,3 +1,6 @@
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportCallIssue=false
+# pandas-stubs false-positives — se data/store.py for kontekst.
+
 """NOAA ONI (Oceanic Niño Index) fetcher.
 
 ONI er 3-måneders rullende gjennomsnitt av SST-anomalier i Niño 3.4-

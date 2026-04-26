@@ -1,3 +1,6 @@
+# pyright: reportAttributeAccessIssue=false, reportCallIssue=false
+# pandas-stubs false-positives — se data/store.py for kontekst.
+
 """Backtest-runner — leser analog_outcomes og bygger BacktestResult.
 
 Session 62: `run_outcome_replay` (kun outcomes-tabellen).

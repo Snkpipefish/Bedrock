@@ -1,3 +1,6 @@
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportCallIssue=false
+# pandas-stubs false-positives — se data/store.py for kontekst.
+
 """`bedrock backfill` — kommandoer for å fylle SQLite-databasen med historikk.
 
 Fase 3: 5 subkommandoer (prices, cot-disaggregated, cot-legacy, weather,

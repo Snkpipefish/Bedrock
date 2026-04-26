@@ -1,3 +1,8 @@
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportCallIssue=false, reportOptionalMemberAccess=false
+# pandas-stubs false-positives — se data/store.py for kontekst.
+# Optional-narrowing: latest_observation er ikke-None når has_data sjekkes
+# (relasjonen er ikke i type-systemet).
+
 """`bedrock fetch` — kommandoer rundt config-drevet fetch-pipeline.
 
 Fase 6 session 28 introduserer kun `status`-subkommandoen. Neste

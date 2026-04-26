@@ -1,3 +1,6 @@
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportCallIssue=false
+# pandas-stubs false-positives — se data/store.py for kontekst.
+
 """Nivå-detektor — finner støtte/motstand-nivåer i pris-historikk.
 
 Per PLAN § 5.1. Session 16 implementerer tre detektorer:
