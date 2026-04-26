@@ -1,0 +1,21 @@
+# bedrock-server: Flask + waitress signal-server for web-UI
+# Session 93. Holder UI online på http://127.0.0.1:5100/.
+#
+# Avhenger av at fetch-timerne har skrevet data og signals-all har
+# generert signals.json. Default After-rekkefølgen sikrer dette.
+[Unit]
+Description=Bedrock signal_server: Flask + UI på port 5100
+After=network-online.target bedrock-signals-all.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pc/bedrock
+ExecStart=/home/pc/bedrock/.venv/bin/bedrock server --host 127.0.0.1 --port 5100
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

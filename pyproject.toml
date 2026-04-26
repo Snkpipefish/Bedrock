@@ -25,6 +25,7 @@ dependencies = [
 
     # Server
     "flask>=3.0",
+    "waitress>=3.0",  # WSGI-prod-server for `bedrock server` (session 93)
 
     # Logging
     "structlog>=24.4",
