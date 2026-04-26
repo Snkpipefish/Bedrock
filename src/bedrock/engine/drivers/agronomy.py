@@ -335,10 +335,60 @@ def bdi_chg30d(store: Any, instrument: str, params: dict) -> float:
     return 0.0
 
 
+@register("igc_stocks_change")
+def igc_stocks_change(store: Any, instrument: str, params: dict) -> float:
+    """Score basert på endring i IGC ending-stocks fra forrige rapport.
+
+    Lavere ending-stocks = tighter global supply = bull. Driveren leser
+    ``TABLE_IGC`` for relevant grain (Corn=MAIZE, Wheat=WHEAT).
+
+    Returns:
+        Score 0..1. 0.5 (nøytral) ved utilstrekkelig data.
+    """
+    igc_grain_map = {
+        "Corn": "MAIZE",
+        "Wheat": "WHEAT",
+    }
+    grain = igc_grain_map.get(instrument)
+    if grain is None:
+        return 0.5
+
+    try:
+        df = store.get_igc(grain, "ENDING_STOCKS")
+    except Exception as exc:
+        _log.warning("igc.fetch_failed", instrument=instrument, error=str(exc))
+        return 0.5
+
+    if len(df) < 2:
+        return 0.5
+
+    latest = float(df["value_mil_tons"].iloc[-1])
+    prev = float(df["value_mil_tons"].iloc[-2])
+    if prev == 0:
+        return 0.5
+
+    pct_change = (latest - prev) / prev * 100
+
+    if pct_change <= -10:
+        return 1.0
+    if pct_change <= -5:
+        return 0.85
+    if pct_change <= -1:
+        return 0.65
+    if pct_change <= 1:
+        return 0.5
+    if pct_change <= 5:
+        return 0.35
+    if pct_change <= 10:
+        return 0.15
+    return 0.0
+
+
 __all__ = [
     "bdi_chg30d",
     "crop_progress_stage",
     "disease_pressure",
     "export_event_active",
+    "igc_stocks_change",
     "wasde_s2u_change",
 ]

@@ -44,6 +44,7 @@ from bedrock.data.schemas import (
     DDL_DISEASE_ALERTS,
     DDL_EXPORT_EVENTS,
     DDL_FUNDAMENTALS,
+    DDL_IGC,
     DDL_PRICES,
     DDL_WASDE,
     DDL_WEATHER,
@@ -51,6 +52,7 @@ from bedrock.data.schemas import (
     DISEASE_ALERTS_COLS,
     EXPORT_EVENTS_COLS,
     FUNDAMENTALS_COLS,
+    IGC_COLS,
     TABLE_ANALOG_OUTCOMES,
     TABLE_BDI,
     TABLE_COT_DISAGGREGATED,
@@ -59,6 +61,7 @@ from bedrock.data.schemas import (
     TABLE_DISEASE_ALERTS,
     TABLE_EXPORT_EVENTS,
     TABLE_FUNDAMENTALS,
+    TABLE_IGC,
     TABLE_PRICES,
     TABLE_WASDE,
     TABLE_WEATHER,
@@ -120,6 +123,7 @@ class DataStore:
             conn.execute(DDL_EXPORT_EVENTS)
             conn.execute(DDL_DISEASE_ALERTS)
             conn.execute(DDL_BDI)
+            conn.execute(DDL_IGC)
             conn.commit()
 
     # ------------------------------------------------------------------
@@ -853,6 +857,26 @@ class DataStore:
             df = pd.read_sql(query, conn, params=params)
         if not df.empty:
             df["alert_date"] = pd.to_datetime(df["alert_date"])
+        return df
+
+    def append_igc(self, df: pd.DataFrame) -> int:
+        return self._append_generic(df, TABLE_IGC, IGC_COLS)
+
+    def get_igc(
+        self,
+        grain: str,
+        metric: str,
+    ) -> pd.DataFrame:
+        """IGC-tidsserie for (grain, metric). Sortert ASC."""
+        query = f"""
+            SELECT * FROM {TABLE_IGC}
+            WHERE grain = ? AND metric = ?
+            ORDER BY report_date ASC
+        """
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=(grain, metric))
+        if not df.empty:
+            df["report_date"] = pd.to_datetime(df["report_date"])
         return df
 
     def append_bdi(self, df: pd.DataFrame) -> int:

@@ -21,7 +21,8 @@
   - **81:** Sub-fase 12.5+ — EURUSD + SP500 som 9. og 10. instrument (FX og indices asset-klasser). Backfilt prices + legacy COT for begge. Bumpet monitor's grade-endring-terskel fra 50% til 80% (bedrock er strengere by design). **LUKKET 2026-04-26**.
   - **82:** Sub-fase 12.5+ — BTC som 11. instrument (crypto-asset-class). Backfilt 4239 prices (BTC-USD 2014-2026) + 420 legacy COT (CME Bitcoin futures 2017-12-onward). Verifisert at cot_legacy-fetcher auto-discoverer alle legacy-instrumenter via YAMLer (Nasdaq + EURUSD + SP500 + BTC). **LUKKET 2026-04-26**.
   - **83:** **PLAN § 7.3 datakilder — full infrastruktur.** 5 nye SQLite-tabeller (crop_progress, wasde, export_events, disease_alerts, bdi). 3 nye fetcher-moduler: `nass.py` (USDA QuickStats med API-key + manuell CSV-fallback), `wasde.py` (USDA-CSV + manuell fallback), `manual_events.py` (eksport-events, disease-alerts, BDI ren manuell). 5 nye drivere i `agronomy.py`: crop_progress_stage, wasde_s2u_change, export_event_active, disease_pressure, bdi_chg30d. Sample manuell CSV med kjente events (India rice ban, Indonesia palm oil, Ivory Coast cocoa quota, etc). Dokumentasjon i `data/manual/README.md`. 18 nye tester. **LUKKET 2026-04-26**.
-  - **84 (neste):** Wire de 5 nye agronomy-driverne inn i Corn/Wheat/Cotton/Soybean/Sugar/Coffee YAMLs (vent til mer data foreligger). NASS API-key + WASDE-URL-discovery for å aktivere auto-fetch.
+  - **84:** PLAN § 7.3 — siste datakilde (IGC reports). Ny `TABLE_IGC` + `fetch_igc` + `igc_stocks_change`-driver. Alle 8 PLAN § 7.3 sources har nå infrastruktur. **22 drivere totalt.** **LUKKET 2026-04-26**.
+  - **85 (neste):** Wire alle 6 nye agronomy-drivere inn i Corn/Wheat/Cotton/Soybean/Sugar/Coffee YAMLs som lavtvektede contributors. Eller: Fokus på data-populering (NASS API-key, WASDE-URL-discovery, faktisk current eksport-events).
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -59,13 +60,13 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `feat/datakilder-plan-7-3` (Nivå 3 — session 83). PR #1-#16 merget.
-- **Blocked:** nei. Manuelle CSV-er gir umiddelbar funksjonalitet; API-fetchere venter på BEDROCK_NASS_API_KEY (gratis registrering).
+- **Branch:** `feat/agri-yaml-wireup-block-e` (Nivå 3 — session 84). PR #1-#17 merget.
+- **Blocked:** nei.
 - **Aktive systemd-timere:** 9 totalt.
 - **Instrumenter:** 11 totalt.
-- **Drivere:** 21 totalt (var 16 ved session 82). 5 nye agronomy-drivere klare for YAML-integration.
-- **PLAN § 7.3 datakilder:** infrastruktur fullt implementert. NASS, WASDE, eksport-events, disease-alerts, BDI alle har tabell + fetcher + driver + tester. Bruker populerer `data/manual/*.csv` for sources uten gratis API.
-- **Next task:** **Session 84.** Wire nye agronomy-drivere inn i agri-YAMLs (Corn/Wheat/Cotton/Soybean/Sugar/Coffee). Aktiver NASS API når key foreligger.
+- **Drivere:** 22 totalt.
+- **PLAN § 7.3 datakilder:** **8 av 8 sources har infrastruktur** (NASS Crop Progress, WASDE, eksport-policy, BRL, BDI, disease/pest, ICE softs COT, IGC). Hver har DB-tabell + fetcher + driver + tester. Auto-fetch er aktiv for de som ikke krever bruker-input (BRL via FRED, ICE via CFTC). Andre venter på API-key (NASS), URL-discovery (WASDE), eller manuell populering.
+- **Next task:** **Session 85.** Wire agronomy-drivere inn i agri-instrumentenes YAMLs (lavtvektede slik at de bidrar når data finnes uten å dominere).
 - **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
 ## Open questions to user
@@ -153,6 +154,63 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-26 — Session 84: PLAN § 7.3 — IGC reports (siste datakilde) (LUKKET)
+
+**Scope:** Avslutte PLAN § 7.3 ved å legge til siste datakilde — IGC
+(International Grains Council) månedlige Grain Market Report.
+**Alle 8 PLAN-§-7.3-datakilder har nå infrastruktur.**
+
+**Endret denne session (feature-branch `feat/agri-yaml-wireup-block-e`):**
+
+`src/bedrock/data/schemas.py`:
+- Ny `TABLE_IGC` + `DDL_IGC` + `IGC_COLS`. Schema: report_date,
+  marketing_year, grain (WHEAT/MAIZE/RICE/TOTAL_GRAINS), metric
+  (PRODUCTION/CONSUMPTION/ENDING_STOCKS/TRADE), value_mil_tons.
+
+`src/bedrock/data/store.py`:
+- `_init_schema` oppretter IGC-tabellen.
+- `append_igc` + `get_igc(grain, metric)`-metoder.
+
+`src/bedrock/fetch/manual_events.py`:
+- `fetch_igc(csv_path)` — manuell-CSV-fetcher (paid PDF subscription
+  så ingen auto-fetcher).
+
+`src/bedrock/engine/drivers/agronomy.py`:
+- Ny `@register("igc_stocks_change")`. Mapping: Corn→MAIZE, Wheat→WHEAT.
+  % endring i ending stocks fra forrige IGC-rapport. Lavere = bull
+  (tighter global supply).
+- Trapped 0..1-mapping (samme som wasde_s2u_change).
+
+`tests/unit/test_drivers_agronomy.py`:
+- 4 nye tester for igc_stocks_change.
+- DummyStore utvidet med `get_igc`.
+
+**Tester:** 1400 → 1404 (+4). 1404/1404 grønne. Pyright 0/0.
+
+**Status PLAN § 7.3 etter denne:**
+
+| Source | Tabell | Fetcher | Driver | Sample data |
+|---|---|---|---|---|
+| USDA WASDE | wasde | wasde.py (URL-recovery) | wasde_s2u_change | manuell CSV-template |
+| NASS Crop Progress | crop_progress | nass.py (API-key) | crop_progress_stage | manuell CSV-template |
+| Eksport-policy | export_events | manual_events.py | export_event_active | 5 samples (India rice, Ivory Coast cocoa, etc) |
+| BRL/USD | fundamentals (DEXBZUS) | fred.py (auto) | brl_chg5d | 4251 obs backfilt |
+| Baltic Dry | bdi | manual_events.py | bdi_chg30d | manuell CSV-template |
+| Disease/pest | disease_alerts | manual_events.py | disease_pressure | 3 samples |
+| ICE softs COT | cot_disaggregated | cot_cftc.py (auto) | positioning_mm_pct | 851 obs backfilt per softs |
+| IGC reports | igc | manual_events.py | igc_stocks_change | manuell CSV-template |
+
+**Auto-fetch-aktivt** for: BRL (FRED), ICE softs COT (CFTC). Andre
+venter på bruker-action (API-key registrering eller manuell populering).
+
+**Beslutninger:**
+- IGC mapper kun Corn→MAIZE og Wheat→WHEAT. Soybean ikke i IGC
+  (hovedsakelig grain-fokus). Returner 0.5 for andre instrumenter.
+- Ingen auto-fetcher for IGC siden subscription er paid; manuell-
+  CSV er eneste praktiske fri alternativ.
+- Wireup til YAMLs utsatt til session 85 — drivere returnerer 0.5
+  uten data, så øyeblikkelig wireup gir ikke verdi før data populeres.
 
 ### 2026-04-26 — Session 83: PLAN § 7.3 datakilder — full infrastruktur (LUKKET)
 

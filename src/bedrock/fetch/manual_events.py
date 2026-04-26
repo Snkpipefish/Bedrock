@@ -40,6 +40,7 @@ from bedrock.data.schemas import (
     BDI_COLS,
     DISEASE_ALERTS_COLS,
     EXPORT_EVENTS_COLS,
+    IGC_COLS,
 )
 
 _log = structlog.get_logger(__name__)
@@ -47,6 +48,7 @@ _log = structlog.get_logger(__name__)
 _EXPORT_EVENTS_CSV = Path("data/manual/export_events.csv")
 _DISEASE_ALERTS_CSV = Path("data/manual/disease_alerts.csv")
 _BDI_CSV = Path("data/manual/bdi.csv")
+_IGC_CSV = Path("data/manual/igc.csv")
 
 
 def _read_manual_csv(csv_path: Path, expected_cols: tuple[str, ...]) -> pd.DataFrame:
@@ -102,4 +104,19 @@ def fetch_bdi(csv_path: Path = _BDI_CSV) -> pd.DataFrame:
     return _read_manual_csv(csv_path, BDI_COLS)
 
 
-__all__ = ["fetch_bdi", "fetch_disease_alerts", "fetch_export_events"]
+def fetch_igc(csv_path: Path = _IGC_CSV) -> pd.DataFrame:
+    """IGC (International Grains Council) Grain Market Report fra manuell CSV.
+
+    IGC publiserer månedlig PDF (paid subscription). Manuell CSV-
+    populering anbefales for production-bruk.
+
+    Schema: ``IGC_COLS`` — report_date, marketing_year, grain, metric,
+    value_mil_tons.
+
+    Eksempel-rad:
+        2025-04-25,2025/26,WHEAT,PRODUCTION,800.5
+    """
+    return _read_manual_csv(csv_path, IGC_COLS)
+
+
+__all__ = ["fetch_bdi", "fetch_disease_alerts", "fetch_export_events", "fetch_igc"]

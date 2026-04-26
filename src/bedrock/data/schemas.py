@@ -549,3 +549,29 @@ CREATE TABLE IF NOT EXISTS {TABLE_BDI} (
 """
 
 BDI_COLS: tuple[str, ...] = ("date", "value", "source")
+
+
+# IGC (International Grains Council) — månedlig Grain Market Report
+# med globalt totaltilbud/etterspørsel (production, trade, ending stocks)
+# for korn (wheat, maize, rice). Paid PDF-subscription primært;
+# manuell CSV-løsning her.
+TABLE_IGC = "igc"
+
+DDL_IGC = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_IGC} (
+    report_date    TEXT    NOT NULL,    -- IGC report publication date
+    marketing_year TEXT    NOT NULL,    -- "2025/26"
+    grain          TEXT    NOT NULL,    -- "WHEAT", "MAIZE", "RICE", "TOTAL_GRAINS"
+    metric         TEXT    NOT NULL,    -- "PRODUCTION", "CONSUMPTION", "ENDING_STOCKS", "TRADE"
+    value_mil_tons REAL    NOT NULL,    -- IGC bruker millioner tonn
+    PRIMARY KEY (report_date, marketing_year, grain, metric)
+)
+"""
+
+IGC_COLS: tuple[str, ...] = (
+    "report_date",
+    "marketing_year",
+    "grain",
+    "metric",
+    "value_mil_tons",
+)

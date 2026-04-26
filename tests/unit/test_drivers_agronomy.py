@@ -51,6 +51,9 @@ class _DummyStore:
             raise KeyError("no BDI")
         return s.tail(last_n) if last_n else s
 
+    def get_igc(self, grain: str, metric: str) -> pd.DataFrame:
+        return self._data.get("igc", pd.DataFrame())
+
 
 # ---------------------------------------------------------------------------
 # crop_progress_stage
@@ -232,6 +235,43 @@ def test_bdi_chg30d_rising_is_bear() -> None:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# igc_stocks_change
+# ---------------------------------------------------------------------------
+
+
+def test_igc_stocks_dropping_is_bull() -> None:
+    fn = get("igc_stocks_change")
+    df = pd.DataFrame({"value_mil_tons": [200.0, 175.0]})  # -12.5%
+    score = fn(_DummyStore(igc=df), "Corn", {})
+    assert score == 1.0
+
+
+def test_igc_stocks_rising_is_bear() -> None:
+    fn = get("igc_stocks_change")
+    df = pd.DataFrame({"value_mil_tons": [200.0, 230.0]})  # +15%
+    score = fn(_DummyStore(igc=df), "Wheat", {})
+    assert score == 0.0
+
+
+def test_igc_stocks_unknown_instrument_returns_neutral() -> None:
+    fn = get("igc_stocks_change")
+    score = fn(_DummyStore(), "BTC", {})
+    assert score == 0.5
+
+
+def test_igc_stocks_short_history_returns_neutral() -> None:
+    fn = get("igc_stocks_change")
+    df = pd.DataFrame({"value_mil_tons": [200.0]})
+    score = fn(_DummyStore(igc=df), "Corn", {})
+    assert score == 0.5
+
+
+# ---------------------------------------------------------------------------
+# Registry
+# ---------------------------------------------------------------------------
+
+
 def test_drivers_all_registered() -> None:
     for name in [
         "crop_progress_stage",
@@ -239,5 +279,6 @@ def test_drivers_all_registered() -> None:
         "export_event_active",
         "disease_pressure",
         "bdi_chg30d",
+        "igc_stocks_change",
     ]:
         assert get(name) is not None
