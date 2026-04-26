@@ -228,14 +228,25 @@ def _read_signals_list(path: Path) -> list[dict]:
         return []
 
 
-def _setups_response(entries: list[dict], *, limit_str: str | None) -> Response:
-    """Filter invalidated + sorter på (grade, score desc) + valgfri limit.
+def _setups_response(
+    entries: list[dict],
+    *,
+    limit_str: str | None,
+    include_unpublished: bool = False,
+) -> Response:
+    """Filter invalidated + (default) unpublished + sorter + valgfri limit.
 
-    Invalidated-signaler skjules alltid fra UI — brukere skal ikke
-    kunne handle dem. Sortering: grade-rank asc (A+ først), så score
-    desc. Limit default = alle.
+    Invalidated-signaler skjules alltid fra UI. Default skjules også
+    `published=False` — disse er signaler hvor scoring ikke møtte
+    publish-terskel. UI viser kun publiserte (handelsbare) signaler.
+    Send `?include_unpublished=1` for å se alt (debug/admin-bruk).
+
+    Sortering: grade-rank asc (A+ først), så score desc.
     """
     visible = [e for e in entries if not e.get("invalidated")]
+    if not include_unpublished:
+        # Default: skjul ikke-publiserte (de møtte ikke score-floor).
+        visible = [e for e in visible if e.get("published") is True]
     visible.sort(key=lambda e: (_grade_key(e), -float(e.get("score") or 0.0)))
 
     if limit_str:
@@ -259,15 +270,19 @@ def _setups_response(entries: list[dict], *, limit_str: str | None) -> Response:
 def setups_financial() -> Response:
     """Financial setups (fx/metals/energy/indices/crypto).
 
-    Leser `config.signals_path` — orchestrator pusher hit via
-    `/push-alert`. Hverken filtrering på asset_class eller tidsvindu
-    i runde 1 — UI kan sortere/filtrere klientside. Invalidated-
-    signaler skjules alltid.
+    Leser `config.signals_path`. Default skjuler ikke-publiserte
+    setups (`published=False`); send `?include_unpublished=1` for
+    debug-visning. Invalidated-signaler skjules alltid.
     """
     from flask import request
 
     entries = _read_signals_list(_config().signals_path)
-    return _setups_response(entries, limit_str=request.args.get("limit"))
+    include_unpub = request.args.get("include_unpublished", "").lower() in ("1", "true", "yes")
+    return _setups_response(
+        entries,
+        limit_str=request.args.get("limit"),
+        include_unpublished=include_unpub,
+    )
 
 
 @ui_bp.get("/api/ui/setups/agri")
@@ -277,7 +292,12 @@ def setups_agri() -> Response:
     from flask import request
 
     entries = _read_signals_list(_config().agri_signals_path)
-    return _setups_response(entries, limit_str=request.args.get("limit"))
+    include_unpub = request.args.get("include_unpublished", "").lower() in ("1", "true", "yes")
+    return _setups_response(
+        entries,
+        limit_str=request.args.get("limit"),
+        include_unpublished=include_unpub,
+    )
 
 
 # ─────────────────────────────────────────────────────────────

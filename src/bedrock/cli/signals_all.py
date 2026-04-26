@@ -40,7 +40,28 @@ from bedrock.orchestrator.score import OrchestratorError
 
 DEFAULT_DB_PATH = Path("data/bedrock.db")
 DEFAULT_OUTPUT_PATH = Path("data/signals.json")
+DEFAULT_AGRI_OUTPUT_PATH = Path("data/agri_signals.json")
 DEFAULT_WHITELIST_PATH = Path("config/bot_whitelist.yaml")
+
+# Asset-classes som UI klassifiserer som "agri" (vs "financial").
+# Matcher signal_server/endpoints/ui.py's split: /api/ui/setups/agri
+# leser agri_signals_path, /api/ui/setups/financial leser signals_path.
+_AGRI_ASSET_CLASSES = frozenset({"grains", "softs"})
+
+
+def _read_asset_class(yaml_path: Path) -> str | None:
+    """Hent asset_class fra en instrument-YAML. Returnerer None ved feil."""
+    try:
+        data = yaml.safe_load(yaml_path.read_text())
+        if not isinstance(data, dict):
+            return None
+        instrument = data.get("instrument", {})
+        if not isinstance(instrument, dict):
+            return None
+        ac = instrument.get("asset_class")
+        return str(ac) if ac else None
+    except (OSError, yaml.YAMLError):
+        return None
 
 
 def _load_bot_whitelist(path: Path) -> dict[str, str]:
@@ -140,6 +161,22 @@ def _discover_instrument_ids(instruments_dir: Path) -> list[str]:
     type=click.Path(path_type=Path),
     help="Path til bot-whitelist YAML (kun relevant med --bot-only).",
 )
+@click.option(
+    "--agri-output",
+    "agri_output_path",
+    default=DEFAULT_AGRI_OUTPUT_PATH,
+    show_default=True,
+    type=click.Path(path_type=Path),
+    help="Path for agri-signals (grains/softs). Hvis --no-split eller --bot-only, ignoreres.",
+)
+@click.option(
+    "--split/--no-split",
+    "split_assets",
+    default=True,
+    show_default=True,
+    help="Skriv financial → signals.json + agri → agri_signals.json. "
+    "Default på, men deaktivert ved --bot-only.",
+)
 def signals_all_cmd(
     db_path: Path,
     instruments_dir: Path,
@@ -149,6 +186,8 @@ def signals_all_cmd(
     continue_on_error: bool,
     bot_only: bool,
     whitelist_path: Path,
+    agri_output_path: Path,
+    split_assets: bool,
 ) -> None:
     """Regenerer signals.json for alle instrumenter i ``instruments_dir``.
 
@@ -207,10 +246,17 @@ def signals_all_cmd(
                     if bedrock_id.lower() == instrument_id.lower():
                         bot_name = mapped
                         break
+
+            # Tag asset_class for split-skriving + UI-bruk
+            yaml_path = instruments_dir / f"{instrument_id.lower()}.yaml"
+            asset_class = _read_asset_class(yaml_path) if yaml_path.exists() else None
+
             for entry in result.entries:
                 e_dict = entry.model_dump(mode="json")
                 if bot_name is not None:
                     e_dict["instrument"] = bot_name
+                if asset_class is not None:
+                    e_dict["asset_class"] = asset_class
                 all_entries.append(e_dict)
             click.echo(f"  {instrument_id}: {len(result.entries)} entries")
         except (OrchestratorError, Exception) as exc:
@@ -227,14 +273,29 @@ def signals_all_cmd(
                 ) from exc
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(all_entries, indent=2, default=str))
 
-    click.echo("")
-    click.echo(
-        f"Wrote {len(all_entries)} entries from "
-        f"{len(instruments) - len(failures)}/{len(instruments)} instruments "
-        f"to {output_path}"
-    )
+    # Splitt financial/agri hvis split_assets er på OG vi ikke er i bot-only.
+    # Bot-only writes always to a single output file (signals_bot.json) since
+    # bot ikke skiller mellom financial og agri.
+    if split_assets and not bot_only:
+        agri_entries = [e for e in all_entries if e.get("asset_class") in _AGRI_ASSET_CLASSES]
+        financial_entries = [
+            e for e in all_entries if e.get("asset_class") not in _AGRI_ASSET_CLASSES
+        ]
+        output_path.write_text(json.dumps(financial_entries, indent=2, default=str))
+        agri_output_path.parent.mkdir(parents=True, exist_ok=True)
+        agri_output_path.write_text(json.dumps(agri_entries, indent=2, default=str))
+        click.echo("")
+        click.echo(f"Wrote {len(financial_entries)} financial entries to {output_path}")
+        click.echo(f"Wrote {len(agri_entries)} agri entries to {agri_output_path}")
+    else:
+        output_path.write_text(json.dumps(all_entries, indent=2, default=str))
+        click.echo("")
+        click.echo(
+            f"Wrote {len(all_entries)} entries from "
+            f"{len(instruments) - len(failures)}/{len(instruments)} instruments "
+            f"to {output_path}"
+        )
     if failures:
         click.echo(f"Failures: {len(failures)}", err=True)
         for inst, err in failures:
