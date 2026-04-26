@@ -25,7 +25,8 @@
   - **85:** **WASDE auto-fetcher fra ESMIS** — XML-parser for USDA's månedlige WASDE-rapporter. Tre forskjellige XML-schemas håndteres (sr08-aggregat, sr11-13 attribute1/m1, sr14-17 attribute4-6/m1). 6 ferskeste reports (Nov 2025-April 2026) backfilt → 972 rader for US Corn/Wheat/Cotton/Soybeans/Sugar/Rice. S2U beregnet automatisk. wasde_s2u_change-driver fixet til å sammenligne samme MY på tvers av rapporter (ikke ulike MY innen én rapport). **LUKKET 2026-04-26**.
   - **86:** WASDE-driver wired inn i 5 agri-YAMLs. Corn: erstattet conab-placeholder (sma200_align trend-leak) med wasde_s2u_change. Wheat/Cotton/Soybean/Sugar: WASDE inn i yield-familien som co-driver med weather_stress (50/50). End-to-end-scoring: Corn dropper fra 8.0 → 7.0 (riktig — fjerner trend-leak), andre stabilt B-grade. **LUKKET 2026-04-26**.
   - **87:** Historisk WASDE-backfill — fixet ESMIS-paginering (regex broadened for eldre URL-pattern, max_pages=70 traverserer alle ESMIS-sider). **8703 rader fra 54 reports 2019-2026 backfilt** (9× økning vs 972 rader fra session 85). Driver fortsatt 0.5 fordi April vs March er stabilt — vil aktiveres ved neste S2U-revisjon. **LUKKET 2026-04-26**.
-  - **88 (neste):** Wire flere PLAN § 7.3 drivere inn (BDI, disease, eksport-events) i agri-YAMLs. Eller backtest-validering av WASDE-driver mot historisk data.
+  - **88:** Wire `disease_pressure` + `export_event_active` inn i Coffee + Wheat YAMLs. Coffee yield: weather 70% + disease 30% (coffee rust er historisk yield-trussel). Wheat yield: weather 40% + WASDE 40% + disease 10% + eksport-events 10% (stripe rust + locust + Ukraine corridor). Sample-data fra session 83 er for gammel for default 90-180d lookback; infrastruktur er klar når fersk data kommer. **LUKKET 2026-04-26**.
+  - **89 (neste):** Backtest-validering av WASDE-driver mot historisk 2019-2026 data, eller populere fersk export_events/disease_alerts CSV.
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -63,13 +64,13 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `feat/wasde-historical-backfill` (Nivå 3 — session 87). PR #1-#20 merget.
+- **Branch:** `feat/plan73-driver-wireup` (Nivå 3 — session 88). PR #1-#21 merget.
 - **Blocked:** nei. NASS Crop Progress venter på API-key.
 - **Aktive systemd-timere:** 9 totalt.
 - **Instrumenter:** 11 totalt.
-- **Drivere:** 22 totalt.
-- **WASDE-data:** 8703 rader, 54 reports (2019-2026), wired inn i 5 agri-YAMLs. ~7 år historikk gir backtest-grunnlag.
-- **Next task:** **Session 88.** Wire flere PLAN § 7.3 drivere (BDI, disease, eksport-events) inn i agri-YAMLs, eller backtest-validering av WASDE-driver mot historisk data.
+- **Drivere:** 22 totalt (WASDE + disease + eksport-events nå wired inn).
+- **WASDE-data:** 8703 rader, 54 reports (2019-2026), wired inn i 5 agri-YAMLs.
+- **Next task:** **Session 89.** Backtest-validering av WASDE-driver mot historisk 2019-2026 data, eller populere fersk export_events/disease_alerts CSV.
 - **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
 ## Open questions to user
@@ -157,6 +158,48 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-26 — Session 88: Wire disease + eksport-events drivere (LUKKET)
+
+**Scope:** Aktivere `disease_pressure` + `export_event_active` i scoring
+for de instrumentene hvor data faktisk er relevant. Sample CSV fra
+session 83 har real historiske events; driver-infrastruktur er klar
+til å ta imot fersk data fra produksjon.
+
+**Endret denne session (feature-branch `feat/plan73-driver-wireup`):**
+
+`config/instruments/coffee.yaml`:
+- yield-familien: weather_stress (70%) + disease_pressure (30%).
+  Coffee rust (Hemileia vastatrix) er historisk største yield-trussel
+  for arabica i Brasil.
+
+`config/instruments/wheat.yaml`:
+- yield-familien: weather_stress (40%) + wasde_s2u_change (40%) +
+  disease_pressure (10%) + export_event_active (10%). Stripe rust +
+  locust + Ukraine corridor + India-ringvirkninger.
+
+**End-to-end (april 2026):**
+
+```
+Coffee: yield 0.09 → 0.21 (disease neutral 0.5 × 0.3 = +0.15)
+        Total 3.95 (uendret) → 4.82
+Wheat:  yield 0.37 → 0.39 (4 drivere bidrar)
+        Total 8.58 → 8.66
+```
+
+Disease + eksport-events returnerer 0.5 i april 2026 fordi sample-
+data er fra 2024-2025 og default 90-180d lookback faller utenfor.
+Infrastruktur er klar når fersk produksjon-data populeres.
+
+**Tester:** 1404/1404 grønne. Pyright 0/0.
+
+**Beslutninger:**
+- Wireup begrenset til Coffee + Wheat denne session — der data er
+  mest relevant. Andre instrumenter får disease/eksport når fersk
+  data kommer (export_events.csv + disease_alerts.csv kan populeres
+  manuelt eller via fremtidige scrapers).
+- Sub-vekter beholder family-score i [0,1]-range (sum av sub-vekter
+  = 1.0). Family-vekt uendret. Max_score uendret.
 
 ### 2026-04-26 — Session 87: Historisk WASDE-backfill (LUKKET)
 
