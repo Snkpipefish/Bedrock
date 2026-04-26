@@ -28,7 +28,8 @@
   - **88:** Wire `disease_pressure` + `export_event_active` inn i Coffee + Wheat YAMLs. Coffee yield: weather 70% + disease 30% (coffee rust er historisk yield-trussel). Wheat yield: weather 40% + WASDE 40% + disease 10% + eksport-events 10% (stripe rust + locust + Ukraine corridor). Sample-data fra session 83 er for gammel for default 90-180d lookback; infrastruktur er klar når fersk data kommer. **LUKKET 2026-04-26**.
   - **89:** **BDI auto-fetcher via BDRY ETF (Yahoo) — gratis-løsning på det vi trodde var kommersielt.** Breakwave Dry Bulk Shipping ETF tracker BDI med ~0.9 korrelasjon. 2034 rader 2018-2026 backfilt. Driver bdi_chg30d returnerer score basert på BDRY-prisendring. 4 nye tester. **LUKKET 2026-04-26**.
   - **90:** **Full system-demonstrasjon.** Wire bdi_chg30d inn i 4 agri-YAMLs (Corn/Wheat/Cotton/Soybean cross-familien, sub-vekt 20%). Regenerert signals.json (66 entries × 11 instrumenter). Compare vs cot-explorer (7 felles, 5 grade-endringer). Backtest-validering 12 mnd × 5 instrumenter × 2 horisonter: **Gold 100% hit-rate 90d (12/12). Corn ikke lenger invertert** (var A+ -2.4% i Fase 11, nå normal B/C-distribusjon). Sammendragsrapport: `docs/system_status_2026-04-26.md`. **Systemet er produksjonsklart.** **LUKKET 2026-04-26**.
-  - **91 (neste):** Backfill analog_outcomes for Wheat/Cotton/Soybean så de kan backtest-valideres. Eller: AsOfDateStore.get_wasde+get_bdi proxy-metoder for å la backtest bruke nye drivere.
+  - **91:** **Instrument-utvidelse — 11 → 21 instrumenter.** 10 nye lagt til: Silver, Copper, Platinum (metals), CrudeOil, NaturalGas (energy — NY asset class), Cocoa (softs), GBPUSD, USDJPY, AUDUSD (FX), ETH (crypto). Backfilt prices (4100-4247 bars per inst) + COT (220-851 reports per inst) for alle. 21 YAMLer aktive. 126 signal-entries generert. **LUKKET 2026-04-26**.
+  - **92 (neste):** Wire BDI inn i agri-YAMLs til Cocoa, eller backfill analog_outcomes for ikke-validert instrumenter, eller backtest-valideringen av nye instrumenter.
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -66,10 +67,10 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `feat/bdi-wireup-and-validation` (Nivå 3 — session 90). PR #1-#23 merget.
+- **Branch:** `feat/expand-instruments-session91` (Nivå 3 — session 91). PR #1-#24 merget.
 - **Blocked:** nei. NASS Crop Progress venter på API-key.
 - **Aktive systemd-timere:** 9 totalt.
-- **Instrumenter:** 11 totalt.
+- **Instrumenter:** 21 totalt (Gold/Silver/Copper/Platinum metals; CrudeOil/NaturalGas energy; Corn/Wheat/Soybean grains; Cotton/Sugar/Coffee/Cocoa softs; Nasdaq/SP500 indices; EURUSD/GBPUSD/USDJPY/AUDUSD fx; BTC/ETH crypto).
 - **Drivere:** 22 totalt.
 - **PLAN § 7.3:** 5/8 live data (WASDE, BRL, ICE softs COT, BDI/BDRY, NASS-infra). 2/8 manuell sample. 1/8 betalt (IGC).
 - **System-status:** `docs/system_status_2026-04-26.md` — full ende-til-ende rapport.
@@ -162,6 +163,66 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-26 — Session 91: Instrument-utvidelse 11 → 21 (LUKKET)
+
+**Scope:** Doble instrument-coverage. Bruker har 11 og påpeker
+mangelen på FX-pairs, energy, flere metals, andre crypto. La til
+10 nye via etablert mønster (Yahoo prices + CFTC COT + YAML).
+
+**Endret denne session (feature-branch `feat/expand-instruments-session91`):**
+
+10 nye `config/instruments/*.yaml`:
+
+| Instrument | Asset class | Yahoo | CFTC | Prices | COT |
+|---|---|---|---|---:|---:|
+| Silver | metals | SI=F | SILVER - COMEX | 4101 | 851 |
+| Copper | metals | HG=F | COPPER- #1 - COMEX | 4102 | 220 |
+| Platinum | metals | PL=F | PLATINUM - NYMEX | 4100 | 851 |
+| CrudeOil | **energy** (ny) | CL=F | CRUDE OIL, LIGHT SWEET - NYMEX | 4102 | 631 |
+| NaturalGas | energy | NG=F | NAT GAS NYME - NYMEX | 4103 | 220 |
+| Cocoa | softs | CC=F | COCOA - ICE | 4101 | 851 |
+| GBPUSD | fx | GBPUSD=X | BRITISH POUND - CME | 4247 | 220 |
+| USDJPY | fx | USDJPY=X | JAPANESE YEN - CME | 4247 | 851 |
+| AUDUSD | fx | AUDUSD=X | AUSTRALIAN DOLLAR - CME | 4246 | 851 |
+| ETH | crypto | ETH-USD | ETHER CASH SETTLED - CME | 3091 | 264 |
+
+**End-to-end (april 2026):**
+
+```
+Metals:    Silver 2.20 B   Copper 3.12 B   Platinum 3.42 A
+Energy:    CrudeOil 2.63 B  NaturalGas 0.89 C
+Softs:     Cocoa 5.49 C
+FX:        GBPUSD 2.06 B   USDJPY 1.63 C   AUDUSD 3.46 A
+Crypto:    ETH 1.72 C
+```
+
+Realistisk distribusjon. AUDUSD scorer A på risk-on-bias.
+NaturalGas scorer lavt fordi ingen sterke signaler i april.
+
+**Asset-class-beslutninger:**
+- **Energy** er ny asset_class (CrudeOil + NaturalGas). VIX `invert=true`
+  for crude (geopolitisk premium = bull) men `invert=false` for
+  ekvivalente. NaturalGas har høyere volatility — `outcome_threshold_pct: 8.0`
+  for analog (vs 5.0 for crude).
+- **USDJPY** har omvendt-tegn-tolkning: positiv positioning i COT er
+  JPY-long = USDJPY-bear. Macro-drivere flippet: real_yield=high, dxy
+  bull_when=positive. VIX invert=true (JPY safe-haven).
+- **AUDUSD** er commodity-currency med risk-on-bias. VIX invert=false.
+- **Copper** er Dr. Copper (industriell) — VIX invert=false (motsatt
+  av Gold). Ingen safe-haven-funksjon.
+
+**Tester:** 1408/1408 grønne (ingen nye tester — kun YAML-config).
+Pyright 0/0.
+
+**Beslutninger:**
+- YAML-filnavn: `crudeoil.yaml` (ikke `crude_oil`) for å matche
+  instrument-id `CrudeOil` (orchestrator strpper underscores fra
+  filename for matching).
+- Cocoa weather_region = brazil_coffee som proxy. Real West-Africa-
+  region mangler i weather_monthly; lagt til som TODO.
+- ETH bruker BTC-mønster med samme crypto-asset-class. CME ETH-COT
+  fra 2021-02 (264 reports vs BTC 420).
 
 ### 2026-04-26 — Session 90: Full system-demonstrasjon (LUKKET)
 
