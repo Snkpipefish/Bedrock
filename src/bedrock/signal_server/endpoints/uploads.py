@@ -1,3 +1,7 @@
+# pyright: reportArgumentType=false
+# Flask `T_route` rejects tuple[object, int] even for valid (jsonify, status)
+# responses. Same pattern across alle signal_server/endpoints/*.
+
 """Fil-upload endepunkt.
 
 Fase 7 session 37: `POST /upload` — multipart/form-data med fil-felt

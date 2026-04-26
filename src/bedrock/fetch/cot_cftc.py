@@ -1,3 +1,6 @@
+# pyright: reportAttributeAccessIssue=false, reportReturnType=false, reportCallIssue=false, reportArgumentType=false
+# pandas-stubs false-positives — se data/store.py for kontekst.
+
 """CFTC Commitments of Traders fetcher (Socrata API).
 
 Dekker begge rapport-typene:

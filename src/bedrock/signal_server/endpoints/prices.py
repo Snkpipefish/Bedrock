@@ -1,3 +1,9 @@
+# pyright: reportArgumentType=false, reportAttributeAccessIssue=false
+# Flask `T_route` rejects tuple[object, int] even for valid (jsonify, status)
+# responses. Same pattern across alle signal_server/endpoints/*.
+# pandas-stubs typer Series.items() som Iterator[tuple[Hashable, T]] — i
+# praksis er ts en Timestamp.
+
 """Pris-endepunkter.
 
 Fase 7 session 37:

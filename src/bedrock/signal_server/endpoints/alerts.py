@@ -1,3 +1,7 @@
+# pyright: reportArgumentType=false
+# Flask `T_route` rejects tuple[object, int] even for valid (jsonify, status)
+# responses. Same pattern across alle signal_server/endpoints/*.
+
 """Skriv-endepunkter for signaler.
 
 Fase 7 session 35 — `/push-alert` (financial) og `/push-agri-alert`

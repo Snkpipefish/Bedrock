@@ -1,3 +1,9 @@
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportReturnType=false, reportGeneralTypeIssues=false
+# pandas-stubs har dårlig dekning av itertuples() (NamedTuple med dynamiske
+# attributter), DatetimeIndex.dt-aksessor, Series-vs-DataFrame-narrowing
+# etter set_index, og NDFrame.__bool__-ambiguitet. Disse er konsekvent
+# false-positive — koden er korrekt, men typene følger ikke med.
+
 """DataStore — datalag-API for drivere og setup-generator.
 
 Fase 2 session 6: SQLite-backet implementasjon som erstatter Fase 1-stub-en

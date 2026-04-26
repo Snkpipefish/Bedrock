@@ -400,6 +400,10 @@ class ExitEngine:
                 )
                 state._m10_trail_logged = True  # type: ignore[attr-defined]
 
+        # state.position_id er Optional[int] under konstruksjon, men er
+        # garantert satt før vi trail-er SL (kalles kun fra T1-/M10-logikk
+        # som krever åpen posisjon).
+        assert state.position_id is not None
         self._client.amend_sl_tp(position_id=state.position_id, stop_loss=state.trail_level)
 
     def _set_break_even(self, state: TradeState, symbol_id: int) -> None:
@@ -451,6 +455,8 @@ class ExitEngine:
                     divergence,
                 )
 
+        # state.position_id satt før BE-flytting (krever åpen posisjon).
+        assert state.position_id is not None
         self._client.amend_sl_tp(position_id=state.position_id, stop_loss=be_stop)
         state.stop_price = be_stop
         log.info(
@@ -647,7 +653,9 @@ class ExitEngine:
                 },
             }
             data["entries"] = [entry, *data.get("entries", [])]
-            data["last_updated"] = now
+            # Pyright smal-typer data-verdi til list[Unknown] etter forrige
+            # tilordning; reell type er dict[str, Any] (json-blob).
+            data["last_updated"] = now  # pyright: ignore[reportArgumentType]
             self._atomic_write_json(data)
             log.info("[TRADE-LOG] %s lagt til via reconcile", state.signal_id)
         except Exception as exc:

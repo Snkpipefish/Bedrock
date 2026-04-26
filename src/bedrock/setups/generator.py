@@ -1,3 +1,6 @@
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportCallIssue=false
+# pandas-stubs false-positives — se data/store.py for kontekst.
+
 """Setup-bygger — fra nivå-liste + nåpris til asymmetrisk setup.
 
 Per PLAN § 5.2 + § 5.3. Session 17 implementerer:

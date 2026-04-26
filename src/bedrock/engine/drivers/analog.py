@@ -1,3 +1,6 @@
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportCallIssue=false
+# pandas-stubs false-positives — se data/store.py for kontekst.
+
 """Analog-familie drivere (Fase 10 ADR-005 B5, session 60).
 
 Drivere som bruker K-NN over historiske dim-verdier per asset-klasse

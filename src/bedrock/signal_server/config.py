@@ -98,4 +98,7 @@ def load_from_env(env: dict[str, str] | None = None) -> ServerConfig:
     if "BEDROCK_ADMIN_LOG_PATH" in source:
         payload["admin_log_path"] = Path(source["BEDROCK_ADMIN_LOG_PATH"])
 
-    return ServerConfig(**payload)
+    # `payload` er typet som `dict[str, object]` for å samle blandede typer
+    # (str, int, Path) før konstruksjon. Pyright klarer ikke å smal-type
+    # **unpacking til riktige felt-typer; ServerConfig validerer selv.
+    return ServerConfig(**payload)  # pyright: ignore[reportArgumentType]

@@ -1304,7 +1304,8 @@ class EntryEngine:
                 },
             }
             data["entries"] = [entry, *data.get("entries", [])]
-            data["last_updated"] = now
+            # Samme pyright-smaltype-issue som i bot/exit.py.
+            data["last_updated"] = now  # pyright: ignore[reportArgumentType]
             self._trade_log_path.parent.mkdir(parents=True, exist_ok=True)
             fd, tmp = tempfile.mkstemp(
                 prefix="tradelog_", suffix=".json", dir=self._trade_log_path.parent
