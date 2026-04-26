@@ -36,12 +36,19 @@ families:
           # Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec
           monthly_scores: [0.7, 0.7, 0.8, 0.9, 1.0, 1.0, 1.0, 1.0, 0.9, 0.7, 0.6, 0.6]
   yield:
+    # Sub-fase 12.5+ session 86: kombinerer vær-stress (50%) + USDA
+    # WASDE S2U (50%). US sugar-produksjon er liten globalt, men
+    # WASDE rapporterer US-balanse + benchmark.
     weight: 3
     drivers:
       - name: weather_stress
-        weight: 1.0
+        weight: 0.5
         params:
           lookback_months: 1
+      - name: wasde_s2u_change
+        weight: 0.5
+        params:
+          region: US
   weather:
     weight: 2
     drivers:
