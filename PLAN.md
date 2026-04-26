@@ -1,11 +1,23 @@
 # Bedrock — implementasjonsplan
 
 Dato opprettet: 2026-04-23
-Sist oppdatert: 2026-04-23
-Status: godkjent, Fase 0 fullført
+Sist oppdatert: 2026-04-27
+Status: Fase 0-11 fullført, Fase 12 åpen (sub-fase 12.5+ aktiv)
 Referanser: `NYTT_PROSJEKT_UTKAST.md` (i cot-explorer), `AGRI_KARTLEGGING.md` (i cot-explorer), fase-1-audit-rapport (i chat-logg).
 
 ## Endringshistorikk (etter initial godkjenning)
+
+**2026-04-27 (session 104):** Docs-cleanup etter audit:
+- § 3.1 mappetre oppdatert til faktisk struktur (signal_server/ ikke server/,
+  orchestrator/ ikke pipeline/+signals/, setups/hysteresis.py ikke persistence.py,
+  drivers utvidet med agri/agronomy/currency/seasonal).
+- § 3.2 dataflyt-diagram oppdatert (SQLite, ikke parquet).
+- § 7.3 statuslinje: 6/8 live (var "5/8 live"-tekst i STATE.md).
+- § 7.5 (ny) — roadmap for de 11 ikke-portede cot-explorer-fetcherne (sessions
+  105-117). Strategi i ADR-007.
+- § 11 + § 13 — eksplisitt notert at Fase 11 UI-fane er utsatt etter Fase 13.
+- § 12 — sub-fase 12.5+ scope dokumentert.
+- § 16 — Neste steg oppdatert til sessions 104-117.
 
 **2026-04-26 (session 103):** § 7 utvidet:
 - Ny § 7.4 dokumenterer runner-registry og full fetch-schedule (9 fetchere etter at WASDE/NASS/BDI er wiret + ENSO-runner-bug fixet).
@@ -92,54 +104,57 @@ bedrock/
 │   │   ├── grade.py                # grade-logikk (A+/A/B/C) fra YAML-terskler
 │   │   └── explain.py              # trace hva som bidro til score
 │   │
+│   ├── engine/drivers/             # driver-registry (faktisk struktur per session 103)
+│   │   ├── __init__.py             # @register-dekorator
+│   │   ├── trend.py                # sma200_align, momentum_z
+│   │   ├── positioning.py          # positioning_mm_pct, cot_z_score
+│   │   ├── macro.py                # real_yield, dxy_chg5d, brl_chg5d, vix_regime
+│   │   ├── structure.py            # range_position
+│   │   ├── risk.py                 # vol_regime
+│   │   ├── analog.py               # analog_hit_rate, analog_avg_return
+│   │   ├── agri.py                 # weather_stress, enso_regime
+│   │   ├── agronomy.py             # crop_progress_stage, wasde_s2u_change,
+│   │   │                           # export_event_active, disease_pressure,
+│   │   │                           # bdi_chg30d, igc_stocks_change
+│   │   ├── currency.py             # currency_cross_trend
+│   │   ├── seasonal.py             # seasonal_stage
+│   │   └── _stats.py               # interne statistikk-helpers
+│   │
 │   ├── setups/                     # setup-generator (NY kritisk komponent)
 │   │   ├── __init__.py
 │   │   ├── levels.py               # reelle-nivåer-detektor (swing, POC, W/D H/L, round)
 │   │   ├── generator.py            # finn asymmetriske setups rundt nivåer
-│   │   ├── persistence.py          # setup-ID + lifecycle (watch→trigger→active→closed)
+│   │   ├── hysteresis.py           # determinisme + hysterese (revidert § 5.4)
+│   │   ├── snapshot.py             # last_run.json som "forrige tilstand"
 │   │   └── horizon.py              # horisont fra setup-karakteristikk, ikke score
 │   │
-│   ├── data/                       # datalag
-│   │   ├── store.py                # DuckDB + parquet
-│   │   ├── schemas.py              # pydantic + parquet-schemas for tidsserier
-│   │   ├── backfill.py             # historisk backfill-orkestrator
-│   │   └── analogs.py              # K-NN-søk mot historikk
+│   ├── data/                       # datalag (SQLite, ADR-002)
+│   │   ├── store.py                # DataStore over sqlite3 + pandas
+│   │   ├── schemas.py              # pydantic + DDL for tabeller
+│   │   └── analog.py               # find_analog_cases (K-NN, ADR-005)
 │   │
-│   ├── fetch/                      # rå I/O (ingen scoring)
+│   ├── fetch/                      # rå I/O (ingen scoring) — faktisk per session 103
 │   │   ├── base.py                 # felles retry/logging/stale-sjekk
-│   │   ├── cot_cftc.py
-│   │   ├── cot_ice.py
-│   │   ├── cot_euronext.py
-│   │   ├── prices.py
-│   │   ├── fundamentals_fred.py
-│   │   ├── agri_weather.py
-│   │   ├── agri_conab.py
-│   │   ├── agri_unica.py
-│   │   ├── calendar_ff.py
-│   │   ├── shipping.py
-│   │   ├── comex.py
-│   │   ├── crypto.py
-│   │   ├── oilgas.py
-│   │   ├── seismic.py              # beholdes selv om unuset i scoring (prinsipp 6)
-│   │   ├── intel.py
-│   │   └── new/                    # nye datakilder (se § 8.3)
-│   │       ├── usda_wasde.py       # stocks-to-use + yield
-│   │       ├── usda_crop_progress.py
-│   │       ├── export_policy.py
-│   │       └── agri_freight.py
+│   │   ├── cot_cftc.py             # CFTC disaggregated + legacy
+│   │   ├── prices.py               # legacy stooq-port (deprecated etter session 58)
+│   │   ├── yahoo.py                # default pris-fetcher (ADR-005-followup)
+│   │   ├── fred.py                 # FRED fundamentals
+│   │   ├── weather.py              # ERA5-vær + agri_history månedlig
+│   │   ├── enso.py                 # NOAA ONI (session 57)
+│   │   ├── wasde.py                # USDA WASDE ESMIS-XML (sessions 85, 87)
+│   │   ├── nass.py                 # USDA NASS QuickStats (sessions 97-98)
+│   │   ├── manual_events.py        # eksport-events, disease, BDI/BDRY
+│   │   └── usda_calendar.py        # USDA-blackout-gate (session 27)
+│   │   # -- portes i sub-fase 12.5+ (sessions 105+):
+│   │   #   calendar_ff.py, eia_inventories.py, cot_ice.py, comex.py,
+│   │   #   seismic.py, news_intel.py, conab.py, unica.py,
+│   │   #   cot_euronext.py, shipping.py, crypto_sentiment.py
 │   │
-│   ├── signals/                    # setup + score → signal-objekt
-│   │   ├── builder.py              # bygg Signal fra (score, setup, context)
-│   │   ├── publisher.py            # POST til signal_server + disk
-│   │   └── schema.py               # Pydantic-modeller (låst v1 + extras)
-│   │
-│   ├── server/                     # refaktor av signal_server.py
-│   │   ├── app.py                  # Flask/FastAPI
-│   │   ├── routes_signals.py       # /signals /push-alert /invalidate
-│   │   ├── routes_prices.py        # /push-prices /prices
-│   │   ├── routes_kill.py          # /kill /clear_kills
-│   │   ├── routes_admin.py         # /admin/rules POST (kode-beskyttet)
-│   │   └── store.py                # in-memory state + disk-persistering
+│   ├── signal_server/              # refaktor av signal_server.py (Fase 7, ny navn)
+│   │   ├── app.py                  # Flask
+│   │   ├── endpoints/              # routes splittet per domene
+│   │   ├── schemas.py              # Pydantic (låst v1 + extras)
+│   │   └── storage.py              # in-memory + disk-persistering
 │   │
 │   ├── bot/                        # refaktor av trading_bot.py
 │   │   ├── __main__.py             # entry-point + CLI (--demo/--live)
@@ -149,20 +164,38 @@ bedrock/
 │   │   ├── exit.py                 # P1-P5 exit-logikk
 │   │   ├── sizing.py               # risk% + lot-tier
 │   │   ├── safety.py               # daily_loss + kill + server-frozen
-│   │   └── comms.py                # signal_server-polling
+│   │   ├── comms.py                # signal_server-polling
+│   │   ├── config.py               # bot.yaml-loader
+│   │   └── instruments.py          # instrument-mapping
 │   │
-│   ├── pipeline/                   # orkestrering (erstatter update.sh)
-│   │   ├── main_cycle.py           # full fetch + score + publish (4-timer)
-│   │   ├── hourly.py               # pris-rescore (hver time :40)
-│   │   ├── gates.py                # dag/klokkeslett-logikk (CFTC lør etc.)
-│   │   └── runner.py               # systemd entry-point
+│   ├── orchestrator/               # signal-pipeline (erstatter PLAN-original pipeline/+signals/)
+│   │   ├── signals.py              # generate_signals + score_instrument (Fase 5)
+│   │   └── (publisher folded inn i CLI signals_all)
+│   │
+│   ├── parallel/                   # compare/monitor for parallell-drift (Fase 12)
+│   │
+│   ├── backtest/                   # Fase 11 — replay + compare
+│   │   ├── runner.py               # outcome-replay + orchestrator-replay
+│   │   ├── compare.py              # signal-diff (session 65)
+│   │   └── report.py               # markdown + JSON
+│   │
+│   ├── systemd/                    # generator + installer for timer/service
+│   │   └── generator.py            # cron_to_oncalendar + install
+│   │
+│   ├── config/                     # YAML-lasting + driver-runner-registry
+│   │   ├── fetch_runner.py         # @register_runner-dispatcher (session 103)
+│   │   └── secrets.py              # ~/.bedrock/secrets.env-loader
 │   │
 │   └── cli/                        # kommandolinje-verktøy
 │       ├── __main__.py             # `bedrock` command
-│       ├── kill.py                 # `bedrock kill <sig_id>` / `bedrock kill all`
-│       ├── backfill.py             # `bedrock backfill prices --from 2016`
-│       ├── explain.py              # `bedrock explain <sig_id>` (hvorfor scoret det så)
-│       └── backtest.py             # `bedrock backtest --rules rules_v2 --from 2024`
+│       ├── backfill.py             # `bedrock backfill prices/cot/...`
+│       ├── backtest.py             # `bedrock backtest run/compare`
+│       ├── fetch.py                # `bedrock fetch run <name>`
+│       ├── instruments.py          # `bedrock instruments list/show`
+│       ├── server.py               # `bedrock server` (waitress + Flask-fallback)
+│       ├── signals.py              # `bedrock signals <instrument>`
+│       ├── signals_all.py          # `bedrock signals-all` (alle 22 inst → JSON)
+│       └── systemd.py              # `bedrock systemd generate/install/list`
 │
 ├── web/                            # statisk frontend (GitHub Pages)
 │   ├── index.html                  # 4 faner (Skipsloggen / Financial / Soft commodities / Kartrommet)
@@ -171,27 +204,29 @@ bedrock/
 │   └── data/                       # symlink til publisert JSON
 │
 ├── data/                           # kjøredata (gitignored større deler)
-│   ├── parquet/                    # historikk-lag (DuckDB queryable)
-│   │   ├── prices/
-│   │   ├── cot/
-│   │   ├── fundamentals/
-│   │   ├── weather/
-│   │   └── trades/
-│   ├── latest/                     # siste snapshots per kilde
-│   │   ├── macro.json
-│   │   ├── signals.json
-│   │   └── ...
-│   ├── setups/                     # aktive setups (persisterte)
+│   ├── bedrock.db                  # SQLite (ADR-002) — alle tidsserier i tabeller
+│   ├── signals.json                # financial setups (90 entries, 22 inst)
+│   ├── agri_signals.json           # agri setups (42 entries, splittet session 94)
+│   ├── signals_bot.json            # bot-only whitelist-output (session 92)
+│   ├── setups/last_run.json        # hysterese-snapshot (Fase 4 § 5.4)
 │   ├── signal_log.json             # ETT sted. Bot skriver her. Ingen kopiering.
-│   └── _meta/                      # genereringstid per fil
+│   ├── manual/                     # manuelle CSVer (eksport-events, disease)
+│   └── _meta/                      # pipeline_health + signal-diff baseline
 │
-├── systemd/                        # versjonerte timer/service-filer
-│   ├── bedrock-main.timer
-│   ├── bedrock-main.service
-│   ├── bedrock-hourly.timer
-│   ├── bedrock-hourly.service
-│   ├── bedrock-server.service
-│   └── bedrock-bot.service
+├── systemd/                        # versjonerte timer/service-filer (per session 103)
+│   ├── bedrock-fetch-prices.{timer,service}
+│   ├── bedrock-fetch-cot_disaggregated.{timer,service}
+│   ├── bedrock-fetch-cot_legacy.{timer,service}
+│   ├── bedrock-fetch-fundamentals.{timer,service}
+│   ├── bedrock-fetch-weather.{timer,service}
+│   ├── bedrock-fetch-enso.{timer,service}
+│   ├── bedrock-fetch-wasde.{timer,service}
+│   ├── bedrock-fetch-crop_progress.{timer,service}
+│   ├── bedrock-fetch-bdi.{timer,service}
+│   ├── bedrock-signals-all.{timer,service}    # daglig signal-generering
+│   ├── bedrock-server.service                 # 24/7 UI (session 93)
+│   ├── bedrock-monitor.{timer,service}        # pipeline-helse 06:30
+│   └── bedrock-compare.{timer,service}        # signal-diff vs cot-explorer 06:35
 │
 ├── tests/
 │   ├── logical/                    # "gitt X → forvent Y"-tester (hoved-testsuite)
@@ -225,17 +260,19 @@ bedrock/
 ### 3.2 Dataflyt
 
 ```
-    fetch/*                    setups/                 engine/                    signals/
-    (rå I/O)                   (generator)             (scoring)                  (publisering)
+    fetch/*                    setups/                 engine/                  orchestrator/
+    (rå I/O)                   (generator)             (scoring)                (publisering)
         │                          │                       │                          │
         ▼                          ▼                       ▼                          ▼
-  data/latest/*.json     data/setups/active.json    (in-memory GroupResult)    signals.json
-  data/parquet/*.parquet         ▲                       ▲                          │
-        │                        │                       │                          ▼
-        └──► analogs.py ◄────────┘                       │               signal_server /push-alert
-                                                         │                          │
-                                                  rules/*.yaml                       ▼
-                                                 drivers/*.py                  bot polls /signals
+  data/bedrock.db           data/setups/last_run.json (in-memory GroupResult)  data/signals.json
+  (SQLite-tabeller)              ▲                       ▲                  data/agri_signals.json
+        │                        │                       │                  data/signals_bot.json
+        └──► data/analog.py ◄────┘                       │                          │
+                                                         │                          ▼
+                                                  config/instruments/*.yaml   signal_server /push-alert
+                                                  config/defaults/*.yaml            │
+                                                  drivers/*.py                      ▼
+                                                                              bot polls /signals
                                                                                       │
                                                                                       ▼
                                                                               cTrader execution
@@ -715,7 +752,11 @@ Pipeline-runner leser yaml, orkestrerer. Ingen shell-if-else.
 
 ### 7.3 Nye datakilder (gaps fra AGRI_KARTLEGGING.md pkt 9)
 
-Alle viktige per dine ord. Implementeres i faser (se § 13):
+Alle viktige per dine ord. Implementeres i faser (se § 13).
+
+**Status etter session 103:** 6 av 8 har auto-fetcher (live), 1 manuell CSV
+sample, 1 betalt/manuell import. ICE softs COT er live via `cot_disaggregated`-
+runneren; full ICE-COT-fetcher (Brent/Gasoil/TTF) kommer i session 106 — se § 7.5.
 
 | Kilde | Hva | Implementering | Fase | Auto-fetcher? |
 |---|---|---|---|---|
@@ -759,6 +800,34 @@ Cron-konverteren (`cron_to_oncalendar`) støtter siden session 103 også
 range/list i dom- og month-feltene (f.eks. `4-11` → `04..11`), nødvendig
 for å gi NASS Crop Progress en vekstsesong-aware schedule som ikke fyrer
 nyttesløst i desember-mars.
+
+### 7.5 Ikke-portede fetchere fra cot-explorer (sub-fase 12.5+ roadmap)
+
+Prinsipp 6 sier at alle fetch-moduler skal beholdes. Audit i session 104
+avdekket at **11 fetchere fra `~/cot-explorer/` ikke ble portet** under
+Fase 6 — de ble parkert som gjeld. Sub-fase 12.5+ (sessions 105-118)
+porter dem inn i bedrock-strukturen og wirer dem inn i scoring der det
+gir verdi. Strategi: ADR-007. Per-fetcher-mapping: ADR-008 (sessions 105+).
+
+| Session | cot-explorer-modul | bedrock-mål | Driver | Instrumenter | Type |
+|---|---|---|---|---|---|
+| 105 | `fetch_calendar.py` | `fetch/calendar_ff.py` | `event_distance` | **alle 22** | full driver-port |
+| 106 | `fetch_ice_cot.py` | `fetch/cot_ice.py` | `cot_ice_mm_pct` | Brent (primær COT), NaturalGas | full driver-port |
+| 107 | `fetch_oilgas.py` (kun EIA-bit) | `fetch/eia_inventories.py` | `eia_stock_change` | CrudeOil, Brent, NaturalGas | full driver-port (resten droppet — duplikat med Yahoo + CFTC) |
+| 108 | `fetch_comex.py` | `fetch/comex.py` (+ manuell CSV-fallback) | `comex_stress` | Gold, Silver, Copper | full driver-port |
+| 109 | `fetch_seismic.py` | `fetch/seismic.py` | `mining_disruption` | Gold, Silver, Copper, Platinum | full driver-port |
+| 110 | `fetch_euronext_cot.py` | `fetch/cot_euronext.py` (+ manuell CSV-fallback) | `cot_euronext_mm_pct` | Wheat, Corn (EU-overlay) | full driver-port |
+| 111 | `fetch_conab.py` | `fetch/conab.py` (PDF via poppler-utils) | `conab_yoy` | Corn, Soybean, Coffee | full driver-port |
+| 112 | `fetch_unica.py` | `fetch/unica.py` (PDF via poppler-utils) | `unica_mix` | Sugar | full driver-port |
+| 113 | `fetch_shipping.py` | konsolideres med eksisterende `bdi` → `fetch/shipping.py` | `shipping_pressure` (utvidelse av `bdi_chg30d`) | Wheat, Soybean, Corn | refactor + utvidelse |
+| 114 | `fetch_intel.py` | `fetch/news_intel.py` | (ingen) | (ingen) | **kun fetcher + UI-context.** Driver-vurdering etter empirisk validering. |
+| 115 | `fetch_crypto.py` | `fetch/crypto_sentiment.py` | (ingen) | (ingen) | **kun fetcher + UI-context.** Driver-vurdering etter empirisk validering. |
+
+Etter session 115 har bedrock 20 fetchere totalt (9 + 11 nye). Phase D
+(sessions 116-117) konsoliderer:
+- Backtest-validering på alle 22 instrumenter med komplett data-grunnlag
+- ADR-009 cutover-readiness audit
+- Tag `v0.12.5-fetch-port-complete`
 
 ---
 
@@ -1156,8 +1225,8 @@ Hver fase avsluttes med testing + commit. Ingen fase starter før forrige er gr�
 | **8** | Bot-refaktor: splitt i 8 moduler, fjern agri-ATR-override-bug (trading_bot.py:2665-2691), config-ekstraksjon | 1 uke | Bot må fortsatt kjøre demo i parallell |
 | **9** | UI: 4 faner + admin-editor. Erstatter eksisterende HTML. | 1-2 uker | Visuell verifisering + signal-visning-tester |
 | **10** | Analog-matching: K-NN, per asset-klasse, outcome-labels, integrer i scoring + UI | 1 uke | Backtest av analog-driver mot forward-return |
-| **11** | Backtest-rammeverk + 12 måneder historikk-replay | 1 uke | Output: rapport over signal-performance |
-| **12** | 2 uker demo-parallell-drift | 2 uker | Cutover-kriterier møtt |
+| **11** | Backtest-rammeverk + 12 måneder historikk-replay (CLI). UI-fane utsatt etter Fase 13 (bruker-beslutning 2026-04-25). | 1 uke | Output: rapport over signal-performance |
+| **12** | Parallell-drift + sub-fase 12.5 debt-rydding (drivere før instrumenter) + sub-fase 12.5+ fetch-port (§ 7.5, sessions 105-117) | 2 uker observasjon + 14-15 sessions debt | Cutover-kriterier møtt |
 | **13** | Cutover: skru av gamle timers (cot-explorer + scalp_edge), install systemd-units, gå live | 1 dag | Alt grønt |
 
 Totalt: ~14-18 uker. Kan parallelliseres noe (data-lag og engine kan jobbes samtidig).
@@ -1195,16 +1264,17 @@ Totalt: ~14-18 uker. Kan parallelliseres noe (data-lag og engine kan jobbes samt
 
 ## 16. Neste steg
 
-Fase 0 er fullført — `~/bedrock/` opprettet med full infrastruktur, git-regler,
-CI, tests-skall, docs, CLAUDE.md, STATE.md. Godkjent av bruker 2026-04-23.
+Fase 0-11 fullført. Fase 12 åpen — parallell-drift pauset, sub-fase 12.5
+(debt-rydding) gjennomført sessions 70-103. Sub-fase 12.5+ (sessions 104-117)
+porter de 11 ikke-portede cot-explorer-fetcherne inn i bedrock — se § 7.5.
 
-Neste session (Fase 1):
-1. Opprett `feat/engine-core` branch
-2. Implementer `Engine`-klasse + driver-registry (base + `@register`-dekorator)
-3. Implementer `weighted_horizon`-aggregator
-4. Første to drivere: `sma200_align`, `momentum_z`
-5. Logiske tester for Gold SWING-scenario
-6. Første ADR: `docs/decisions/001-one-engine-two-aggregators.md`
+Aktivt nå (sessions 104-117):
+1. Session 104: docs-cleanup (PLAN § 3.1 mappetre, § 7.5 ny, ADR-007 strategi)
+2. Sessions 105-115: én fetcher per session (calendar_ff → crypto_sentiment)
+3. Sessions 116-117: backtest-validering + ADR-009 cutover-readiness
+
+Etter sub-fase 12.5+: re-aktiver observasjonsvinduet (parallell-drift sub-session
+68) før Fase 13 cutover.
 
 ---
 
