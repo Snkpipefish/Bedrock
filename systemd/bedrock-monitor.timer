@@ -1,0 +1,12 @@
+# Block D session 78. Kjører daglig 06:30 etter at signals-all (03:30)
+# har regenerert data/signals.json med ferske data fra fetch-timerne.
+[Unit]
+Description=Daily bedrock pipeline-monitor
+
+[Timer]
+OnCalendar=*-*-* 06:30:00
+Persistent=true
+Unit=bedrock-monitor.service
+
+[Install]
+WantedBy=timers.target

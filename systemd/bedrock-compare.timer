@@ -1,0 +1,11 @@
+# Block D session 78. Kjører daglig 06:35 (etter monitor 06:30).
+[Unit]
+Description=Daily bedrock signal-diff vs cot-explorer
+
+[Timer]
+OnCalendar=*-*-* 06:35:00
+Persistent=true
+Unit=bedrock-compare.service
+
+[Install]
+WantedBy=timers.target

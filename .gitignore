@@ -41,13 +41,16 @@ data/parquet/**/*.parquet
 data/latest/*.json
 data/setups/active.json
 data/_meta/*.json
+data/_meta/compare_*.md
 data/signal_log.json
 
-# Men behold mappene (via .gitkeep)
+# Men behold mappene (via .gitkeep) + baseline-filer
 !data/parquet/.gitkeep
 !data/latest/.gitkeep
 !data/setups/.gitkeep
 !data/_meta/.gitkeep
+!data/_meta/*_baseline_*.json
+!data/_meta/*_baseline_*.md
 
 # Test-artefakter
 tests/**/coverage.xml

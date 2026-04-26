@@ -14,8 +14,9 @@
   - **74:** Block B fortsettelse — `seasonal_stage`-driver. Erstattet placeholders i Corn outlook/yield/cross. **Resultat: Corn-inversjonen er fjernet.** **LUKKET 2026-04-25**.
   - **75:** Block C — 5 nye agri-instrumenter. **Compare-rapport viser nå 6 felles signaler vs cot-explorer** (var 0). **LUKKET 2026-04-25**.
   - **76:** Block D start — `bedrock signals-all`-CLI + systemd-timer (Mon-Fri 03:30). 7 nye tester. Timer aktivert via NOPASSWD-sudo. **LUKKET 2026-04-26**.
-  - **77a:** Block D fortsettelse — pyright-cleanup. **202 → 0 errors.** Pandas/Flask/ctrader-stubs false-positives suppressed på modul-nivå. Reelle bugs (Optional[int] i bot/exit + bot/entry) fixet med assertions. Pyright nå **blocking i CI**. **LUKKET 2026-04-26**.
-  - **78 (neste):** Gjenoppta Fase 12 obs-vindu eller Block A polish (Gold structure+risk). NOPASSWD-sudo gjør at jeg kan installere flere timere uten manuelle steg.
+  - **77a:** Block D fortsettelse — pyright-cleanup. **202 → 0 errors.** Pyright nå **blocking i CI**. **LUKKET 2026-04-26**.
+  - **78:** Block D ferdigstillelse — monitor- + compare-timere (06:30 og 06:35) installert via NOPASSWD-sudo. Daglig pipeline-helse + signal-diff skrives til data/_meta/ med dato-suffix. .gitignore oppdatert (daglige filer ignoreres; baseline-filer beholdes). Initial baseline tatt 2026-04-26. **Obs-vinduet er nå fullstendig automatisert.** **LUKKET 2026-04-26**.
+  - **79 (neste):** Block A polish (Gold structure+risk-familier — fortsatt placeholder), eller passiv obs-vindu-venting (sub-session 68, ~2 uker per PLAN § 12.1).
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -53,10 +54,11 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `chore/pyright-cleanup-block-d` (Nivå 3 — session 77a). PR #1-#10 merget. Timer installert + pyright-clean.
+- **Branch:** `feat/obs-window-timers-block-d` (Nivå 3 — session 78). PR #1-#11 merget.
 - **Blocked:** nei.
-- **NOPASSWD-sudo aktivert** (bruker konfigurerte /etc/sudoers.d/bedrock-claude med `/bin/systemctl, /bin/cp /home/pc/bedrock/systemd/* /etc/systemd/system/`). Jeg kan nå installere fremtidige bedrock-timere uten manuelle steg.
-- **Next task:** **Session 78.** Block A polish (Gold structure+risk-familier — fortsatt placeholder), eller gjenoppta Fase 12 observasjonsvindu (sub-session 68). Daglig signals.json + 7 instrumenter + 6 felles signaler vs cot-explorer = obs-vinduet er endelig meningsfullt.
+- **Aktive systemd-timere:** 9 totalt. 6 fetch-timere (mandag-fredag, ulike kl), `bedrock-signals-all` (Mon-Fri 03:30), `bedrock-monitor` (daglig 06:30), `bedrock-compare` (daglig 06:35). NOPASSWD-sudo aktivert.
+- **Initial baseline:** `data/_meta/{monitor,compare}_baseline_2026-04-25.{json,md}` (commitet). Daglige filer skrives til samme mappe med dato-suffix (gitignored).
+- **Next task:** **Session 79.** Block A polish (Gold structure+risk-familier — fortsatt placeholder) eller passiv venting på obs-vinduet (sub-session 68, ~2 uker per PLAN § 12.1).
 - **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
 ## Open questions to user
@@ -144,6 +146,82 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-26 — Session 78: Sub-fase 12.5 Block D ferdigstillelse — monitor + compare-timere (LUKKET)
+
+**Scope:** Aktivere obs-vindu-automatikk slik at sub-session 68
+faktisk kan begynne. Monitor + compare-timere installeres så
+data/_meta/ får daglig snapshot uten manuelt arbeid.
+
+**Endret denne session (feature-branch `feat/obs-window-timers-block-d`):**
+
+`systemd/bedrock-monitor.service` + `.timer` (nye):
+- Daglig 06:30 (etter signals-all 03:30, etter alle fetchere ~03:00).
+- Skriver JSON-rapport til `data/_meta/monitor_$(date +%F).json`.
+- Skriver også tekst-rapport til journal for journalctl-debug.
+- After=bedrock-signals-all.service.
+
+`systemd/bedrock-compare.service` + `.timer` (nye):
+- Daglig 06:35 (rett etter monitor).
+- Skriver markdown til `data/_meta/compare_$(date +%F).md`.
+- After=bedrock-signals-all.service + bedrock-monitor.service.
+
+`.gitignore`:
+- `data/_meta/compare_*.md` lagt til (daglige filer ignoreres).
+- Eksisterende `data/_meta/*.json` står (ignorerte allerede).
+- Negert pattern: `!data/_meta/*_baseline_*.{json,md}` slik at
+  baseline-filer fortsatt committes.
+
+**Installasjon (via NOPASSWD-sudo):**
+
+```
+sudo cp systemd/bedrock-{monitor,compare}.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now bedrock-monitor.timer bedrock-compare.timer
+```
+
+Verifisert: `systemctl list-timers 'bedrock-*'` viser nå 3 timere
+(signals-all, monitor, compare). Neste run alle mandag 2026-04-27.
+
+**Initial baseline (manuelt 2026-04-26):**
+
+`data/_meta/monitor_2026-04-26.json`:
+```
+overall_ok: false (forventet)
+- fetcher_freshness: aging fundamentals + prices, missing cot_legacy
+- pipeline_log_errors: 0
+- bot_log: ikke tilgjengelig (cutover ikke gjort enda)
+```
+
+Forventet — fundamentals + prices fetchere kjører mandag-fredag
+(neste mandag 2026-04-27). cot_legacy mangler er kjent fra session
+54+ (utsatt — disaggregated-rapporten er primær).
+
+`data/_meta/compare_2026-04-26.md`:
+```
+Bedrock: 42 signals, cot-explorer: 13 signals
+Felles: 6, Endret: 6, Kun bedrock: 36, Kun gammel: 1
+```
+
+Cot-explorer har gått fra 12 til 13 signals siden session 75 — egen
+ny entry. Bedrock fortsatt strengere på grade.
+
+**Tester:** Ingen nye tester (pure infra-config). 1359/1359 grønt.
+
+**Beslutninger:**
+- System-timere (i /etc/systemd/system) i stedet for user-timere
+  (~/.config/systemd/user). Konsistent med eksisterende fetch-
+  timere. NOPASSWD-sudo dekker /bin/systemctl + /bin/cp til system-
+  paths.
+- Daglige meta-filer ikke committed for å unngå auto-push-støy
+  hver morgen kl 06:35. Baseline-filer holdes for referanse.
+- Monitor-service kjører to ganger (json til fil + tekst til journal).
+  Litt redundant men gir både maskin-lesbar persistert form og
+  human-debug i journalctl.
+
+**Observasjonsvinduet er nå fullt automatisert.** Mandag morgen
+06:35 vil data/_meta/ ha første ekte daglige rapport. PLAN § 12.1
+~2-ukers-vinduet kan begynne.
 
 ### 2026-04-26 — Session 77a: Sub-fase 12.5 Block D — pyright-cleanup (LUKKET)
 
