@@ -86,3 +86,15 @@ fetchers:
     on_failure: retry_with_backoff
     table: bdi
     ts_column: date
+
+  # Sub-fase 12.5+ session 105 (ADR-007/008): Forex Factory økonomisk
+  # kalender. JSON-en endrer seg når nye events legges til eller når
+  # forecast/previous fylles inn 1-2 timer før release. Daglig 2× er
+  # mer enn nok for event_distance-driveren (timing-krav 4-24t).
+  calendar_ff:
+    module: bedrock.fetch.calendar_ff
+    cron: "15 6,18 * * *"        # 06:15 + 18:15 Oslo (morgen EU + ettermiddag US)
+    stale_hours: 14              # 14h slack — første timer-fire kveld OK selv etter 06:15-fetch
+    on_failure: log_and_skip
+    table: econ_events
+    ts_column: fetched_at

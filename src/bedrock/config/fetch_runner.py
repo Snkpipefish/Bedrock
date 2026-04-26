@@ -445,6 +445,36 @@ def run_bdi(
     return result
 
 
+@register_runner("calendar_ff")
+def run_calendar_ff(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """Forex Factory økonomisk kalender (sub-fase 12.5+ session 105).
+
+    Henter denne uke's high/medium-impact events og skriver til
+    ``econ_events``-tabellen. Ikke instrument-spesifikk; én global
+    fetch per kjøring. Cadence (ADR-008): ``15 6,18 * * *`` Oslo —
+    daglig 2× for å fange forecast/previous-oppdateringer 1-2 timer
+    før release.
+    """
+    from bedrock.fetch.calendar_ff import fetch_calendar_events
+
+    result = FetchRunResult(fetcher_name="calendar_ff")
+
+    def _do() -> int:
+        df = fetch_calendar_events()
+        if df.empty:
+            return 0
+        return store.append_econ_events(df)
+
+    _safe_run([("forex_factory", _do)], result)
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Convenience: default from_date basert på stale_hours
 # ---------------------------------------------------------------------------

@@ -318,6 +318,8 @@ _FETCHER_GROUPS: dict[str, str] = {
     "wasde": "USDA",
     "crop_progress": "USDA",
     "bdi": "Shipping",
+    # Sub-fase 12.5+ session 105 (ADR-007/008):
+    "calendar_ff": "Calendar",
 }
 _DEFAULT_GROUP = "Other"
 
@@ -328,6 +330,7 @@ _GROUP_ORDER = [
     "CFTC",
     "Ekstern COT",
     "Fundamentals",
+    "Calendar",
     "USDA",
     "Shipping",
     "Sektor",
