@@ -101,6 +101,7 @@ def is_registered(name: str) -> bool:
 # ruff: noqa: E402, F401
 from bedrock.engine.drivers import (
     agri,
+    agronomy,
     analog,
     currency,
     macro,

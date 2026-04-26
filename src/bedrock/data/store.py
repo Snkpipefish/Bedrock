@@ -32,23 +32,38 @@ import pandas as pd
 
 from bedrock.data.schemas import (
     ANALOG_OUTCOMES_COLS,
+    BDI_COLS,
     COT_DISAGGREGATED_COLS,
     COT_LEGACY_COLS,
+    CROP_PROGRESS_COLS,
     DDL_ANALOG_OUTCOMES,
+    DDL_BDI,
     DDL_COT_DISAGGREGATED,
     DDL_COT_LEGACY,
+    DDL_CROP_PROGRESS,
+    DDL_DISEASE_ALERTS,
+    DDL_EXPORT_EVENTS,
     DDL_FUNDAMENTALS,
     DDL_PRICES,
+    DDL_WASDE,
     DDL_WEATHER,
     DDL_WEATHER_MONTHLY,
+    DISEASE_ALERTS_COLS,
+    EXPORT_EVENTS_COLS,
     FUNDAMENTALS_COLS,
     TABLE_ANALOG_OUTCOMES,
+    TABLE_BDI,
     TABLE_COT_DISAGGREGATED,
     TABLE_COT_LEGACY,
+    TABLE_CROP_PROGRESS,
+    TABLE_DISEASE_ALERTS,
+    TABLE_EXPORT_EVENTS,
     TABLE_FUNDAMENTALS,
     TABLE_PRICES,
+    TABLE_WASDE,
     TABLE_WEATHER,
     TABLE_WEATHER_MONTHLY,
+    WASDE_COLS,
     WEATHER_COLS,
     WEATHER_MONTHLY_COLS,
 )
@@ -99,6 +114,12 @@ class DataStore:
             conn.execute(DDL_WEATHER)
             conn.execute(DDL_WEATHER_MONTHLY)
             conn.execute(DDL_ANALOG_OUTCOMES)
+            # PLAN § 7.3 datakilder (session 83+):
+            conn.execute(DDL_CROP_PROGRESS)
+            conn.execute(DDL_WASDE)
+            conn.execute(DDL_EXPORT_EVENTS)
+            conn.execute(DDL_DISEASE_ALERTS)
+            conn.execute(DDL_BDI)
             conn.commit()
 
     # ------------------------------------------------------------------
@@ -699,6 +720,157 @@ class DataStore:
         with self._connect() as conn:
             cursor = conn.execute(query, tuple(params))
             return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # PLAN § 7.3 datakilder (session 83+) — generisk append + get
+    # ------------------------------------------------------------------
+
+    def _append_generic(
+        self,
+        df: pd.DataFrame,
+        table: str,
+        cols: tuple[str, ...],
+    ) -> int:
+        """Generisk INSERT OR REPLACE for nye § 7.3-tabeller.
+
+        Schema-validering: alle kolonner i ``cols`` må finnes i ``df``.
+        Returnerer antall innsatte rader. Tom DataFrame → 0.
+        """
+        if df.empty:
+            return 0
+        missing = set(cols) - set(df.columns)
+        if missing:
+            raise ValueError(f"{table}: df mangler kolonner: {sorted(missing)}")
+
+        prepared = df.reindex(columns=list(cols))
+        rows: Sequence[tuple] = [tuple(r) for r in prepared.itertuples(index=False, name=None)]
+        placeholders = ", ".join(["?"] * len(cols))
+        col_list = ", ".join(cols)
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {table} ({col_list}) VALUES ({placeholders})",
+                rows,
+            )
+            conn.commit()
+        return len(rows)
+
+    def append_crop_progress(self, df: pd.DataFrame) -> int:
+        """Skriv NASS Crop Progress-rader. Schema: ``CROP_PROGRESS_COLS``."""
+        return self._append_generic(df, TABLE_CROP_PROGRESS, CROP_PROGRESS_COLS)
+
+    def get_crop_progress(
+        self,
+        commodity: str,
+        state: str = "US TOTAL",
+        metric: str | None = None,
+    ) -> pd.DataFrame:
+        """Hent crop-progress-rader for én commodity (+ optional metric)."""
+        query = f"""
+            SELECT * FROM {TABLE_CROP_PROGRESS}
+            WHERE commodity = ? AND state = ?
+        """
+        params: list = [commodity, state]
+        if metric is not None:
+            query += " AND metric = ?"
+            params.append(metric)
+        query += " ORDER BY week_ending ASC"
+
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=params)
+        df["week_ending"] = pd.to_datetime(df["week_ending"])
+        return df
+
+    def append_wasde(self, df: pd.DataFrame) -> int:
+        """Skriv WASDE-rader. Schema: ``WASDE_COLS``."""
+        return self._append_generic(df, TABLE_WASDE, WASDE_COLS)
+
+    def get_wasde(
+        self,
+        commodity: str,
+        metric: str,
+        region: str = "US",
+    ) -> pd.DataFrame:
+        """Hent WASDE-tidsserie for (commodity, metric, region)."""
+        query = f"""
+            SELECT * FROM {TABLE_WASDE}
+            WHERE commodity = ? AND metric = ? AND region = ?
+            ORDER BY report_date ASC
+        """
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=(commodity, metric, region))
+        df["report_date"] = pd.to_datetime(df["report_date"])
+        return df
+
+    def append_export_events(self, df: pd.DataFrame) -> int:
+        return self._append_generic(df, TABLE_EXPORT_EVENTS, EXPORT_EVENTS_COLS)
+
+    def get_export_events(
+        self,
+        commodity: str | None = None,
+        country: str | None = None,
+        from_date: str | None = None,
+    ) -> pd.DataFrame:
+        """Hent eksport-policy events (alle, eller filtrert)."""
+        query = f"SELECT * FROM {TABLE_EXPORT_EVENTS} WHERE 1=1"
+        params: list = []
+        if commodity:
+            query += " AND commodity = ?"
+            params.append(commodity)
+        if country:
+            query += " AND country = ?"
+            params.append(country)
+        if from_date:
+            query += " AND event_date >= ?"
+            params.append(from_date)
+        query += " ORDER BY event_date DESC"
+
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=params)
+        if not df.empty:
+            df["event_date"] = pd.to_datetime(df["event_date"])
+        return df
+
+    def append_disease_alerts(self, df: pd.DataFrame) -> int:
+        return self._append_generic(df, TABLE_DISEASE_ALERTS, DISEASE_ALERTS_COLS)
+
+    def get_disease_alerts(
+        self,
+        commodity: str | None = None,
+        from_date: str | None = None,
+    ) -> pd.DataFrame:
+        query = f"SELECT * FROM {TABLE_DISEASE_ALERTS} WHERE 1=1"
+        params: list = []
+        if commodity:
+            query += " AND commodity = ?"
+            params.append(commodity)
+        if from_date:
+            query += " AND alert_date >= ?"
+            params.append(from_date)
+        query += " ORDER BY alert_date DESC"
+
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=params)
+        if not df.empty:
+            df["alert_date"] = pd.to_datetime(df["alert_date"])
+        return df
+
+    def append_bdi(self, df: pd.DataFrame) -> int:
+        return self._append_generic(df, TABLE_BDI, BDI_COLS)
+
+    def get_bdi(self, last_n: int | None = None) -> pd.Series:
+        """Returner BDI-tidsserie sortert ASC. Kaster KeyError hvis tom."""
+        query = f"SELECT date, value FROM {TABLE_BDI} ORDER BY date ASC"
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn)
+        if df.empty:
+            raise KeyError("No BDI data")
+        df["date"] = pd.to_datetime(df["date"])
+        series = df.set_index("date")["value"].astype("float64")
+        series.name = None
+        if last_n is None:
+            return series
+        return series.tail(last_n)
 
     # ------------------------------------------------------------------
     # Generisk staleness-accessor (fase 6 session 28)
