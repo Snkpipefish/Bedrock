@@ -964,6 +964,128 @@ def _load_agri_history_to_weather_monthly(path: Path) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# crop-progress (PLAN § 7.3) — USDA NASS QuickStats
+# ---------------------------------------------------------------------------
+
+
+_DEFAULT_NASS_COMMODITIES = ("CORN", "SOYBEANS", "WHEAT", "COTTON")
+
+
+@backfill.command("crop-progress")
+@click.option(
+    "--commodity",
+    "commodities",
+    multiple=True,
+    default=_DEFAULT_NASS_COMMODITIES,
+    show_default=True,
+    help=(
+        "NASS commodity-kode. Kan gjentas. Default fanger de 4 hoved-crops bedrock har drivere for."
+    ),
+)
+@click.option(
+    "--year",
+    "years",
+    multiple=True,
+    type=int,
+    default=None,
+    help=(
+        "Årgang(er) å hente. Kan gjentas. Default: nåværende år + 4 år "
+        "tilbake (gir nok for sesongbaseline)."
+    ),
+)
+@click.option(
+    "--api-key",
+    default=None,
+    help=(
+        "USDA NASS API-nøkkel. Hvis utelatt, leses fra env-var "
+        "BEDROCK_NASS_API_KEY eller ~/.bedrock/secrets.env."
+    ),
+)
+@click.option(
+    "--db",
+    "db_path",
+    default=DEFAULT_DB_PATH,
+    show_default=True,
+    type=click.Path(path_type=Path),
+    help="Path til SQLite-databasen.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help=(
+        "Vis hva som ville blitt hentet (commodities × år) uten HTTP-kall "
+        "eller DB-skriving. API-nøkkel maskes."
+    ),
+)
+def crop_progress_cmd(
+    commodities: tuple[str, ...],
+    years: tuple[int, ...],
+    api_key: str | None,
+    db_path: Path,
+    dry_run: bool,
+) -> None:
+    """Backfill USDA NASS Crop Progress til SQLite (`crop_progress`-tabellen).
+
+    Henter ukentlige crop-progress-rader (PLANTED/SILKING/HARVESTED/
+    GOOD_EXCELLENT) for de angitte commodities × år.
+
+    Eksempel:
+
+        bedrock backfill crop-progress --year 2024 --year 2025 --year 2026
+        bedrock backfill crop-progress --commodity CORN --year 2026
+
+    API-nøkkel: registrer gratis på https://quickstats.nass.usda.gov/api
+    og legg til ``BEDROCK_NASS_API_KEY=...`` i ``~/.bedrock/secrets.env``.
+    """
+    from bedrock.fetch.nass import (
+        NASS_API_KEY_ENV,
+        fetch_crop_progress_api,
+    )
+
+    if not years:
+        current = date.today().year
+        years_list = [current - i for i in range(5)][::-1]  # 4 år bakover + i år
+    else:
+        years_list = sorted(set(years))
+
+    commodities_list = sorted(set(commodities))
+
+    resolved_key = api_key or get_secret(NASS_API_KEY_ENV)
+
+    if dry_run:
+        click.echo(f"DRY-RUN  Commodities: {', '.join(commodities_list)}")
+        click.echo(f"DRY-RUN  Years:       {years_list}")
+        masked = _MASKED_API_KEY if resolved_key else "(MISSING)"
+        click.echo(f"DRY-RUN  API-key:     {masked}")
+        click.echo(f"DRY-RUN  Would write to: {db_path}")
+        return
+
+    if not resolved_key:
+        raise click.UsageError(
+            f"NASS API-nøkkel ikke funnet. Sett env-var {NASS_API_KEY_ENV}, "
+            f"legg til i ~/.bedrock/secrets.env, eller bruk --api-key. "
+            f"Nøkkel hentes gratis fra https://quickstats.nass.usda.gov/api."
+        )
+
+    df = fetch_crop_progress_api(
+        commodities=commodities_list,
+        years=years_list,
+        api_key=resolved_key,
+    )
+    if df.empty:
+        click.echo("crop-progress: ingen rader returnert.")
+        return
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    store = DataStore(db_path)
+    n = store.append_crop_progress(df)
+    click.echo(
+        f"crop-progress: {n} rader skrevet  "
+        f"(commodities={len(commodities_list)} × years={len(years_list)})"
+    )
+
+
+# ---------------------------------------------------------------------------
 # outcomes (Fase 10 ADR-005) — beregne forward_return + max_drawdown
 # ---------------------------------------------------------------------------
 

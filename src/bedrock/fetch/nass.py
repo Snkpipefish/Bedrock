@@ -6,10 +6,15 @@
 Henter ukentlig crop-progress-data (% planted, silking, harvested, good/
 excellent condition) fra USDA's NASS QuickStats API.
 
-API-nøkkel: krever ``BEDROCK_NASS_API_KEY``-env-var. Registrer gratis
-på https://quickstats.nass.usda.gov/api (krever email-bekreftelse).
+API-nøkkel: oppslag-rekkefølge (samme mønster som FRED-fetcher):
+1. CLI-arg / `api_key`-param,
+2. env-var ``BEDROCK_NASS_API_KEY``,
+3. ``~/.bedrock/secrets.env`` (KEY=VALUE).
 
-Manuell CSV-fallback: hvis env-var mangler, leser fra
+Registrer gratis på https://quickstats.nass.usda.gov/api (krever
+email-bekreftelse).
+
+Manuell CSV-fallback: hvis ingen key er funnet, leser fra
 ``data/manual/crop_progress.csv`` (samme schema som
 ``CROP_PROGRESS_COLS``). Bruker kan populere manuelt hvis API-key ikke
 er tilgjengelig.
@@ -26,7 +31,6 @@ Bruk:
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
@@ -35,7 +39,10 @@ import pandas as pd
 import requests
 import structlog
 
+from bedrock.config.secrets import get_secret
 from bedrock.data.schemas import CROP_PROGRESS_COLS
+
+NASS_API_KEY_ENV = "BEDROCK_NASS_API_KEY"
 
 _log = structlog.get_logger(__name__)
 
@@ -76,7 +83,7 @@ def fetch_crop_progress_api(
         ValueError: hvis api_key ikke er gitt og BEDROCK_NASS_API_KEY mangler.
         requests.HTTPError: ved API-feil.
     """
-    api_key = api_key or os.environ.get("BEDROCK_NASS_API_KEY")
+    api_key = api_key or get_secret(NASS_API_KEY_ENV)
     if not api_key:
         raise ValueError(
             "BEDROCK_NASS_API_KEY er ikke satt. Registrer gratis på "
@@ -182,7 +189,7 @@ def fetch_crop_progress(
         current = date.today().year
         years = [current - 1, current]
 
-    api_key_resolved = api_key or os.environ.get("BEDROCK_NASS_API_KEY")
+    api_key_resolved = api_key or get_secret(NASS_API_KEY_ENV)
     if api_key_resolved:
         try:
             return fetch_crop_progress_api(
@@ -195,6 +202,7 @@ def fetch_crop_progress(
 
 
 __all__ = [
+    "NASS_API_KEY_ENV",
     "fetch_crop_progress",
     "fetch_crop_progress_api",
     "fetch_crop_progress_manual",
