@@ -1,0 +1,81 @@
+# Natural Gas — financial instrument (energy)
+# Session 91. Vær-følsom (heat/cold cycles), men weather_stress-driver
+# brukes ikke her — dedikerte gas-storage-rapporter mangler. Plain
+# financial-rules.
+
+inherits: family_financial
+
+instrument:
+  id: NaturalGas
+  asset_class: energy
+  ticker: XNGUSD
+  cfd_ticker: NaturalGas
+  yahoo_ticker: NG=F
+  cot_contract: "NAT GAS NYME - NEW YORK MERCANTILE EXCHANGE"
+  cot_report: disaggregated
+  fred_series_ids:
+    - DGS10
+    - T10YIE
+    - DTWEXBGS
+    - VIXCLS
+
+aggregation: weighted_horizon
+
+horizons:
+  SCALP:
+    family_weights: {trend: 1.2, positioning: 0.5, macro: 0.6, structure: 1.4, risk: 1.0, analog: 0.3}
+    max_score: 5.0
+    min_score_publish: 1.5
+  SWING:
+    family_weights: {trend: 1.0, positioning: 1.0, macro: 0.8, structure: 1.2, risk: 1.2, analog: 0.6}
+    max_score: 5.8
+    min_score_publish: 2.5
+  MAKRO:
+    family_weights: {trend: 0.8, positioning: 1.3, macro: 1.0, structure: 0.5, risk: 1.0, analog: 1.0}
+    max_score: 5.6
+    min_score_publish: 3.5
+
+families:
+  trend:
+    drivers:
+      - {name: sma200_align, weight: 0.5, params: {tf: D1}}
+      - {name: momentum_z, weight: 0.5, params: {window: 20}}
+  positioning:
+    drivers:
+      - name: positioning_mm_pct
+        weight: 0.6
+        params: {metric: mm_net_pct, lookback_weeks: 52}
+      - name: cot_z_score
+        weight: 0.4
+        params: {metric: mm_net_pct, lookback_weeks: 52}
+  macro:
+    drivers:
+      - name: dxy_chg5d
+        weight: 0.6
+        params: {bull_when: negative, window: 5}
+      - name: vix_regime
+        weight: 0.4
+        params: {invert: true}
+  structure:
+    drivers:
+      - name: range_position
+        weight: 1.0
+        params: {window: 20, mode: continuation}
+  risk:
+    drivers:
+      - name: vol_regime
+        weight: 1.0
+        params: {period: 14, lookback: 252, mode: high_is_bull}
+  analog:
+    drivers:
+      - name: analog_hit_rate
+        weight: 0.5
+        params: {asset_class: energy, k: 5, horizon_days: 30, outcome_threshold_pct: 8.0, min_history_days: 365}
+      - name: analog_avg_return
+        weight: 0.5
+        params: {asset_class: energy, k: 5, horizon_days: 30, min_history_days: 365}
+
+grade_thresholds:
+  A_plus: {min_pct_of_max: 0.75, min_families: 4}
+  A:      {min_pct_of_max: 0.55, min_families: 3}
+  B:      {min_pct_of_max: 0.35, min_families: 2}
