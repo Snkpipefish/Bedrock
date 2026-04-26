@@ -285,4 +285,95 @@ def cot_z_score(store: Any, instrument: str, params: dict) -> float:
     return 0.0
 
 
-__all__ = ["cot_z_score", "positioning_mm_pct"]
+# ---------------------------------------------------------------------------
+# cot_ice_mm_pct (sub-fase 12.5+ session 106)
+# ---------------------------------------------------------------------------
+
+
+def _load_ice_metric_series(
+    store: Any,
+    params: dict,
+) -> tuple[float, list[float]] | None:
+    """Datastrøm-loader for ICE-COT, parallell til ``_load_metric_series``.
+
+    Forskjellen fra CFTC-versjonen: ``contract`` leses fra ``params``
+    (YAML-driven), ikke fra instrument-config. ICE-canonical contract-
+    strenger er ``"ice brent crude"`` / ``"ice gasoil"`` / ``"ice ttf gas"``.
+
+    Returnerer ``(current, history)`` eller ``None`` ved feil.
+    """
+    contract = params.get("contract")
+    if not contract:
+        _log.warning("cot_ice.no_contract_in_params params=%s", params)
+        return None
+
+    lookback = int(params.get("lookback_weeks", _DEFAULT_LOOKBACK))
+    metric = str(params.get("metric", _DEFAULT_METRIC))
+
+    try:
+        df = store.get_cot_ice(contract, last_n=lookback + 1)
+    except KeyError:
+        _log.warning("cot_ice.data_missing contract=%s", contract)
+        return None
+    except Exception as exc:
+        _log.warning("cot_ice.fetch_failed contract=%s error=%s", contract, exc)
+        return None
+
+    series = _compute_metric(df, metric)
+    if series is None:
+        _log.warning("cot_ice.unknown_metric contract=%s metric=%s", contract, metric)
+        return None
+
+    series = series.dropna()
+    if len(series) < MIN_OBS_FOR_PCTILE + 1:
+        _log.debug(
+            "cot_ice.short_history contract=%s n=%d required=%d",
+            contract,
+            len(series),
+            MIN_OBS_FOR_PCTILE + 1,
+        )
+        return None
+
+    current = float(series.iloc[-1])
+    history = [float(v) for v in series.iloc[:-1]]
+    return current, history
+
+
+@register("cot_ice_mm_pct")
+def cot_ice_mm_pct(store: Any, instrument: str, params: dict) -> float:
+    """Rank-percentile av MM net positioning fra ICE COT, normalisert til 0..1.
+
+    Parallell til ``positioning_mm_pct`` men leser fra ``store.get_cot_ice``
+    (ICE Futures Europe COT) i stedet for ``store.get_cot`` (CFTC).
+    Brukes for instrumenter listet på ICE — Brent Crude (primær COT-kilde,
+    siden Brent er ICE-listet), Gasoil og TTF Natural Gas (overlay til
+    CFTC-COT-driver for cross-validering).
+
+    Params:
+        contract (REQUIRED): ICE-canonical streng. F.eks. ``"ice brent crude"``,
+            ``"ice gasoil"``, ``"ice ttf gas"``. Kommer fra YAML-wiring,
+            ikke fra instrument-config (siden bedrock per i dag har
+            ``cot_contract`` knyttet til CFTC).
+        lookback_weeks: rolling-vindu (default 52).
+        metric: ``"mm_net"`` (default) eller ``"mm_net_pct"``.
+
+    Returnerer:
+    - 1.0 ved ekstrem MM long (top-percentile)
+    - 0.5 ved median posisjonering
+    - 0.0 ved ekstrem MM short eller manglende data
+
+    Defensiv: alle feil → 0.0 + log, ingen exception.
+    """
+    loaded = _load_ice_metric_series(store, params)
+    if loaded is None:
+        return 0.0
+    current, history = loaded
+
+    pct = rank_percentile(current, history)
+    if pct is None:
+        return 0.0
+
+    return round(pct / 100.0, 4)
+
+
+__all__ = ["cot_ice_mm_pct", "cot_z_score", "positioning_mm_pct"]
