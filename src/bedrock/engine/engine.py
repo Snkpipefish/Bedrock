@@ -79,11 +79,36 @@ class FinancialFamilySpec(BaseModel):
 
 
 class HorizonSpec(BaseModel):
-    """En horisonts familie-vekter + score-cap + publish-gulv."""
+    """En horisonts familie-vekter + score-cap + publish-gulv.
+
+    `min_score_publish` kan være enten:
+    - `float`: felles floor for begge retninger (default-mønster)
+    - `dict[str, float]` med keys ``buy``/``sell``: asymmetrisk floor
+
+    Asymmetrisk publish-floor (session 101) lar instrumenter med
+    strukturell BUY-bias (SP500/Nasdaq/Gold) ha lavere BUY-floor +
+    høyere SELL-floor. Brukes når session 99-backtest viser
+    asymmetri > 15pp i hit-rate.
+    """
 
     family_weights: dict[str, float]
     max_score: float = Field(gt=0.0)
-    min_score_publish: float = Field(ge=0.0)
+    min_score_publish: float | dict[str, float] = Field(default=0.0)
+
+    def get_publish_floor(self, direction: str) -> float:
+        """Returnér gjeldende publish-floor for en retning.
+
+        Default: float-verdi gjelder begge. Hvis dict: slå opp på
+        ``direction.lower()`` (``buy``/``sell``); fallback til
+        max-floor hvis ukjent retning.
+        """
+        if isinstance(self.min_score_publish, dict):
+            key = direction.lower()
+            if key in self.min_score_publish:
+                return float(self.min_score_publish[key])
+            # Strengeste fallback: høyeste oppgitte floor
+            return float(max(self.min_score_publish.values()))
+        return float(self.min_score_publish)
 
 
 class FinancialRules(BaseModel):
@@ -128,7 +153,7 @@ class AgriRules(BaseModel):
 
     aggregation: Literal["additive_sum"]
     max_score: float = Field(gt=0.0)
-    min_score_publish: float = Field(ge=0.0)
+    min_score_publish: float | dict[str, float] = Field(default=0.0)
     families: dict[str, AgriFamilySpec]
     grade_thresholds: grade.AgriGradeThresholds
     gates: list[GateSpec] = Field(default_factory=list)
