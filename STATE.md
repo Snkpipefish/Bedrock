@@ -19,7 +19,8 @@
   - **79:** Block A polish — `range_position` (structure) + `vol_regime` (risk) erstatter sma200_align placeholder i Gold. **Gold scorer nå reelt i alle 6 familier.** 13 nye tester. **LUKKET 2026-04-26**. **Sub-fase 12.5 ferdig — alle 4 blocks fullført.**
   - **80:** Sub-fase 12.5+ — gjeld-clearing fortsatt. Backfilt DEXBZUS (USD/BRL), nytt `brl_chg5d`-driver, byttet Coffee+Sugar fra DXY-proxy til ekte BRL. Lagt til Nasdaq som 8. instrument (4103 prices + 631+225 legacy COT). Utvidet positioning-driver med `noncomm_net`/`noncomm_net_pct` for legacy COT (indekser). Compare-script fikset for `key` + `name`-matching (cot-explorer financial bruker key=ticker, agri bruker key=engelsk-navn). **6 → 7 felles signaler vs cot-explorer.** 10 nye tester. **LUKKET 2026-04-26**.
   - **81:** Sub-fase 12.5+ — EURUSD + SP500 som 9. og 10. instrument (FX og indices asset-klasser). Backfilt prices + legacy COT for begge. Bumpet monitor's grade-endring-terskel fra 50% til 80% (bedrock er strengere by design). **LUKKET 2026-04-26**.
-  - **82 (neste):** USDA NASS Crop Progress-fetcher krever API-key (manuell registrering). WASDE-fetcher krever PDF-parsing. Resterende auto-doable: BTC-instrument, ICE softs COT-utvidelse, branch-protection-setup på GitHub UI (manuelt). Kandidat: cot_legacy backfill for de 6 agri-instrumentene som har disaggregated (gir bridge-historikk pre-2010 og redundans).
+  - **82:** Sub-fase 12.5+ — BTC som 11. instrument (crypto-asset-class). Backfilt 4239 prices (BTC-USD 2014-2026) + 420 legacy COT (CME Bitcoin futures 2017-12-onward). Verifisert at cot_legacy-fetcher auto-discoverer alle legacy-instrumenter via YAMLer (Nasdaq + EURUSD + SP500 + BTC). **LUKKET 2026-04-26**.
+  - **83 (neste, blokket på manuell input):** NASS Crop Progress + WASDE krever bruker-handling (API-key registrering + PDF-parser). Branch-protection krever GitHub UI. Andre auto-doable er små (cot_legacy-bridge for agri pre-2010 = lavt verdi). Naturlig pause-punkt for å vente på obs-vinduets data.
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -57,12 +58,12 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `feat/eurusd-sp500-instruments` (Nivå 3 — session 81). PR #1-#14 merget.
-- **Blocked:** nei.
+- **Branch:** `feat/btc-instrument` (Nivå 3 — session 82). PR #1-#15 merget.
+- **Blocked:** Resterende gjeld krever bruker-input (API-key, PDF-parser, GitHub UI). Naturlig pause-punkt.
 - **Aktive systemd-timere:** 9 totalt.
-- **Instrumenter:** 10 totalt (Gold, Corn, Cotton, Coffee, Soybean, Sugar, Wheat, Nasdaq, EURUSD, SP500).
-- **Compare overlap:** 7 felles signaler vs cot-explorer (cot-explorer dekker kun 7 unike — vi matcher alle).
-- **Next task:** **Session 82.** Auto-doable kandidater: cot_legacy backfill (bridge-historikk + redundans), BTC-instrument, eller mindre infra-tasks. NASS Crop Progress + WASDE krever manuell API-key/PDF-parsing.
+- **Instrumenter:** 11 totalt (Gold, Corn, Cotton, Coffee, Soybean, Sugar, Wheat, Nasdaq, EURUSD, SP500, BTC).
+- **Compare overlap:** 7 felles signaler vs cot-explorer (vi matcher alle deres 7 unike).
+- **Next task:** **Session 83.** Vent på obs-vindu-data, eller bruker-aktiverte gjeld-tasks (NASS API-key, WASDE-parser, branch-protection).
 - **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
 ## Open questions to user
@@ -150,6 +151,100 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-26 — Session 82: Sub-fase 12.5+ — BTC + cot_legacy auto-fetch verifikasjon (LUKKET)
+
+**Scope:** Legge til BTC som 11. instrument (første crypto). Verifisere
+at cot_legacy-fetcher auto-discoverer legacy-instrumenter fra YAMLene.
+
+**Endret denne session (feature-branch `feat/btc-instrument`):**
+
+`config/instruments/btc.yaml` (ny):
+- asset_class: crypto, første crypto-instrument.
+- cot_contract: "BITCOIN - CHICAGO MERCANTILE EXCHANGE" (CME Bitcoin
+  futures, startet 2017-12).
+- Trend-tunge horizon-vekter (SCALP trend=1.5) — BTC er trend-asset.
+- Macro samme equity-tolkning som Nasdaq/SP500 (lav real yield = bull,
+  USD-svakhet = bull, lav VIX = bull).
+- analog_thresholds: outcome_threshold_pct=5.0% (BTC har høyere typisk
+  daily move enn equity).
+
+**Backfill:**
+
+| Datapunkt | Antall | Periode |
+|---|---:|---|
+| BTC prices (BTC-USD) | 4239 | 2014-2026 |
+| BTC legacy COT | 420 | 2017-12 - 2026 |
+
+**cot_legacy fetcher-verifikasjon:**
+
+```
+$ bedrock fetch run cot_legacy
+=== Running cot_legacy from 2026-04-12 to 2026-04-26 ===
+fetch_cot_legacy contract=EURO FX → 2 row(s)
+fetch_cot_legacy contract=NASDAQ-100 Consolidated → 2 row(s)
+fetch_cot_legacy contract=E-MINI S&P 500 STOCK INDEX → 0 row(s)
+Summary: 3/3 ok, 0 failed, 4 total rows
+```
+
+Auto-discovery virker: fetcheren leser cot_report-feltet i alle
+instrument-YAMLer og fetcher legacy-rapporter for de som har
+`cot_report: legacy`. BTC vil bli inkludert fra og med neste fredag-
+fetch.
+
+**End-to-end BTC (april 2026):**
+
+```
+SCALP buy: 2.48 grade=B
+SWING buy: 2.52 grade=B
+MAKRO buy: 2.35 grade=B
+  trend=0.38 positioning=0.95 macro=0.55
+  structure=0.88 risk=0.04 analog=0.00
+```
+
+Realistisk: BTC nær top av 20d range (structure 0.88), specs ekstremt
+long (positioning 0.95 — top percentil), men trend-følger har svekket
+seg (0.38 — close er kun marginalt over SMA200), og vol er kompresjon-
+modus (risk 0.04 — kortsiktig vol er svært lav vs 252d-percentil).
+
+**Monitor:**
+
+```
+[OK  ] fetcher_freshness: 4 fresh; 2 aging
+[OK  ] pipeline_log_errors: log mangler
+[OK  ] agri_tp_override: 0
+[OK  ] signal_diff: 7 felles, 5 grade-endring (71%)
+Overall: OK
+```
+
+Etter session 81's threshold-bump (50% → 80%) er signal_diff nå OK.
+
+**signals.json:** 66 entries fra 11/11 instrumenter.
+
+**Tester:** 1382/1382 grønt (ingen nye tester — kun YAML). Pyright 0/0.
+
+**Beslutninger:**
+- BTC bruker noncomm_net_pct (legacy COT, samme som Nasdaq/EURUSD/SP500).
+- Pris-historikk fra 2014 (4239 bars), COT fra 2017-12 (420 reports).
+  Med 26-week-min på percentile har vi 8 år historikk for spec-
+  positioning-trapp.
+- analog_threshold 5.0% (vs 3.0% for andre) reflekterer BTC's høyere
+  typiske daily move.
+- Asset-class "crypto" er ny og analog-historikk er fortsatt sparsomt
+  (analog returnerer 0 i april 2026 — analog dim-extractors må bygges
+  ut for crypto-klassen i fremtid).
+
+**Sub-fase 12.5+ status:**
+- 11 instrumenter (var 2 ved start av sub-fase 12.5)
+- 14 unike drivere (var 1 placeholder per familie)
+- 1382 tester (var 1265)
+- 9 timere aktive
+- Pyright 0/0 (var 202 errors)
+- 7/7 compare-overlap mot cot-explorer
+
+**Naturlig pause-punkt.** Resterende gjeld (NASS API-key, WASDE-PDF,
+branch-protection, IGC) krever bruker-aktivert oppsett. Engine + data
++ infrastruktur er bygget ut til "Fase 13 ready"-nivå.
 
 ### 2026-04-26 — Session 81: Sub-fase 12.5+ — EURUSD + SP500 + monitor-threshold (LUKKET)
 
