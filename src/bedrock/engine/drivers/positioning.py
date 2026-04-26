@@ -124,6 +124,23 @@ def _compute_metric(df: pd.DataFrame, metric: str) -> pd.Series | None:
         oi = df["open_interest"].astype("float64").replace(0, pd.NA)
         return net / oi  # NA-propagering tar seg av OI=0-tilfeller
 
+    # Legacy COT (uten disaggregated MM-splitt): bruk non-commercial som
+    # nærmeste MM-ekvivalent. For indekser og andre kontrakter uten
+    # disaggregated-rapport er dette den eneste tilgjengelige spec-metrikken.
+    if metric == "noncomm_net":
+        if "noncomm_long" not in df.columns or "noncomm_short" not in df.columns:
+            return None
+        return df["noncomm_long"].astype("float64") - df["noncomm_short"].astype("float64")
+
+    if metric == "noncomm_net_pct":
+        if "noncomm_long" not in df.columns or "noncomm_short" not in df.columns:
+            return None
+        if "open_interest" not in df.columns:
+            return None
+        net = df["noncomm_long"].astype("float64") - df["noncomm_short"].astype("float64")
+        oi = df["open_interest"].astype("float64").replace(0, pd.NA)
+        return net / oi
+
     return None
 
 

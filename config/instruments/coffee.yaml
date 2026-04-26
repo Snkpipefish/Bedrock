@@ -54,15 +54,15 @@ families:
         weight: 1.0
         params: {}
   cross:
-    # Coffee er BRL-eksponert. Vi har ikke BRL-feed enda; bruker DXY
-    # som proxy. USD-svakhet → BRL-styrke (typisk korrelert) → bear
-    # for coffee (brasiliansk eksport blir dyrere). Inverter.
+    # Sub-fase 12.5+ session 80: erstattet DXY-proxy med direkte BRL-
+    # måling via DEXBZUS. USDBRL UP = BRL svakhet = bull for
+    # brasiliansk kaffe-eksport.
     weight: 2
     drivers:
-      - name: dxy_chg5d
+      - name: brl_chg5d
         weight: 1.0
         params:
-          bull_when: positive  # USD-styrke → BRL-svakhet → bull coffee
+          bull_when: positive
           window: 5
   analog:
     weight: 2

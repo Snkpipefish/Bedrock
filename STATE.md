@@ -17,7 +17,8 @@
   - **77a:** Block D fortsettelse — pyright-cleanup. **202 → 0 errors.** Pyright nå **blocking i CI**. **LUKKET 2026-04-26**.
   - **78:** Block D ferdigstillelse — monitor- + compare-timere (06:30 og 06:35) installert via NOPASSWD-sudo. Daglig pipeline-helse + signal-diff skrives til data/_meta/ med dato-suffix. .gitignore oppdatert (daglige filer ignoreres; baseline-filer beholdes). Initial baseline tatt 2026-04-26. **Obs-vinduet er nå fullstendig automatisert.** **LUKKET 2026-04-26**.
   - **79:** Block A polish — `range_position` (structure) + `vol_regime` (risk) erstatter sma200_align placeholder i Gold. **Gold scorer nå reelt i alle 6 familier.** 13 nye tester. **LUKKET 2026-04-26**. **Sub-fase 12.5 ferdig — alle 4 blocks fullført.**
-  - **80 (neste):** Sub-fase 12.5 LUKKES, tag `v0.12.5-debt-cleanup`. Deretter: passiv obs-vindu-venting (~2 uker), eller eventuelle små polish-tasks (cot_legacy backfill, branch-protection setup).
+  - **80:** Sub-fase 12.5+ — gjeld-clearing fortsatt. Backfilt DEXBZUS (USD/BRL), nytt `brl_chg5d`-driver, byttet Coffee+Sugar fra DXY-proxy til ekte BRL. Lagt til Nasdaq som 8. instrument (4103 prices + 631+225 legacy COT). Utvidet positioning-driver med `noncomm_net`/`noncomm_net_pct` for legacy COT (indekser). Compare-script fikset for `key` + `name`-matching (cot-explorer financial bruker key=ticker, agri bruker key=engelsk-navn). **6 → 7 felles signaler vs cot-explorer.** 10 nye tester. **LUKKET 2026-04-26**.
+  - **81 (neste):** USDA NASS Crop Progress-fetcher (PLAN § 7.3 Fase-4 item) eller flere financial instrumenter (EURUSD/SP500/BTC).
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -55,11 +56,12 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `feat/gold-structure-risk-block-a` (Nivå 3 — session 79). PR #1-#12 merget.
+- **Branch:** `feat/brl-driver` (Nivå 3 — session 80, ble utvidet til Nasdaq + compare-fix). PR #1-#13 merget.
 - **Blocked:** nei.
-- **Aktive systemd-timere:** 9 totalt (6 fetch + signals-all + monitor + compare).
-- **Sub-fase 12.5 status:** alle 4 blocks fullført. 10 nye drivere, 7 instrumenter, pyright 0/0, 9 timere, obs-vindu fullstendig automatisert.
-- **Next task:** **Session 80.** Tag `v0.12.5-debt-cleanup`. Deretter passiv obs-vindu-venting eller small-task som cot_legacy backfill / branch-protection-setup.
+- **Aktive systemd-timere:** 9 totalt.
+- **Instrumenter:** 8 totalt (Gold, Corn, Cotton, Coffee, Soybean, Sugar, Wheat, Nasdaq).
+- **Compare overlap:** 7 felles signaler vs cot-explorer (Nasdaq + 6 agri).
+- **Next task:** **Session 81.** USDA NASS Crop Progress-fetcher (PLAN § 7.3 Fase-4) eller flere financial instrumenter (EURUSD/SP500/BTC).
 - **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
 ## Open questions to user
@@ -147,6 +149,109 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-26 — Session 80: Sub-fase 12.5+ — BRL driver + Nasdaq + compare-fix (LUKKET)
+
+**Scope:** Fortsette gjeld-clearing. Tre arbeidsstrømmer i én session:
+(a) BRL-driver erstatter DXY-proxy for BRL-eksponerte softs;
+(b) Nasdaq som 8. instrument (cot-explorer's eneste financial signal);
+(c) compare-script fikset slik at både cot-explorer's key og name
+matches mot bedrock instrument-id.
+
+**Endret denne session (feature-branch `feat/brl-driver`):**
+
+`src/bedrock/engine/drivers/macro.py`:
+- Ny `@register("brl_chg5d")` — 5-dagers % endring i DEXBZUS (FRED
+  USD/BRL). Default `bull_when=positive` (USDBRL UP = BRL svakhet =
+  bull for brasiliansk eksport).
+- BRL-kalibrerte terskler basert på empirisk percentil-fordeling
+  2010-2026 (BRL ~2x mer volatil enn DXY: 5d stdev 2.06% vs 0.8%).
+
+`src/bedrock/engine/drivers/positioning.py`:
+- `_compute_metric` utvidet med `noncomm_net` og `noncomm_net_pct`-
+  metrics for legacy COT (indekser). Disaggregated MM-splitt finnes
+  ikke for indekser; non-commercial er beste tilgjengelige
+  spec-positionsmål.
+
+`config/instruments/coffee.yaml`:
+- cross: `dxy_chg5d` (DXY-proxy) → `brl_chg5d` (direkte BRL).
+
+`config/instruments/sugar.yaml`:
+- cross: `dxy_chg5d` → `brl_chg5d` (samme grunn).
+
+`config/instruments/nasdaq.yaml` (ny):
+- asset_class: indices, cot_report: legacy.
+- positioning bruker noncomm_net_pct (ikke MM som krever
+  disaggregated).
+- macro: real_yield bull_when=low, dxy_chg5d bull_when=negative,
+  vix_regime invert=false (motsatt av Gold — Nasdaq er risk-asset).
+- structure + risk: range_position + vol_regime som Gold.
+
+**Backfill via NOPASSWD-sudo + bedrock CLI:**
+
+| Datapunkt | Antall | Periode |
+|---|---:|---|
+| DEXBZUS (USD/BRL) | 4251 | 2010-2026 |
+| Nasdaq prices | 4103 | 2010-2026 |
+| Nasdaq COT (MINI) | 631 | 2010-2022 |
+| Nasdaq COT (Consolidated) | 225 | 2022-2026 |
+
+**Compare-script-fix (`src/bedrock/parallel/compare.py`):**
+- `normalize_old` returnerer nå *list* — én NormalizedSignal per
+  unik kandidat fra `key` + `name`. Dedupliserer ved lowercase-match.
+- `load_old_signals` flatener listene fra `normalize_old`.
+- Rationale: cot-explorer's instrument-felt er inkonsistent — agri
+  har key=engelsk-navn (matcher bedrock), financial har key=ticker
+  (NAS100) men name=display (Nasdaq). Match-kandidater fra begge.
+
+`tests/unit/test_drivers_brl.py` (ny, 9 tester):
+- Strong-positive/strong-negative/neutral, mode-invert, short-history,
+  missing-series, store-error, custom-thresholds, registry.
+
+`tests/unit/test_parallel_compare.py`:
+- Oppdatert 2 tester for ny list-retur.
+- Ny test: `test_normalize_old_returns_both_key_and_name_candidates`
+  verifiserer NAS100/Nasdaq-mønsteret.
+
+**End-to-end Nasdaq (april 2026):**
+
+```
+SCALP buy: 3.39 grade=A
+SWING buy: 3.21 grade=A
+MAKRO buy: 2.63 grade=B
+  trend=0.88 positioning=0.08 macro=0.55
+  structure=0.99 risk=0.71 analog=0.00
+```
+
+Realistisk: Nasdaq nær ATH (structure 0.99), trend over SMA (0.88),
+non-commercial percentil lavt (0.08 — tech specs er svært neutral
+historisk).
+
+**Compare-rapport post-session-80:**
+
+```
+Bedrock: 48 signals (8 instr × 3 horisonter × 2 dir)
+Cot-explorer: 26 signals (13 unike + 13 duplisert via key+name-fix)
+Felles: 7 (Nasdaq SWING + 6 agri)
+Endret: 7
+```
+
+**Tester:** 1372 → 1382 (+10). 1382/1382 grønne. Pyright 0/0.
+
+**Beslutninger:**
+- Egen `brl_chg5d` (ikke gjenbrukt `dxy_chg5d` med custom series-
+  param) for klarhet i YAML + kalibrerte BRL-spesifikke terskler.
+- Nasdaq cot_contract = "Consolidated" (post-2022 navn). Historikken
+  før 2022 er under "(MINI)" — backfilt begge for fremtidig
+  bridge-script. Nåværende driver leser kun "Consolidated"-225 rows
+  som er ok for 26-week-min på percentil.
+- Compare-script-fix gjør IKKE bedrock-side endringer (instrument-id
+  forblir "Nasdaq"). cot-explorer-side toleranse er den riktige
+  layer-fixen — bedrock kan kjøre uavhengig av hvordan eksterne
+  consumers navngir.
+- noncomm-metric som spec-proxy for legacy: noncomm = non-commercial
+  = primært large speculators. For indekser er dette closeste
+  ekvivalent til "managed money" (som ikke rapporteres i legacy).
 
 ### 2026-04-26 — Session 79: Sub-fase 12.5 Block A polish — Gold structure + risk (LUKKET)
 
