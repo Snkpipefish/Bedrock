@@ -150,6 +150,12 @@ def test_all_registered_runners() -> None:
     assert "cot_legacy" in names
     assert "fundamentals" in names
     assert "weather" in names
+    # Tilføyd i Kartrommet-utvidelse: enso (tidligere mistet runner) +
+    # 3 nye auto-fetchbare kilder.
+    assert "enso" in names
+    assert "wasde" in names
+    assert "crop_progress" in names
+    assert "bdi" in names
 
 
 # ---------------------------------------------------------------------------
@@ -349,6 +355,167 @@ def test_run_fundamentals_with_key(store: DataStore, configs_dir) -> None:
     assert result.total_rows == 1
     # Kun DGS10 siden kun Gold har fred_series_ids
     assert result.items[0].item_id == "DGS10"
+
+
+# ---------------------------------------------------------------------------
+# ENSO / WASDE / NASS Crop Progress / BDI runners (Kartrommet-utvidelse)
+# ---------------------------------------------------------------------------
+
+
+def test_run_enso_writes_to_fundamentals(store: DataStore, configs_dir) -> None:
+    """ENSO bruker fundamentals-tabellen via series_id=NOAA_ONI (ADR-005)."""
+    defaults, insts = configs_dir
+    df = pd.DataFrame(
+        {
+            "series_id": ["NOAA_ONI"] * 3,
+            "date": ["2026-01-01", "2026-02-01", "2026-03-01"],
+            "value": [-0.4, -0.3, -0.2],
+        }
+    )
+    with patch("bedrock.fetch.enso.fetch_noaa_oni", return_value=df):
+        result = run_fetcher_by_name(
+            "enso",
+            store,
+            _spec(),
+            from_date=date(2026, 1, 1),
+            instruments_dir=insts,
+            defaults_dir=defaults,
+        )
+
+    assert result.ok_count == 1
+    assert result.fail_count == 0
+    assert result.total_rows == 3
+    assert result.items[0].item_id == "NOAA_ONI"
+
+
+def test_run_enso_handles_empty_df(store: DataStore, configs_dir) -> None:
+    defaults, insts = configs_dir
+    with patch("bedrock.fetch.enso.fetch_noaa_oni", return_value=pd.DataFrame()):
+        result = run_fetcher_by_name(
+            "enso",
+            store,
+            _spec(),
+            from_date=date(2026, 1, 1),
+            instruments_dir=insts,
+            defaults_dir=defaults,
+        )
+    assert result.ok_count == 1
+    assert result.total_rows == 0
+
+
+def test_run_wasde_appends_rows(store: DataStore, configs_dir) -> None:
+    defaults, insts = configs_dir
+    df = pd.DataFrame(
+        {
+            "report_date": ["2026-04-10"] * 2,
+            "marketing_year": ["2025/26"] * 2,
+            "region": ["US"] * 2,
+            "commodity": ["CORN", "WHEAT"],
+            "metric": ["ending_stocks", "ending_stocks"],
+            "value": [1.5, 0.85],
+            "unit": ["bil_bu", "bil_bu"],
+        }
+    )
+    with patch("bedrock.fetch.wasde.fetch_wasde", return_value=df):
+        result = run_fetcher_by_name(
+            "wasde",
+            store,
+            _spec(),
+            from_date=date(2026, 4, 1),
+            instruments_dir=insts,
+            defaults_dir=defaults,
+        )
+    assert result.ok_count == 1
+    assert result.total_rows == 2
+    assert result.items[0].item_id == "WASDE"
+
+
+def test_run_crop_progress_uses_api_key(store: DataStore, configs_dir) -> None:
+    """API-key fra get_secret() forwarded til fetch_crop_progress."""
+    defaults, insts = configs_dir
+    captured = {}
+
+    def fake_fetch(*, api_key=None, **_kwargs):
+        captured["api_key"] = api_key
+        return pd.DataFrame(
+            {
+                "week_ending": ["2026-04-20"],
+                "commodity": ["CORN"],
+                "state": ["US"],
+                "metric": ["PLANTED"],
+                "value_pct": [25.0],
+            }
+        )
+
+    with (
+        patch("bedrock.config.fetch_runner.get_secret", return_value="nass_test_key"),
+        patch("bedrock.fetch.nass.fetch_crop_progress", side_effect=fake_fetch),
+    ):
+        result = run_fetcher_by_name(
+            "crop_progress",
+            store,
+            _spec(),
+            from_date=date(2026, 4, 1),
+            instruments_dir=insts,
+            defaults_dir=defaults,
+        )
+
+    assert result.ok_count == 1
+    assert result.total_rows == 1
+    assert captured["api_key"] == "nass_test_key"
+
+
+def test_run_crop_progress_without_key_falls_back(store: DataStore, configs_dir) -> None:
+    """Mangler key → fetch_crop_progress kalles med None (faller tilbake til CSV)."""
+    defaults, insts = configs_dir
+    with (
+        patch("bedrock.config.fetch_runner.get_secret", return_value=None),
+        patch("bedrock.fetch.nass.fetch_crop_progress", return_value=pd.DataFrame()),
+    ):
+        result = run_fetcher_by_name(
+            "crop_progress",
+            store,
+            _spec(),
+            from_date=date(2026, 4, 1),
+            instruments_dir=insts,
+            defaults_dir=defaults,
+        )
+    # Empty df er ok-status (ingen exception) — runneren rapporterer 0 rader.
+    assert result.ok_count == 1
+    assert result.total_rows == 0
+
+
+def test_run_bdi_passes_date_range(store: DataStore, configs_dir) -> None:
+    defaults, insts = configs_dir
+    captured: dict = {}
+
+    def fake_fetch(start_date=None, end_date=None):
+        captured["start"] = start_date
+        captured["end"] = end_date
+        return pd.DataFrame(
+            {
+                "date": ["2026-04-25"],
+                "value": [22.5],
+                "source": ["BDRY"],
+            }
+        )
+
+    with patch("bedrock.fetch.manual_events.fetch_bdi_via_bdry", side_effect=fake_fetch):
+        result = run_fetcher_by_name(
+            "bdi",
+            store,
+            _spec(),
+            from_date=date(2026, 4, 20),
+            to_date=date(2026, 4, 26),
+            instruments_dir=insts,
+            defaults_dir=defaults,
+        )
+
+    assert result.ok_count == 1
+    assert result.total_rows == 1
+    assert captured["start"] == "2026-04-20"
+    assert captured["end"] == "2026-04-26"
+    assert result.items[0].item_id == "BDRY"
 
 
 # ---------------------------------------------------------------------------

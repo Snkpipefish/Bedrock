@@ -30,6 +30,7 @@ from bedrock.config.instruments import InstrumentConfig, load_all_instruments
 from bedrock.config.secrets import get_secret
 
 _FRED_API_KEY_ENV = "FRED_API_KEY"
+_NASS_API_KEY_ENV = "BEDROCK_NASS_API_KEY"
 
 
 # ---------------------------------------------------------------------------
@@ -336,6 +337,111 @@ def run_fundamentals(
                 yield series_id, _do
 
     _safe_run(_items(), result)
+    return result
+
+
+@register_runner("enso")
+def run_enso(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """NOAA ONI (ENSO-indeks). Ikke-instrument-spesifikk; én global serie.
+
+    Skriver til `fundamentals`-tabellen som ``series_id="NOAA_ONI"`` per
+    ADR-005. Kjørt månedlig (12. UTC) etter NOAAs ~10. publisering.
+    """
+    from bedrock.fetch.enso import fetch_noaa_oni
+
+    result = FetchRunResult(fetcher_name="enso")
+
+    def _do() -> int:
+        df = fetch_noaa_oni()
+        if df.empty:
+            return 0
+        return store.append_fundamentals(df)
+
+    _safe_run([("NOAA_ONI", _do)], result)
+    return result
+
+
+@register_runner("wasde")
+def run_wasde(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """USDA WASDE-rapport. Månedlig (~10.); fetcher har egen XML→CSV-fallback."""
+    from bedrock.fetch.wasde import fetch_wasde
+
+    result = FetchRunResult(fetcher_name="wasde")
+
+    def _do() -> int:
+        df = fetch_wasde()
+        if df.empty:
+            return 0
+        return store.append_wasde(df)
+
+    _safe_run([("WASDE", _do)], result)
+    return result
+
+
+@register_runner("crop_progress")
+def run_crop_progress(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """USDA NASS Crop Progress. Ukentlig (mandager) under vekstsesong.
+
+    Krever ``BEDROCK_NASS_API_KEY`` (env eller secrets.env). Mangler
+    nøkkelen, faller fetcheren tilbake til manuell CSV — vi rapporterer
+    likevel item som ok hvis dataframe er ikke-tom.
+    """
+    from bedrock.fetch.nass import fetch_crop_progress
+
+    result = FetchRunResult(fetcher_name="crop_progress")
+    api_key = get_secret(_NASS_API_KEY_ENV)
+
+    def _do() -> int:
+        df = fetch_crop_progress(api_key=api_key)
+        if df.empty:
+            return 0
+        return store.append_crop_progress(df)
+
+    _safe_run([("crop_progress", _do)], result)
+    return result
+
+
+@register_runner("bdi")
+def run_bdi(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """Baltic Dry Index via BDRY ETF (Yahoo). Daglig Mon-Fri etter US close."""
+    from bedrock.fetch.manual_events import fetch_bdi_via_bdry
+
+    result = FetchRunResult(fetcher_name="bdi")
+
+    def _do() -> int:
+        df = fetch_bdi_via_bdry(
+            start_date=from_date.isoformat(),
+            end_date=to_date.isoformat(),
+        )
+        if df.empty:
+            return 0
+        return store.append_bdi(df)
+
+    _safe_run([("BDRY", _do)], result)
     return result
 
 

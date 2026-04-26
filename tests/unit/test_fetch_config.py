@@ -107,10 +107,21 @@ def test_load_fetch_config_on_checked_in_file() -> None:
     """Verifiser at repo-ens checked-in `config/fetch.yaml` parses."""
     repo_root = Path(__file__).resolve().parents[2]
     cfg = load_fetch_config(repo_root / "config" / "fetch.yaml")
+    # Eldre fetchere
     assert "prices" in cfg.fetchers
     assert "cot_disaggregated" in cfg.fetchers
+    assert "cot_legacy" in cfg.fetchers
     assert "fundamentals" in cfg.fetchers
     assert "weather" in cfg.fetchers
+    assert "enso" in cfg.fetchers
+    # Kartrommet-utvidelse
+    assert "wasde" in cfg.fetchers
+    assert "crop_progress" in cfg.fetchers
+    assert "bdi" in cfg.fetchers
+    # Smartere schedules — sanity-sjekker
+    assert cfg.fetchers["wasde"].table == "wasde"
+    assert cfg.fetchers["crop_progress"].cron == "0 23 * 4-11 1"  # apr-nov
+    assert cfg.fetchers["bdi"].cron == "30 23 * * 1-5"  # mon-fri etter close
 
 
 # ---------------------------------------------------------------------------

@@ -7,6 +7,12 @@ Referanser: `NYTT_PROSJEKT_UTKAST.md` (i cot-explorer), `AGRI_KARTLEGGING.md` (i
 
 ## Endringshistorikk (etter initial godkjenning)
 
+**2026-04-26 (session 103):** § 7 utvidet:
+- Ny § 7.4 dokumenterer runner-registry og full fetch-schedule (9 fetchere etter at WASDE/NASS/BDI er wiret + ENSO-runner-bug fixet).
+- § 7.3 tabellen markerer nå hvilke kilder som har auto-fetcher vs manuell CSV.
+- OnCalendar tolkes i lokal TZ — cron i fetch.yaml settes i lokal-tid (ikke UTC) slik at firing lander etter publisering.
+- `cron_to_oncalendar` støtter range/list i dom + month for vekstsesong-aware schedules.
+
 **2026-04-23:** Følgende beslutninger etter første utkast:
 - § 5.4 omskrevet: dropp setup-persistence-som-lifecycle. Erstatt med generator-determinisme + hysterese + stabilitets-filtre. Enklere, mindre state.
 - § 10 utvidet: UI-kode beskytter HELE dashboardet (ikke bare admin). Killswitch i UI-en når man er logget inn.
@@ -711,16 +717,48 @@ Pipeline-runner leser yaml, orkestrerer. Ingen shell-if-else.
 
 Alle viktige per dine ord. Implementeres i faser (se § 13):
 
-| Kilde | Hva | Implementering | Fase |
+| Kilde | Hva | Implementering | Fase | Auto-fetcher? |
+|---|---|---|---|---|
+| USDA WASDE | Ending stocks, yield-prognoser, S2U | XML-parser fra ESMIS (sessions 85, 87) + manuell CSV-fallback | 4 | Ja (`wasde`-runner, session 103) |
+| USDA Crop Progress | % planted/silked/harvested ukentlig | NASS QuickStats API (session 97-98) | 4 | Ja (`crop_progress`-runner, session 103) |
+| Eksport-policy-tracker | India/Indonesia/Ivory Coast-hendelser | Manuell CSV (`export_events`) | 5 | Nei (manuell CSV) |
+| BRL/USD aktivt drivet | Pris-feed + som driver for softs | DEXBZUS via FRED (session 80) | 4 | Ja (gjennom `fundamentals`-runner) |
+| Baltic Dry til agri | Kobling BDI → grain-eksport-pris | BDRY ETF via Yahoo (session 89) | 5 | Ja (`bdi`-runner, session 103) |
+| Disease/pest-varsling | Coffee rust, wheat stripe rust | Manuell CSV (`disease_alerts`) | 6 | Nei (manuell CSV) |
+| ICE softs COT | Sukker/kaffe-spesifikk | Finnes delvis; utvid | 4 | Ja (gjennom `cot_disaggregated`) |
+| IGC rapporter | International Grains Council | Månedlig PDF-parse (session 84) | 5 | Nei (manuell import) |
+| NOAA ONI (ENSO) | El Niño / La Niña-regime | NOAA-ASCII (session 57) | 4 | Ja (`enso`-runner, session 103) |
+
+### 7.4 Runner-registry og fetch-schedule
+
+`bedrock fetch run <name>` dispatcher via `register_runner`-decorator i
+`src/bedrock/config/fetch_runner.py`. Alle navn i `fetch.yaml` må ha en
+matchende runner — manglende runner gir hard FAIL (oppdaget i session 103
+da `enso`-timeren feilet hver måned uten registrert runner).
+
+systemd-timers genereres fra `fetch.yaml` via `bedrock systemd generate`
++ `... install`. `Persistent=true` på alle timers → catch-up ved boot
+hvis fyrings-tiden ble missed. **OnCalendar tolkes i lokal TZ (Oslo);
+cron-verdier i fetch.yaml må derfor settes i lokal-tid, ikke UTC.**
+
+Gjeldende fetcher-liste (etter session 103, 9 totalt):
+
+| Fetcher | Cadence | OnCalendar | Stale_hours |
 |---|---|---|---|
-| USDA WASDE | Ending stocks, yield-prognoser, S2U | Parse PDF/XLS månedlig | 4 |
-| USDA Crop Progress | % planted/silked/harvested ukentlig | API (NASS QuickStats) | 4 |
-| Eksport-policy-tracker | India/Indonesia/Ivory Coast-hendelser | News-scraper + manuell kuratert kalender | 5 |
-| BRL/USD aktivt drivet | Pris-feed + som driver for softs | Pris-feed finnes allerede; legg til som driver | 4 |
-| Baltic Dry til agri | Kobling BDI → grain-eksport-pris | Driver som regresserer BDI mot eksport-cost | 5 |
-| Disease/pest-varsling | Coffee rust, wheat stripe rust | Ekstern service (PestMon, CABI) — senere | 6 |
-| ICE softs COT | Sukker/kaffe-spesifikk | Finnes delvis; utvid | 4 |
-| IGC rapporter | International Grains Council | Månedlig PDF-parse | 5 |
+| prices | hverdager hver time | `Mon-Fri *-*-* *:40:00` | 30 |
+| cot_disaggregated | ukentlig | `Fri *-*-* 22:00:00` | 168 |
+| cot_legacy | ukentlig | `Fri *-*-* 22:00:00` | 168 |
+| fundamentals | daglig | `*-*-* 02:30:00` | 48 |
+| weather | daglig | `*-*-* 03:00:00` | 30 |
+| enso | månedlig | `*-*-12 06:00:00` | 720 |
+| wasde | månedlig | `*-*-13 19:00:00` | 840 |
+| crop_progress | ukentlig (apr-nov) | `Mon *-04..11-* 23:00:00` | 200 |
+| bdi | hverdager | `Mon-Fri *-*-* 23:30:00` | 30 |
+
+Cron-konverteren (`cron_to_oncalendar`) støtter siden session 103 også
+range/list i dom- og month-feltene (f.eks. `4-11` → `04..11`), nødvendig
+for å gi NASS Crop Progress en vekstsesong-aware schedule som ikke fyrer
+nyttesløst i desember-mars.
 
 ---
 

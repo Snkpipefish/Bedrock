@@ -110,13 +110,24 @@ def _field_to_systemd_time(value: str, *, field: str) -> str:
 
 
 def _field_to_systemd_date(field: str, *, zero_pad: bool = False) -> str:
-    """Konverter dom/month-felt: `*` → `*`, tall → tall (valgfritt padd)."""
+    """Konverter dom/month-felt: `*` → `*`, tall → tall (valgfritt padd).
+
+    Range som `4-11` (måned: april-november) konverteres til systemd-
+    range-syntaks `04..11`. List som `4,7,10` konverteres til `04,07,10`.
+    """
+
+    def _fmt(raw: str) -> str:
+        n = int(raw)
+        return f"{n:02d}" if zero_pad else str(n)
+
     if field == "*":
         return "*"
-    if "," in field or "-" in field:
-        raise CronConversionError(f"range/list i dom/month-felt ikke støttet i MVP: {field!r}")
-    n = int(field)
-    return f"{n:02d}" if zero_pad else str(n)
+    if "-" in field:
+        start, end = field.split("-", maxsplit=1)
+        return f"{_fmt(start)}..{_fmt(end)}"
+    if "," in field:
+        return ",".join(_fmt(p) for p in field.split(","))
+    return _fmt(field)
 
 
 def _dow_to_systemd(field: str) -> str:

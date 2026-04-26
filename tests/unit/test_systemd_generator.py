@@ -58,6 +58,19 @@ def test_cron_specific_date() -> None:
     assert cron_to_oncalendar("0 12 15 3 *") == "*-03-15 12:00:00"
 
 
+def test_cron_month_range() -> None:
+    # Mandager 21:30 UTC, kun april-november (NASS Crop Progress).
+    assert cron_to_oncalendar("30 21 * 4-11 1") == "Mon *-04..11-* 21:30:00"
+
+
+def test_cron_month_list() -> None:
+    assert cron_to_oncalendar("0 12 * 3,6,9,12 *") == "*-03,06,09,12-* 12:00:00"
+
+
+def test_cron_dom_range() -> None:
+    assert cron_to_oncalendar("0 12 1-5 * *") == "*-*-1..5 12:00:00"
+
+
 def test_cron_wrong_number_of_fields_raises() -> None:
     with pytest.raises(CronConversionError, match="5 felter"):
         cron_to_oncalendar("0 3 *")

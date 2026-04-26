@@ -656,6 +656,71 @@ def test_pipeline_health_groups_by_plan_categories(client: FlaskClient) -> None:
     assert group_names.index("Geo") < group_names.index("Other")
 
 
+def test_pipeline_health_kartrommet_groups_for_new_fetchers(
+    tmp_path: Path,
+    web_root: Path,
+    trade_log_path: Path,
+    signals_path: Path,
+    agri_signals_path: Path,
+    db_path: Path,
+) -> None:
+    """ENSO/WASDE/NASS/BDI havner i riktige grupper (USDA, Shipping, Fundamentals)."""
+    fetch_path = tmp_path / "fetch_full.yaml"
+    fetch_path.write_text(
+        """
+fetchers:
+  enso:
+    module: bedrock.fetch.enso
+    cron: "0 6 12 * *"
+    stale_hours: 720
+    on_failure: log_and_skip
+    table: fundamentals
+    ts_column: date
+  wasde:
+    module: bedrock.fetch.wasde
+    cron: "0 17 13 * *"
+    stale_hours: 840
+    on_failure: log_and_skip
+    table: wasde
+    ts_column: report_date
+  crop_progress:
+    module: bedrock.fetch.nass
+    cron: "30 21 * 4-11 1"
+    stale_hours: 200
+    on_failure: log_and_skip
+    table: crop_progress
+    ts_column: week_ending
+  bdi:
+    module: bedrock.fetch.manual_events
+    cron: "0 23 * * 1-5"
+    stale_hours: 30
+    on_failure: retry_with_backoff
+    table: bdi
+    ts_column: date
+""".strip()
+    )
+    cfg = ServerConfig(
+        web_root=web_root,
+        trade_log_path=trade_log_path,
+        signals_path=signals_path,
+        agri_signals_path=agri_signals_path,
+        fetch_config_path=fetch_path,
+        db_path=db_path,
+    )
+    client = create_app(cfg).test_client()
+    data = client.get("/api/ui/pipeline_health").get_json()
+
+    by_name = {s["name"]: g["name"] for g in data["groups"] for s in g["sources"]}
+    assert by_name["enso"] == "Fundamentals"
+    assert by_name["wasde"] == "USDA"
+    assert by_name["crop_progress"] == "USDA"
+    assert by_name["bdi"] == "Shipping"
+
+    group_names = [g["name"] for g in data["groups"]]
+    # USDA før Shipping før Other per _GROUP_ORDER
+    assert group_names.index("USDA") < group_names.index("Shipping")
+
+
 def test_pipeline_health_unknown_fetcher_in_other_group(
     client: FlaskClient,
 ) -> None:

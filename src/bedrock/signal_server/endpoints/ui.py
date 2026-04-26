@@ -313,7 +313,11 @@ _FETCHER_GROUPS: dict[str, str] = {
     "cot_disaggregated": "CFTC",
     "cot_legacy": "CFTC",
     "fundamentals": "Fundamentals",
+    "enso": "Fundamentals",
     "weather": "Geo",
+    "wasde": "USDA",
+    "crop_progress": "USDA",
+    "bdi": "Shipping",
 }
 _DEFAULT_GROUP = "Other"
 
@@ -324,6 +328,8 @@ _GROUP_ORDER = [
     "CFTC",
     "Ekstern COT",
     "Fundamentals",
+    "USDA",
+    "Shipping",
     "Sektor",
     "Geo",
     "Other",

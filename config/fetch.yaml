@@ -60,3 +60,29 @@ fetchers:
     on_failure: log_and_skip
     table: fundamentals          # ADR-005: lagres som series_id="NOAA_ONI"
     ts_column: date
+
+  # MERK: systemd OnCalendar tolkes i lokal TZ (Oslo: CEST/CET), ikke UTC.
+  # Tidene under er valgt så de lander ETTER kildens publisering Oslo-tid.
+  wasde:
+    module: bedrock.fetch.wasde
+    cron: "0 19 13 * *"         # 13. i mnd 19:00 Oslo (etter USDA noon ET = 18:00 Oslo)
+    stale_hours: 840            # månedlig — buffer 35 dager
+    on_failure: log_and_skip
+    table: wasde
+    ts_column: report_date
+
+  crop_progress:
+    module: bedrock.fetch.nass
+    cron: "0 23 * 4-11 1"       # Mon 23:00 Oslo, kun apr-nov (NASS rel. 16 ET = 22 Oslo)
+    stale_hours: 200            # ukentlig under sesong; off-season vil naturlig vise stale
+    on_failure: log_and_skip
+    table: crop_progress
+    ts_column: week_ending
+
+  bdi:
+    module: bedrock.fetch.manual_events
+    cron: "30 23 * * 1-5"       # Mon-Fri 23:30 Oslo (etter US close 22 Oslo + Yahoo-lag)
+    stale_hours: 30             # daglig på hverdager
+    on_failure: retry_with_backoff
+    table: bdi
+    ts_column: date
