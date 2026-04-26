@@ -632,3 +632,87 @@ class EconomicEvent(BaseModel):
         if v not in {"High", "Medium", "Low"}:
             raise ValueError(f"impact must be High/Medium/Low, got {v!r}")
         return v
+
+
+# ---------------------------------------------------------------------------
+# ICE Futures Europe COT (sub-fase 12.5+ session 106)
+# ---------------------------------------------------------------------------
+# Parallell-tabell til `cot_disaggregated` for ICE-listede kontrakter
+# (Brent Crude, Low Sulphur Gasoil, TTF Natural Gas). ICE publiserer
+# fredag 18:30 London = 19:30 Oslo for tirsdag-posisjoner.
+#
+# ICE-rapporten leveres i CFTC disaggregated-format (samme kolonnenavn:
+# M_Money_Positions_Long_All, Other_Reportable, PMPU, NonReportable),
+# slik at schema-strukturen mirrorer cot_disaggregated. MiFID II-mapping
+# (info; ikke separate kolonner):
+# - mm_long/short      ≈ Investment Funds (Managed Money)
+# - other_long/short   ≈ Investment Firms / andre Other Reportable
+# - comm_long/short    ≈ Commercial Undertakings (PMPU)
+# - nonrep_long/short  ≈ Non-Reportable
+#
+# Egen tabell (ikke gjenbruk cot_disaggregated) fordi:
+# 1. Datakilde og provenance er forskjellig (ICE vs CFTC).
+# 2. Contract-strenger er forskjellige (f.eks. "ice brent crude" vs
+#    "BRENT LAST DAY - NEW YORK MERCANTILE EXCHANGE").
+# 3. Driver-laget kan velge kilde uten å filtrere.
+
+TABLE_COT_ICE = "cot_ice"
+
+DDL_COT_ICE = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_COT_ICE} (
+    report_date    TEXT    NOT NULL,
+    contract       TEXT    NOT NULL,
+    mm_long        INTEGER NOT NULL,
+    mm_short       INTEGER NOT NULL,
+    other_long     INTEGER NOT NULL,
+    other_short    INTEGER NOT NULL,
+    comm_long      INTEGER NOT NULL,
+    comm_short     INTEGER NOT NULL,
+    nonrep_long    INTEGER NOT NULL,
+    nonrep_short   INTEGER NOT NULL,
+    open_interest  INTEGER NOT NULL,
+    PRIMARY KEY (report_date, contract)
+)
+"""
+
+COT_ICE_COLS: tuple[str, ...] = (
+    "report_date",
+    "contract",
+    "mm_long",
+    "mm_short",
+    "other_long",
+    "other_short",
+    "comm_long",
+    "comm_short",
+    "nonrep_long",
+    "nonrep_short",
+    "open_interest",
+)
+
+
+class CotIceRow(BaseModel):
+    """En rad fra ICE Futures Europe COT-rapport.
+
+    Schema mirrorer ``CotDisaggregatedRow`` (samme CFTC-disaggregated-
+    format). MiFID II-kategorier mappes via dokumentasjon, ikke via
+    separate kolonner — se modul-docstring for cot_ice-tabellen.
+
+    `contract` er ICE-canonical (f.eks. ``"ice brent crude"``,
+    ``"ice gasoil"``, ``"ice ttf gas"``), ikke Bedrocks instrument-id.
+    Mapping skjer i driver-laget.
+    """
+
+    report_date: date
+    contract: str
+
+    mm_long: int = Field(ge=0)
+    mm_short: int = Field(ge=0)
+    other_long: int = Field(ge=0)
+    other_short: int = Field(ge=0)
+    comm_long: int = Field(ge=0)
+    comm_short: int = Field(ge=0)
+    nonrep_long: int = Field(ge=0)
+    nonrep_short: int = Field(ge=0)
+    open_interest: int = Field(ge=0)
+
+    model_config = ConfigDict(extra="forbid")

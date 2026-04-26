@@ -34,11 +34,13 @@ from bedrock.data.schemas import (
     ANALOG_OUTCOMES_COLS,
     BDI_COLS,
     COT_DISAGGREGATED_COLS,
+    COT_ICE_COLS,
     COT_LEGACY_COLS,
     CROP_PROGRESS_COLS,
     DDL_ANALOG_OUTCOMES,
     DDL_BDI,
     DDL_COT_DISAGGREGATED,
+    DDL_COT_ICE,
     DDL_COT_LEGACY,
     DDL_CROP_PROGRESS,
     DDL_DISEASE_ALERTS,
@@ -58,6 +60,7 @@ from bedrock.data.schemas import (
     TABLE_ANALOG_OUTCOMES,
     TABLE_BDI,
     TABLE_COT_DISAGGREGATED,
+    TABLE_COT_ICE,
     TABLE_COT_LEGACY,
     TABLE_CROP_PROGRESS,
     TABLE_DISEASE_ALERTS,
@@ -129,6 +132,8 @@ class DataStore:
             conn.execute(DDL_IGC)
             # Sub-fase 12.5+ session 105 (ADR-007/008):
             conn.execute(DDL_ECON_EVENTS)
+            # Sub-fase 12.5+ session 106 (ADR-008): ICE Futures Europe COT.
+            conn.execute(DDL_COT_ICE)
             conn.commit()
 
     # ------------------------------------------------------------------
@@ -367,6 +372,56 @@ class DataStore:
         with self._connect() as conn:
             cursor = conn.execute(
                 f"SELECT 1 FROM {table} WHERE contract = ? LIMIT 1",
+                (contract,),
+            )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # COT — ICE Futures Europe (sub-fase 12.5+ session 106)
+    # ------------------------------------------------------------------
+
+    def append_cot_ice(self, df: pd.DataFrame) -> int:
+        """Skriv rader til `cot_ice`. Returnerer antall rader.
+
+        Schema er parallelt med `cot_disaggregated` — samme kolonnesett.
+        Idempotent på (report_date, contract) via INSERT OR REPLACE.
+        """
+        return self._append_cot(df, TABLE_COT_ICE, COT_ICE_COLS)
+
+    def get_cot_ice(
+        self,
+        contract: str,
+        last_n: int | None = None,
+    ) -> pd.DataFrame:
+        """Returner ICE COT-rader for `contract`, sortert ASC på report_date.
+
+        Returnerer pd.DataFrame med `report_date` som pd.Timestamp i en
+        kolonne (ikke index), tilsvarende `get_cot()`-konvensjonen.
+
+        Kaster `KeyError` hvis ingen rader finnes for `contract`.
+        """
+        query = f"""
+            SELECT * FROM {TABLE_COT_ICE}
+            WHERE contract = ?
+            ORDER BY report_date ASC
+        """
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=(contract,))
+
+        if df.empty:
+            raise KeyError(f"No ICE COT data for contract={contract!r}")
+
+        df["report_date"] = pd.to_datetime(df["report_date"])
+
+        if last_n is None:
+            return df
+        return df.tail(last_n).reset_index(drop=True)
+
+    def has_cot_ice(self, contract: str) -> bool:
+        """Test-hjelper: sjekk om `contract` har minst én ICE COT-rad."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"SELECT 1 FROM {TABLE_COT_ICE} WHERE contract = ? LIMIT 1",
                 (contract,),
             )
             return cursor.fetchone() is not None
