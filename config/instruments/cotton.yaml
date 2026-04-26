@@ -65,14 +65,19 @@ families:
         weight: 1.0
         params: {}
   cross:
-    # Cotton-eksport — USD-svakhet er bull globalt (US-cotton billigere).
+    # Cotton-eksport. Session 90: utvidet med bdi_chg30d.
     weight: 2
     drivers:
       - name: dxy_chg5d
-        weight: 1.0
+        weight: 0.8
         params:
           bull_when: negative
           window: 5
+      - name: bdi_chg30d
+        weight: 0.2
+        params:
+          window_days: 30
+          bull_when: negative
   analog:
     weight: 2
     # K-NN per § 6.5 softs: weather_stress + enso + dxy_chg5d

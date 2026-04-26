@@ -69,15 +69,21 @@ families:
         params:
           region: US
   cross:
-    # USD-styrke er bear for Corn (US-eksport blir dyrere globalt).
-    # dxy_chg5d med bull_when=negative gir høy score når USD svekkes.
+    # Sub-fase 12.5+ session 90: utvidet med bdi_chg30d (shipping-
+    # kostnad). USD-svakhet OG BDI ned begge bull for US-eksport-flyt.
+    # Sub-vekter: dxy 80%, bdi 20% (BDI er sekundær men reell).
     weight: 2
     drivers:
       - name: dxy_chg5d
-        weight: 1.0
+        weight: 0.8
         params:
           bull_when: negative
           window: 5
+      - name: bdi_chg30d
+        weight: 0.2
+        params:
+          window_days: 30
+          bull_when: negative
   analog:
     weight: 2
     # K-NN per § 6.5 grains: weather_stress + enso + dxy_chg5d
