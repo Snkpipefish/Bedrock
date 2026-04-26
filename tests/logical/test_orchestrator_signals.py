@@ -167,9 +167,15 @@ def test_generate_signals_financial_end_to_end(
     assert directions == {Direction.BUY, Direction.SELL}
     horizons = {e.horizon for e in result.entries}
     assert horizons == {Horizon.SWING}
-    # Alle entries har score
+    # Etter ADR-006 (session 95b) er score direction-bevisst: BUY-driveren
+    # som passer (sma200_align=1.0) flippes til 0.0 for SELL. BUY skal ha
+    # positiv score; SELL kan være 0 i denne fixture-en.
+    by_dir = {e.direction: e for e in result.entries}
+    assert by_dir[Direction.BUY].score > 0
+    assert by_dir[Direction.SELL].score >= 0
+    # Asymmetri: BUY og SELL har ulik score (kjernen i ADR-006)
+    assert by_dir[Direction.BUY].score != by_dir[Direction.SELL].score
     for e in result.entries:
-        assert e.score > 0
         assert e.grade in {"A_plus", "A", "B", "C"}
         assert e.max_score == 5.0
 

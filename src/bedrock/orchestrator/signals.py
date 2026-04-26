@@ -247,15 +247,17 @@ def generate_signals(
     # Snapshot for hysterese
     previous_snapshot = _load_previous_snapshot(snapshot_path)
 
-    # Pre-compute score per horisont (financial) eller én gang (agri)
-    scores_by_horizon = _compute_scores(cfg, store, horizons_list, engine)
+    # Pre-compute score per (horisont, retning). Per ADR-006 (session 95b)
+    # er score nå direction-bevisst — flippes på familier med
+    # polarity="directional" når direction=SELL.
+    scores_by_horizon_dir = _compute_scores(cfg, store, horizons_list, directions_list, engine)
 
     # Generer entries
     entries: list[SignalEntry] = []
     new_stable_setups: list[StableSetup] = []
     for horizon in horizons_list:
-        group_result = scores_by_horizon[horizon]
         for direction in directions_list:
+            group_result = scores_by_horizon_dir[(horizon, direction)]
             entry = _build_entry(
                 cfg=cfg,
                 direction=direction,
@@ -358,24 +360,39 @@ def _compute_scores(
     cfg: InstrumentConfig,
     store: Any,
     horizons: list[Horizon],
+    directions: list[Direction],
     engine: Engine | None,
-) -> dict[Horizon, GroupResult]:
-    """Score per horisont.
+) -> dict[tuple[Horizon, Direction], GroupResult]:
+    """Score per (horisont, retning).
 
-    - Financial: én Engine.score-call per horisont
-    - Agri: én score totalt, delt på alle horisonter (agri har ingen
-      horisont på scoring-siden)
+    Per ADR-006 (session 95b) er Engine.score direction-bevisst.
+    - Financial: én Engine.score-call per (horisont, retning).
+    - Agri: én score per retning (agri har ingen horisont-splitt på
+      scoring-siden), delt på alle horisonter.
     """
     eng = engine or Engine()
+    out: dict[tuple[Horizon, Direction], GroupResult] = {}
+
     if isinstance(cfg.rules, AgriRules):
-        single = eng.score(cfg.instrument.id, store, cfg.rules, horizon=None)
-        return dict.fromkeys(horizons, single)
+        for direction in directions:
+            single = eng.score(
+                cfg.instrument.id, store, cfg.rules, horizon=None, direction=direction
+            )
+            for h in horizons:
+                out[(h, direction)] = single
+        return out
 
     assert isinstance(cfg.rules, FinancialRules)  # nosec B101
-    return {
-        h: eng.score(cfg.instrument.id, store, cfg.rules, horizon=_yaml_key_from_horizon(h))
-        for h in horizons
-    }
+    for h in horizons:
+        for direction in directions:
+            out[(h, direction)] = eng.score(
+                cfg.instrument.id,
+                store,
+                cfg.rules,
+                horizon=_yaml_key_from_horizon(h),
+                direction=direction,
+            )
+    return out
 
 
 def _get_min_score_publish(cfg: InstrumentConfig, horizon: Horizon) -> float:

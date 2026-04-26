@@ -75,6 +75,7 @@ families:
         weight: 1.0
         params: {window: 20, mode: continuation}
   risk:
+    polarity: neutral  # ADR-006: vol_regime trend-friendly begge retninger
     # BTC har inherent høy vol; kalibrer lookback til 252 dager som
     # fanger både bull- og bear-regimer.
     drivers:
