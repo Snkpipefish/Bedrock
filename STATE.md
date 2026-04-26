@@ -42,7 +42,10 @@
   - **101:** **Asymmetrisk publish-floor.** Schema utvidet: `HorizonSpec.min_score_publish` + `AgriRules.min_score_publish` aksepterer nå dict `{buy, sell}` for direction-spesifikk floor (eller float for felles, som før — bakoverkompatibelt). `_get_min_score_publish(cfg, horizon, direction)` slår opp per retning; ukjent dir → strengeste floor. SP500/Nasdaq/Gold migrert basert på session 99-backtest: BUY-floor lavere (lett mot bull-trend), SELL strenger. Effekt på live signals: 18 floor-endringer (3 inst × 3 hor × 2 dir), 2 publish-flag-flips (Gold MAKRO BUY +★, Gold SWING SELL −★). 10 nye tester (`tests/unit/test_asymmetric_publish_floor.py`). **1460/1460 grønt, pyright 0 errors.** PR #36 merget på main (71d8e47). **LUKKET 2026-04-26**.
   - **102:** **Asymmetrisk publish-floor utvidelse — USDJPY/CrudeOil/Sugar.** Bruker valgte å utvide session 101-mekanikken til neste kohort av bias-instrumenter fra session 99-backtest. USDJPY (+10.7pp BUY-bias) og CrudeOil (+5.3pp BUY-bias) får BUY-floor < SELL-floor på alle 3 horisonter. **Sugar (-10.1pp SELL-bias) får invertert asymmetri** (BUY 7, SELL 5) — første agri-instrument med dict-form `min_score_publish` og første med BUY-floor strenger enn SELL-floor (Brazil over-supply + HFCS-substitusjon). Effekt på signals: 12/90 floor-endringer (USDJPY/CrudeOil × 6 par), 1 publish-flip (CrudeOil MAKRO BUY 3.43 publishet på 3.2-floor). 1 ny test (`test_agri_rules_inverted_asymmetry_for_sell_bias`). **1461/1461 grønt, pyright 0 errors.** PR #37 merget på main (4dbee1e). **LUKKET 2026-04-26**.
   - **103:** **Kartrommet-utvidelse + smarte fetch-timers.** UI-tab Kartrommet viste kun 5 kilder fra `config/fetch.yaml`; nye datakilder fra sessions 83–89 (WASDE, NASS Crop Progress, BDI/BDRY) manglet helt. ENSO sto i fetch.yaml men hadde **ingen** `register_runner("enso")` — systemd-timeren feilet konsistent hver måned (`No runner for fetcher 'enso'`-FAIL i journalctl). Endringer: (a) `_field_to_systemd_date` i `systemd/generator.py` støtter nå range/list (`4-11` → `04..11`) for å la NASS få vekstsesong-aware schedule; (b) 4 nye runners i `config/fetch_runner.py` (enso/wasde/crop_progress/bdi) — alle ikke-instrument-spesifikke, gjenbruker eksisterende `fetch_*`-funksjoner; (c) 3 nye fetch.yaml-entries med Oslo-lokal-cron som lander **etter** publisering (wasde 13. 19:00, crop_progress Mon 23:00 apr-nov, bdi Mon-Fri 23:30); (d) `_FETCHER_GROUPS` + `_GROUP_ORDER` utvidet med "USDA" + "Shipping". Verifisert end-to-end: alle 4 fetchere kjørt manuelt (enso 914 rader, bdi 1, wasde 1612, crop_progress 201), 9 timers aktive, UI-API viser 6 grupper × 9 sources. 12 nye tester (4 i fetch_runner, 1 i fetch_config, 3 i systemd_generator, 1 i ui-endpoints). **1473/1473 grønt, pyright 0 errors.** Trafikk-budsjett: nye fetchere fyrer kun når kilden faktisk publiserer (~12+35+250 kall/år for wasde/crop_progress/bdi). **LUKKET 2026-04-26**.
-  - **104 (neste):** Branch-protection-oppsett (krever GitHub UI fra bruker — Claude leverer sjekkliste), evt. subjektiv setup-review (krever bruker-deltakelse), eller fortsette parallell-observasjon for Fase 12-cutover.
+  - **104:** **Sub-fase 12.5+ åpning — docs cleanup + fetch-port-strategi.** Audit avdekket "stille divergens": (a) STATE.md meta-blokk (linje 83-91) ikke oppdatert siden ca session 90 (sa "21 inst"/"5/8 live"/"Next task: 91"), (b) PLAN § 3.1 mappetre stemte ikke med faktisk kode (`server/` → `signal_server/`, `pipeline/+signals/` → `orchestrator/`, `setups/persistence.py` → `hysteresis.py+snapshot.py`, drivers utvidet med agri/agronomy/currency/seasonal), (c) 11 cot-explorer-fetchere ikke portet til bedrock (PLAN-prinsipp 6 brutt). PLAN § 3.1 mappetre + § 3.2 dataflyt rebased mot virkelighet. Ny § 7.5 dokumenterer port-roadmap (sessions 105-117). § 11/§ 12/§ 13 oppdatert med UI-fane-utsatt + sub-fase 12.5+ scope. ADR-007 låser fetch-port-strategi (3 port-typer: full driver-port / fetcher+UI-context / konsolidering; manuell CSV-fallback fra dag 1 for fragile HTML-skrapere; sentiment-fetchere starter UI-only; PDF via poppler-utils + pypdf-fallback; cron i lokal Oslo TZ). **LUKKET 2026-04-27**.
+  - **105 (neste):** ADR-008 + første fetcher-port: `fetch_calendar.py` → `bedrock/fetch/calendar_ff.py` med `event_distance`-driver wired på alle 22 instrumenter (PLAN § 4.2 risk-familie). Lavest kompleksitet (79 linjer original) → safer first-port for å validere mønsteret.
+  - **106-115:** én fetcher per session per § 7.5: cot_ice (106), eia_inventories (107), comex (108), seismic (109), cot_euronext (110), conab (111), unica (112), shipping (113 konsolidering med bdi), news_intel (114 UI-only), crypto_sentiment (115 UI-only).
+  - **116-117:** Phase D — backtest-validering + ADR-009 cutover-readiness. Tag `v0.12.5-fetch-port-complete`.
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -80,15 +83,16 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `feat/expand-instruments-session91` (Nivå 3 — session 91). PR #1-#24 merget.
-- **Blocked:** nei. NASS Crop Progress venter på API-key.
-- **Aktive systemd-timere:** 9 totalt.
-- **Instrumenter:** 21 totalt (Gold/Silver/Copper/Platinum metals; CrudeOil/NaturalGas energy; Corn/Wheat/Soybean grains; Cotton/Sugar/Coffee/Cocoa softs; Nasdaq/SP500 indices; EURUSD/GBPUSD/USDJPY/AUDUSD fx; BTC/ETH crypto).
-- **Drivere:** 22 totalt.
-- **PLAN § 7.3:** 5/8 live data (WASDE, BRL, ICE softs COT, BDI/BDRY, NASS-infra). 2/8 manuell sample. 1/8 betalt (IGC).
-- **System-status:** `docs/system_status_2026-04-26.md` — full ende-til-ende rapport.
+- **Branch-modus:** Nivå 1 aktivt for sub-fase 12.5+ docs (sessions 104+ commits direkte til main). Nivå 3 (feature-branches + PR) gjenopptas ved kode-port (session 105+).
+- **Blocked:** nei.
+- **Aktive systemd-timere:** 9 totalt (prices, cot_disaggregated, cot_legacy, fundamentals, weather, enso, wasde, crop_progress, bdi). Pluss 4 service-relatert: signals-all, server, monitor, compare.
+- **Instrumenter:** 22 totalt (Gold/Silver/Copper/Platinum metals; CrudeOil/Brent/NaturalGas energy; Corn/Wheat/Soybean grains; Cotton/Sugar/Coffee/Cocoa softs; Nasdaq/SP500 indices; EURUSD/GBPUSD/USDJPY/AUDUSD fx; BTC/ETH crypto).
+- **Drivere:** 22 registrert i `engine/drivers/` (verifisert via grep `@register`).
+- **PLAN § 7.3:** 6/8 live data (WASDE, BRL, ICE softs COT via cot_disaggregated, BDI/BDRY, NASS Crop Progress, ENSO). 2/8 manuell sample (eksport-events, disease-alerts). 1/8 betalt/manuell import (IGC).
+- **System-status:** `docs/system_status_2026-04-26.md` — full ende-til-ende rapport (sub-fase 12.5+ refresh i session 117).
 - **Backtest-resultater siste 12mnd:** Gold 100% hit-rate 90d. Corn ikke lenger invertert.
-- **Next task:** **Session 91.** AsOfDateStore.get_wasde+get_bdi proxy-metoder så backtest-rammeverket bruker WASDE/BDI-driverne. Eller: backfill analog_outcomes for Wheat/Cotton/Soybean.
+- **Sub-fase 12.5+ scope:** 11 ikke-portede cot-explorer-fetchere (PLAN § 7.5) + ADR-007 strategi. Sessions 105-117 (~14 sessioner). Etter sub-fase: re-aktiver observasjonsvinduet før Fase 13 cutover.
+- **Next task:** **Session 105** — ADR-008 (per-fetcher mapping) + `fetch_calendar.py` → `bedrock/fetch/calendar_ff.py` + `event_distance`-driver. PLAN § 7.5 første rad.
 - **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
 ## Workflow-notes (2026-04-26)
@@ -187,6 +191,68 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-27 — Session 104: Sub-fase 12.5+ åpning — docs cleanup + ADR-007 (LUKKET)
+
+**Scope:** Bruker bestilte audit av STATE.md vs PLAN.md vs faktisk kode.
+Funn:
+- STATE.md meta-blokk (linje 83-91) ikke oppdatert siden ca session 90:
+  sa "21 instrumenter" (var 22 etter Brent i session 92), "Blocked: NASS"
+  (løst i session 97-98), "Next task: Session 91" (sessions 91-103
+  ferdig), utdatert branch-info, "5/8 live" (er 6/8).
+- PLAN § 3.1 mappetre stemte ikke med faktisk kode: `server/` →
+  `signal_server/`, `pipeline/` + `signals/` → `orchestrator/`,
+  `setups/persistence.py` → `hysteresis.py + snapshot.py`, drivers-
+  listen mangler agri/agronomy/currency/seasonal, fundamental.py
+  finnes ikke.
+- 11 cot-explorer-fetchere ikke portet til bedrock (brudd på PLAN-
+  prinsipp 6). Hverken STATE eller PLAN noterte dette.
+
+**Endringer (commit direkte til main, Nivå 1 for docs):**
+
+Commit 1 — `docs(plan): cleanup divergens + scope sub-fase 12.5+ fetch-port`
+(3794625):
+- § 3.1 mappetre rebased mot virkelighet (signal_server/, orchestrator/,
+  hysteresis.py, drivers utvidet).
+- § 3.2 dataflyt-diagram peker på SQLite (ikke parquet — etterslep fra
+  før ADR-002).
+- § 7.3 statuslinje korrigert: 6/8 live.
+- § 7.5 (ny) — roadmap for de 11 ikke-portede fetcherne (sessions 105-117)
+  med per-fetcher tabell (cot-explorer-modul → bedrock-mål → driver →
+  instrumenter → port-type).
+- § 11 + § 12 + § 13 — Fase 11 UI-fane utsatt eksplisitt; sub-fase 12.5+
+  scope dokumentert.
+- § 16 — Neste steg = sessions 104-117.
+
+Commit 2 — `docs(adr): ADR-007 fetch-port strategi for sub-fase 12.5+`
+(c72724b):
+- 3 port-typer: full driver-port, fetcher + UI-context, konsolidering.
+- Konsolidering-prinsipp: hvis cot-explorer-fetcher overlapper bedrock
+  >70%, utvid eksisterende framfor å duplisere. fetch_oilgas → kun
+  EIA-bit (priser/COT/nyheter er allerede dekket). fetch_shipping →
+  utvider eksisterende `bdi`-fetcher.
+- Manuell CSV-fallback fra dag 1 for fragile HTML-skrapere (comex,
+  euronext_cot) — samme mønster som NASS (session 97-98).
+- Sentiment-fetchere (intel, crypto) starter UI-only. Driver-vurdering
+  i ADR-009 etter 1+ mnd empirisk data.
+- PDF-parsere: poppler-utils primær, pypdf fallback.
+- Cron i lokal Oslo TZ (per § 7.4).
+- Per-fetcher mapping låses i ADR-008 (session 105).
+
+**Beslutninger fra bruker (2026-04-27):**
+1. Shipping konsolideres til én tabell (bekreftet).
+2. news_intel + crypto_sentiment → UI-context først, scoring-vurdering
+   etter empirisk validering (bekreftet).
+3. fetch_oilgas → kun EIA-bit, drop split (priser+COT er allerede inne).
+4. Manuell CSV-fallback for HTML-skrapere fra dag 1 (bekreftet).
+5. Poppler-utils OK på prod-host (bekreftet).
+
+**Estimat sub-fase 12.5+:** 14 sessioner (104 docs + 11 ports + 2
+konsolidering). Lander session 117 → tag `v0.12.5-fetch-port-complete`
+→ re-aktiver observasjonsvindu → Fase 13 cutover.
+
+Ingen kode endret. STATE.md meta-blokk fixet i samme session-commit.
+
 
 ### 2026-04-26 — Session 92: Bot-whitelist + Brent (LUKKET)
 
