@@ -33,19 +33,24 @@ families:
           # Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec
           monthly_scores: [0.4, 0.4, 0.7, 0.9, 1.0, 0.8, 0.5, 0.3, 0.6, 0.6, 0.5, 0.4]
   yield:
-    # Sub-fase 12.5+ session 88: utvidet med disease_pressure (stripe
-    # rust, locust) og export_event_active (Ukraine corridor, India ban
-    # ringvirkninger). Sub-vekter:
-    # - weather_stress 40% (forward-looking)
+    # Session 98: utvidet med crop_progress_stage (NASS GOOD/EXCELLENT).
+    # Vekter:
+    # - weather_stress 20% (forward-looking)
+    # - crop_progress_stage 20% (USDA ukentlig observert, samme domene)
     # - wasde_s2u_change 40% (autoritativ S2U)
-    # - disease_pressure 10% (sekundær men reell)
-    # - export_event_active 10% (sjokk-pris-driver)
+    # - disease_pressure 10% (stripe rust, locust)
+    # - export_event_active 10% (Ukraine corridor, India ban)
     weight: 3
     drivers:
       - name: weather_stress
-        weight: 0.4
+        weight: 0.2
         params:
           lookback_months: 1
+      - name: crop_progress_stage
+        weight: 0.2
+        params:
+          metric: GOOD_EXCELLENT
+          mode: low_is_bull
       - name: wasde_s2u_change
         weight: 0.4
         params:

@@ -29,15 +29,21 @@ families:
         weight: 1.0
         params: {}  # bruker default NH-grain-kalender
   yield:
-    # Yield-forventning drives av samme weather-stress-data som weather-
-    # familien, men weight i denne familien (3) reflekterer at yield er
-    # forward-looking mens weather er current-state.
+    # Yield-forventning drives av weather_stress (månedlig miljø) +
+    # crop_progress_stage (ukentlig USDA-rapport, GOOD/EXCELLENT-pct).
+    # Session 98: NASS-data live etter session 97. Lav GOOD_EXCELLENT
+    # er bullish (yield-risk) per default-mode `low_is_bull`.
     weight: 3
     drivers:
       - name: weather_stress
-        weight: 1.0
+        weight: 0.5
         params:
           lookback_months: 1
+      - name: crop_progress_stage
+        weight: 0.5
+        params:
+          metric: GOOD_EXCELLENT
+          mode: low_is_bull
   weather:
     # Sub-fase 12.5 session 72: ekte vær-stress-driver fra weather_monthly.
     # Høy stress (varmt + tørt + vann-underskudd) er bull for Corn (lavere

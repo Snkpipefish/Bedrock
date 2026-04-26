@@ -50,12 +50,22 @@ _NASS_BASE = "https://quickstats.nass.usda.gov/api/api_GET/"
 _DEFAULT_TIMEOUT = 30
 _MANUAL_CSV = Path("data/manual/crop_progress.csv")
 
-# NASS short_desc-strenger som matcher våre `metric`-verdier.
-_METRIC_SHORT_DESC: dict[str, str] = {
-    "PLANTED": "PROGRESS, MEASURED IN PCT PLANTED",
-    "SILKING": "PROGRESS, MEASURED IN PCT SILKING",
-    "HARVESTED": "PROGRESS, MEASURED IN PCT HARVESTED",
-    "GOOD_EXCELLENT": "CONDITION, MEASURED IN PCT GOOD + EXCELLENT",
+# NASS-filtre per metric. Bruker `statisticcat_desc + unit_desc`-paret
+# istedenfor `short_desc` fordi short_desc inkluderer commodity-prefix
+# som varierer (CORN - ..., CORN, GRAIN - ..., WHEAT, SPRING, (EXCL DURUM) - ...).
+# statisticcat_desc + unit_desc er commodity-agnostisk per NASS API-doc:
+# https://quickstats.nass.usda.gov/api#param_define.
+#
+# Sammensatte metrics (GOOD_EXCELLENT = GOOD + EXCELLENT, ingen single
+# unit_desc) hentes som to separate calls + summeres per week_ending.
+_METRIC_FILTERS: dict[str, tuple[tuple[str, str], ...]] = {
+    "PLANTED": (("PROGRESS", "PCT PLANTED"),),
+    "SILKING": (("PROGRESS", "PCT SILKING"),),
+    "HARVESTED": (("PROGRESS", "PCT HARVESTED"),),
+    "GOOD_EXCELLENT": (
+        ("CONDITION", "PCT GOOD"),
+        ("CONDITION", "PCT EXCELLENT"),
+    ),
 }
 
 
@@ -90,59 +100,70 @@ def fetch_crop_progress_api(
             "https://quickstats.nass.usda.gov/api og eksporter env-var."
         )
 
-    metrics = list(metrics) if metrics else list(_METRIC_SHORT_DESC.keys())
-    rows: list[dict] = []
+    metrics = list(metrics) if metrics else list(_METRIC_FILTERS.keys())
+    # Per-(commodity, metric, week_ending) accumulator. For GOOD_EXCELLENT
+    # summerer vi GOOD + EXCELLENT-verdiene som kommer fra to separate calls.
+    # Key: (commodity, state, metric, week_ending) → akkumulert value_pct.
+    accum: dict[tuple[str, str, str, str], float] = {}
 
     for commodity in commodities:
         for metric in metrics:
-            short_desc = _METRIC_SHORT_DESC.get(metric)
-            if short_desc is None:
+            filters = _METRIC_FILTERS.get(metric)
+            if filters is None:
                 _log.warning("nass.unknown_metric", metric=metric)
                 continue
 
             for year in years:
-                params = {
-                    "key": api_key,
-                    "format": "JSON",
-                    "commodity_desc": commodity,
-                    "short_desc": short_desc,
-                    "agg_level_desc": "NATIONAL",
-                    "year": str(year),
-                }
+                for statisticcat_desc, unit_desc in filters:
+                    params = {
+                        "key": api_key,
+                        "format": "JSON",
+                        "commodity_desc": commodity,
+                        "statisticcat_desc": statisticcat_desc,
+                        "unit_desc": unit_desc,
+                        "agg_level_desc": "NATIONAL",
+                        "year": str(year),
+                    }
 
-                try:
-                    resp = requests.get(_NASS_BASE, params=params, timeout=timeout)
-                    resp.raise_for_status()
-                    data = resp.json()
-                except Exception as exc:
-                    _log.warning(
-                        "nass.fetch_failed",
-                        commodity=commodity,
-                        metric=metric,
-                        year=year,
-                        error=str(exc),
-                    )
-                    continue
-
-                for item in data.get("data", []):
-                    week_ending = item.get("week_ending")
-                    value = item.get("Value", "")
-                    if not week_ending or not value:
-                        continue
                     try:
-                        value_pct = float(value.replace(",", ""))
-                    except ValueError:
+                        resp = requests.get(_NASS_BASE, params=params, timeout=timeout)
+                        resp.raise_for_status()
+                        data = resp.json()
+                    except Exception as exc:
+                        _log.warning(
+                            "nass.fetch_failed",
+                            commodity=commodity,
+                            metric=metric,
+                            year=year,
+                            statisticcat=statisticcat_desc,
+                            unit=unit_desc,
+                            error=str(exc),
+                        )
                         continue
-                    rows.append(
-                        {
-                            "week_ending": week_ending,
-                            "commodity": commodity,
-                            "state": item.get("location_desc", "US TOTAL"),
-                            "metric": metric,
-                            "value_pct": value_pct,
-                        }
-                    )
 
+                    for item in data.get("data", []):
+                        week_ending = item.get("week_ending")
+                        value = item.get("Value", "")
+                        if not week_ending or not value:
+                            continue
+                        try:
+                            value_pct = float(value.replace(",", ""))
+                        except ValueError:
+                            continue
+                        state = item.get("location_desc", "US TOTAL")
+                        key = (commodity, state, metric, week_ending)
+                        accum[key] = accum.get(key, 0.0) + value_pct
+
+    rows = [
+        {
+            "week_ending": week_ending,
+            "commodity": commodity,
+            "state": state,
+            "metric": metric,
+            "value_pct": value_pct,
+        }
+        for (commodity, state, metric, week_ending), value_pct in accum.items()
+    ]
     df = pd.DataFrame(rows, columns=list(CROP_PROGRESS_COLS))
     return df
 

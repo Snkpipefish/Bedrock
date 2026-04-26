@@ -10,8 +10,8 @@
     "published": false,
     "setup": {
       "setup_id": "8a69313f2fbf",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "AUDUSD",
         "direction": "buy",
@@ -153,8 +153,8 @@
     "published": false,
     "setup": {
       "setup_id": "ff1aad9b96c6",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "AUDUSD",
         "direction": "sell",
@@ -294,8 +294,8 @@
     "published": true,
     "setup": {
       "setup_id": "b8bfa24881fe",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "AUDUSD",
         "direction": "buy",
@@ -440,8 +440,8 @@
     "published": true,
     "setup": {
       "setup_id": "59c6ba31c7d0",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "AUDUSD",
         "direction": "sell",
@@ -706,8 +706,8 @@
     "published": false,
     "setup": {
       "setup_id": "91294c95aee0",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "AUDUSD",
         "direction": "sell",
@@ -851,8 +851,8 @@
     "published": false,
     "setup": {
       "setup_id": "c0344c475848",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Brent",
         "direction": "buy",
@@ -994,8 +994,8 @@
     "published": true,
     "setup": {
       "setup_id": "3a5179214f2c",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Brent",
         "direction": "sell",
@@ -1137,8 +1137,8 @@
     "published": true,
     "setup": {
       "setup_id": "ecd512ad2749",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Brent",
         "direction": "buy",
@@ -1285,8 +1285,8 @@
     "published": true,
     "setup": {
       "setup_id": "db16f77d0b8e",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Brent",
         "direction": "sell",
@@ -1673,8 +1673,8 @@
     "published": false,
     "setup": {
       "setup_id": "3ae143d12a09",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Cocoa",
         "direction": "buy",
@@ -1800,8 +1800,8 @@
     "published": true,
     "setup": {
       "setup_id": "67ffb68c3a91",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Cocoa",
         "direction": "sell",
@@ -1927,8 +1927,8 @@
     "published": false,
     "setup": {
       "setup_id": "aeb8b647dc5d",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Cocoa",
         "direction": "buy",
@@ -2055,8 +2055,8 @@
     "published": true,
     "setup": {
       "setup_id": "918bc859fa35",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Cocoa",
         "direction": "sell",
@@ -2181,8 +2181,8 @@
     "published": false,
     "setup": {
       "setup_id": "cb58f433e5db",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Cocoa",
         "direction": "buy",
@@ -2306,8 +2306,8 @@
     "published": true,
     "setup": {
       "setup_id": "625a908665a4",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Cocoa",
         "direction": "sell",
@@ -2428,8 +2428,8 @@
     "published": false,
     "setup": {
       "setup_id": "15ae7b135cdb",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Coffee",
         "direction": "buy",
@@ -2558,8 +2558,8 @@
     "published": true,
     "setup": {
       "setup_id": "0f11acf694f2",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Coffee",
         "direction": "sell",
@@ -2688,8 +2688,8 @@
     "published": false,
     "setup": {
       "setup_id": "207ac4d4907e",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Coffee",
         "direction": "buy",
@@ -2918,8 +2918,8 @@
     "published": false,
     "setup": {
       "setup_id": "465e0d69acf3",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Coffee",
         "direction": "buy",
@@ -3043,8 +3043,8 @@
     "published": true,
     "setup": {
       "setup_id": "7d3c943f8050",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Coffee",
         "direction": "sell",
@@ -3161,15 +3161,15 @@
     "instrument": "Corn",
     "direction": "buy",
     "horizon": "scalp",
-    "score": 6.856,
-    "grade": "C",
+    "score": 7.3657569620253165,
+    "grade": "B",
     "max_score": 20.0,
     "min_score_publish": 7.0,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "0d0c1eb594ff",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Corn",
         "direction": "buy",
@@ -3211,13 +3211,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.1032,
+        "score": 0.27311898734177215,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.1032,
-            "weight": 1.0,
-            "contribution": 0.1032
+            "weight": 0.5,
+            "contribution": 0.0516
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.44303797468354433,
+            "weight": 0.5,
+            "contribution": 0.22151898734177217
           }
         ]
       },
@@ -3347,15 +3353,15 @@
     "instrument": "Corn",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 11.144,
+    "score": 10.634243037974684,
     "grade": "A",
     "max_score": 20.0,
     "min_score_publish": 7.0,
     "published": true,
     "setup": {
       "setup_id": "368004fb1cf2",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Corn",
         "direction": "sell",
@@ -3397,13 +3403,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.8968,
+        "score": 0.7268810126582279,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.8968,
-            "weight": 1.0,
-            "contribution": 0.8968
+            "weight": 0.5,
+            "contribution": 0.4484
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.5569620253164557,
+            "weight": 0.5,
+            "contribution": 0.27848101265822783
           }
         ]
       },
@@ -3533,15 +3545,15 @@
     "instrument": "Corn",
     "direction": "buy",
     "horizon": "swing",
-    "score": 6.856,
-    "grade": "C",
+    "score": 7.3657569620253165,
+    "grade": "B",
     "max_score": 20.0,
     "min_score_publish": 7.0,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "539caf06b933",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Corn",
         "direction": "buy",
@@ -3581,13 +3593,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.1032,
+        "score": 0.27311898734177215,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.1032,
-            "weight": 1.0,
-            "contribution": 0.1032
+            "weight": 0.5,
+            "contribution": 0.0516
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.44303797468354433,
+            "weight": 0.5,
+            "contribution": 0.22151898734177217
           }
         ]
       },
@@ -3717,15 +3735,15 @@
     "instrument": "Corn",
     "direction": "sell",
     "horizon": "swing",
-    "score": 11.144,
+    "score": 10.634243037974684,
     "grade": "A",
     "max_score": 20.0,
     "min_score_publish": 7.0,
     "published": true,
     "setup": {
       "setup_id": "43ea6126bbda",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Corn",
         "direction": "sell",
@@ -3765,13 +3783,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.8968,
+        "score": 0.7268810126582279,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.8968,
-            "weight": 1.0,
-            "contribution": 0.8968
+            "weight": 0.5,
+            "contribution": 0.4484
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.5569620253164557,
+            "weight": 0.5,
+            "contribution": 0.27848101265822783
           }
         ]
       },
@@ -3901,15 +3925,15 @@
     "instrument": "Corn",
     "direction": "buy",
     "horizon": "makro",
-    "score": 6.856,
-    "grade": "C",
+    "score": 7.3657569620253165,
+    "grade": "B",
     "max_score": 20.0,
     "min_score_publish": 7.0,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "4bd0d7305574",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Corn",
         "direction": "buy",
@@ -3947,13 +3971,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.1032,
+        "score": 0.27311898734177215,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.1032,
-            "weight": 1.0,
-            "contribution": 0.1032
+            "weight": 0.5,
+            "contribution": 0.0516
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.44303797468354433,
+            "weight": 0.5,
+            "contribution": 0.22151898734177217
           }
         ]
       },
@@ -4083,15 +4113,15 @@
     "instrument": "Corn",
     "direction": "sell",
     "horizon": "makro",
-    "score": 11.144,
+    "score": 10.634243037974684,
     "grade": "A",
     "max_score": 20.0,
     "min_score_publish": 7.0,
     "published": true,
     "setup": {
       "setup_id": "e91154dd0c19",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Corn",
         "direction": "sell",
@@ -4128,13 +4158,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.8968,
+        "score": 0.7268810126582279,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.8968,
-            "weight": 1.0,
-            "contribution": 0.8968
+            "weight": 0.5,
+            "contribution": 0.4484
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.5569620253164557,
+            "weight": 0.5,
+            "contribution": 0.27848101265822783
           }
         ]
       },
@@ -4264,15 +4300,15 @@
     "instrument": "Cotton",
     "direction": "buy",
     "horizon": "scalp",
-    "score": 6.40655,
+    "score": 6.522751470588235,
     "grade": "B",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": true,
     "setup": {
       "setup_id": "aa1b46da1e29",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Cotton",
         "direction": "buy",
@@ -4311,13 +4347,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.36665000000000003,
+        "score": 0.40538382352941177,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.2333,
-            "weight": 0.5,
-            "contribution": 0.11665
+            "weight": 0.25,
+            "contribution": 0.058325
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.388235294117647,
+            "weight": 0.25,
+            "contribution": 0.09705882352941175
           },
           {
             "name": "wasde_s2u_change",
@@ -4396,15 +4438,15 @@
     "instrument": "Cotton",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 9.59345,
+    "score": 9.477248529411765,
     "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": true,
     "setup": {
       "setup_id": "2b5d3e82ac1d",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Cotton",
         "direction": "sell",
@@ -4443,13 +4485,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.63335,
+        "score": 0.5946161764705882,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.7666999999999999,
-            "weight": 0.5,
-            "contribution": 0.38334999999999997
+            "weight": 0.25,
+            "contribution": 0.19167499999999998
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.611764705882353,
+            "weight": 0.25,
+            "contribution": 0.15294117647058825
           },
           {
             "name": "wasde_s2u_change",
@@ -4528,15 +4576,15 @@
     "instrument": "Cotton",
     "direction": "buy",
     "horizon": "swing",
-    "score": 6.40655,
+    "score": 6.522751470588235,
     "grade": "B",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": true,
     "setup": {
       "setup_id": "86981309c8d2",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Cotton",
         "direction": "buy",
@@ -4574,13 +4622,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.36665000000000003,
+        "score": 0.40538382352941177,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.2333,
-            "weight": 0.5,
-            "contribution": 0.11665
+            "weight": 0.25,
+            "contribution": 0.058325
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.388235294117647,
+            "weight": 0.25,
+            "contribution": 0.09705882352941175
           },
           {
             "name": "wasde_s2u_change",
@@ -4659,15 +4713,15 @@
     "instrument": "Cotton",
     "direction": "sell",
     "horizon": "swing",
-    "score": 9.59345,
+    "score": 9.477248529411765,
     "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": true,
     "setup": {
       "setup_id": "d9802663e8b5",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Cotton",
         "direction": "sell",
@@ -4707,13 +4761,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.63335,
+        "score": 0.5946161764705882,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.7666999999999999,
-            "weight": 0.5,
-            "contribution": 0.38334999999999997
+            "weight": 0.25,
+            "contribution": 0.19167499999999998
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.611764705882353,
+            "weight": 0.25,
+            "contribution": 0.15294117647058825
           },
           {
             "name": "wasde_s2u_change",
@@ -4792,15 +4852,15 @@
     "instrument": "Cotton",
     "direction": "buy",
     "horizon": "makro",
-    "score": 6.40655,
+    "score": 6.522751470588235,
     "grade": "B",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": true,
     "setup": {
       "setup_id": "3cfa32473b01",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Cotton",
         "direction": "buy",
@@ -4836,13 +4896,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.36665000000000003,
+        "score": 0.40538382352941177,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.2333,
-            "weight": 0.5,
-            "contribution": 0.11665
+            "weight": 0.25,
+            "contribution": 0.058325
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.388235294117647,
+            "weight": 0.25,
+            "contribution": 0.09705882352941175
           },
           {
             "name": "wasde_s2u_change",
@@ -4921,15 +4987,15 @@
     "instrument": "Cotton",
     "direction": "sell",
     "horizon": "makro",
-    "score": 9.59345,
+    "score": 9.477248529411765,
     "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": true,
     "setup": {
       "setup_id": "d8fdd615cadf",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Cotton",
         "direction": "sell",
@@ -4965,13 +5031,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.63335,
+        "score": 0.5946161764705882,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.7666999999999999,
-            "weight": 0.5,
-            "contribution": 0.38334999999999997
+            "weight": 0.25,
+            "contribution": 0.19167499999999998
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.611764705882353,
+            "weight": 0.25,
+            "contribution": 0.15294117647058825
           },
           {
             "name": "wasde_s2u_change",
@@ -5057,8 +5129,8 @@
     "published": false,
     "setup": {
       "setup_id": "82d28450ea12",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "CrudeOil",
         "direction": "buy",
@@ -5200,8 +5272,8 @@
     "published": true,
     "setup": {
       "setup_id": "bf0980f49e85",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "CrudeOil",
         "direction": "sell",
@@ -5341,8 +5413,8 @@
     "published": true,
     "setup": {
       "setup_id": "5557d9dda7d8",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "CrudeOil",
         "direction": "buy",
@@ -5487,8 +5559,8 @@
     "published": true,
     "setup": {
       "setup_id": "3ff0483a5443",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "CrudeOil",
         "direction": "sell",
@@ -5873,8 +5945,8 @@
     "published": false,
     "setup": {
       "setup_id": "2cd634a6c654",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "EURUSD",
         "direction": "buy",
@@ -6016,8 +6088,8 @@
     "published": true,
     "setup": {
       "setup_id": "d54f0c247b45",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "EURUSD",
         "direction": "sell",
@@ -6156,8 +6228,8 @@
     "published": true,
     "setup": {
       "setup_id": "75927dda0402",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "EURUSD",
         "direction": "buy",
@@ -6301,8 +6373,8 @@
     "published": true,
     "setup": {
       "setup_id": "755ff4a33fa4",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "EURUSD",
         "direction": "sell",
@@ -6446,8 +6518,8 @@
     "published": false,
     "setup": {
       "setup_id": "3f80d00f3ae7",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "EURUSD",
         "direction": "buy",
@@ -6592,8 +6664,8 @@
     "published": true,
     "setup": {
       "setup_id": "d61515d760f4",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "EURUSD",
         "direction": "sell",
@@ -6735,8 +6807,8 @@
     "published": false,
     "setup": {
       "setup_id": "6cc9cedf8cda",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "GBPUSD",
         "direction": "buy",
@@ -7478,8 +7550,8 @@
     "published": false,
     "setup": {
       "setup_id": "6c31c3050a04",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Gold",
         "direction": "buy",
@@ -7666,8 +7738,8 @@
     "published": false,
     "setup": {
       "setup_id": "3fda2ff82185",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Gold",
         "direction": "sell",
@@ -7854,8 +7926,8 @@
     "published": true,
     "setup": {
       "setup_id": "962a747af62a",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Gold",
         "direction": "buy",
@@ -8047,8 +8119,8 @@
     "published": true,
     "setup": {
       "setup_id": "fafb483fd101",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Gold",
         "direction": "sell",
@@ -8240,8 +8312,8 @@
     "published": true,
     "setup": {
       "setup_id": "88ba06a2bad0",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Gold",
         "direction": "buy",
@@ -8431,8 +8503,8 @@
     "published": true,
     "setup": {
       "setup_id": "1e0339ce4a76",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Gold",
         "direction": "sell",
@@ -8622,8 +8694,8 @@
     "published": false,
     "setup": {
       "setup_id": "8a1947eadd65",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Nasdaq",
         "direction": "buy",
@@ -9362,8 +9434,8 @@
     "published": false,
     "setup": {
       "setup_id": "337d8fc8918a",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Silver",
         "direction": "buy",
@@ -9505,8 +9577,8 @@
     "published": true,
     "setup": {
       "setup_id": "d2b98ab97a91",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Silver",
         "direction": "sell",
@@ -9646,8 +9718,8 @@
     "published": true,
     "setup": {
       "setup_id": "d0bf0b5f3295",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Silver",
         "direction": "buy",
@@ -9792,8 +9864,8 @@
     "published": true,
     "setup": {
       "setup_id": "e6eef3d6b12f",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Silver",
         "direction": "sell",
@@ -9938,8 +10010,8 @@
     "published": true,
     "setup": {
       "setup_id": "97f15fba33df",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Silver",
         "direction": "buy",
@@ -10083,8 +10155,8 @@
     "published": true,
     "setup": {
       "setup_id": "45c05e3a8683",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Silver",
         "direction": "sell",
@@ -10220,15 +10292,15 @@
     "instrument": "Soybean",
     "direction": "buy",
     "horizon": "scalp",
-    "score": 5.9512,
-    "grade": "C",
+    "score": 6.2792054054054045,
+    "grade": "B",
     "max_score": 16.0,
     "min_score_publish": 6.0,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "5555e8dc18d0",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Soybean",
         "direction": "buy",
@@ -10268,13 +10340,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.3016,
+        "score": 0.41093513513513513,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.1032,
-            "weight": 0.5,
-            "contribution": 0.0516
+            "weight": 0.25,
+            "contribution": 0.0258
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.5405405405405406,
+            "weight": 0.25,
+            "contribution": 0.13513513513513514
           },
           {
             "name": "wasde_s2u_change",
@@ -10353,15 +10431,15 @@
     "instrument": "Soybean",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 10.0488,
+    "score": 9.720794594594595,
     "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": true,
     "setup": {
       "setup_id": "f8092f733812",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Soybean",
         "direction": "sell",
@@ -10401,13 +10479,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.6984,
+        "score": 0.5890648648648649,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.8968,
-            "weight": 0.5,
-            "contribution": 0.4484
+            "weight": 0.25,
+            "contribution": 0.2242
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.45945945945945943,
+            "weight": 0.25,
+            "contribution": 0.11486486486486486
           },
           {
             "name": "wasde_s2u_change",
@@ -10486,15 +10570,15 @@
     "instrument": "Soybean",
     "direction": "buy",
     "horizon": "swing",
-    "score": 5.9512,
-    "grade": "C",
+    "score": 6.2792054054054045,
+    "grade": "B",
     "max_score": 16.0,
     "min_score_publish": 6.0,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "719652a4fa27",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Soybean",
         "direction": "buy",
@@ -10534,13 +10618,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.3016,
+        "score": 0.41093513513513513,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.1032,
-            "weight": 0.5,
-            "contribution": 0.0516
+            "weight": 0.25,
+            "contribution": 0.0258
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.5405405405405406,
+            "weight": 0.25,
+            "contribution": 0.13513513513513514
           },
           {
             "name": "wasde_s2u_change",
@@ -10619,15 +10709,15 @@
     "instrument": "Soybean",
     "direction": "sell",
     "horizon": "swing",
-    "score": 10.0488,
+    "score": 9.720794594594595,
     "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": true,
     "setup": {
       "setup_id": "ffeb5957ba09",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Soybean",
         "direction": "sell",
@@ -10666,13 +10756,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.6984,
+        "score": 0.5890648648648649,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.8968,
-            "weight": 0.5,
-            "contribution": 0.4484
+            "weight": 0.25,
+            "contribution": 0.2242
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.45945945945945943,
+            "weight": 0.25,
+            "contribution": 0.11486486486486486
           },
           {
             "name": "wasde_s2u_change",
@@ -10751,15 +10847,15 @@
     "instrument": "Soybean",
     "direction": "buy",
     "horizon": "makro",
-    "score": 5.9512,
-    "grade": "C",
+    "score": 6.2792054054054045,
+    "grade": "B",
     "max_score": 16.0,
     "min_score_publish": 6.0,
-    "published": false,
+    "published": true,
     "setup": {
       "setup_id": "dd456ae33312",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Soybean",
         "direction": "buy",
@@ -10797,13 +10893,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.3016,
+        "score": 0.41093513513513513,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.1032,
-            "weight": 0.5,
-            "contribution": 0.0516
+            "weight": 0.25,
+            "contribution": 0.0258
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.5405405405405406,
+            "weight": 0.25,
+            "contribution": 0.13513513513513514
           },
           {
             "name": "wasde_s2u_change",
@@ -10882,15 +10984,15 @@
     "instrument": "Soybean",
     "direction": "sell",
     "horizon": "makro",
-    "score": 10.0488,
+    "score": 9.720794594594595,
     "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": true,
     "setup": {
       "setup_id": "f96b6b2db67b",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Soybean",
         "direction": "sell",
@@ -10925,13 +11027,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.6984,
+        "score": 0.5890648648648649,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.8968,
-            "weight": 0.5,
-            "contribution": 0.4484
+            "weight": 0.25,
+            "contribution": 0.2242
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.45945945945945943,
+            "weight": 0.25,
+            "contribution": 0.11486486486486486
           },
           {
             "name": "wasde_s2u_change",
@@ -11017,8 +11125,8 @@
     "published": true,
     "setup": {
       "setup_id": "2b8207df1f96",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "SP500",
         "direction": "buy",
@@ -11757,8 +11865,8 @@
     "published": true,
     "setup": {
       "setup_id": "3b08af07825b",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Sugar",
         "direction": "buy",
@@ -11885,8 +11993,8 @@
     "published": true,
     "setup": {
       "setup_id": "799bd2fe8d49",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Sugar",
         "direction": "sell",
@@ -12013,8 +12121,8 @@
     "published": true,
     "setup": {
       "setup_id": "37a78e1e5b73",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Sugar",
         "direction": "buy",
@@ -12240,8 +12348,8 @@
     "published": true,
     "setup": {
       "setup_id": "254674fb129d",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Sugar",
         "direction": "buy",
@@ -12363,8 +12471,8 @@
     "published": true,
     "setup": {
       "setup_id": "3ff3f4313719",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Sugar",
         "direction": "sell",
@@ -12488,8 +12596,8 @@
     "published": false,
     "setup": {
       "setup_id": "34bfb94ef6e5",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "USDJPY",
         "direction": "buy",
@@ -13224,15 +13332,15 @@
     "instrument": "Wheat",
     "direction": "buy",
     "horizon": "scalp",
-    "score": 8.4984,
+    "score": 8.8812,
     "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": true,
     "setup": {
       "setup_id": "9d89c2ebeb8c",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Wheat",
         "direction": "buy",
@@ -13273,13 +13381,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.3948,
+        "score": 0.5224,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.237,
-            "weight": 0.4,
-            "contribution": 0.0948
+            "weight": 0.2,
+            "contribution": 0.0474
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.875,
+            "weight": 0.2,
+            "contribution": 0.17500000000000002
           },
           {
             "name": "wasde_s2u_change",
@@ -13370,15 +13484,15 @@
     "instrument": "Wheat",
     "direction": "sell",
     "horizon": "scalp",
-    "score": 7.501600000000001,
+    "score": 7.1188,
     "grade": "B",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": true,
     "setup": {
       "setup_id": "6b599aaa7ace",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Wheat",
         "direction": "sell",
@@ -13419,13 +13533,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.6052000000000002,
+        "score": 0.4776,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.763,
-            "weight": 0.4,
-            "contribution": 0.3052
+            "weight": 0.2,
+            "contribution": 0.1526
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.125,
+            "weight": 0.2,
+            "contribution": 0.025
           },
           {
             "name": "wasde_s2u_change",
@@ -13516,7 +13636,7 @@
     "instrument": "Wheat",
     "direction": "buy",
     "horizon": "swing",
-    "score": 8.4984,
+    "score": 8.8812,
     "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
@@ -13539,13 +13659,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.3948,
+        "score": 0.5224,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.237,
-            "weight": 0.4,
-            "contribution": 0.0948
+            "weight": 0.2,
+            "contribution": 0.0474
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.875,
+            "weight": 0.2,
+            "contribution": 0.17500000000000002
           },
           {
             "name": "wasde_s2u_change",
@@ -13636,7 +13762,7 @@
     "instrument": "Wheat",
     "direction": "sell",
     "horizon": "swing",
-    "score": 7.501600000000001,
+    "score": 7.1188,
     "grade": "B",
     "max_score": 16.0,
     "min_score_publish": 6.0,
@@ -13659,13 +13785,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.6052000000000002,
+        "score": 0.4776,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.763,
-            "weight": 0.4,
-            "contribution": 0.3052
+            "weight": 0.2,
+            "contribution": 0.1526
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.125,
+            "weight": 0.2,
+            "contribution": 0.025
           },
           {
             "name": "wasde_s2u_change",
@@ -13756,15 +13888,15 @@
     "instrument": "Wheat",
     "direction": "buy",
     "horizon": "makro",
-    "score": 8.4984,
+    "score": 8.8812,
     "grade": "A",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": true,
     "setup": {
       "setup_id": "2ee41753938a",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Wheat",
         "direction": "buy",
@@ -13802,13 +13934,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.3948,
+        "score": 0.5224,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.237,
-            "weight": 0.4,
-            "contribution": 0.0948
+            "weight": 0.2,
+            "contribution": 0.0474
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.875,
+            "weight": 0.2,
+            "contribution": 0.17500000000000002
           },
           {
             "name": "wasde_s2u_change",
@@ -13899,15 +14037,15 @@
     "instrument": "Wheat",
     "direction": "sell",
     "horizon": "makro",
-    "score": 7.501600000000001,
+    "score": 7.1188,
     "grade": "B",
     "max_score": 16.0,
     "min_score_publish": 6.0,
     "published": true,
     "setup": {
       "setup_id": "f982b283c623",
-      "first_seen": "2026-04-26T15:21:19.100525Z",
-      "last_updated": "2026-04-26T15:21:19.100525Z",
+      "first_seen": "2026-04-26T16:54:25.163283Z",
+      "last_updated": "2026-04-26T16:54:25.163283Z",
       "setup": {
         "instrument": "Wheat",
         "direction": "sell",
@@ -13943,13 +14081,19 @@
       },
       "yield": {
         "name": "yield",
-        "score": 0.6052000000000002,
+        "score": 0.4776,
         "drivers": [
           {
             "name": "weather_stress",
             "value": 0.763,
-            "weight": 0.4,
-            "contribution": 0.3052
+            "weight": 0.2,
+            "contribution": 0.1526
+          },
+          {
+            "name": "crop_progress_stage",
+            "value": 0.125,
+            "weight": 0.2,
+            "contribution": 0.025
           },
           {
             "name": "wasde_s2u_change",
