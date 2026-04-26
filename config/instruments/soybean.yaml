@@ -32,14 +32,20 @@ families:
           # Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec
           monthly_scores: [0.3, 0.3, 0.4, 0.5, 0.7, 0.9, 1.0, 1.0, 0.8, 0.5, 0.4, 0.3]
   yield:
-    # Sub-fase 12.5+ session 86: kombinerer vær-stress (50%) + USDA
-    # WASDE S2U (50%). US er ~30% av global soybean-produksjon.
+    # Session 98: utvidet med crop_progress_stage (NASS GOOD/EXCELLENT).
+    # Vekter: weather 25% + crop_progress 25% (samme yield-domene splittet)
+    # + wasde 50% (autoritativ S2U). US er ~30% av global soybean-produksjon.
     weight: 3
     drivers:
       - name: weather_stress
-        weight: 0.5
+        weight: 0.25
         params:
           lookback_months: 1
+      - name: crop_progress_stage
+        weight: 0.25
+        params:
+          metric: GOOD_EXCELLENT
+          mode: low_is_bull
       - name: wasde_s2u_change
         weight: 0.5
         params:
