@@ -57,14 +57,17 @@ families:
         weight: 1.0
         params: {}
   conab:
-    # PLACEHOLDER: Conab-fetcher (Brazil agri ministry) er ikke
-    # implementert ennå. Familien beholdes for fremtidig conab_yoy-
-    # driver, men sma200_align gir trend-leak. Vurder å sette
-    # weight: 0 eller fjerne familien helt før Fase 13 cutover hvis
-    # Conab-fetcher fortsatt ikke er bygget.
+    # Sub-fase 12.5+ session 86: erstattet sma200_align placeholder med
+    # wasde_s2u_change. USDA WASDE er primær data-kilde for global
+    # corn-balanse (US dominerer global produksjon, ~30% av total).
+    # Conab-data (Brasil) er fortsatt ikke implementert; familie-navnet
+    # beholdes men driver er nå reell USDA-supply-data.
     weight: 2
     drivers:
-      - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+      - name: wasde_s2u_change
+        weight: 1.0
+        params:
+          region: US
   cross:
     # USD-styrke er bear for Corn (US-eksport blir dyrere globalt).
     # dxy_chg5d med bull_when=negative gir høy score når USD svekkes.
