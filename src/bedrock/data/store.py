@@ -42,6 +42,7 @@ from bedrock.data.schemas import (
     DDL_COT_LEGACY,
     DDL_CROP_PROGRESS,
     DDL_DISEASE_ALERTS,
+    DDL_ECON_EVENTS,
     DDL_EXPORT_EVENTS,
     DDL_FUNDAMENTALS,
     DDL_IGC,
@@ -50,6 +51,7 @@ from bedrock.data.schemas import (
     DDL_WEATHER,
     DDL_WEATHER_MONTHLY,
     DISEASE_ALERTS_COLS,
+    ECON_EVENTS_COLS,
     EXPORT_EVENTS_COLS,
     FUNDAMENTALS_COLS,
     IGC_COLS,
@@ -59,6 +61,7 @@ from bedrock.data.schemas import (
     TABLE_COT_LEGACY,
     TABLE_CROP_PROGRESS,
     TABLE_DISEASE_ALERTS,
+    TABLE_ECON_EVENTS,
     TABLE_EXPORT_EVENTS,
     TABLE_FUNDAMENTALS,
     TABLE_IGC,
@@ -124,6 +127,8 @@ class DataStore:
             conn.execute(DDL_DISEASE_ALERTS)
             conn.execute(DDL_BDI)
             conn.execute(DDL_IGC)
+            # Sub-fase 12.5+ session 105 (ADR-007/008):
+            conn.execute(DDL_ECON_EVENTS)
             conn.commit()
 
     # ------------------------------------------------------------------
@@ -895,6 +900,67 @@ class DataStore:
         if last_n is None:
             return series
         return series.tail(last_n)
+
+    # ------------------------------------------------------------------
+    # Økonomisk kalender (sub-fase 12.5+ session 105)
+    # ------------------------------------------------------------------
+
+    def append_econ_events(self, df: pd.DataFrame) -> int:
+        """Skriv kalender-events til ``econ_events``. Schema:
+        ``ECON_EVENTS_COLS``. Idempotent på (event_ts, country, title).
+
+        ``event_ts`` og ``fetched_at`` normaliseres til ISO-streng.
+        """
+        if df.empty:
+            return 0
+        prepared = df.copy()
+        if "event_ts" in prepared.columns:
+            prepared["event_ts"] = pd.to_datetime(prepared["event_ts"], utc=True).dt.strftime(
+                "%Y-%m-%dT%H:%M:%S"
+            )
+        if "fetched_at" in prepared.columns:
+            prepared["fetched_at"] = pd.to_datetime(prepared["fetched_at"], utc=True).dt.strftime(
+                "%Y-%m-%dT%H:%M:%S"
+            )
+        return self._append_generic(prepared, TABLE_ECON_EVENTS, ECON_EVENTS_COLS)
+
+    def get_econ_events(
+        self,
+        countries: Sequence[str] | None = None,
+        impact_levels: Sequence[str] | None = None,
+        from_ts: str | None = None,
+        to_ts: str | None = None,
+    ) -> pd.DataFrame:
+        """Hent kalender-events. Returnerer pd.DataFrame med
+        `event_ts` som tz-aware UTC pd.Timestamp i en kolonne (ikke index).
+
+        Filtre er optional; alle returnerer hele tabellen sortert ASC på
+        event_ts. Tom resultat → tom DataFrame med kolonner intakt.
+        """
+        query = f"SELECT * FROM {TABLE_ECON_EVENTS} WHERE 1=1"
+        params: list = []
+        if countries:
+            placeholders = ", ".join(["?"] * len(countries))
+            query += f" AND country IN ({placeholders})"
+            params.extend(countries)
+        if impact_levels:
+            placeholders = ", ".join(["?"] * len(impact_levels))
+            query += f" AND impact IN ({placeholders})"
+            params.extend(impact_levels)
+        if from_ts is not None:
+            query += " AND event_ts >= ?"
+            params.append(from_ts)
+        if to_ts is not None:
+            query += " AND event_ts <= ?"
+            params.append(to_ts)
+        query += " ORDER BY event_ts ASC"
+
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=params)
+        if not df.empty:
+            df["event_ts"] = pd.to_datetime(df["event_ts"], utc=True)
+            df["fetched_at"] = pd.to_datetime(df["fetched_at"], utc=True)
+        return df
 
     # ------------------------------------------------------------------
     # Generisk staleness-accessor (fase 6 session 28)

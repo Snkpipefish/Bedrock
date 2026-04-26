@@ -575,3 +575,60 @@ IGC_COLS: tuple[str, ...] = (
     "metric",
     "value_mil_tons",
 )
+
+
+# Økonomisk kalender (Forex Factory via faireconomy.media JSON).
+# Sub-fase 12.5+ session 105 (ADR-007/008) — første cot-explorer-port.
+# Lagrer scheduled high/medium-impact events fra Fed/ECB/BoE/BoJ/RBA/RBNZ
+# m.fl. Brukes av `event_distance`-driveren i risk-/cross-familier på
+# alle 22 instrumenter.
+TABLE_ECON_EVENTS = "econ_events"
+
+DDL_ECON_EVENTS = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_ECON_EVENTS} (
+    event_ts     TEXT    NOT NULL,    -- ISO-8601 UTC timestamp
+    country      TEXT    NOT NULL,    -- "USD", "EUR", "GBP", "JPY", "AUD", "NZD", "CAD", "CHF"
+    title        TEXT    NOT NULL,    -- f.eks. "FOMC Statement", "CPI m/m"
+    impact       TEXT    NOT NULL,    -- "High", "Medium", "Low"
+    forecast     TEXT,                -- analytiker-forventning (kan være tom)
+    previous     TEXT,                -- forrige rapportverdi (kan være tom)
+    fetched_at   TEXT    NOT NULL,    -- når raden ble hentet (ISO UTC)
+    PRIMARY KEY (event_ts, country, title)
+)
+"""
+
+ECON_EVENTS_COLS: tuple[str, ...] = (
+    "event_ts",
+    "country",
+    "title",
+    "impact",
+    "forecast",
+    "previous",
+    "fetched_at",
+)
+
+
+class EconomicEvent(BaseModel):
+    """Én rad i econ_events-tabellen.
+
+    `event_ts` er event-tidspunkt i UTC. `fetched_at` er når raden ble
+    hentet (sub-fase 12.5+ session 105). PK på (event_ts, country, title)
+    er rimelig unik for kalender-events.
+    """
+
+    event_ts: datetime
+    country: str = Field(min_length=2, max_length=4)
+    title: str = Field(min_length=1)
+    impact: str
+    forecast: str | None = None
+    previous: str | None = None
+    fetched_at: datetime
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("impact")
+    @classmethod
+    def _impact_valid(cls, v: str) -> str:
+        if v not in {"High", "Medium", "Low"}:
+            raise ValueError(f"impact must be High/Medium/Low, got {v!r}")
+        return v
