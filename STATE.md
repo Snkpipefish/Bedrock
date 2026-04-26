@@ -22,7 +22,8 @@
   - **82:** Sub-fase 12.5+ — BTC som 11. instrument (crypto-asset-class). Backfilt 4239 prices (BTC-USD 2014-2026) + 420 legacy COT (CME Bitcoin futures 2017-12-onward). Verifisert at cot_legacy-fetcher auto-discoverer alle legacy-instrumenter via YAMLer (Nasdaq + EURUSD + SP500 + BTC). **LUKKET 2026-04-26**.
   - **83:** **PLAN § 7.3 datakilder — full infrastruktur.** 5 nye SQLite-tabeller (crop_progress, wasde, export_events, disease_alerts, bdi). 3 nye fetcher-moduler: `nass.py` (USDA QuickStats med API-key + manuell CSV-fallback), `wasde.py` (USDA-CSV + manuell fallback), `manual_events.py` (eksport-events, disease-alerts, BDI ren manuell). 5 nye drivere i `agronomy.py`: crop_progress_stage, wasde_s2u_change, export_event_active, disease_pressure, bdi_chg30d. Sample manuell CSV med kjente events (India rice ban, Indonesia palm oil, Ivory Coast cocoa quota, etc). Dokumentasjon i `data/manual/README.md`. 18 nye tester. **LUKKET 2026-04-26**.
   - **84:** PLAN § 7.3 — siste datakilde (IGC reports). Ny `TABLE_IGC` + `fetch_igc` + `igc_stocks_change`-driver. Alle 8 PLAN § 7.3 sources har nå infrastruktur. **22 drivere totalt.** **LUKKET 2026-04-26**.
-  - **85 (neste):** Wire alle 6 nye agronomy-drivere inn i Corn/Wheat/Cotton/Soybean/Sugar/Coffee YAMLs som lavtvektede contributors. Eller: Fokus på data-populering (NASS API-key, WASDE-URL-discovery, faktisk current eksport-events).
+  - **85:** **WASDE auto-fetcher fra ESMIS** — XML-parser for USDA's månedlige WASDE-rapporter. Tre forskjellige XML-schemas håndteres (sr08-aggregat, sr11-13 attribute1/m1, sr14-17 attribute4-6/m1). 6 ferskeste reports (Nov 2025-April 2026) backfilt → 972 rader for US Corn/Wheat/Cotton/Soybeans/Sugar/Rice. S2U beregnet automatisk. wasde_s2u_change-driver fixet til å sammenligne samme MY på tvers av rapporter (ikke ulike MY innen én rapport). **LUKKET 2026-04-26**.
+  - **86 (neste):** Wire WASDE-driver inn i Corn/Wheat/Cotton/Soybean YAMLs (vi har nå reelle data!). Eller scrape eldre WASDE-historikk (ESMIS-arkiv har paginering for 2010+).
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -60,13 +61,13 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `feat/agri-yaml-wireup-block-e` (Nivå 3 — session 84). PR #1-#17 merget.
-- **Blocked:** nei.
+- **Branch:** `feat/agri-yaml-wireup-block-e` (Nivå 3 — sessions 84+85). PR #1-#18 merget.
+- **Blocked:** nei. NASS Crop Progress venter på API-key (bruker fikk 504 timeout — utsatt). WASDE er nå AKTIV via ESMIS XML-scraping.
 - **Aktive systemd-timere:** 9 totalt.
 - **Instrumenter:** 11 totalt.
 - **Drivere:** 22 totalt.
-- **PLAN § 7.3 datakilder:** **8 av 8 sources har infrastruktur** (NASS Crop Progress, WASDE, eksport-policy, BRL, BDI, disease/pest, ICE softs COT, IGC). Hver har DB-tabell + fetcher + driver + tester. Auto-fetch er aktiv for de som ikke krever bruker-input (BRL via FRED, ICE via CFTC). Andre venter på API-key (NASS), URL-discovery (WASDE), eller manuell populering.
-- **Next task:** **Session 85.** Wire agronomy-drivere inn i agri-instrumentenes YAMLs (lavtvektede slik at de bidrar når data finnes uten å dominere).
+- **WASDE-data:** 972 rader, 6 reports (Nov 2025-April 2026), 6 commodities × 3 marketing years × 9 metrics. wasde_s2u_change-driver fungerer ende-til-ende på reell data.
+- **Next task:** **Session 86.** Wire wasde_s2u_change inn i Corn/Wheat/Cotton/Soybean/Sugar YAMLs.
 - **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
 ## Open questions to user
@@ -154,6 +155,82 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-26 — Session 85: WASDE auto-fetcher fra ESMIS (LUKKET)
+
+**Scope:** Aktivere reell WASDE-data (PLAN § 7.3) ved å bygge XML-parser
+for USDA's konsoliderte arkiv på esmis.nal.usda.gov. NASS Crop Progress
+gjenstår (bruker fikk 504 timeout ved API-key registrering).
+
+**Endret denne session (feature-branch `feat/agri-yaml-wireup-block-e`):**
+
+`src/bedrock/fetch/wasde.py` (utvidet):
+- `parse_wasde_xml(bytes) -> DataFrame`: håndterer 3 forskjellige
+  WASDE XML-schemas:
+  - sr08 (aggregat-rapport): m1_commodity_group → m1_year_group → s3 → Cell
+  - sr11-sr13 (US-spesifikk schema 1): attribute1-TAG → m1_year_group →
+    m1_month_group → Cell med cell_value1
+  - sr14-sr17 (US-spesifikk schema 2): attribute4/5/6-TAG med parallelle
+    suffixer (market_year4, cell_value4 etc.). USDA bruker forskjellige
+    suffixer per matrix; parser ekstraherer suffix dynamisk.
+- `fetch_wasde_xml_index()`: scraper ESMIS-index, finner alle XML-URL-
+  er via regex, laster ned + parser hver report. Filter på years.
+- `fetch_wasde()` oppdatert med `try_xml_first=True` (default).
+- S2U beregnes automatisk fra Ending Stocks / Total Use → 100.
+
+`src/bedrock/engine/drivers/agronomy.py`:
+- `wasde_s2u_change` fixet — sammenligner nå samme marketing year
+  på tvers av consecutive reports (ikke forskjellige MYs innen én
+  rapport). Bruker latest report's MY som referanse, henter samme
+  MY fra tidligere rapporter, sammenligner.
+
+`tests/unit/test_drivers_agronomy.py`:
+- `_wasde_df()` helper bygger DataFrame med `report_date` +
+  `marketing_year` for å matche driver-logikken.
+- 4 wasde_s2u-tester oppdatert.
+
+**Backfill:**
+
+```
+ESMIS-index: 6 XML-rapporter funnet (Nov 2025-April 2026)
+Parsed 972 rader totalt
+Inserted 972 rows into bedrock.db
+```
+
+Per rapport: 162 rader = 6 commodities (Corn/Wheat/Cotton/Soybeans/
+Sugar/Rice) × 3 marketing years × 9 metrics (Production, Yield,
+Stocks-related, Total Use, S2U etc.)
+
+**End-to-end driver-test:**
+
+```
+Corn:    score=0.5 (MY=2025/26, history: 13.8, 13.1, 13.1) — stabilt
+Wheat:   score=0.5 (MY=2025/26, history: 45.5, 45.9, 45.9) — stabilt
+Cotton:  score=0.5 (MY=2025/26, history: 30.4, 32.4, 32.4) — stabilt
+Soybean: score=0.5 (MY=2025/26, history: 8.2, 8.2, 8.2) — stabilt
+```
+
+April-rapportens estimater er like som mars (stabile USDA-estimater
+inn i bull-season). Driver returnerer 0.5 som forventet — vil aktiveres
+når WASDE-rapport endrer estimater.
+
+**Tester:** 1404/1404 grønne (4 tester oppdatert til ny driver-signatur).
+Pyright 0/0.
+
+**Beslutninger:**
+- ESMIS-index har bare ~6 ferskeste rapporter. Eldre historikk (2010+)
+  er pageinert; backfill-script for å hente ALL historikk er deferred
+  (PR-scope-disiplin).
+- WASDE XML-schema er IKKE-konsistent — schema-detection per matrix-
+  type via attribute-tag-suffix. Robust nok mot fremtidige WASDE-
+  layout-endringer fordi parser kun trenger at "attributeN" mønsteret
+  holdes konsistent.
+- USDA-mapping for US-soybeans bruker matrix1 (Domestic Measure).
+  WASDE har også matrix2/matrix3 for Soymeal/Soyoil — disse skippes
+  (bedrock fokuserer på primær commodity).
+- `wasde_s2u_change` driver-fix kritisk: original kode tok iloc[-2:]
+  som ofte var to forskjellige MY (f.eks. 2024/25 og 2025/26 fra
+  samme rapport). Nytt: filter til same MY across reports.
 
 ### 2026-04-26 — Session 84: PLAN § 7.3 — IGC reports (siste datakilde) (LUKKET)
 

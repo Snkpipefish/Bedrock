@@ -93,30 +93,42 @@ def test_crop_progress_high_is_bull_inverts() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _wasde_df(values: list[float], marketing_year: str = "2025/26") -> pd.DataFrame:
+    """Bygg dummy WASDE-DataFrame med same MY på tvers av rapporter."""
+    n = len(values)
+    return pd.DataFrame(
+        {
+            "value": values,
+            "report_date": pd.to_datetime([f"2025-{i + 1:02d}-10" for i in range(n)]),
+            "marketing_year": [marketing_year] * n,
+        }
+    )
+
+
 def test_wasde_s2u_dropping_is_bull() -> None:
     fn = get("wasde_s2u_change")
-    df = pd.DataFrame({"value": [15.0, 13.5]})  # -10%
+    df = _wasde_df([15.0, 13.5])  # -10%
     score = fn(_DummyStore(wasde=df), "Corn", {})
     assert score == 1.0
 
 
 def test_wasde_s2u_rising_is_bear() -> None:
     fn = get("wasde_s2u_change")
-    df = pd.DataFrame({"value": [10.0, 11.5]})  # +15%
+    df = _wasde_df([10.0, 11.5])  # +15%
     score = fn(_DummyStore(wasde=df), "Corn", {})
     assert score == 0.0
 
 
 def test_wasde_s2u_neutral() -> None:
     fn = get("wasde_s2u_change")
-    df = pd.DataFrame({"value": [10.0, 10.05]})  # +0.5%
+    df = _wasde_df([10.0, 10.05])  # +0.5%
     score = fn(_DummyStore(wasde=df), "Corn", {})
     assert score == 0.5
 
 
 def test_wasde_s2u_short_history_returns_neutral() -> None:
     fn = get("wasde_s2u_change")
-    df = pd.DataFrame({"value": [10.0]})
+    df = _wasde_df([10.0])
     score = fn(_DummyStore(wasde=df), "Corn", {})
     assert score == 0.5
 
