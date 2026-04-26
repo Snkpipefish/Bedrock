@@ -71,3 +71,4 @@ systemd/bedrock-fetch-*.timer
 
 # Volatil signal-output (regeneres av orchestrator)
 data/signals.json
+data/agri_signals.json

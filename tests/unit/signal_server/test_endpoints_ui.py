@@ -357,7 +357,7 @@ def _write_signals(path: Path, entries: list[dict]) -> None:
 
 
 def test_setups_financial_empty_when_file_missing(client: FlaskClient) -> None:
-    r = client.get("/api/ui/setups/financial")
+    r = client.get("/api/ui/setups/financial?include_unpublished=1")
     assert r.status_code == 200
     data = r.get_json()
     assert data["setups"] == []
@@ -388,7 +388,7 @@ def test_setups_financial_returns_entries(
             },
         ],
     )
-    r = client.get("/api/ui/setups/financial")
+    r = client.get("/api/ui/setups/financial?include_unpublished=1")
     data = r.get_json()
     assert data["total_count"] == 2
     assert data["visible_count"] == 2
@@ -433,7 +433,7 @@ def test_setups_financial_sorts_by_grade_then_score(
             },
         ],
     )
-    r = client.get("/api/ui/setups/financial")
+    r = client.get("/api/ui/setups/financial?include_unpublished=1")
     setups = r.get_json()["setups"]
     assert [s["instrument"] for s in setups] == ["X2", "X4", "X3", "X1"]
 
@@ -462,7 +462,7 @@ def test_setups_financial_hides_invalidated(
             },
         ],
     )
-    r = client.get("/api/ui/setups/financial")
+    r = client.get("/api/ui/setups/financial?include_unpublished=1")
     data = r.get_json()
     assert data["total_count"] == 2
     assert data["visible_count"] == 1
@@ -486,7 +486,7 @@ def test_setups_financial_limit_truncates(
             for i in range(10)
         ],
     )
-    r = client.get("/api/ui/setups/financial?limit=3")
+    r = client.get("/api/ui/setups/financial?limit=3&include_unpublished=1")
     data = r.get_json()
     assert data["visible_count"] == 3
     # Høyeste score først → X0, X1, X2
@@ -501,7 +501,7 @@ def test_setups_financial_invalid_limit_returns_all(
         signals_path,
         [{"instrument": "X", "direction": "BUY", "horizon": "SWING", "score": 3.0, "grade": "A"}],
     )
-    r = client.get("/api/ui/setups/financial?limit=abc")
+    r = client.get("/api/ui/setups/financial?limit=abc&include_unpublished=1")
     assert len(r.get_json()["setups"]) == 1
 
 
@@ -510,7 +510,7 @@ def test_setups_financial_corrupt_file_returns_empty(
     signals_path: Path,
 ) -> None:
     signals_path.write_text("{ not valid json")
-    r = client.get("/api/ui/setups/financial")
+    r = client.get("/api/ui/setups/financial?include_unpublished=1")
     assert r.status_code == 200
     assert r.get_json()["setups"] == []
 
@@ -520,7 +520,7 @@ def test_setups_financial_non_list_toplevel(
     signals_path: Path,
 ) -> None:
     signals_path.write_text(json.dumps({"foo": "bar"}))
-    r = client.get("/api/ui/setups/financial")
+    r = client.get("/api/ui/setups/financial?include_unpublished=1")
     assert r.get_json()["setups"] == []
 
 
@@ -544,7 +544,7 @@ def test_setups_financial_skips_non_dict_rows(
             ]
         )
     )
-    r = client.get("/api/ui/setups/financial")
+    r = client.get("/api/ui/setups/financial?include_unpublished=1")
     data = r.get_json()
     assert data["total_count"] == 1
     assert len(data["setups"]) == 1
@@ -587,14 +587,14 @@ def test_setups_agri_reads_agri_path(
             },
         ],
     )
-    r = client.get("/api/ui/setups/agri")
+    r = client.get("/api/ui/setups/agri?include_unpublished=1")
     data = r.get_json()
     assert data["total_count"] == 2
     assert [s["instrument"] for s in data["setups"]] == ["Corn", "Wheat"]
 
 
 def test_setups_agri_empty_when_file_missing(client: FlaskClient) -> None:
-    r = client.get("/api/ui/setups/agri")
+    r = client.get("/api/ui/setups/agri?include_unpublished=1")
     assert r.status_code == 200
     assert r.get_json()["setups"] == []
 
@@ -617,7 +617,7 @@ def test_setups_passes_through_setup_dict(
             },
         ],
     )
-    r = client.get("/api/ui/setups/financial")
+    r = client.get("/api/ui/setups/financial?include_unpublished=1")
     setup = r.get_json()["setups"][0]["setup"]
     assert setup["entry"] == 2050.25
     assert setup["stop_loss"] == 2040.0
