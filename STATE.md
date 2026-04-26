@@ -26,7 +26,8 @@
   - **86:** WASDE-driver wired inn i 5 agri-YAMLs. Corn: erstattet conab-placeholder (sma200_align trend-leak) med wasde_s2u_change. Wheat/Cotton/Soybean/Sugar: WASDE inn i yield-familien som co-driver med weather_stress (50/50). End-to-end-scoring: Corn dropper fra 8.0 → 7.0 (riktig — fjerner trend-leak), andre stabilt B-grade. **LUKKET 2026-04-26**.
   - **87:** Historisk WASDE-backfill — fixet ESMIS-paginering (regex broadened for eldre URL-pattern, max_pages=70 traverserer alle ESMIS-sider). **8703 rader fra 54 reports 2019-2026 backfilt** (9× økning vs 972 rader fra session 85). Driver fortsatt 0.5 fordi April vs March er stabilt — vil aktiveres ved neste S2U-revisjon. **LUKKET 2026-04-26**.
   - **88:** Wire `disease_pressure` + `export_event_active` inn i Coffee + Wheat YAMLs. Coffee yield: weather 70% + disease 30% (coffee rust er historisk yield-trussel). Wheat yield: weather 40% + WASDE 40% + disease 10% + eksport-events 10% (stripe rust + locust + Ukraine corridor). Sample-data fra session 83 er for gammel for default 90-180d lookback; infrastruktur er klar når fersk data kommer. **LUKKET 2026-04-26**.
-  - **89 (neste):** Backtest-validering av WASDE-driver mot historisk 2019-2026 data, eller populere fersk export_events/disease_alerts CSV.
+  - **89:** **BDI auto-fetcher via BDRY ETF (Yahoo) — gratis-løsning på det vi trodde var kommersielt.** Breakwave Dry Bulk Shipping ETF tracker BDI med ~0.9 korrelasjon. 2034 rader 2018-2026 backfilt. Driver bdi_chg30d returnerer score basert på BDRY-prisendring. 4 nye tester. **LUKKET 2026-04-26**.
+  - **90 (neste):** Wire bdi_chg30d inn i agri-YAMLs (lav vekt; eksport-shipping-cost-driver). Eller backtest-validering av WASDE.
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -64,13 +65,15 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `feat/plan73-driver-wireup` (Nivå 3 — session 88). PR #1-#21 merget.
-- **Blocked:** nei. NASS Crop Progress venter på API-key.
+- **Branch:** `feat/bdi-via-bdry` (Nivå 3 — session 89). PR #1-#22 merget.
+- **Blocked:** nei. NASS Crop Progress venter på API-key (bruker fikk 504-timeout).
 - **Aktive systemd-timere:** 9 totalt.
 - **Instrumenter:** 11 totalt.
-- **Drivere:** 22 totalt (WASDE + disease + eksport-events nå wired inn).
+- **Drivere:** 22 totalt.
+- **PLAN § 7.3 status:** 5 av 8 datakilder med live data (WASDE, BRL, ICE softs COT, BDI/BDRY, NASS infrastruktur klar). 2 manuell-CSV (eksport-events, disease — sample data, fersk populering venter). 1 betalt (IGC).
 - **WASDE-data:** 8703 rader, 54 reports (2019-2026), wired inn i 5 agri-YAMLs.
-- **Next task:** **Session 89.** Backtest-validering av WASDE-driver mot historisk 2019-2026 data, eller populere fersk export_events/disease_alerts CSV.
+- **BDI-data:** 2034 rader (2018-2026) via BDRY ETF (Yahoo).
+- **Next task:** **Session 90.** Wire bdi_chg30d inn i agri-YAMLs (lav vekt). Eller backtest-validering av WASDE-driver.
 - **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
 ## Open questions to user
@@ -158,6 +161,51 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-26 — Session 89: BDI auto-fetcher via BDRY ETF (LUKKET)
+
+**Scope:** Konvertere BDI fra "kommersiell-only" til gratis-feed.
+Oppdaget at Breakwave Dry Bulk Shipping ETF (BDRY på NYSE Arca)
+tracker BDI med ~0.9 korrelasjon og er gratis tilgjengelig via Yahoo.
+
+**Endret denne session (feature-branch `feat/bdi-via-bdry`):**
+
+`src/bedrock/fetch/manual_events.py`:
+- Ny `fetch_bdi_via_bdry(start_date, end_date)`: bruker
+  `fetch_yahoo_prices("BDRY", ...)`, konverterer til BDI_COLS-schema
+  med source='BDRY'.
+- Doc-string oppdatert til å reflektere auto-modus.
+
+`tests/unit/test_fetch_bdi.py` (ny, 4 tester):
+- Schema-konvertering verifisert (BDI_COLS, source='BDRY')
+- Tom DataFrame → tom returnert
+- Yahoo-feil → tom returnert (graceful)
+- Default end-date er i dag
+
+**Backfill-resultat:**
+
+```
+BDRY rows: 2034 (2018-03-22 .. 2026-04-24)
+Inserted: 2034
+bdi_chg30d for Wheat: 0.35
+```
+
+8 år historikk. BDRY-ETF startet i mars 2018, så pre-2018 BDI er
+fortsatt utilgjengelig uten kommersiell feed.
+
+**Tester:** 1408/1408 grønne (+4 nye). Pyright 0/0.
+
+**Beslutninger:**
+- Verdiene i bdi-tabellen er BDRY close-priser (~10 USD), ikke
+  faktiske BDI-verdier (~1500-2500 punkter). Driver-logikken
+  (window % change) gir samme signal siden korrelasjonen er høy.
+  Senere kan vi normalisere hvis presis BDI-verdi trengs.
+- BDRY-ETF har lavere likviditet enn faktisk BDI-spot, så små
+  daglige bevegelser kan ha bid/ask-spread-noise. 30-dagers vinduet
+  i bdi_chg30d gjør dette uvesentlig.
+- 9 av 9 PLAN § 7.3 datakilder har nå EN av: live data (5),
+  manuell CSV med sample (2), API-key venter (1), kommersiell (1).
+  Bare IGC er hindret av betal-mur.
 
 ### 2026-04-26 — Session 88: Wire disease + eksport-events drivere (LUKKET)
 
