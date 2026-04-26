@@ -1,0 +1,6 @@
+event_date,country,commodity,event_type,severity,bull_bear,description,source_url
+2023-07-20,INDIA,RICE,EXPORT_BAN,5,BULL,"India bans non-basmati white rice exports — major global supply shock",
+2023-08-25,INDIA,RICE,TARIFF,4,BULL,"India imposes 20% export duty on parboiled rice",
+2024-09-15,IVORY COAST,COCOA,QUOTA,4,BULL,"Ivory Coast cocoa export quota for 2024-25 reduced",
+2024-04-08,INDONESIA,PALM OIL,EXPORT_BAN,5,BULL,"Indonesia palm oil export ban (24-hour version after market reaction)",
+2024-08-30,UKRAINE,WHEAT,QUOTA,3,BULL,"Ukraine grain corridor uncertainty — sporadic shipping disruptions",

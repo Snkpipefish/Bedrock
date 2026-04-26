@@ -412,3 +412,140 @@ ANALOG_OUTCOMES_COLS: tuple[str, ...] = (
     "forward_return_pct",
     "max_drawdown_pct",
 )
+
+
+# ---------------------------------------------------------------------------
+# PLAN § 7.3 datakilder (session 83+)
+# ---------------------------------------------------------------------------
+
+# USDA NASS Crop Progress — ukentlige %-verdier for planted/silking/harvested
+# per crop og state. Auto-fetcher krever NASS QuickStats API-key
+# (BEDROCK_NASS_API_KEY). Manuell CSV-fallback i data/manual/crop_progress.csv.
+TABLE_CROP_PROGRESS = "crop_progress"
+
+DDL_CROP_PROGRESS = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_CROP_PROGRESS} (
+    week_ending  TEXT    NOT NULL,    -- ISO date (søndag som regel)
+    commodity    TEXT    NOT NULL,    -- "CORN", "SOYBEANS", "COTTON", "WHEAT"
+    state        TEXT    NOT NULL,    -- "US TOTAL" eller state-kode
+    metric       TEXT    NOT NULL,    -- "PLANTED", "SILKING", "HARVESTED", "GOOD_EXCELLENT"
+    value_pct    REAL    NOT NULL,    -- 0..100
+    PRIMARY KEY (week_ending, commodity, state, metric)
+)
+"""
+
+CROP_PROGRESS_COLS: tuple[str, ...] = (
+    "week_ending",
+    "commodity",
+    "state",
+    "metric",
+    "value_pct",
+)
+
+
+# WASDE — månedlige USDA estimater (ending stocks, yield, S2U).
+# Auto-fetcher leser fra USDA's konsoliderte CSV (URL i fetcher).
+# Manuell CSV-fallback i data/manual/wasde.csv.
+TABLE_WASDE = "wasde"
+
+DDL_WASDE = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_WASDE} (
+    report_date   TEXT    NOT NULL,    -- WASDE rapport-dato (publication date)
+    marketing_year TEXT   NOT NULL,    -- "2025/26", "2024/25"
+    region        TEXT    NOT NULL,    -- "US", "WORLD"
+    commodity     TEXT    NOT NULL,    -- "CORN", "WHEAT", "SOYBEANS", "COTTON", "SUGAR"
+    metric        TEXT    NOT NULL,    -- "ENDING_STOCKS", "PRODUCTION", "YIELD", "S2U"
+    value         REAL    NOT NULL,    -- enhet varierer per metric (mill bu, %, bu/acre)
+    unit          TEXT    NOT NULL,    -- "MIL_BU", "PCT", "BU_ACRE", "MIL_TONS"
+    PRIMARY KEY (report_date, marketing_year, region, commodity, metric)
+)
+"""
+
+WASDE_COLS: tuple[str, ...] = (
+    "report_date",
+    "marketing_year",
+    "region",
+    "commodity",
+    "metric",
+    "value",
+    "unit",
+)
+
+
+# Eksport-policy events — manuell kuratert kalender for India/Indonesia/
+# Ivory Coast og andre jurisdikasjoner som påvirker globale agri-priser
+# via eksport-restriksjoner, kvoter, eller forbud.
+# Ren manuell CSV — data/manual/export_events.csv.
+TABLE_EXPORT_EVENTS = "export_events"
+
+DDL_EXPORT_EVENTS = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_EXPORT_EVENTS} (
+    event_date   TEXT    NOT NULL,    -- ISO date for hendelsen
+    country      TEXT    NOT NULL,    -- "INDIA", "INDONESIA", "IVORY COAST"
+    commodity    TEXT    NOT NULL,    -- "RICE", "PALM OIL", "COCOA", "SUGAR" etc
+    event_type   TEXT    NOT NULL,    -- "EXPORT_BAN", "QUOTA", "TARIFF", "SUBSIDY_REMOVED"
+    severity     INTEGER NOT NULL,    -- 1-5: 1=mild, 5=major-shock
+    bull_bear    TEXT    NOT NULL,    -- "BULL", "BEAR" (for commodity-prisen)
+    description  TEXT,
+    source_url   TEXT,
+    PRIMARY KEY (event_date, country, commodity, event_type)
+)
+"""
+
+EXPORT_EVENTS_COLS: tuple[str, ...] = (
+    "event_date",
+    "country",
+    "commodity",
+    "event_type",
+    "severity",
+    "bull_bear",
+    "description",
+    "source_url",
+)
+
+
+# Disease/pest-varsler — coffee rust, wheat stripe rust, locust outbreaks etc.
+# Manuell CSV-driven (eksterne services som PestMon/CABI er paid).
+# data/manual/disease_alerts.csv.
+TABLE_DISEASE_ALERTS = "disease_alerts"
+
+DDL_DISEASE_ALERTS = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_DISEASE_ALERTS} (
+    alert_date   TEXT    NOT NULL,
+    region       TEXT    NOT NULL,    -- "BRAZIL", "VIETNAM", "AUSTRALIA" etc
+    commodity    TEXT    NOT NULL,
+    pathogen     TEXT    NOT NULL,    -- "COFFEE_RUST", "STRIPE_RUST", "LOCUST"
+    severity     INTEGER NOT NULL,    -- 1-5
+    yield_impact_pct REAL,            -- estimert yield-tap (kan være null)
+    description  TEXT,
+    source_url   TEXT,
+    PRIMARY KEY (alert_date, region, commodity, pathogen)
+)
+"""
+
+DISEASE_ALERTS_COLS: tuple[str, ...] = (
+    "alert_date",
+    "region",
+    "commodity",
+    "pathogen",
+    "severity",
+    "yield_impact_pct",
+    "description",
+    "source_url",
+)
+
+
+# Baltic Dry Index — global shipping/freight indikator. Påvirker
+# eksport-cost for grains. Auto-fetcher prøver Yahoo BDI-ticker;
+# manuell CSV-fallback (paid feeds som Trading Economics gir bedre data).
+TABLE_BDI = "bdi"
+
+DDL_BDI = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_BDI} (
+    date   TEXT NOT NULL PRIMARY KEY,
+    value  REAL NOT NULL,
+    source TEXT NOT NULL    -- "YAHOO", "MANUAL", "TRADINGECONOMICS"
+)
+"""
+
+BDI_COLS: tuple[str, ...] = ("date", "value", "source")

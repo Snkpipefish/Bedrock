@@ -20,7 +20,8 @@
   - **80:** Sub-fase 12.5+ — gjeld-clearing fortsatt. Backfilt DEXBZUS (USD/BRL), nytt `brl_chg5d`-driver, byttet Coffee+Sugar fra DXY-proxy til ekte BRL. Lagt til Nasdaq som 8. instrument (4103 prices + 631+225 legacy COT). Utvidet positioning-driver med `noncomm_net`/`noncomm_net_pct` for legacy COT (indekser). Compare-script fikset for `key` + `name`-matching (cot-explorer financial bruker key=ticker, agri bruker key=engelsk-navn). **6 → 7 felles signaler vs cot-explorer.** 10 nye tester. **LUKKET 2026-04-26**.
   - **81:** Sub-fase 12.5+ — EURUSD + SP500 som 9. og 10. instrument (FX og indices asset-klasser). Backfilt prices + legacy COT for begge. Bumpet monitor's grade-endring-terskel fra 50% til 80% (bedrock er strengere by design). **LUKKET 2026-04-26**.
   - **82:** Sub-fase 12.5+ — BTC som 11. instrument (crypto-asset-class). Backfilt 4239 prices (BTC-USD 2014-2026) + 420 legacy COT (CME Bitcoin futures 2017-12-onward). Verifisert at cot_legacy-fetcher auto-discoverer alle legacy-instrumenter via YAMLer (Nasdaq + EURUSD + SP500 + BTC). **LUKKET 2026-04-26**.
-  - **83 (neste, blokket på manuell input):** NASS Crop Progress + WASDE krever bruker-handling (API-key registrering + PDF-parser). Branch-protection krever GitHub UI. Andre auto-doable er små (cot_legacy-bridge for agri pre-2010 = lavt verdi). Naturlig pause-punkt for å vente på obs-vinduets data.
+  - **83:** **PLAN § 7.3 datakilder — full infrastruktur.** 5 nye SQLite-tabeller (crop_progress, wasde, export_events, disease_alerts, bdi). 3 nye fetcher-moduler: `nass.py` (USDA QuickStats med API-key + manuell CSV-fallback), `wasde.py` (USDA-CSV + manuell fallback), `manual_events.py` (eksport-events, disease-alerts, BDI ren manuell). 5 nye drivere i `agronomy.py`: crop_progress_stage, wasde_s2u_change, export_event_active, disease_pressure, bdi_chg30d. Sample manuell CSV med kjente events (India rice ban, Indonesia palm oil, Ivory Coast cocoa quota, etc). Dokumentasjon i `data/manual/README.md`. 18 nye tester. **LUKKET 2026-04-26**.
+  - **84 (neste):** Wire de 5 nye agronomy-driverne inn i Corn/Wheat/Cotton/Soybean/Sugar/Coffee YAMLs (vent til mer data foreligger). NASS API-key + WASDE-URL-discovery for å aktivere auto-fetch.
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -58,12 +59,13 @@
 - Session 63 lukket — orchestrator-replay. Ny `AsOfDateStore` (wrapper rundt DataStore som clipper alle getters til ts ≤ as_of_date; outcomes er look-ahead-strict via `ref_date + horizon_days ≤ as_of`). Ny `run_orchestrator_replay` itererer ref_dates med AsOfDateStore + `generate_signals` per dato; populerer score/grade/published på `BacktestSignal`. Per-grade-breakdown beregnes når grade er populert; vises kun i markdown når non-empty. CLI-utvidelse: `--mode outcome|orchestrator --step-days N --direction buy|sell --instruments-dir --max-iterations`. Demo `docs/backtest_2026-04_orchestrator-replay.md` mot Gold 2024 ukentlig: 51 signaler, 42 publisert, hit-rate 58.8%, avg +3.84% (98.8s wall-time, ~2s per iterasjon). 1212/1212 tester (+29 nye fordelt på 2 filer).
 - Session 64 lukket — full 12-mnd Fase 11-rapport. `scripts/backtest_fase11_full.py` kjører orchestrator-replay for Gold + Corn × 30d/90d (step_days=5, direction=buy) og samler i `docs/backtest_fase11_full.md`. Wall-time 4.7 min total. Hovedfunn: (1) Gold er monotont scorende A+/A med 100% hit-rate på 90d (+22.4% avg) — speiler 2025-26-bullmarked. (2) Corn er INVERTERT for buy-direction: A+ -2.38% / -5.67% mens C +1.68% / +6.40% på 30d/90d. Skyldes Corn-rules sma200_align-placeholder under mean-reversion. Må fikses i Fase 6 agri-drivere; ikke Fase 11-blokker. (3) Publish-floor er konservativt for Gold (78%/100%), riktig for Corn (51%/39%). Ingen kode endret — kun rapport-script + output (1212/1212 tester fortsatt grønne).
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
-- **Branch:** `feat/btc-instrument` (Nivå 3 — session 82). PR #1-#15 merget.
-- **Blocked:** Resterende gjeld krever bruker-input (API-key, PDF-parser, GitHub UI). Naturlig pause-punkt.
+- **Branch:** `feat/datakilder-plan-7-3` (Nivå 3 — session 83). PR #1-#16 merget.
+- **Blocked:** nei. Manuelle CSV-er gir umiddelbar funksjonalitet; API-fetchere venter på BEDROCK_NASS_API_KEY (gratis registrering).
 - **Aktive systemd-timere:** 9 totalt.
-- **Instrumenter:** 11 totalt (Gold, Corn, Cotton, Coffee, Soybean, Sugar, Wheat, Nasdaq, EURUSD, SP500, BTC).
-- **Compare overlap:** 7 felles signaler vs cot-explorer (vi matcher alle deres 7 unike).
-- **Next task:** **Session 83.** Vent på obs-vindu-data, eller bruker-aktiverte gjeld-tasks (NASS API-key, WASDE-parser, branch-protection).
+- **Instrumenter:** 11 totalt.
+- **Drivere:** 21 totalt (var 16 ved session 82). 5 nye agronomy-drivere klare for YAML-integration.
+- **PLAN § 7.3 datakilder:** infrastruktur fullt implementert. NASS, WASDE, eksport-events, disease-alerts, BDI alle har tabell + fetcher + driver + tester. Bruker populerer `data/manual/*.csv` for sources uten gratis API.
+- **Next task:** **Session 84.** Wire nye agronomy-drivere inn i agri-YAMLs (Corn/Wheat/Cotton/Soybean/Sugar/Coffee). Aktiver NASS API når key foreligger.
 - **Git-modus:** Nivå 3 (feature-branches + PR) aktivert fra session 66. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt: branch → push → `gh pr create` → squash-merge til main. Branch-protection krever manuell GitHub UI-oppsett av bruker.
 
 ## Open questions to user
@@ -151,6 +153,123 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-26 — Session 83: PLAN § 7.3 datakilder — full infrastruktur (LUKKET)
+
+**Scope:** Implementere alle 8 PLAN § 7.3-datakilder per bruker-direktiv
+("all dateen vi har planlagt blir implementert"). Begrensninger: NASS
+QuickStats krever API-key (manuell registrering); WASDE er PDF/CSV med
+USDA URL som kan endre seg; BDI/disease/eksport-policy har ikke gratis
+API. Strategi: full infrastruktur (DB + fetcher + driver + tester) for
+alle, med manuell CSV-fallback der API-tilgang krever bruker-input.
+
+**Endret denne session (feature-branch `feat/datakilder-plan-7-3`):**
+
+`src/bedrock/data/schemas.py`:
+- 5 nye DDL-er + COLS-tupler:
+  - `TABLE_CROP_PROGRESS` (NASS ukentlig per crop+state+metric)
+  - `TABLE_WASDE` (månedlig per commodity+region+metric)
+  - `TABLE_EXPORT_EVENTS` (manuell event-kalender)
+  - `TABLE_DISEASE_ALERTS` (manuell pest/disease-tracker)
+  - `TABLE_BDI` (Baltic Dry tidsserie)
+
+`src/bedrock/data/store.py`:
+- `_init_schema` oppretter de 5 nye tabellene.
+- Generisk `_append_generic(df, table, cols)` for INSERT OR REPLACE
+  (felles for de nye tabellene).
+- Spesifikke append/get-metoder:
+  - `append_crop_progress` / `get_crop_progress`
+  - `append_wasde` / `get_wasde`
+  - `append_export_events` / `get_export_events` (med commodity/
+    country/from_date filter)
+  - `append_disease_alerts` / `get_disease_alerts`
+  - `append_bdi` / `get_bdi` (returnerer tidsserie)
+
+`src/bedrock/fetch/nass.py` (ny, ~180 linjer):
+- `fetch_crop_progress_api`: USDA NASS QuickStats REST API. Krever
+  `BEDROCK_NASS_API_KEY` env-var. Mapping fra metric-koder til USDA
+  short_desc-strenger. Per-commodity/year-loop med graceful fallback.
+- `fetch_crop_progress_manual`: leser `data/manual/crop_progress.csv`.
+- `fetch_crop_progress`: kombinert — API hvis key, ellers manuell CSV.
+
+`src/bedrock/fetch/wasde.py` (ny, ~120 linjer):
+- `fetch_wasde_api`: prøver kjente USDA URL-er for konsolidert CSV.
+  Kolonne-mapping fra USDA-format til våre WASDE_COLS.
+- `fetch_wasde_manual` + kombinert `fetch_wasde`.
+
+`src/bedrock/fetch/manual_events.py` (ny, ~85 linjer):
+- `fetch_export_events`, `fetch_disease_alerts`, `fetch_bdi` —
+  rene manuell-CSV-fetchere. Schema-validering ved lasting.
+
+`src/bedrock/engine/drivers/agronomy.py` (ny, ~250 linjer):
+- `crop_progress_stage`: percentil av good/excellent-condition.
+  Default `mode=low_is_bull` (yield-risk). USDA-mapping for Corn/
+  Soybean/Wheat/Cotton.
+- `wasde_s2u_change`: % endring i stocks-to-use ratio fra forrige
+  rapport. Trapped 0..1-mapping (lavere S2U = bull).
+- `export_event_active`: severity-basert score for events innen
+  lookback-vinduet. Filter på bull_bear-retning.
+- `disease_pressure`: severity + yield-impact-bonus.
+- `bdi_chg30d`: 30-dagers BDI %-endring. Default `bull_when=negative`
+  (BDI ned = billigere eksport = bull grain-prisen).
+
+`src/bedrock/engine/drivers/__init__.py`:
+- Auto-import oppdatert: `agri, agronomy, analog, currency, macro,
+  positioning, risk, seasonal, structure, trend`.
+
+`tests/unit/test_drivers_agronomy.py` (ny, 18 tester):
+- 4 crop_progress: no-mapping/empty/low-is-bull/high-is-bull.
+- 4 wasde_s2u: dropping/rising/neutral/short-history.
+- 3 export_event: severe/no-events/unknown-instrument.
+- 3 disease_pressure: severe/no-alerts/yield-impact-bonus.
+- 3 bdi_chg30d: no-data/falling/rising.
+- 1 registry-presence.
+
+**Sample manuell data:**
+
+`data/manual/export_events.csv`: 5 kjente historiske events
+(India rice ban 2023, Indonesia palm oil 2024, Ivory Coast cocoa
+quota 2024, India rice tariff, Ukraine grain corridor).
+
+`data/manual/disease_alerts.csv`: 3 prøve-alerts
+(Brazil coffee rust, Australia stripe rust, East Africa locust).
+
+`data/manual/README.md`: dokumentasjon for hvor data hentes,
+schema-eksempler, populerings-workflow.
+
+**Auto-fetch-status:**
+
+| Source | Auto-fetcher | Krever | Fallback |
+|---|---|---|---|
+| NASS Crop Progress | `bedrock.fetch.nass` | BEDROCK_NASS_API_KEY (gratis registrering) | manuell CSV |
+| WASDE | `bedrock.fetch.wasde` | direkte HTTPS til USDA (URL-recovery prøves) | manuell CSV |
+| Eksport-events | — | manuell curation (Reuters/Bloomberg) | manuell CSV |
+| Disease-alerts | — | manuell curation eller paid services | manuell CSV |
+| BDI | — | paid feed (Trading Economics) | manuell CSV |
+
+**Tester:** 1382 → 1400 (+18). 1400/1400 grønne. Pyright 0/0.
+
+**Beslutninger:**
+- Generisk `_append_generic` i DataStore — eliminerer boilerplate for
+  fremtidige tabeller. Schema-validering bevart per-tabell.
+- Manuell CSV-fallback for alle sources, ikke bare paid-only — gjør
+  systemet immediately funksjonelt selv uten API-keys.
+- Drivere returnerer 0.5 (nøytral) ved manglende data, ikke 0.0
+  (defensive). Dette holder agri-instrumentenes total score ikke kollapser
+  hvis NASS/WASDE-data er sparse.
+- USDA-mapping per crop hardkodet i agronomy.py — Coffee/Sugar er
+  ikke i NASS (Brazil-driven). For dem returneres 0.5.
+- BDI bull_when=negative som default fordi PLAN § 7.3 kontekstualiserer
+  BDI som "agri eksport-cost-driver" — høyt BDI gjør US/Brazilian
+  grain-eksport dyrere globalt.
+- Sample data populert med kjente historiske events for å validere
+  end-to-end driver-flow.
+
+**Wire-up til YAMLs utsatt til session 84** — drivere kan nå brukes
+i Corn/Wheat/Cotton/Soybean/Sugar/Coffee YAMLs. Deferred for å holde
+denne PR-en fokusert på infrastruktur. Også: noen drivere returnerer
+0.5 (nøytral) inntil mer manuell data populeres, så lav umiddelbar
+verdi i scoring.
 
 ### 2026-04-26 — Session 82: Sub-fase 12.5+ — BTC + cot_legacy auto-fetch verifikasjon (LUKKET)
 

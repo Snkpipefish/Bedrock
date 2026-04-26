@@ -1,0 +1,4 @@
+alert_date,region,commodity,pathogen,severity,yield_impact_pct,description,source_url
+2024-09-15,BRAZIL,COFFEE,COFFEE_RUST,2,3.0,"Localized Hemileia vastatrix in Minas Gerais — moderate spread",
+2024-12-01,AUSTRALIA,WHEAT,STRIPE_RUST,2,2.5,"Stripe rust detected in WA wheat belt",
+2025-04-15,EAST AFRICA,WHEAT,LOCUST,4,8.0,"Desert locust upsurge in Ethiopia/Kenya/Somalia",
