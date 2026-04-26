@@ -555,8 +555,11 @@ function renderSetupCards(containerId, setups, totalBeforeFilter) {
     const lv = _extractSetupLevels(s) || {};
     const entry = lv.entry;
     const sl = lv.sl;
-    const t1 = lv.tp;
-    const rr = lv.rr;
+    // MAKRO trailing-only: tp/rr er eksplisitt null. Vis det som tekst
+    // istedenfor "–" så kortet er informativt.
+    const isTrailing = (s.horizon || '').toLowerCase() === 'makro' && lv.tp == null;
+    const t1Cell = isTrailing ? '<span class="meta">trailing</span>' : fmt(lv.tp);
+    const rrCell = isTrailing ? '<span class="meta">–</span>' : fmt(lv.rr, 2);
     const dirCls = (s.direction || '').toLowerCase() === 'sell' ? 'dir-sell' : 'dir-buy';
     const gradeCls = `grade-${(s.grade || 'x').replace('+', 'plus').toLowerCase()}`;
     const idx = setups.indexOf(s);
@@ -573,8 +576,8 @@ function renderSetupCards(containerId, setups, totalBeforeFilter) {
       <table class="levels">
         <tr><th>Entry</th><td>${fmt(entry)}</td></tr>
         <tr><th>Stop</th><td>${fmt(sl)}</td></tr>
-        <tr><th>T1</th><td>${fmt(t1)}</td></tr>
-        <tr><th>R:R</th><td>${fmt(rr, 2)}</td></tr>
+        <tr><th>T1</th><td>${t1Cell}</td></tr>
+        <tr><th>R:R</th><td>${rrCell}</td></tr>
       </table>
     </article>`;
   }).join('');
