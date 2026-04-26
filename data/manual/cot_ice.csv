@@ -1,0 +1,4 @@
+report_date,contract,mm_long,mm_short,other_long,other_short,comm_long,comm_short,nonrep_long,nonrep_short,open_interest
+2026-04-22,ice brent crude,180000,95000,40000,32000,520000,610000,18000,21000,1450000
+2026-04-22,ice gasoil,55000,42000,18000,15000,210000,225000,9000,10000,485000
+2026-04-22,ice ttf gas,32000,18000,12000,8000,145000,162000,5000,6000,295000

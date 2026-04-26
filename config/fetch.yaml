@@ -98,3 +98,16 @@ fetchers:
     on_failure: log_and_skip
     table: econ_events
     ts_column: fetched_at
+
+  # Sub-fase 12.5+ session 106 (ADR-007/008): ICE Futures Europe COT.
+  # ICE publiserer fredag 18:30 London = 19:30 Oslo for tirsdag-snapshot.
+  # Vi fyrer 22:30 Oslo med buffer for opplastingstid. Runneren har
+  # smart-skip: hvis DB allerede har siste tirsdag-rad, hopper den
+  # over HTTP-kallet (gratis-API-etiquette).
+  cot_ice:
+    module: bedrock.fetch.cot_ice
+    cron: "30 22 * * 5"          # Fre 22:30 Oslo (etter ICE 19:30 + buffer)
+    stale_hours: 168             # ukentlig
+    on_failure: log_and_skip
+    table: cot_ice
+    ts_column: report_date

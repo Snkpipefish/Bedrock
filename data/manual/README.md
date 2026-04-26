@@ -12,6 +12,7 @@ gratis API-tilgang eller er paid-only.
 | `export_events.csv` | event_date, country, commodity, event_type, severity, bull_bear, description, source_url | News-monitoring (manuelt) — Reuters, Bloomberg, USDA FAS |
 | `disease_alerts.csv` | alert_date, region, commodity, pathogen, severity, yield_impact_pct, description, source_url | PestMon, CABI, FAO Crop Prospects |
 | `bdi.csv` | date, value, source | Trading Economics, Bloomberg, eller manuell daglig registrering |
+| `cot_ice.csv` | report_date, contract, mm_long/short, other_long/short, comm_long/short, nonrep_long/short, open_interest | https://www.ice.com/publicdocs/futures/COTHist{YEAR}.csv (manuell nedlasting hvis prod-host blokkeres) |
 
 ## Format-eksempler
 
@@ -58,6 +59,19 @@ date,value,source
 2025-04-17,1834.0,TRADINGECONOMICS
 ```
 
+### cot_ice.csv
+
+ICE Futures Europe COT (Brent, Gasoil, TTF Natural Gas). Bedrock-canonical
+contract-strenger: `ice brent crude`, `ice gasoil`, `ice ttf gas`. Tall
+matcher CFTC disaggregated-format som ICE publiserer i (samme kolonner
+som `cot_disaggregated`).
+
+```csv
+report_date,contract,mm_long,mm_short,other_long,other_short,comm_long,comm_short,nonrep_long,nonrep_short,open_interest
+2026-04-22,ice brent crude,180000,95000,40000,32000,520000,610000,18000,21000,1450000
+2026-04-22,ice gasoil,55000,42000,18000,15000,210000,225000,9000,10000,485000
+```
+
 ## Workflow for å populere
 
 1. **Daglig/ukentlig**: Sjekk Reuters/Bloomberg agri-news for eksport-policy events. Append-er til `export_events.csv` med severity 1-5.
@@ -74,3 +88,4 @@ date,value,source
 | Eksport-events | — | manuell curation | manuell CSV |
 | Disease-alerts | — | manuell curation (paid services finnes) | manuell CSV |
 | BDI | — | paid feed (Trading Economics, Bloomberg) | manuell CSV |
+| ICE COT | `bedrock.fetch.cot_ice` | direkte HTTPS til ICE COTHist{YEAR}.csv | manuell CSV |

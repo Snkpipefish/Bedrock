@@ -320,6 +320,8 @@ _FETCHER_GROUPS: dict[str, str] = {
     "bdi": "Shipping",
     # Sub-fase 12.5+ session 105 (ADR-007/008):
     "calendar_ff": "Calendar",
+    # Sub-fase 12.5+ session 106 (ADR-007/008): ICE COT.
+    "cot_ice": "Ekstern COT",
 }
 _DEFAULT_GROUP = "Other"
 

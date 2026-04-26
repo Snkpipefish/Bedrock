@@ -19,6 +19,7 @@ Struktur:
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
@@ -28,6 +29,8 @@ from typing import Any
 from bedrock.config.fetch import FetcherSpec
 from bedrock.config.instruments import InstrumentConfig, load_all_instruments
 from bedrock.config.secrets import get_secret
+
+_log = logging.getLogger(__name__)
 
 _FRED_API_KEY_ENV = "FRED_API_KEY"
 _NASS_API_KEY_ENV = "BEDROCK_NASS_API_KEY"
@@ -442,6 +445,77 @@ def run_bdi(
         return store.append_bdi(df)
 
     _safe_run([("BDRY", _do)], result)
+    return result
+
+
+def _previous_tuesday(now: datetime | None = None) -> date:
+    """ICE-COT rapporteres for tirsdag-snapshot, publisert fredag.
+
+    Returnerer siste tirsdag på eller før ``now`` (UTC). Brukes av
+    ``run_cot_ice`` til smart-skip: hvis DB allerede har rad for denne
+    tirsdagen, hopper vi over HTTP-kallet (sparer trafikk mot gratis-
+    kilden).
+    """
+    n = now or datetime.now(timezone.utc)
+    today = n.date()
+    # Mandag=0 ... Søndag=6. Vi vil til siste tirsdag (=1) på eller før i dag.
+    delta = (today.weekday() - 1) % 7
+    return today - timedelta(days=delta)
+
+
+@register_runner("cot_ice")
+def run_cot_ice(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """ICE Futures Europe COT (sub-fase 12.5+ session 106).
+
+    Henter ukentlig CSV (én fil per år) og skriver til ``cot_ice``-
+    tabellen. Ikke instrument-spesifikk; én global fetch dekker alle
+    ICE-listede markeder (Brent, Gasoil, TTF Gas).
+
+    Smart-skip: ICE rapporterer for forrige tirsdag-snapshot (publisert
+    fredag). Hvis DB allerede har rad med ``report_date >=
+    previous_tuesday(now)``, hopper vi over HTTP-kallet — gratis-API-
+    etiquette per memory feedback_free_api_no_parallel.
+    """
+    from bedrock.data.schemas import TABLE_COT_ICE
+    from bedrock.fetch.cot_ice import fetch_cot_ice
+
+    result = FetchRunResult(fetcher_name="cot_ice")
+
+    # Smart-skip-sjekk
+    target_tuesday = _previous_tuesday()
+    latest = None
+    try:
+        latest = store.latest_observation_ts(TABLE_COT_ICE, "report_date")
+    except Exception as exc:
+        _log.warning("cot_ice.smart_skip_lookup_failed error=%s", exc)
+
+    if latest is not None:
+        try:
+            latest_date = datetime.strptime(str(latest)[:10], "%Y-%m-%d").date()
+            if latest_date >= target_tuesday:
+                _log.info(
+                    "cot_ice.up_to_date latest=%s target=%s — skipping HTTP",
+                    latest_date,
+                    target_tuesday,
+                )
+                result.items.append(ItemOutcome(item_id="ice_cot", ok=True, rows_written=0))
+                return result
+        except ValueError:
+            _log.warning("cot_ice.smart_skip_bad_date raw=%r", latest)
+
+    def _do() -> int:
+        df = fetch_cot_ice()
+        if df.empty:
+            return 0
+        return store.append_cot_ice(df)
+
+    _safe_run([("ice_cot", _do)], result)
     return result
 
 
