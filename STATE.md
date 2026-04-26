@@ -276,6 +276,13 @@ signals-all + monitor + compare + server-service. De 9 fetch-timerne
 kjøres antageligvis manuelt eller via annen mekanisme. Bør verifiseres
 i egen oppgave.
 
+**Follow-up commit 04a7d1f (post-105 docs):** PLAN § 7.3 fikk ny
+kolonne `systemd-timer?` som ærlig markerer hvilke fetchere er
+faktisk deployed (kun calendar_ff ✅, andre 9 ⚠). § 7.4 splittet i
+3 subsections (runner-registry-mønster, smart-schedule-prinsipper,
+generert-vs-installert-audit). Aksjonsplan: 9 ⚠-fetchere skal
+verifiseres/installeres før ADR-009 cutover-readiness (session 117).
+
 
 ### 2026-04-27 — Session 104: Sub-fase 12.5+ åpning — docs cleanup + ADR-007 (LUKKET)
 
