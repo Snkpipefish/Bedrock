@@ -179,6 +179,46 @@ def test_agri_rules_accept_dict_form() -> None:
     assert rules.min_score_publish["sell"] == 6.0
 
 
+def test_agri_rules_inverted_asymmetry_for_sell_bias() -> None:
+    """Sugar-mønster: SELL-bias instrument får BUY-floor høyere enn SELL.
+
+    Bekrefter at `_get_min_score_publish` slår opp riktig retning når
+    asymmetrien er invertert (SELL ≤ BUY istedenfor BUY ≤ SELL).
+    """
+    from bedrock.config.instruments import InstrumentConfig, InstrumentMetadata
+    from bedrock.orchestrator.signals import _get_min_score_publish
+    from bedrock.setups.generator import Horizon
+
+    rules = AgriRules(
+        aggregation="additive_sum",
+        max_score=16.0,
+        min_score_publish={"buy": 7.0, "sell": 5.0},  # invertert
+        families={
+            "weather": AgriFamilySpec(
+                weight=2.0,
+                drivers=[DriverSpec(name="mock_full", weight=1.0)],
+            ),
+        },
+        grade_thresholds=AgriGradeThresholds(
+            a_plus=AgriGradeThreshold(min_score=12.0, min_families_active=1),
+            a=AgriGradeThreshold(min_score=10.0, min_families_active=1),
+            b=AgriGradeThreshold(min_score=6.0, min_families_active=1),
+        ),
+    )
+    cfg = InstrumentConfig(
+        instrument=InstrumentMetadata(
+            id="SugarTest",
+            asset_class="softs",
+            ticker="SB",
+        ),
+        rules=rules,
+    )
+    # Agri har ingen horizon-skille — samme floor for SCALP/SWING/MAKRO
+    for horizon in (Horizon.SCALP, Horizon.SWING, Horizon.MAKRO):
+        assert _get_min_score_publish(cfg, horizon, Direction.BUY) == 7.0
+        assert _get_min_score_publish(cfg, horizon, Direction.SELL) == 5.0
+
+
 # ---------------------------------------------------------------------------
 # End-to-end: published-flag respekterer asymmetrisk floor
 # ---------------------------------------------------------------------------

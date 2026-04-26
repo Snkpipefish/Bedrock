@@ -20,18 +20,21 @@ instrument:
 aggregation: weighted_horizon
 
 horizons:
+  # Session 102: asymmetrisk publish-floor. Backtest (session 99): USDJPY
+  # BUY-hr 22.7% vs SELL-hr 12.0% (90d) — +10.7pp BUY-bias (USD-styrke
+  # via rente-spread + carry-trade). Mildere enn equity-indekser.
   SCALP:
     family_weights: {trend: 1.2, positioning: 0.5, macro: 1.0, structure: 1.3, risk: 0.6, analog: 0.3}
     max_score: 4.9
-    min_score_publish: 1.5
+    min_score_publish: {buy: 1.3, sell: 1.8}
   SWING:
     family_weights: {trend: 1.0, positioning: 1.0, macro: 1.2, structure: 1.0, risk: 0.8, analog: 0.8}
     max_score: 5.8
-    min_score_publish: 2.5
+    min_score_publish: {buy: 2.2, sell: 2.9}
   MAKRO:
     family_weights: {trend: 0.8, positioning: 1.2, macro: 1.5, structure: 0.5, risk: 0.6, analog: 1.2}
     max_score: 5.8
-    min_score_publish: 3.5
+    min_score_publish: {buy: 3.1, sell: 3.9}
 
 families:
   trend:

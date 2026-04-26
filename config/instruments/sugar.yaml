@@ -22,7 +22,11 @@ instrument:
 
 aggregation: additive_sum
 max_score: 16
-min_score_publish: 6
+# Session 102: invertert asymmetrisk floor. Backtest (session 99):
+# Sugar BUY-hr 34.9% vs SELL-hr 45.0% (90d) — -10.1pp **SELL-bias**.
+# Eneste agri med strukturell SELL-bias (Brazil over-supply + global
+# substitusjon til HFCS). BUY-floor strenger, SELL lavere.
+min_score_publish: {buy: 7, sell: 5}
 
 families:
   outlook:

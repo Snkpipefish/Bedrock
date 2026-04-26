@@ -10,8 +10,8 @@
     "published": true,
     "setup": {
       "setup_id": "8a69313f2fbf",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "AUDUSD",
         "direction": "buy",
@@ -197,8 +197,8 @@
     "published": false,
     "setup": {
       "setup_id": "ff1aad9b96c6",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "AUDUSD",
         "direction": "sell",
@@ -382,8 +382,8 @@
     "published": true,
     "setup": {
       "setup_id": "b8bfa24881fe",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "AUDUSD",
         "direction": "buy",
@@ -572,8 +572,8 @@
     "published": false,
     "setup": {
       "setup_id": "59c6ba31c7d0",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "AUDUSD",
         "direction": "sell",
@@ -926,8 +926,8 @@
     "published": false,
     "setup": {
       "setup_id": "91294c95aee0",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "AUDUSD",
         "direction": "sell",
@@ -1115,8 +1115,8 @@
     "published": false,
     "setup": {
       "setup_id": "c0344c475848",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Brent",
         "direction": "buy",
@@ -1301,8 +1301,8 @@
     "published": false,
     "setup": {
       "setup_id": "3a5179214f2c",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Brent",
         "direction": "sell",
@@ -1487,8 +1487,8 @@
     "published": true,
     "setup": {
       "setup_id": "ecd512ad2749",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Brent",
         "direction": "buy",
@@ -1678,8 +1678,8 @@
     "published": true,
     "setup": {
       "setup_id": "db16f77d0b8e",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Brent",
         "direction": "sell",
@@ -2195,8 +2195,8 @@
     "published": false,
     "setup": {
       "setup_id": "3ae143d12a09",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Cocoa",
         "direction": "buy",
@@ -2366,8 +2366,8 @@
     "published": true,
     "setup": {
       "setup_id": "67ffb68c3a91",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Cocoa",
         "direction": "sell",
@@ -2537,8 +2537,8 @@
     "published": false,
     "setup": {
       "setup_id": "aeb8b647dc5d",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Cocoa",
         "direction": "buy",
@@ -2709,8 +2709,8 @@
     "published": true,
     "setup": {
       "setup_id": "918bc859fa35",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Cocoa",
         "direction": "sell",
@@ -2879,8 +2879,8 @@
     "published": false,
     "setup": {
       "setup_id": "cb58f433e5db",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Cocoa",
         "direction": "buy",
@@ -3048,8 +3048,8 @@
     "published": true,
     "setup": {
       "setup_id": "625a908665a4",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Cocoa",
         "direction": "sell",
@@ -3214,8 +3214,8 @@
     "published": false,
     "setup": {
       "setup_id": "15ae7b135cdb",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Coffee",
         "direction": "buy",
@@ -3388,8 +3388,8 @@
     "published": true,
     "setup": {
       "setup_id": "0f11acf694f2",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Coffee",
         "direction": "sell",
@@ -3562,8 +3562,8 @@
     "published": false,
     "setup": {
       "setup_id": "207ac4d4907e",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Coffee",
         "direction": "buy",
@@ -3880,8 +3880,8 @@
     "published": false,
     "setup": {
       "setup_id": "465e0d69acf3",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Coffee",
         "direction": "buy",
@@ -4049,8 +4049,8 @@
     "published": true,
     "setup": {
       "setup_id": "7d3c943f8050",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Coffee",
         "direction": "sell",
@@ -4218,8 +4218,8 @@
     "published": true,
     "setup": {
       "setup_id": "0d0c1eb594ff",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Corn",
         "direction": "buy",
@@ -4410,8 +4410,8 @@
     "published": true,
     "setup": {
       "setup_id": "368004fb1cf2",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Corn",
         "direction": "sell",
@@ -4602,8 +4602,8 @@
     "published": true,
     "setup": {
       "setup_id": "539caf06b933",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Corn",
         "direction": "buy",
@@ -4792,8 +4792,8 @@
     "published": true,
     "setup": {
       "setup_id": "43ea6126bbda",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Corn",
         "direction": "sell",
@@ -4982,8 +4982,8 @@
     "published": true,
     "setup": {
       "setup_id": "4bd0d7305574",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Corn",
         "direction": "buy",
@@ -5170,8 +5170,8 @@
     "published": true,
     "setup": {
       "setup_id": "e91154dd0c19",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Corn",
         "direction": "sell",
@@ -5357,8 +5357,8 @@
     "published": true,
     "setup": {
       "setup_id": "aa1b46da1e29",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Cotton",
         "direction": "buy",
@@ -5539,8 +5539,8 @@
     "published": true,
     "setup": {
       "setup_id": "2b5d3e82ac1d",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Cotton",
         "direction": "sell",
@@ -5721,8 +5721,8 @@
     "published": true,
     "setup": {
       "setup_id": "86981309c8d2",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Cotton",
         "direction": "buy",
@@ -5902,8 +5902,8 @@
     "published": true,
     "setup": {
       "setup_id": "d9802663e8b5",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Cotton",
         "direction": "sell",
@@ -6085,8 +6085,8 @@
     "published": true,
     "setup": {
       "setup_id": "3cfa32473b01",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Cotton",
         "direction": "buy",
@@ -6264,8 +6264,8 @@
     "published": true,
     "setup": {
       "setup_id": "d8fdd615cadf",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Cotton",
         "direction": "sell",
@@ -6439,12 +6439,12 @@
     "score": 3.4258033973835804,
     "grade": "A",
     "max_score": 5.9,
-    "min_score_publish": 3.5,
-    "published": false,
+    "min_score_publish": 3.2,
+    "published": true,
     "setup": {
       "setup_id": "82d28450ea12",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "CrudeOil",
         "direction": "buy",
@@ -6625,12 +6625,12 @@
     "score": 3.0594555667598455,
     "grade": "B",
     "max_score": 5.9,
-    "min_score_publish": 3.5,
+    "min_score_publish": 3.8,
     "published": false,
     "setup": {
       "setup_id": "bf0980f49e85",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "CrudeOil",
         "direction": "sell",
@@ -6809,12 +6809,12 @@
     "score": 2.8234816618825693,
     "grade": "A",
     "max_score": 4.9,
-    "min_score_publish": 1.5,
+    "min_score_publish": 1.4,
     "published": true,
     "setup": {
       "setup_id": "5557d9dda7d8",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "CrudeOil",
         "direction": "buy",
@@ -6998,12 +6998,12 @@
     "score": 2.731777302260857,
     "grade": "A",
     "max_score": 4.9,
-    "min_score_publish": 1.5,
+    "min_score_publish": 1.7,
     "published": true,
     "setup": {
       "setup_id": "3ff0483a5443",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "CrudeOil",
         "direction": "sell",
@@ -7187,7 +7187,7 @@
     "score": 3.3528346832133766,
     "grade": "A",
     "max_score": 5.8,
-    "min_score_publish": 2.5,
+    "min_score_publish": 2.3,
     "published": false,
     "setup": null,
     "skip_reason": "build_setup returned None (no asymmetric setup found)",
@@ -7350,7 +7350,7 @@
     "score": 3.243739021965906,
     "grade": "A",
     "max_score": 5.8,
-    "min_score_publish": 2.5,
+    "min_score_publish": 2.8,
     "published": false,
     "setup": null,
     "skip_reason": "build_setup returned None (no asymmetric setup found)",
@@ -7517,8 +7517,8 @@
     "published": false,
     "setup": {
       "setup_id": "2cd634a6c654",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "EURUSD",
         "direction": "buy",
@@ -7704,8 +7704,8 @@
     "published": false,
     "setup": {
       "setup_id": "d54f0c247b45",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "EURUSD",
         "direction": "sell",
@@ -7888,8 +7888,8 @@
     "published": true,
     "setup": {
       "setup_id": "75927dda0402",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "EURUSD",
         "direction": "buy",
@@ -8077,8 +8077,8 @@
     "published": true,
     "setup": {
       "setup_id": "755ff4a33fa4",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "EURUSD",
         "direction": "sell",
@@ -8266,8 +8266,8 @@
     "published": true,
     "setup": {
       "setup_id": "3f80d00f3ae7",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "EURUSD",
         "direction": "buy",
@@ -8456,8 +8456,8 @@
     "published": false,
     "setup": {
       "setup_id": "d61515d760f4",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "EURUSD",
         "direction": "sell",
@@ -8643,8 +8643,8 @@
     "published": false,
     "setup": {
       "setup_id": "6cc9cedf8cda",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "GBPUSD",
         "direction": "buy",
@@ -9650,8 +9650,8 @@
     "published": true,
     "setup": {
       "setup_id": "6c31c3050a04",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Gold",
         "direction": "buy",
@@ -9838,8 +9838,8 @@
     "published": false,
     "setup": {
       "setup_id": "3fda2ff82185",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Gold",
         "direction": "sell",
@@ -10026,8 +10026,8 @@
     "published": true,
     "setup": {
       "setup_id": "962a747af62a",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Gold",
         "direction": "buy",
@@ -10219,8 +10219,8 @@
     "published": true,
     "setup": {
       "setup_id": "fafb483fd101",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Gold",
         "direction": "sell",
@@ -10412,8 +10412,8 @@
     "published": true,
     "setup": {
       "setup_id": "88ba06a2bad0",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Gold",
         "direction": "buy",
@@ -10603,8 +10603,8 @@
     "published": false,
     "setup": {
       "setup_id": "1e0339ce4a76",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Gold",
         "direction": "sell",
@@ -10794,8 +10794,8 @@
     "published": false,
     "setup": {
       "setup_id": "8a1947eadd65",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Nasdaq",
         "direction": "buy",
@@ -11534,8 +11534,8 @@
     "published": false,
     "setup": {
       "setup_id": "337d8fc8918a",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Silver",
         "direction": "buy",
@@ -11722,8 +11722,8 @@
     "published": false,
     "setup": {
       "setup_id": "d2b98ab97a91",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Silver",
         "direction": "sell",
@@ -11908,8 +11908,8 @@
     "published": true,
     "setup": {
       "setup_id": "d0bf0b5f3295",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Silver",
         "direction": "buy",
@@ -12099,8 +12099,8 @@
     "published": true,
     "setup": {
       "setup_id": "e6eef3d6b12f",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Silver",
         "direction": "sell",
@@ -12290,8 +12290,8 @@
     "published": true,
     "setup": {
       "setup_id": "97f15fba33df",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Silver",
         "direction": "buy",
@@ -12480,8 +12480,8 @@
     "published": true,
     "setup": {
       "setup_id": "45c05e3a8683",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Silver",
         "direction": "sell",
@@ -12669,8 +12669,8 @@
     "published": true,
     "setup": {
       "setup_id": "5555e8dc18d0",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Soybean",
         "direction": "buy",
@@ -12853,8 +12853,8 @@
     "published": true,
     "setup": {
       "setup_id": "f8092f733812",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Soybean",
         "direction": "sell",
@@ -13037,8 +13037,8 @@
     "published": true,
     "setup": {
       "setup_id": "719652a4fa27",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Soybean",
         "direction": "buy",
@@ -13221,8 +13221,8 @@
     "published": true,
     "setup": {
       "setup_id": "ffeb5957ba09",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Soybean",
         "direction": "sell",
@@ -13404,8 +13404,8 @@
     "published": true,
     "setup": {
       "setup_id": "dd456ae33312",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Soybean",
         "direction": "buy",
@@ -13586,8 +13586,8 @@
     "published": true,
     "setup": {
       "setup_id": "f96b6b2db67b",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Soybean",
         "direction": "sell",
@@ -13765,8 +13765,8 @@
     "published": true,
     "setup": {
       "setup_id": "2b8207df1f96",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "SP500",
         "direction": "buy",
@@ -14501,12 +14501,12 @@
     "score": 7.461049999999999,
     "grade": "B",
     "max_score": 16.0,
-    "min_score_publish": 6.0,
+    "min_score_publish": 7.0,
     "published": true,
     "setup": {
       "setup_id": "3b08af07825b",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Sugar",
         "direction": "buy",
@@ -14673,12 +14673,12 @@
     "score": 8.13895,
     "grade": "A",
     "max_score": 16.0,
-    "min_score_publish": 6.0,
+    "min_score_publish": 5.0,
     "published": true,
     "setup": {
       "setup_id": "799bd2fe8d49",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Sugar",
         "direction": "sell",
@@ -14845,12 +14845,12 @@
     "score": 7.461049999999999,
     "grade": "B",
     "max_score": 16.0,
-    "min_score_publish": 6.0,
+    "min_score_publish": 7.0,
     "published": true,
     "setup": {
       "setup_id": "37a78e1e5b73",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Sugar",
         "direction": "buy",
@@ -15014,7 +15014,7 @@
     "score": 8.13895,
     "grade": "A",
     "max_score": 16.0,
-    "min_score_publish": 6.0,
+    "min_score_publish": 5.0,
     "published": false,
     "setup": null,
     "skip_reason": "build_setup returned None (no asymmetric setup found)",
@@ -15160,12 +15160,12 @@
     "score": 7.461049999999999,
     "grade": "B",
     "max_score": 16.0,
-    "min_score_publish": 6.0,
+    "min_score_publish": 7.0,
     "published": true,
     "setup": {
       "setup_id": "254674fb129d",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Sugar",
         "direction": "buy",
@@ -15327,12 +15327,12 @@
     "score": 8.13895,
     "grade": "A",
     "max_score": 16.0,
-    "min_score_publish": 6.0,
+    "min_score_publish": 5.0,
     "published": true,
     "setup": {
       "setup_id": "3ff3f4313719",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Sugar",
         "direction": "sell",
@@ -15496,12 +15496,12 @@
     "score": 2.263092619520837,
     "grade": "B",
     "max_score": 5.8,
-    "min_score_publish": 3.5,
+    "min_score_publish": 3.1,
     "published": false,
     "setup": {
       "setup_id": "34bfb94ef6e5",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "USDJPY",
         "direction": "buy",
@@ -15683,7 +15683,7 @@
     "score": 2.366907380479163,
     "grade": "B",
     "max_score": 5.8,
-    "min_score_publish": 3.5,
+    "min_score_publish": 3.9,
     "published": false,
     "setup": null,
     "skip_reason": "build_setup returned None (no asymmetric setup found)",
@@ -15847,7 +15847,7 @@
     "score": 2.438540810754177,
     "grade": "B",
     "max_score": 4.9,
-    "min_score_publish": 1.5,
+    "min_score_publish": 1.3,
     "published": false,
     "setup": null,
     "skip_reason": "build_setup returned None (no asymmetric setup found)",
@@ -16011,7 +16011,7 @@
     "score": 1.7189591892458236,
     "grade": "B",
     "max_score": 4.9,
-    "min_score_publish": 1.5,
+    "min_score_publish": 1.8,
     "published": false,
     "setup": null,
     "skip_reason": "build_setup returned None (no asymmetric setup found)",
@@ -16175,7 +16175,7 @@
     "score": 2.4261852390416743,
     "grade": "B",
     "max_score": 5.8,
-    "min_score_publish": 2.5,
+    "min_score_publish": 2.2,
     "published": false,
     "setup": null,
     "skip_reason": "build_setup returned None (no asymmetric setup found)",
@@ -16339,7 +16339,7 @@
     "score": 2.193814760958326,
     "grade": "B",
     "max_score": 5.8,
-    "min_score_publish": 2.5,
+    "min_score_publish": 2.9,
     "published": false,
     "setup": null,
     "skip_reason": "build_setup returned None (no asymmetric setup found)",
@@ -16507,8 +16507,8 @@
     "published": true,
     "setup": {
       "setup_id": "9d89c2ebeb8c",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Wheat",
         "direction": "buy",
@@ -16704,8 +16704,8 @@
     "published": false,
     "setup": {
       "setup_id": "6b599aaa7ace",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Wheat",
         "direction": "sell",
@@ -17243,8 +17243,8 @@
     "published": true,
     "setup": {
       "setup_id": "2ee41753938a",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Wheat",
         "direction": "buy",
@@ -17437,8 +17437,8 @@
     "published": false,
     "setup": {
       "setup_id": "f982b283c623",
-      "first_seen": "2026-04-26T18:22:40.541496Z",
-      "last_updated": "2026-04-26T18:22:40.541496Z",
+      "first_seen": "2026-04-26T19:22:14.184360Z",
+      "last_updated": "2026-04-26T19:22:14.184360Z",
       "setup": {
         "instrument": "Wheat",
         "direction": "sell",
