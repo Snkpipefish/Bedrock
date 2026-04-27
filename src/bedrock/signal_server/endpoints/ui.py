@@ -330,6 +330,8 @@ _FETCHER_GROUPS: dict[str, str] = {
     "seismic": "Sektor",
     # Sub-fase 12.5+ session 110 (ADR-007/008): Euronext MiFID II COT.
     "cot_euronext": "Ekstern COT",
+    # Sub-fase 12.5+ session 111 (ADR-007/008): Conab Brazil crop estimates.
+    "conab": "USDA",
 }
 _DEFAULT_GROUP = "Other"
 

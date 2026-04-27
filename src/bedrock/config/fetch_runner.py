@@ -657,6 +657,62 @@ def run_comex(
     return result
 
 
+@register_runner("conab")
+def run_conab(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """Conab Brazil monthly crop estimates (sub-fase 12.5+ session 111).
+
+    Henter grains + kaffe-rapporter via PDF (pdftotext primær,
+    pypdf fallback). Ikke instrument-spesifikk; én global fetch
+    dekker alle Brazil-relaterte instrumenter (Soybean, Corn,
+    Coffee).
+
+    Smart-skip: Conab publiserer en gang per måned. Hvis DB allerede
+    har rader fra inneværende måned, hopper runneren over PDF-
+    nedlasting (PDF-er er store, unngå sløsing).
+    """
+    from bedrock.data.schemas import TABLE_CONAB_ESTIMATES
+    from bedrock.fetch.conab import fetch_conab
+
+    result = FetchRunResult(fetcher_name="conab")
+
+    today = datetime.now(timezone.utc).date()
+    month_start = today.replace(day=1)
+    latest = None
+    try:
+        latest = store.latest_observation_ts(TABLE_CONAB_ESTIMATES, "report_date")
+    except Exception as exc:
+        _log.warning("conab.smart_skip_lookup_failed error=%s", exc)
+
+    if latest is not None:
+        try:
+            latest_date = datetime.strptime(str(latest)[:10], "%Y-%m-%d").date()
+            if latest_date >= month_start:
+                _log.info(
+                    "conab.up_to_date latest=%s month_start=%s — skipping PDF",
+                    latest_date,
+                    month_start,
+                )
+                result.items.append(ItemOutcome(item_id="conab", ok=True, rows_written=0))
+                return result
+        except ValueError:
+            _log.warning("conab.smart_skip_bad_date raw=%r", latest)
+
+    def _do() -> int:
+        df = fetch_conab()
+        if df.empty:
+            return 0
+        return store.append_conab_estimates(df)
+
+    _safe_run([("conab", _do)], result)
+    return result
+
+
 @register_runner("cot_euronext")
 def run_cot_euronext(
     spec: FetcherSpec,

@@ -32,6 +32,11 @@ dependencies = [
 
     # CLI
     "click>=8.1",
+
+    # PDF-parsing (sub-fase 12.5+ session 111). pdftotext (poppler-utils)
+    # er primær via subprocess; pypdf er pure-python fallback når
+    # poppler-utils mangler (ADR-007 § 6).
+    "pypdf>=4.0",
 ]
 
 [project.optional-dependencies]

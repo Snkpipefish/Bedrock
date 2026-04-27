@@ -1,0 +1,5 @@
+report_date,commodity,levantamento,safra,production,production_units,area_kha,yield_value,yield_units,yoy_change_pct,mom_change_pct
+2026-04-15,soja,7o,2025/26,179151.6,kt,48472.7,3696,kgha,4.5,
+2026-04-15,milho,7o,2025/26,139571.9,kt,22483.2,6208,kgha,-1.1,
+2026-04-15,algodao,7o,2025/26,3843.2,kt,2041.5,1883,kgha,-5.8,
+2026-04-15,cafe_total,1o,2026,50500.0,ksacas,1850.0,27.3,sacasha,-3.2,

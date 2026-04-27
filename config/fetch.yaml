@@ -157,3 +157,15 @@ fetchers:
     on_failure: log_and_skip
     table: cot_euronext
     ts_column: report_date
+
+  # Sub-fase 12.5+ session 111 (ADR-007/008): Conab Brazil monthly crop
+  # estimates (Soja/Milho/Trigo/Algodão + Café). PDF via poppler-utils
+  # primær + pypdf fallback per ADR-007 § 6. Conab publiserer rundt
+  # 12.-15. hver måned.
+  conab:
+    module: bedrock.fetch.conab
+    cron: "0 20 15 * *"          # 15. i mnd 20:00 Oslo (etter Conab)
+    stale_hours: 720             # månedlig (30d)
+    on_failure: log_and_skip
+    table: conab_estimates
+    ts_column: report_date

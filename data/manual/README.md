@@ -17,6 +17,7 @@ gratis API-tilgang eller er paid-only.
 | `comex_inventory.csv` | metal, date, registered, eligible, total, units | https://metalcharts.org/ eller CME-publiserte daglige stats (kun hvis primær HTTP-kilde feiler) |
 | `seismic_events.csv` | event_id, event_ts, magnitude, latitude, longitude, depth_km, place, region, url | https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week.geojson (manuell hvis USGS ikke tilgjengelig) |
 | `cot_euronext.csv` | report_date, contract, mm_long, mm_short, open_interest | https://live.euronext.com/sites/default/files/commodities_reporting/.../cdwpr_{EBM,EMA,ECO}_*.html (manuell hvis HTML-parser feiler) |
+| `conab_estimates.csv` | report_date, commodity, levantamento, safra, production, production_units, area_kha, yield_value, yield_units, yoy_change_pct, mom_change_pct | https://www.gov.br/conab/.../boletim-da-safra-de-graos + .../safra-de-cafe (PDF; manuell hvis poppler/pypdf feiler) |
 
 ## Format-eksempler
 
@@ -115,3 +116,4 @@ NW2_EPG0_SWO_R48_BCF,2026-04-17,2063,BCF
 | COMEX Inventories | `bedrock.fetch.comex` | metalcharts.org JSON-API (token-basert, ingen key) | manuell CSV |
 | USGS Seismic | `bedrock.fetch.seismic` | USGS GeoJSON feed (M≥4.5 siste 7d, ingen key) | manuell CSV |
 | Euronext COT | `bedrock.fetch.cot_euronext` | Euronext per-produkt HTML-rapporter (requests-basert) | manuell CSV |
+| Conab Brazil | `bedrock.fetch.conab` | gov.br PDF (pdftotext primær, pypdf fallback) | manuell CSV |
