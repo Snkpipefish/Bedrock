@@ -15,6 +15,7 @@ gratis API-tilgang eller er paid-only.
 | `cot_ice.csv` | report_date, contract, mm_long/short, other_long/short, comm_long/short, nonrep_long/short, open_interest | https://www.ice.com/publicdocs/futures/COTHist{YEAR}.csv (manuell nedlasting hvis prod-host blokkeres) |
 | `eia_inventory.csv` | series_id, date, value, units | https://www.eia.gov/petroleum/supply/weekly/ + https://ir.eia.gov/ngs/ngs.html (kun hvis API-key mangler) |
 | `comex_inventory.csv` | metal, date, registered, eligible, total, units | https://metalcharts.org/ eller CME-publiserte daglige stats (kun hvis primær HTTP-kilde feiler) |
+| `seismic_events.csv` | event_id, event_ts, magnitude, latitude, longitude, depth_km, place, region, url | https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week.geojson (manuell hvis USGS ikke tilgjengelig) |
 
 ## Format-eksempler
 
@@ -111,3 +112,4 @@ NW2_EPG0_SWO_R48_BCF,2026-04-17,2063,BCF
 | ICE COT | `bedrock.fetch.cot_ice` | direkte HTTPS til ICE COTHist{YEAR}.csv | manuell CSV |
 | EIA Inventories | `bedrock.fetch.eia_inventories` | EIA Open Data v2 + `BEDROCK_EIA_API_KEY` | manuell CSV |
 | COMEX Inventories | `bedrock.fetch.comex` | metalcharts.org JSON-API (token-basert, ingen key) | manuell CSV |
+| USGS Seismic | `bedrock.fetch.seismic` | USGS GeoJSON feed (M≥4.5 siste 7d, ingen key) | manuell CSV |

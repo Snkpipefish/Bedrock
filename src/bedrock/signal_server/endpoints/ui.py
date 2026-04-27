@@ -326,6 +326,8 @@ _FETCHER_GROUPS: dict[str, str] = {
     "eia_inventories": "Sektor",
     # Sub-fase 12.5+ session 108 (ADR-007/008): COMEX warehouse-inventories.
     "comex": "Sektor",
+    # Sub-fase 12.5+ session 109 (ADR-007/008): USGS seismic events.
+    "seismic": "Sektor",
 }
 _DEFAULT_GROUP = "Other"
 

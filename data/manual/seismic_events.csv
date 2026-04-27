@@ -1,0 +1,3 @@
+event_id,event_ts,magnitude,latitude,longitude,depth_km,place,region,url
+manual_chile_001,2026-04-25T08:30:00Z,6.2,-23.5,-70.4,30.0,Antofagasta region; Chile,Chile / Peru,https://earthquake.usgs.gov/example/manual_chile_001
+manual_sa_001,2026-04-23T14:15:00Z,5.5,-26.8,28.4,15.0,Witwatersrand basin; Sør-Afrika,Sør-Afrika,https://earthquake.usgs.gov/example/manual_sa_001

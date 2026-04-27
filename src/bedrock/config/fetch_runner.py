@@ -657,6 +657,38 @@ def run_comex(
     return result
 
 
+@register_runner("seismic")
+def run_seismic(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """USGS seismic events M≥4.5 siste 7 dager (sub-fase 12.5+ session 109).
+
+    Henter globale events og lagrer alle (med region=None for events
+    utenfor mining-regions). Drivere filtrerer per metall.
+
+    Idempotent på event_id — daglig kjøring oppdaterer event-properties
+    hvis USGS reviderer (vanlig de første 24 timene etter et skjelv).
+    Ingen smart-skip nødvendig: USGS-feeden er liten (~100 events/uke)
+    og refresh-cost er trivialt.
+    """
+    from bedrock.fetch.seismic import fetch_seismic
+
+    result = FetchRunResult(fetcher_name="seismic")
+
+    def _do() -> int:
+        df = fetch_seismic()
+        if df.empty:
+            return 0
+        return store.append_seismic_events(df)
+
+    _safe_run([("seismic", _do)], result)
+    return result
+
+
 @register_runner("calendar_ff")
 def run_calendar_ff(
     spec: FetcherSpec,

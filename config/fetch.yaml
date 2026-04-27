@@ -135,3 +135,14 @@ fetchers:
     on_failure: log_and_skip
     table: comex_inventory
     ts_column: date
+
+  # Sub-fase 12.5+ session 109 (ADR-007/008): USGS seismic events M≥4.5
+  # i mining-regioner. Daglig refresh; USGS oppdaterer feeden hvert
+  # minutt men refresh-cost er trivialt.
+  seismic:
+    module: bedrock.fetch.seismic
+    cron: "0 4 * * *"            # Daglig 04:00 Oslo
+    stale_hours: 30
+    on_failure: log_and_skip
+    table: seismic_events
+    ts_column: event_ts
