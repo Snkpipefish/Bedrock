@@ -61,11 +61,28 @@ _MANUAL_CSV = Path("data/manual/crop_progress.csv")
 _METRIC_FILTERS: dict[str, tuple[tuple[str, str], ...]] = {
     "PLANTED": (("PROGRESS", "PCT PLANTED"),),
     "SILKING": (("PROGRESS", "PCT SILKING"),),
+    "HEADING": (("PROGRESS", "PCT HEADED"),),
+    "BLOOMING": (("PROGRESS", "PCT BLOOMING"),),
+    "SQUARING": (("PROGRESS", "PCT SQUARING"),),
     "HARVESTED": (("PROGRESS", "PCT HARVESTED"),),
     "GOOD_EXCELLENT": (
         ("CONDITION", "PCT GOOD"),
         ("CONDITION", "PCT EXCELLENT"),
     ),
+}
+
+# Per-commodity hvilke metrics er meningsfulle. NASS QuickStats returnerer
+# 400 Bad Request hvis (commodity, statisticcat, unit) ikke eksisterer
+# (f.eks. WHEAT × SILKING). Maser fra USDA Crop Progress definitions:
+# - CORN: planted, silking (blomstring), harvested, good/excellent
+# - SOYBEANS: planted, blooming, harvested, good/excellent
+# - WHEAT: planted, headed (heading), harvested, good/excellent
+# - COTTON: planted, squaring, harvested, good/excellent
+_VALID_METRICS_PER_COMMODITY: dict[str, frozenset[str]] = {
+    "CORN": frozenset({"PLANTED", "SILKING", "HARVESTED", "GOOD_EXCELLENT"}),
+    "SOYBEANS": frozenset({"PLANTED", "BLOOMING", "HARVESTED", "GOOD_EXCELLENT"}),
+    "WHEAT": frozenset({"PLANTED", "HEADING", "HARVESTED", "GOOD_EXCELLENT"}),
+    "COTTON": frozenset({"PLANTED", "SQUARING", "HARVESTED", "GOOD_EXCELLENT"}),
 }
 
 
@@ -111,6 +128,17 @@ def fetch_crop_progress_api(
             filters = _METRIC_FILTERS.get(metric)
             if filters is None:
                 _log.warning("nass.unknown_metric", metric=metric)
+                continue
+
+            # Skip metrics som ikke gjelder for denne commodity (NASS gir
+            # 400 Bad Request på ugyldig kombinasjon).
+            valid = _VALID_METRICS_PER_COMMODITY.get(commodity.upper())
+            if valid is not None and metric not in valid:
+                _log.debug(
+                    "nass.skipping_invalid_combo",
+                    commodity=commodity,
+                    metric=metric,
+                )
                 continue
 
             for year in years:
