@@ -57,13 +57,19 @@ families:
         weight: 0.3   # ICE TTF overlay (cross-region)
         params: {contract: ice ttf gas, metric: mm_net_pct, lookback_weeks: 52}
   macro:
+    # Sub-fase 12.5+ session 107: US Working Natural Gas Storage Lower 48
+    # er primær fundamental for Henry Hub-prising. Lavt lager før vinter =
+    # bullish, høyt overflødig lager = bearish. Tyngst vekt i familien.
     drivers:
       - name: dxy_chg5d
-        weight: 0.6
+        weight: 0.3
         params: {bull_when: negative, window: 5}
       - name: vix_regime
-        weight: 0.4
+        weight: 0.2
         params: {invert: true}
+      - name: eia_stock_change
+        weight: 0.5
+        params: {series_id: NW2_EPG0_SWO_R48_BCF}  # US NG Storage Lower 48
   structure:
     drivers:
       - name: range_position

@@ -52,16 +52,22 @@ families:
         weight: 0.4
         params: {metric: mm_net_pct, lookback_weeks: 52}
   macro:
+    # Sub-fase 12.5+ session 107: US crude inventories er ledende
+    # fundamental også for Brent (US er største importør; EIA-rapport
+    # publiseres tidlig + brukes globalt for global balance-insight).
     drivers:
       - name: real_yield
-        weight: 0.2
+        weight: 0.15
         params: {bull_when: low}
       - name: dxy_chg5d
-        weight: 0.5
+        weight: 0.35
         params: {bull_when: negative, window: 5}
       - name: vix_regime
-        weight: 0.3
+        weight: 0.2
         params: {invert: true}
+      - name: eia_stock_change
+        weight: 0.3
+        params: {series_id: WCESTUS1}  # US Crude Oil Stocks (global proxy)
   structure:
     drivers:
       - name: range_position
