@@ -57,6 +57,7 @@ from bedrock.data.schemas import (
     DDL_IGC,
     DDL_PRICES,
     DDL_SEISMIC_EVENTS,
+    DDL_SHIPPING_INDICES,
     DDL_UNICA_REPORTS,
     DDL_WASDE,
     DDL_WEATHER,
@@ -68,6 +69,7 @@ from bedrock.data.schemas import (
     FUNDAMENTALS_COLS,
     IGC_COLS,
     SEISMIC_EVENTS_COLS,
+    SHIPPING_INDICES_COLS,
     TABLE_ANALOG_OUTCOMES,
     TABLE_BDI,
     TABLE_COMEX_INVENTORY,
@@ -85,6 +87,7 @@ from bedrock.data.schemas import (
     TABLE_IGC,
     TABLE_PRICES,
     TABLE_SEISMIC_EVENTS,
+    TABLE_SHIPPING_INDICES,
     TABLE_UNICA_REPORTS,
     TABLE_WASDE,
     TABLE_WEATHER,
@@ -164,7 +167,54 @@ class DataStore:
             conn.execute(DDL_CONAB_ESTIMATES)
             # Sub-fase 12.5+ session 112 (ADR-008): UNICA Brazil sugar/ethanol.
             conn.execute(DDL_UNICA_REPORTS)
+            # Sub-fase 12.5+ session 113 (ADR-008): Baltic shipping suite
+            # (BDI/BCI/BPI/BSI long-format). Erstatter den gamle `bdi`-
+            # tabellen via idempotent migrasjon under.
+            conn.execute(DDL_SHIPPING_INDICES)
+            self._migrate_bdi_to_shipping_indices(conn)
             conn.commit()
+
+    def _migrate_bdi_to_shipping_indices(self, conn: sqlite3.Connection) -> None:
+        """Engangs-migrasjon: kopier alle `bdi`-rader til `shipping_indices`
+        med index_code='BDI', deretter dropp `bdi`-tabellen.
+
+        Idempotent — sjekker først om gammel tabell finnes; hvis ikke,
+        no-op. Trygt på fresh DB. Kjøres automatisk ved init.
+        """
+        cursor = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (TABLE_BDI,),
+        )
+        if cursor.fetchone() is None:
+            return  # Ingen gammel bdi-tabell → no-op
+
+        # Tell rader før migrasjon (for verifisering)
+        n_before = conn.execute(f"SELECT COUNT(*) FROM {TABLE_BDI}").fetchone()[0]
+
+        # Idempotent kopiering: INSERT OR IGNORE i tilfelle delvis kjørt
+        # tidligere (skal ikke skje, men forsvarlig).
+        conn.execute(
+            f"""
+            INSERT OR IGNORE INTO {TABLE_SHIPPING_INDICES} (index_code, date, value, source)
+            SELECT 'BDI', date, value, source FROM {TABLE_BDI}
+            """
+        )
+
+        # Verifiser at minst like mange rader nå finnes for BDI som vi
+        # hadde før (kan være flere hvis migrasjonen ble kjørt flere
+        # ganger, men det er INSERT OR IGNORE så det er idempotent).
+        n_after = conn.execute(
+            f"SELECT COUNT(*) FROM {TABLE_SHIPPING_INDICES} WHERE index_code='BDI'"
+        ).fetchone()[0]
+
+        if n_after < n_before:
+            raise RuntimeError(
+                f"bdi → shipping_indices migrasjon: tapte rader "
+                f"(før={n_before}, etter={n_after}). Aborterer."
+            )
+
+        # Dropp gammel tabell først etter at vi har verifisert kopi.
+        conn.execute(f"DROP TABLE {TABLE_BDI}")
 
     # ------------------------------------------------------------------
     # Prices
@@ -1487,22 +1537,85 @@ class DataStore:
             df["report_date"] = pd.to_datetime(df["report_date"])
         return df
 
-    def append_bdi(self, df: pd.DataFrame) -> int:
-        return self._append_generic(df, TABLE_BDI, BDI_COLS)
+    def append_shipping_indices(self, df: pd.DataFrame) -> int:
+        """Skriv shipping-index-rader til ``shipping_indices``-tabellen.
 
-    def get_bdi(self, last_n: int | None = None) -> pd.Series:
-        """Returner BDI-tidsserie sortert ASC. Kaster KeyError hvis tom."""
-        query = f"SELECT date, value FROM {TABLE_BDI} ORDER BY date ASC"
+        Schema: ``SHIPPING_INDICES_COLS`` — (index_code, date, value, source).
+        Idempotent på (index_code, date) via INSERT OR REPLACE. Returnerer
+        antall rader skrevet.
+
+        Erstatter ``append_bdi`` (sub-fase 12.5+ session 113). En tynn
+        legacy-wrapper finnes på ``append_bdi`` for BDI-only-bruk.
+        """
+        return self._append_generic(df, TABLE_SHIPPING_INDICES, SHIPPING_INDICES_COLS)
+
+    def get_shipping_index(
+        self,
+        index_code: str,
+        last_n: int | None = None,
+    ) -> pd.Series:
+        """Returner verdi-tidsserie for én shipping-indeks (BDI/BCI/BPI/BSI).
+
+        Sortert ASC på date. Kaster ``KeyError`` hvis ingen rader for
+        ``index_code``. Drivere må håndtere det (returnere 0.5 nøytral).
+
+        Erstatter ``get_bdi`` (sub-fase 12.5+ session 113); ``get_bdi``
+        beholdes som legacy-wrapper med ``index_code='BDI'``.
+        """
+        code = index_code.upper()
+        query = (
+            f"SELECT date, value FROM {TABLE_SHIPPING_INDICES} "
+            f"WHERE index_code = ? ORDER BY date ASC"
+        )
         with self._connect() as conn:
-            df = pd.read_sql(query, conn)
+            df = pd.read_sql(query, conn, params=(code,))
         if df.empty:
-            raise KeyError("No BDI data")
+            raise KeyError(f"No shipping_indices data for index_code={code!r}")
         df["date"] = pd.to_datetime(df["date"])
         series = df.set_index("date")["value"].astype("float64")
         series.name = None
         if last_n is None:
             return series
         return series.tail(last_n)
+
+    def has_shipping_index(self, index_code: str | None = None) -> bool:
+        """Test-hjelper: True hvis det finnes minst én rad.
+
+        Hvis ``index_code`` gitt, sjekker kun for den koden. Ellers
+        sjekker hele tabellen.
+        """
+        with self._connect() as conn:
+            if index_code is None:
+                cursor = conn.execute(f"SELECT 1 FROM {TABLE_SHIPPING_INDICES} LIMIT 1")
+            else:
+                cursor = conn.execute(
+                    f"SELECT 1 FROM {TABLE_SHIPPING_INDICES} WHERE index_code = ? LIMIT 1",
+                    (index_code.upper(),),
+                )
+            return cursor.fetchone() is not None
+
+    # ----- Legacy BDI-delegates (deprecated; fjernes i C4) ------------
+
+    def append_bdi(self, df: pd.DataFrame) -> int:
+        """Legacy-wrapper. Forventer ``BDI_COLS`` (date, value, source)
+        og forfremmer til shipping_indices-schema med index_code='BDI'.
+        Vil bli fjernet etter session 113 driver-rename.
+        """
+        if df.empty:
+            return 0
+        prepared = df[list(BDI_COLS)].copy()
+        prepared["index_code"] = "BDI"
+        prepared = prepared[list(SHIPPING_INDICES_COLS)]
+        return self.append_shipping_indices(prepared)
+
+    def get_bdi(self, last_n: int | None = None) -> pd.Series:
+        """Legacy-wrapper for ``get_shipping_index('BDI')``. Vil bli
+        fjernet etter session 113 driver-rename.
+        """
+        try:
+            return self.get_shipping_index("BDI", last_n=last_n)
+        except KeyError as exc:
+            raise KeyError("No BDI data") from exc
 
     # ------------------------------------------------------------------
     # Økonomisk kalender (sub-fase 12.5+ session 105)

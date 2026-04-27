@@ -1132,3 +1132,66 @@ class UnicaReportRow(BaseModel):
     ethanol_total_yoy_pct: float | None = None
 
     model_config = ConfigDict(extra="forbid")
+
+
+# ---------------------------------------------------------------------------
+# Shipping indices — Baltic Dry Index + sub-indekser (sub-fase 12.5+ session 113)
+# ---------------------------------------------------------------------------
+#
+# Long-format tabell for hele Baltic-suiten:
+#   BDI = Baltic Dry Index (composite tørrbulk)
+#   BCI = Baltic Capesize Index (kull, jernmalm)
+#   BPI = Baltic Panamax Index (korn, kull) — primær for grain-eksport
+#   BSI = Baltic Supramax Index (korn, stål, fosfat)
+#
+# Erstatter den gamle `bdi`-tabellen (session 89) som kun lagret BDI-verdier.
+# Long-format ble valgt over wide-format fordi (a) det matcher
+# fundamentals-mønsteret (én rad per (series_id, date)), (b) det er
+# trivielt utvidbart med nye indekser uten schema-endring, (c) sparse
+# data er naturlig håndtert (BCI/BPI/BSI starter ofte fra manuell CSV
+# mens BDI har full Yahoo-historikk).
+#
+# Migration: ved DataStore-init, hvis `bdi`-tabellen eksisterer kopieres
+# alle rader til shipping_indices med index_code='BDI', deretter droppes
+# `bdi`. Idempotent — kjører kun én gang.
+
+TABLE_SHIPPING_INDICES = "shipping_indices"
+
+DDL_SHIPPING_INDICES = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_SHIPPING_INDICES} (
+    index_code TEXT NOT NULL,    -- 'BDI', 'BCI', 'BPI', 'BSI'
+    date       TEXT NOT NULL,    -- ISO YYYY-MM-DD
+    value      REAL NOT NULL,
+    source     TEXT NOT NULL,    -- 'BDRY', 'STOOQ', 'MANUAL', 'TRADINGECONOMICS'
+    PRIMARY KEY (index_code, date)
+)
+"""
+
+SHIPPING_INDICES_COLS: tuple[str, ...] = ("index_code", "date", "value", "source")
+
+_VALID_SHIPPING_INDEX_CODES = frozenset({"BDI", "BCI", "BPI", "BSI"})
+
+
+class ShippingIndexRow(BaseModel):
+    """Én daglig observasjon av en Baltic-shipping-indeks.
+
+    `index_code` aksepterer foreløpig kun BDI/BCI/BPI/BSI. Schema er
+    utvidbart (legg til nye koder i ``_VALID_SHIPPING_INDEX_CODES``).
+    """
+
+    index_code: str
+    date: date
+    value: float
+    source: str
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("index_code")
+    @classmethod
+    def _validate_index_code(cls, v: str) -> str:
+        v_upper = v.upper()
+        if v_upper not in _VALID_SHIPPING_INDEX_CODES:
+            raise ValueError(
+                f"index_code must be one of {sorted(_VALID_SHIPPING_INDEX_CODES)}, got {v!r}"
+            )
+        return v_upper
