@@ -1332,6 +1332,71 @@ Per din bekreftelse: evalueres subjektivt + logg. Men minimum:
 - Siste 20 setups manuelt inspisert: entry-nivå gir mening, TP ved reelt nivå, R:R ≥ horisont-min
 - Bedrock-bot log viser 0 tilfeller av "agri TP overridden" (bug-fix fungerer)
 - Signal-diff mellom gammel og ny pipeline forklarbar (ikke tilfeldig støy)
+- **Sub-fase 12.6-konvergens** (ny krav per ADR-009 session 117):
+  ≥2 iterasjoner med rebalansert YAML der re-harvest viser
+  scoring-forbedring; setup-walker P&L positiv risk-justert på minst
+  4 av 6 (asset-klasse, retning)-kombinasjoner
+
+### 12.5+ Fetcher-port-strategi — LUKKET 2026-04-27
+
+Sessions 104-117. Tag `v0.12.5-fetch-port-complete`. Alle 11 ikke-
+portede cot-explorer-fetchere fra § 7.5 portet til bedrock-strukturen
+(sessions 105-115), AsOfDateStore utvidet med Phase A-C-proxy-getters
++ Phase D backtest-infrastruktur levert (session 116), ADR-009 låser
+in cutover-readiness-status (session 117). Se ADR-008 for per-fetcher
+mapping og ADR-009 for sluttvurdering.
+
+### 12.6 Data-driven rebalansering — ÅPEN 2026-04-27
+
+Ny sub-fase mellom 12.5+ og Fase 13 per ADR-009. Bruker harvester+
+analyzer-infrastrukturen fra session 116 til empirisk å rebalansere
+scoring-systemet før cutover.
+
+**Scope:**
+
+1. **Detached harvest** (sessions 118+): full historisk
+   `driver_observations` + `feature_snapshots` + `signal_setups` over
+   ≥10 års historikk for alle 22 instrumenter × 3 horisonter ×
+   2 retninger via `scripts/run_full_history_harvest.sh`. Kjøres
+   detached — ~24-35 timer per komplett harvest. Resumable.
+
+2. **Analyzer-utvidelser:**
+   - `analyze_driver_performance.py`: per-driver IC, kvartil-hit-
+     rate, monotonisitet (allerede levert session 116)
+   - `analyze_cross_correlations.py`: forward-looking IC-matrise
+     prediktor × target (allerede levert session 116)
+   - **Sesong-bucketing:** IC per kalenderkvartal — fanger sykler
+     (Sugar pre/post Brazil-høst, Wheat pre/post US-planting,
+     energi sesongsyklus, FX-rentesyklus)
+   - **Lead-lag-IC:** driver_value(t) vs forward_return ved lag 0,
+     14, 30, 60d — driver kan predikere lengre frem på SWING/MAKRO
+     enn SCALP
+   - **Setup-walker** (12.6.b): walker prisene forover dag-for-dag
+     for hver setup, avgjør TP-hit / SL-hit / timeout / break-even,
+     skriver til ny `setup_outcomes`-tabell. Gir ekte P&L-distri-
+     busjon, ikke bare hit-rate
+
+3. **YAML-vekt-rebalansering:** basert på empiri, IKKE skjønn.
+   Drivere med median |IC| < 0.05 og monotonisitet < 0.4 vurderes
+   for vekt-reduksjon eller fjerning. Drivere med median |IC| > 0.10
+   og monotonisitet > 0.7 kan vekt-økes.
+
+4. **Iterer:** re-harvest delsett etter rebalansering → bekreft
+   forbedring → ny rebalansering. Til konvergens.
+
+5. **Empirisk validering av Phase A-C-drivere:** når Phase A-C-
+   data har akkumulert ≥1 mnd, kjør spike-mode (zero-out) for hver
+   ny driver via `backtest_phase_d_session116.py --mode spike`.
+   Resultat avgjør om driver beholdes / vekt-justeres / fjernes.
+
+6. **News_intel + crypto_sentiment driver-aktivering:** vurderes
+   etter ≥1 mnds data + IC-analyse fra harvest. Maks 0.1 vekt i
+   første runde per ADR-007 § 5.
+
+**Test-krav:** harvester + analyzer er resumable (PRIMARY KEY på
+alle nye tabeller); analyzer-output reproducerer session 99-baseline
+± 1pp; minst én rebalansering-iterasjon viser positiv ∆IC på ≥1
+high-confidence-driver.
 
 ---
 
@@ -1353,7 +1418,7 @@ Hver fase avsluttes med testing + commit. Ingen fase starter før forrige er gr�
 | **9** | UI: 4 faner + admin-editor. Erstatter eksisterende HTML. | 1-2 uker | Visuell verifisering + signal-visning-tester |
 | **10** | Analog-matching: K-NN, per asset-klasse, outcome-labels, integrer i scoring + UI | 1 uke | Backtest av analog-driver mot forward-return |
 | **11** | Backtest-rammeverk + 12 måneder historikk-replay (CLI). UI-fane utsatt etter Fase 13 (bruker-beslutning 2026-04-25). | 1 uke | Output: rapport over signal-performance |
-| **12** | Parallell-drift + sub-fase 12.5 debt-rydding (drivere før instrumenter) + sub-fase 12.5+ fetch-port (§ 7.5, sessions 105-117) | 2 uker observasjon + 14-15 sessions debt | Cutover-kriterier møtt |
+| **12** | Parallell-drift + sub-fase 12.5 debt-rydding (drivere før instrumenter) + sub-fase 12.5+ fetch-port (§ 7.5, sessions 105-117) + sub-fase 12.6 data-driven rebalansering (sessions 118+) | 2 uker observasjon + 14-15 sessions debt + N sessions rebalansering | Cutover-kriterier møtt + sub-fase 12.6-konvergens |
 | **13** | Cutover: skru av gamle timers (cot-explorer + scalp_edge), install systemd-units, gå live | 1 dag | Alt grønt |
 
 Totalt: ~14-18 uker. Kan parallelliseres noe (data-lag og engine kan jobbes samtidig).
@@ -1393,15 +1458,22 @@ Totalt: ~14-18 uker. Kan parallelliseres noe (data-lag og engine kan jobbes samt
 
 Fase 0-11 fullført. Fase 12 åpen — parallell-drift pauset, sub-fase 12.5
 (debt-rydding) gjennomført sessions 70-103. Sub-fase 12.5+ (sessions 104-117)
-porter de 11 ikke-portede cot-explorer-fetcherne inn i bedrock — se § 7.5.
+portet de 11 ikke-portede cot-explorer-fetcherne + leverte Phase D backtest-
+infrastruktur — **LUKKET 2026-04-27** med tag `v0.12.5-fetch-port-complete`.
 
-Aktivt nå (sessions 104-117):
-1. Session 104: docs-cleanup (PLAN § 3.1 mappetre, § 7.5 ny, ADR-007 strategi)
-2. Sessions 105-115: én fetcher per session (calendar_ff → crypto_sentiment)
-3. Sessions 116-117: backtest-validering + ADR-009 cutover-readiness
+Sub-fase 12.6 (sessions 118+) ÅPEN: data-driven rebalansering før Fase 13
+cutover. Per ADR-009 skal vi bygge empirisk grunnlag for YAML-vekt-justeringer
+i stedet for å låse inn dagens skjønnsbaserte vekter. Harvester+analyzer-
+infrastruktur fra session 116 er fundamentet — full historisk harvest startet
+detached fra session 117.
 
-Etter sub-fase 12.5+: re-aktiver observasjonsvinduet (parallell-drift sub-session
-68) før Fase 13 cutover.
+Aktivt nå (sessions 118+):
+1. Vente på + monitorere harvest-progress (~24-35 timer)
+2. Analyzer-utvidelser: sesong-bucketing, lead-lag-IC, setup-walker
+3. YAML-rebalansering basert på empiri
+4. Iterer til konvergens
+5. Etter sub-fase 12.6: re-aktiver observasjonsvinduet (parallell-drift sub-
+   session 68) før Fase 13 cutover.
 
 ---
 
