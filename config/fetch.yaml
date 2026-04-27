@@ -123,3 +123,15 @@ fetchers:
     on_failure: log_and_skip
     table: eia_inventory
     ts_column: date
+
+  # Sub-fase 12.5+ session 108 (ADR-007/008): COMEX warehouse-inventories
+  # for gull/sølv/kobber via metalcharts.org's JSON-API. Daglig publisering
+  # T-1; smart-skip i runneren hopper HTTP hvis DB allerede har siste
+  # børsdag.
+  comex:
+    module: bedrock.fetch.comex
+    cron: "0 22 * * 1-5"         # Mon-Fri 22:00 Oslo (etter COMEX-close + buffer)
+    stale_hours: 30              # daglig
+    on_failure: log_and_skip
+    table: comex_inventory
+    ts_column: date

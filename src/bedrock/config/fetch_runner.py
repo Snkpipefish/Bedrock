@@ -589,6 +589,74 @@ def run_eia_inventories(
     return result
 
 
+def _previous_business_day(now: datetime | None = None) -> date:
+    """COMEX rapporterer T-1: man-fre publiseres data for forrige børsdag.
+
+    Returnerer siste mandag-fredag på eller før gårsdagen (UTC). Brukt av
+    ``run_comex`` til smart-skip.
+    """
+    n = now or datetime.now(timezone.utc)
+    today = n.date()
+    target = today - timedelta(days=1)
+    while target.weekday() >= 5:
+        target = target - timedelta(days=1)
+    return target
+
+
+@register_runner("comex")
+def run_comex(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """COMEX warehouse-inventories (sub-fase 12.5+ session 108).
+
+    Henter daglige stocks for gull/sølv/kobber fra metalcharts.org.
+    Ikke instrument-spesifikk; én global fetch dekker alle metals-
+    instrumenter.
+
+    Smart-skip: COMEX rapporterer T-1 daglig (man-fre). Hvis DB
+    allerede har rader med ``date >= forrige børsdag``, hopper
+    runneren over HTTP-kallet.
+    """
+    from bedrock.data.schemas import TABLE_COMEX_INVENTORY
+    from bedrock.fetch.comex import fetch_comex
+
+    result = FetchRunResult(fetcher_name="comex")
+
+    target = _previous_business_day()
+    latest = None
+    try:
+        latest = store.latest_observation_ts(TABLE_COMEX_INVENTORY, "date")
+    except Exception as exc:
+        _log.warning("comex.smart_skip_lookup_failed error=%s", exc)
+
+    if latest is not None:
+        try:
+            latest_date = datetime.strptime(str(latest)[:10], "%Y-%m-%d").date()
+            if latest_date >= target:
+                _log.info(
+                    "comex.up_to_date latest=%s target=%s — skipping HTTP",
+                    latest_date,
+                    target,
+                )
+                result.items.append(ItemOutcome(item_id="comex", ok=True, rows_written=0))
+                return result
+        except ValueError:
+            _log.warning("comex.smart_skip_bad_date raw=%r", latest)
+
+    def _do() -> int:
+        df = fetch_comex()
+        if df.empty:
+            return 0
+        return store.append_comex_inventory(df)
+
+    _safe_run([("comex", _do)], result)
+    return result
+
+
 @register_runner("calendar_ff")
 def run_calendar_ff(
     spec: FetcherSpec,

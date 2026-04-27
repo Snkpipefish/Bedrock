@@ -14,6 +14,7 @@ gratis API-tilgang eller er paid-only.
 | `bdi.csv` | date, value, source | Trading Economics, Bloomberg, eller manuell daglig registrering |
 | `cot_ice.csv` | report_date, contract, mm_long/short, other_long/short, comm_long/short, nonrep_long/short, open_interest | https://www.ice.com/publicdocs/futures/COTHist{YEAR}.csv (manuell nedlasting hvis prod-host blokkeres) |
 | `eia_inventory.csv` | series_id, date, value, units | https://www.eia.gov/petroleum/supply/weekly/ + https://ir.eia.gov/ngs/ngs.html (kun hvis API-key mangler) |
+| `comex_inventory.csv` | metal, date, registered, eligible, total, units | https://metalcharts.org/ eller CME-publiserte daglige stats (kun hvis primær HTTP-kilde feiler) |
 
 ## Format-eksempler
 
@@ -109,3 +110,4 @@ NW2_EPG0_SWO_R48_BCF,2026-04-17,2063,BCF
 | BDI | — | paid feed (Trading Economics, Bloomberg) | manuell CSV |
 | ICE COT | `bedrock.fetch.cot_ice` | direkte HTTPS til ICE COTHist{YEAR}.csv | manuell CSV |
 | EIA Inventories | `bedrock.fetch.eia_inventories` | EIA Open Data v2 + `BEDROCK_EIA_API_KEY` | manuell CSV |
+| COMEX Inventories | `bedrock.fetch.comex` | metalcharts.org JSON-API (token-basert, ingen key) | manuell CSV |

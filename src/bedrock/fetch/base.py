@@ -34,11 +34,21 @@ def http_get_with_retry(
     params: dict[str, str] | None = None,
     timeout: float = 30.0,
     attempts: int = 3,
+    headers: dict[str, str] | None = None,
 ) -> requests.Response:
     """GET med 3 retries + eksponentiell backoff på `RequestException`.
 
     Reiser siste exception hvis alle forsøk feiler. 4xx-responser returneres
     som-er (kaster ikke) — caller må selv sjekke `response.status_code`.
+
+    Args:
+        url: URL som skal hentes.
+        params: query-string-parametre (sendes via requests).
+        timeout: HTTP-timeout sekunder.
+        attempts: antall retry-forsøk ved RequestException.
+        headers: HTTP-headers (User-Agent, custom auth-headers etc.).
+            Lagt til i sub-fase 12.5+ session 108 for å støtte fetchers
+            som krever custom headers (f.eks. metalcharts X-MC-Token).
     """
     retrying = Retrying(
         stop=stop_after_attempt(attempts),
@@ -49,7 +59,7 @@ def http_get_with_retry(
     for attempt in retrying:
         with attempt:
             _log.debug("http_get url=%s params=%s", url, params)
-            response = requests.get(url, params=params, timeout=timeout)
+            response = requests.get(url, params=params, timeout=timeout, headers=headers)
             # raise_for_status NOT called her — caller vurderer status
             return response
     # Teoretisk uoppnåelig pga reraise=True, men stiller pyright fornøyd.
