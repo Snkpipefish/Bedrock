@@ -50,9 +50,12 @@ def sma200_align(store: Any, instrument: str, params: dict) -> float:
     tf = params.get("tf", "D1")
     try:
         prices = store.get_prices(instrument, tf=tf, lookback=_SMA_WINDOW + 50)
+    except KeyError as exc:
+        _log.debug("sma200_align.prices_unavailable", instrument=instrument, tf=tf, error=str(exc))
+        return 0.0
     except Exception as exc:
         _log.warning(
-            "sma200_align.prices_unavailable", instrument=instrument, tf=tf, error=str(exc)
+            "sma200_align.prices_fetch_failed", instrument=instrument, tf=tf, error=str(exc)
         )
         return 0.0
 
@@ -113,8 +116,11 @@ def momentum_z(store: Any, instrument: str, params: dict) -> float:
 
     try:
         prices = store.get_prices(instrument, tf=tf, lookback=window + 50)
+    except KeyError as exc:
+        _log.debug("momentum_z.prices_unavailable", instrument=instrument, tf=tf, error=str(exc))
+        return 0.0
     except Exception as exc:
-        _log.warning("momentum_z.prices_unavailable", instrument=instrument, tf=tf, error=str(exc))
+        _log.warning("momentum_z.prices_fetch_failed", instrument=instrument, tf=tf, error=str(exc))
         return 0.0
 
     if len(prices) < window + 1:

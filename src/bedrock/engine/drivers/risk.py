@@ -92,9 +92,17 @@ def vol_regime(store: Any, instrument: str, params: dict) -> float:
 
     try:
         ohlc = store.get_prices_ohlc(instrument, tf=tf, lookback=lookback + period + 10)
+    except KeyError as exc:
+        _log.debug(
+            "vol_regime.prices_unavailable",
+            instrument=instrument,
+            tf=tf,
+            error=str(exc),
+        )
+        return 0.0
     except Exception as exc:
         _log.warning(
-            "vol_regime.prices_unavailable",
+            "vol_regime.prices_fetch_failed",
             instrument=instrument,
             tf=tf,
             error=str(exc),

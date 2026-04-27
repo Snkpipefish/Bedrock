@@ -166,7 +166,7 @@ def _load_metric_series(
     try:
         df = store.get_cot(contract, report=report, last_n=lookback + 1)
     except KeyError:
-        _log.warning(
+        _log.debug(
             "positioning.cot_data_missing",
             instrument=instrument,
             contract=contract,
@@ -313,7 +313,7 @@ def _load_ice_metric_series(
     try:
         df = store.get_cot_ice(contract, last_n=lookback + 1)
     except KeyError:
-        _log.warning("cot_ice.data_missing contract=%s", contract)
+        _log.debug("cot_ice.data_missing contract=%s", contract)
         return None
     except Exception as exc:
         _log.warning("cot_ice.fetch_failed contract=%s error=%s", contract, exc)
@@ -402,7 +402,7 @@ def _load_euronext_metric_series(
     try:
         df = store.get_cot_euronext(contract, last_n=lookback + 1)
     except KeyError:
-        _log.warning("cot_euronext.data_missing contract=%s", contract)
+        _log.debug("cot_euronext.data_missing contract=%s", contract)
         return None
     except Exception as exc:
         _log.warning("cot_euronext.fetch_failed contract=%s error=%s", contract, exc)

@@ -450,7 +450,7 @@ def conab_yoy(store: Any, instrument: str, params: dict) -> float:
     try:
         df = store.get_conab_estimates(str(commodity), last_n=1)
     except KeyError:
-        _log.warning("conab_yoy.data_missing", instrument=instrument, commodity=commodity)
+        _log.debug("conab_yoy.data_missing", instrument=instrument, commodity=commodity)
         return 0.0
     except Exception as exc:
         _log.warning("conab_yoy.fetch_failed", instrument=instrument, error=str(exc))
@@ -539,7 +539,7 @@ def unica_change(store: Any, instrument: str, params: dict) -> float:
         return 0.0
 
     if df.empty:
-        _log.warning("unica_change.no_data", instrument=instrument)
+        _log.debug("unica_change.no_data", instrument=instrument)
         return 0.0
 
     last = df.iloc[0]

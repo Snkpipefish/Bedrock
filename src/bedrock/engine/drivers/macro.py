@@ -91,7 +91,7 @@ def real_yield(store: Any, instrument: str, params: dict) -> float:
         nominal = store.get_fundamentals(nominal_id)
         inflation = store.get_fundamentals(inflation_id)
     except KeyError as exc:
-        _log.warning(
+        _log.debug(
             "real_yield.series_missing",
             instrument=instrument,
             error=str(exc),
@@ -182,7 +182,7 @@ def dxy_chg5d(store: Any, instrument: str, params: dict) -> float:
     try:
         series = store.get_fundamentals(series_id).dropna()
     except KeyError:
-        _log.warning("dxy_chg5d.series_missing", instrument=instrument, series=series_id)
+        _log.debug("dxy_chg5d.series_missing", instrument=instrument, series=series_id)
         return 0.0
     except Exception as exc:
         _log.warning("dxy_chg5d.fetch_failed", instrument=instrument, error=str(exc))
@@ -273,7 +273,7 @@ def brl_chg5d(store: Any, instrument: str, params: dict) -> float:
     try:
         series = store.get_fundamentals(series_id).dropna()
     except KeyError:
-        _log.warning("brl_chg5d.series_missing", instrument=instrument, series=series_id)
+        _log.debug("brl_chg5d.series_missing", instrument=instrument, series=series_id)
         return 0.0
     except Exception as exc:
         _log.warning("brl_chg5d.fetch_failed", instrument=instrument, error=str(exc))
@@ -347,7 +347,7 @@ def vix_regime(store: Any, instrument: str, params: dict) -> float:
     try:
         series = store.get_fundamentals(series_id).dropna()
     except KeyError:
-        _log.warning("vix_regime.series_missing", instrument=instrument, series=series_id)
+        _log.debug("vix_regime.series_missing", instrument=instrument, series=series_id)
         return 0.0
     except Exception as exc:
         _log.warning("vix_regime.fetch_failed", instrument=instrument, error=str(exc))
@@ -434,7 +434,7 @@ def eia_stock_change(store: Any, instrument: str, params: dict) -> float:
     try:
         df = store.get_eia_inventory(series_id, last_n=lookback + 2)
     except KeyError:
-        _log.warning(
+        _log.debug(
             "eia_stock_change.data_missing",
             instrument=instrument,
             series_id=series_id,
@@ -539,7 +539,7 @@ def comex_stress(store: Any, instrument: str, params: dict) -> float:
     try:
         df = store.get_comex_inventory(metal, last_n=wow_window + 5)
     except KeyError:
-        _log.warning("comex_stress.data_missing", instrument=instrument, metal=metal)
+        _log.debug("comex_stress.data_missing", instrument=instrument, metal=metal)
         return 0.0
     except Exception as exc:
         _log.warning(
