@@ -961,3 +961,80 @@ class CotEuronextRow(BaseModel):
     open_interest: int = Field(ge=0)
 
     model_config = ConfigDict(extra="forbid")
+
+
+# ---------------------------------------------------------------------------
+# Conab Brazil crop estimates (sub-fase 12.5+ session 111)
+# ---------------------------------------------------------------------------
+# Conab (Brasil) publiserer månedlig "Boletim da Safra de Grãos" (soja,
+# milho, trigo, algodão) og "Boletim da Safra de Café" (arábica + conilon).
+# PDF-rapporter via gov.br; pdftotext (poppler-utils) primær, pypdf
+# fallback per ADR-007 § 6.
+#
+# Schema lagrer normaliserte tall + units-kolonne for å håndtere at
+# grains rapporteres i kilotonn (kt) og kaffe i tusen sekker (ksacas).
+# yoy_change_pct = vs forrige safra; mom_change_pct = vs forrige
+# levantamento (samme safra) — Conab publiserer nye levantamentos hver
+# måned i sesongen.
+#
+# `commodity` er bedrock-canonical: "soja", "milho", "trigo", "algodao",
+# "cafe_total", "cafe_arabica", "cafe_conilon".
+
+TABLE_CONAB_ESTIMATES = "conab_estimates"
+
+DDL_CONAB_ESTIMATES = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_CONAB_ESTIMATES} (
+    report_date     TEXT    NOT NULL,    -- ISO YYYY-MM-DD (publiseringsdato)
+    commodity       TEXT    NOT NULL,    -- bedrock-canonical
+    levantamento    TEXT,                -- "7o", "1o" etc.
+    safra           TEXT,                -- "2025/26" eller "2026"
+    production      REAL    NOT NULL,    -- kt (grains) eller ksacas (kaffe)
+    production_units TEXT   NOT NULL,    -- "kt" eller "ksacas"
+    area_kha        REAL,                -- 1000 ha (begge)
+    yield_value     REAL,                -- kgha (grains) eller sacasha (kaffe)
+    yield_units     TEXT,                -- "kgha" eller "sacasha"
+    yoy_change_pct  REAL,                -- vs forrige safra
+    mom_change_pct  REAL,                -- vs forrige levantamento
+    PRIMARY KEY (report_date, commodity)
+)
+"""
+
+CONAB_ESTIMATES_COLS: tuple[str, ...] = (
+    "report_date",
+    "commodity",
+    "levantamento",
+    "safra",
+    "production",
+    "production_units",
+    "area_kha",
+    "yield_value",
+    "yield_units",
+    "yoy_change_pct",
+    "mom_change_pct",
+)
+
+
+class ConabEstimateRow(BaseModel):
+    """En rad fra Conab Brazil monthly crop estimate-rapport.
+
+    `commodity` er bedrock-canonical. `production_units` er ``"kt"`` for
+    grains og ``"ksacas"`` for kaffe (1000 sekker = 60 mbags / 60).
+
+    `yoy_change_pct` reflekterer endring vs forrige safra (årlig basis).
+    `mom_change_pct` reflekterer endring vs forrige levantamento (samme
+    safra; månedlig revisjon).
+    """
+
+    report_date: date
+    commodity: str
+    levantamento: str | None = None
+    safra: str | None = None
+    production: float
+    production_units: str
+    area_kha: float | None = None
+    yield_value: float | None = None
+    yield_units: str | None = None
+    yoy_change_pct: float | None = None
+    mom_change_pct: float | None = None
+
+    model_config = ConfigDict(extra="forbid")

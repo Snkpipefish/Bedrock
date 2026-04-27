@@ -34,6 +34,7 @@ from bedrock.data.schemas import (
     ANALOG_OUTCOMES_COLS,
     BDI_COLS,
     COMEX_INVENTORY_COLS,
+    CONAB_ESTIMATES_COLS,
     COT_DISAGGREGATED_COLS,
     COT_EURONEXT_COLS,
     COT_ICE_COLS,
@@ -42,6 +43,7 @@ from bedrock.data.schemas import (
     DDL_ANALOG_OUTCOMES,
     DDL_BDI,
     DDL_COMEX_INVENTORY,
+    DDL_CONAB_ESTIMATES,
     DDL_COT_DISAGGREGATED,
     DDL_COT_EURONEXT,
     DDL_COT_ICE,
@@ -68,6 +70,7 @@ from bedrock.data.schemas import (
     TABLE_ANALOG_OUTCOMES,
     TABLE_BDI,
     TABLE_COMEX_INVENTORY,
+    TABLE_CONAB_ESTIMATES,
     TABLE_COT_DISAGGREGATED,
     TABLE_COT_EURONEXT,
     TABLE_COT_ICE,
@@ -154,6 +157,8 @@ class DataStore:
             conn.execute(DDL_SEISMIC_EVENTS)
             # Sub-fase 12.5+ session 110 (ADR-008): Euronext MiFID II COT.
             conn.execute(DDL_COT_EURONEXT)
+            # Sub-fase 12.5+ session 111 (ADR-008): Conab Brazil crop estimates.
+            conn.execute(DDL_CONAB_ESTIMATES)
             conn.commit()
 
     # ------------------------------------------------------------------
@@ -522,6 +527,93 @@ class DataStore:
             cursor = conn.execute(
                 f"SELECT 1 FROM {TABLE_COT_EURONEXT} WHERE contract = ? LIMIT 1",
                 (contract,),
+            )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # Conab Brazil crop estimates (sub-fase 12.5+ session 111)
+    # ------------------------------------------------------------------
+
+    def append_conab_estimates(self, df: pd.DataFrame) -> int:
+        """Skriv rader til ``conab_estimates``. Returnerer antall rader.
+
+        `df` må ha kolonnene i ``CONAB_ESTIMATES_COLS``. Idempotent på
+        (report_date, commodity) via INSERT OR REPLACE — Conab kan
+        revidere et levantamento ved feil-publisering.
+        """
+        missing = [c for c in CONAB_ESTIMATES_COLS if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_conab_estimates: missing columns {missing}. "
+                f"Required: {list(CONAB_ESTIMATES_COLS)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df[list(CONAB_ESTIMATES_COLS)].copy()
+        prepared["report_date"] = pd.to_datetime(prepared["report_date"]).dt.strftime("%Y-%m-%d")
+
+        rows: Sequence[tuple] = [
+            (
+                row.report_date,
+                str(row.commodity),
+                None if pd.isna(row.levantamento) else str(row.levantamento),
+                None if pd.isna(row.safra) else str(row.safra),
+                float(row.production),
+                str(row.production_units),
+                None if pd.isna(row.area_kha) else float(row.area_kha),
+                None if pd.isna(row.yield_value) else float(row.yield_value),
+                None if pd.isna(row.yield_units) else str(row.yield_units),
+                None if pd.isna(row.yoy_change_pct) else float(row.yoy_change_pct),
+                None if pd.isna(row.mom_change_pct) else float(row.mom_change_pct),
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_CONAB_ESTIMATES} "
+                f"(report_date, commodity, levantamento, safra, production, "
+                f"production_units, area_kha, yield_value, yield_units, "
+                f"yoy_change_pct, mom_change_pct) "
+                f"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_conab_estimates(
+        self,
+        commodity: str,
+        last_n: int | None = None,
+    ) -> pd.DataFrame:
+        """Returner Conab-rader for `commodity`, sortert ASC på report_date.
+
+        Returnerer pd.DataFrame med report_date som pd.Timestamp. Kaster
+        ``KeyError`` hvis ingen rader for ``commodity``.
+        """
+        query = f"""
+            SELECT * FROM {TABLE_CONAB_ESTIMATES}
+            WHERE commodity = ?
+            ORDER BY report_date ASC
+        """
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=(commodity,))
+
+        if df.empty:
+            raise KeyError(f"No Conab data for commodity={commodity!r}")
+
+        df["report_date"] = pd.to_datetime(df["report_date"])
+
+        if last_n is None:
+            return df
+        return df.tail(last_n).reset_index(drop=True)
+
+    def has_conab_estimates(self, commodity: str) -> bool:
+        """Test-hjelper: sjekk om `commodity` har minst én rad."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"SELECT 1 FROM {TABLE_CONAB_ESTIMATES} WHERE commodity = ? LIMIT 1",
+                (commodity,),
             )
             return cursor.fetchone() is not None
 
