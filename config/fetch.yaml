@@ -146,3 +146,14 @@ fetchers:
     on_failure: log_and_skip
     table: seismic_events
     ts_column: event_ts
+
+  # Sub-fase 12.5+ session 110 (ADR-007/008): Euronext MiFID II COT
+  # for Milling Wheat (EBM) + Corn (EMA) + Canola (ECO). Publiseres
+  # ons ettermiddag for forrige fredag-snapshot.
+  cot_euronext:
+    module: bedrock.fetch.cot_euronext
+    cron: "0 18 * * 3"           # Ons 18:00 Oslo (etter publisering)
+    stale_hours: 168             # ukentlig
+    on_failure: log_and_skip
+    table: cot_euronext
+    ts_column: report_date

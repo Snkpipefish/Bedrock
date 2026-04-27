@@ -657,6 +657,59 @@ def run_comex(
     return result
 
 
+@register_runner("cot_euronext")
+def run_cot_euronext(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """Euronext MiFID II COT (sub-fase 12.5+ session 110).
+
+    Henter ukentlige rapporter for Milling Wheat (EBM), Corn (EMA), og
+    Canola (ECO). Ikke instrument-spesifikk; én global fetch per kjøring.
+
+    Smart-skip: Euronext rapporterer onsdager. Hvis DB allerede har rader
+    med ``report_date >= forrige onsdag``, hopper runneren over HTTP.
+    """
+    from bedrock.data.schemas import TABLE_COT_EURONEXT
+    from bedrock.fetch.cot_euronext import fetch_cot_euronext
+
+    result = FetchRunResult(fetcher_name="cot_euronext")
+
+    # Smart-skip: gjenbruker _previous_wednesday() fra session 107
+    target = _previous_wednesday()
+    latest = None
+    try:
+        latest = store.latest_observation_ts(TABLE_COT_EURONEXT, "report_date")
+    except Exception as exc:
+        _log.warning("euronext.smart_skip_lookup_failed error=%s", exc)
+
+    if latest is not None:
+        try:
+            latest_date = datetime.strptime(str(latest)[:10], "%Y-%m-%d").date()
+            if latest_date >= target:
+                _log.info(
+                    "euronext.up_to_date latest=%s target=%s — skipping HTTP",
+                    latest_date,
+                    target,
+                )
+                result.items.append(ItemOutcome(item_id="cot_euronext", ok=True, rows_written=0))
+                return result
+        except ValueError:
+            _log.warning("euronext.smart_skip_bad_date raw=%r", latest)
+
+    def _do() -> int:
+        df = fetch_cot_euronext()
+        if df.empty:
+            return 0
+        return store.append_cot_euronext(df)
+
+    _safe_run([("cot_euronext", _do)], result)
+    return result
+
+
 @register_runner("seismic")
 def run_seismic(
     spec: FetcherSpec,
