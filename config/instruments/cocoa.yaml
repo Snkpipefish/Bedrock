@@ -53,6 +53,8 @@ families:
         weight: 1.0
         params: {}
   cross:
+    # Sub-fase 12.5+ session 113: bdi_chg30d → shipping_pressure med
+    # eksplisitt index=BDI (Baltic-suite-rebrand).
     weight: 2
     drivers:
       - name: dxy_chg5d
@@ -60,9 +62,10 @@ families:
         params:
           bull_when: positive  # USD-styrke = lokal-valuta-svakhet = bull cocoa-eksport
           window: 5
-      - name: bdi_chg30d
+      - name: shipping_pressure
         weight: 0.2
         params:
+          index: BDI
           window_days: 30
           bull_when: negative
       - name: event_distance

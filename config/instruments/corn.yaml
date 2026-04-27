@@ -85,6 +85,8 @@ families:
     # NB: Euronext Corn er mye mindre likvid enn US-CBOT (~38K OI
     # vs >2M for CBOT). Settes lav vekt 0.15 — ren cross-region-
     # spec-signal, ikke primær.
+    # Sub-fase 12.5+ session 113: bdi_chg30d → shipping_pressure med
+    # eksplisitt index=BDI (Baltic-suite-rebrand).
     weight: 2
     drivers:
       - name: dxy_chg5d
@@ -92,9 +94,10 @@ families:
         params:
           bull_when: negative
           window: 5
-      - name: bdi_chg30d
+      - name: shipping_pressure
         weight: 0.2
         params:
+          index: BDI
           window_days: 30
           bull_when: negative
       - name: event_distance

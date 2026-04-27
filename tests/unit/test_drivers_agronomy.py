@@ -51,6 +51,17 @@ class _DummyStore:
             raise KeyError("no BDI")
         return s.tail(last_n) if last_n else s
 
+    def get_shipping_index(self, index_code: str, last_n: int | None = None) -> pd.Series:
+        # Lookup either by explicit code (e.g. shipping_BPI) eller default 'bdi'-key
+        # for å bevare bakoverkompatibilitet med eksisterende tester.
+        code = index_code.upper()
+        s = self._data.get(f"shipping_{code}")
+        if s is None and code == "BDI":
+            s = self._data.get("bdi")  # legacy-key
+        if s is None or len(s) == 0:
+            raise KeyError(f"no shipping_indices data for {code}")
+        return s.tail(last_n) if last_n else s
+
     def get_igc(self, grain: str, metric: str) -> pd.DataFrame:
         return self._data.get("igc", pd.DataFrame())
 
@@ -215,31 +226,111 @@ def test_disease_pressure_high_yield_impact_bonus() -> None:
 
 
 # ---------------------------------------------------------------------------
-# bdi_chg30d
+# shipping_pressure (sub-fase 12.5+ session 113 — rebrand av bdi_chg30d)
 # ---------------------------------------------------------------------------
 
 
-def test_bdi_chg30d_no_data_returns_neutral() -> None:
-    fn = get("bdi_chg30d")
+def test_shipping_pressure_no_data_returns_neutral() -> None:
+    fn = get("shipping_pressure")
     score = fn(_DummyStore(), "Wheat", {})
     assert score == 0.5
 
 
-def test_bdi_chg30d_falling_is_bull() -> None:
-    fn = get("bdi_chg30d")
-    # 35 verdier, siste = 800, 30d-tilbake = 1000 → -20%
-    values = [1000.0] * 32 + [900.0, 850.0, 800.0]
+def test_shipping_pressure_default_index_is_bdi() -> None:
+    """Uten index-param brukes BDI for bakoverkompatibilitet."""
+    fn = get("shipping_pressure")
+    values = [1000.0] * 32 + [900.0, 850.0, 800.0]  # -20%
     series = pd.Series(values, index=pd.date_range("2024-01-01", periods=len(values), freq="D"))
     score = fn(_DummyStore(bdi=series), "Wheat", {"window_days": 30})
     assert score == 1.0
 
 
-def test_bdi_chg30d_rising_is_bear() -> None:
-    fn = get("bdi_chg30d")
+def test_shipping_pressure_falling_is_bull() -> None:
+    fn = get("shipping_pressure")
+    values = [1000.0] * 32 + [900.0, 850.0, 800.0]  # -20%
+    series = pd.Series(values, index=pd.date_range("2024-01-01", periods=len(values), freq="D"))
+    score = fn(
+        _DummyStore(shipping_BDI=series),
+        "Wheat",
+        {"index": "BDI", "window_days": 30},
+    )
+    assert score == 1.0
+
+
+def test_shipping_pressure_rising_is_bear() -> None:
+    fn = get("shipping_pressure")
     values = [1000.0] * 32 + [1100.0, 1180.0, 1250.0]  # +25%
     series = pd.Series(values, index=pd.date_range("2024-01-01", periods=len(values), freq="D"))
-    score = fn(_DummyStore(bdi=series), "Wheat", {"window_days": 30})
+    score = fn(
+        _DummyStore(shipping_BDI=series),
+        "Wheat",
+        {"index": "BDI", "window_days": 30},
+    )
     assert score == 0.0
+
+
+def test_shipping_pressure_bpi_index() -> None:
+    """BPI er Panamax — primær for grain-eksport."""
+    fn = get("shipping_pressure")
+    values = [1500.0] * 32 + [1300.0, 1250.0, 1200.0]  # -20%
+    series = pd.Series(values, index=pd.date_range("2024-01-01", periods=len(values), freq="D"))
+    score = fn(
+        _DummyStore(shipping_BPI=series),
+        "Wheat",
+        {"index": "BPI", "window_days": 30},
+    )
+    assert score == 1.0
+
+
+def test_shipping_pressure_unknown_index_returns_neutral() -> None:
+    fn = get("shipping_pressure")
+    score = fn(_DummyStore(), "Wheat", {"index": "BSI"})
+    assert score == 0.5
+
+
+def test_shipping_pressure_short_history_returns_neutral() -> None:
+    fn = get("shipping_pressure")
+    series = pd.Series(
+        [1000.0, 1100.0, 1200.0],
+        index=pd.date_range("2024-01-01", periods=3, freq="D"),
+    )
+    score = fn(_DummyStore(bdi=series), "Wheat", {"window_days": 30})
+    assert score == 0.5
+
+
+def test_shipping_pressure_index_param_lowercase_uppercases() -> None:
+    """index-param er case-insensitive."""
+    fn = get("shipping_pressure")
+    values = [1000.0] * 32 + [900.0, 850.0, 800.0]  # -20%
+    series = pd.Series(values, index=pd.date_range("2024-01-01", periods=len(values), freq="D"))
+    score = fn(
+        _DummyStore(shipping_BDI=series),
+        "Wheat",
+        {"index": "bdi", "window_days": 30},
+    )
+    assert score == 1.0
+
+
+def test_shipping_pressure_bull_when_positive_inverts() -> None:
+    fn = get("shipping_pressure")
+    values = [1000.0] * 32 + [1100.0, 1180.0, 1250.0]  # +25%
+    series = pd.Series(values, index=pd.date_range("2024-01-01", periods=len(values), freq="D"))
+    score = fn(
+        _DummyStore(shipping_BDI=series),
+        "Wheat",
+        {"index": "BDI", "window_days": 30, "bull_when": "positive"},
+    )
+    assert score == 1.0  # rate opp = bull i positive-modus
+
+
+def test_old_bdi_chg30d_no_longer_registered() -> None:
+    """Sub-fase 12.5+ session 113: bdi_chg30d skal være avregistrert."""
+    import pytest
+
+    from bedrock.engine.drivers import get as _get
+
+    with pytest.raises(KeyError):
+        _get("bdi_chg30d")
 
 
 # ---------------------------------------------------------------------------
@@ -290,7 +381,7 @@ def test_drivers_all_registered() -> None:
         "wasde_s2u_change",
         "export_event_active",
         "disease_pressure",
-        "bdi_chg30d",
+        "shipping_pressure",
         "igc_stocks_change",
     ]:
         assert get(name) is not None

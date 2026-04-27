@@ -281,30 +281,45 @@ def disease_pressure(store: Any, instrument: str, params: dict) -> float:
     return base
 
 
-@register("bdi_chg30d")
-def bdi_chg30d(store: Any, instrument: str, params: dict) -> float:
-    """Score basert på 30-dagers % endring i Baltic Dry Index.
+@register("shipping_pressure")
+def shipping_pressure(store: Any, instrument: str, params: dict) -> float:
+    """Score basert på % endring i en Baltic-shipping-indeks over et vindu.
 
-    BDI er proxy for global shipping/freight cost. Høyt BDI = dyr
-    eksport = bear for grain-eksportører. Default ``bull_when=negative``
-    (BDI ned = bull eksport-flyt).
+    Erstatter ``bdi_chg30d`` (sub-fase 12.5+ session 113). Fungerer for
+    hele Baltic-suiten — velg indeks via ``index``-param:
+
+    - ``BDI`` (default for bakoverkompatibilitet): composite tørrbulk
+    - ``BCI``: Capesize (kull/jernmalm)
+    - ``BPI``: Panamax — primær for grain-eksport (mest vanlig
+      skipsstørrelse for korn)
+    - ``BSI``: Supramax (korn/stål/fosfat)
+
+    Tolkning: høy shipping-rate = dyr eksport = bear for eksportør-priser.
+    Default ``bull_when=negative`` (rate ned = bull eksport-flyt).
 
     Params:
+        index: 'BDI' (default) | 'BCI' | 'BPI' | 'BSI'.
         window_days: lookback (default 30).
-        bull_when: "negative" (default) — BDI ned = bull.
+        bull_when: "negative" (default) — rate ned = bull.
 
     Returns:
         Score 0..1. 0.5 (nøytral) hvis utilstrekkelig data.
     """
+    index_code = str(params.get("index", "BDI")).upper()
     window_days = int(params.get("window_days", 30))
     bull_when = str(params.get("bull_when", "negative")).lower()
 
     try:
-        series = store.get_bdi(last_n=window_days + 5)
+        series = store.get_shipping_index(index_code, last_n=window_days + 5)
     except KeyError:
         return 0.5
     except Exception as exc:
-        _log.warning("bdi.fetch_failed", instrument=instrument, error=str(exc))
+        _log.warning(
+            "shipping.fetch_failed",
+            instrument=instrument,
+            index=index_code,
+            error=str(exc),
+        )
         return 0.5
 
     if len(series) < window_days + 1:
@@ -315,7 +330,7 @@ def bdi_chg30d(store: Any, instrument: str, params: dict) -> float:
     )
 
     if bull_when == "negative":
-        # BDI ned = bull: -20% → 1.0, 0% → 0.5, +20% → 0.0
+        # Shipping ned = bull: -20% → 1.0, 0% → 0.5, +20% → 0.0
         if pct_change <= -20:
             return 1.0
         if pct_change <= -10:
@@ -329,7 +344,7 @@ def bdi_chg30d(store: Any, instrument: str, params: dict) -> float:
         if pct_change <= 20:
             return 0.2
         return 0.0
-    # bull_when=positive: BDI opp = bull (sjeldent i agri-context)
+    # bull_when=positive: shipping opp = bull (sjeldent i agri-context)
     if pct_change >= 20:
         return 1.0
     if pct_change >= 10:
@@ -582,12 +597,12 @@ def unica_change(store: Any, instrument: str, params: dict) -> float:
 
 
 __all__ = [
-    "bdi_chg30d",
     "conab_yoy",
     "crop_progress_stage",
     "disease_pressure",
     "export_event_active",
     "igc_stocks_change",
+    "shipping_pressure",
     "unica_change",
     "wasde_s2u_change",
 ]
