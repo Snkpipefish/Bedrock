@@ -117,11 +117,12 @@ def test_load_fetch_config_on_checked_in_file() -> None:
     # Kartrommet-utvidelse
     assert "wasde" in cfg.fetchers
     assert "crop_progress" in cfg.fetchers
-    assert "bdi" in cfg.fetchers
+    assert "shipping" in cfg.fetchers  # session 113: bdi-rebrand
     # Smartere schedules — sanity-sjekker
     assert cfg.fetchers["wasde"].table == "wasde"
     assert cfg.fetchers["crop_progress"].cron == "0 23 * 4-11 1"  # apr-nov
-    assert cfg.fetchers["bdi"].cron == "30 23 * * 1-5"  # mon-fri etter close
+    assert cfg.fetchers["shipping"].cron == "30 23 * * 1-5"  # mon-fri etter close
+    assert cfg.fetchers["shipping"].table == "shipping_indices"
 
 
 # ---------------------------------------------------------------------------

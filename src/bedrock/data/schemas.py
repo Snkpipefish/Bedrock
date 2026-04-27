@@ -535,20 +535,12 @@ DISEASE_ALERTS_COLS: tuple[str, ...] = (
 )
 
 
-# Baltic Dry Index — global shipping/freight indikator. Påvirker
-# eksport-cost for grains. Auto-fetcher prøver Yahoo BDI-ticker;
-# manuell CSV-fallback (paid feeds som Trading Economics gir bedre data).
+# Sub-fase 12.5+ session 113: gammel `bdi`-tabell konsolideres inn i
+# `shipping_indices` (Baltic-suite long-format). DDL_BDI/BDI_COLS er
+# fjernet; TABLE_BDI beholdes kun som referanse-konstant for
+# `DataStore._migrate_bdi_to_shipping_indices` som drop-er den gamle
+# tabellen om den finnes på disk.
 TABLE_BDI = "bdi"
-
-DDL_BDI = f"""
-CREATE TABLE IF NOT EXISTS {TABLE_BDI} (
-    date   TEXT NOT NULL PRIMARY KEY,
-    value  REAL NOT NULL,
-    source TEXT NOT NULL    -- "YAHOO", "MANUAL", "TRADINGECONOMICS"
-)
-"""
-
-BDI_COLS: tuple[str, ...] = ("date", "value", "source")
 
 
 # IGC (International Grains Council) — månedlig Grain Market Report

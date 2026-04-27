@@ -690,12 +690,12 @@ fetchers:
     on_failure: log_and_skip
     table: crop_progress
     ts_column: week_ending
-  bdi:
-    module: bedrock.fetch.manual_events
+  shipping:
+    module: bedrock.fetch.shipping
     cron: "0 23 * * 1-5"
     stale_hours: 30
     on_failure: retry_with_backoff
-    table: bdi
+    table: shipping_indices
     ts_column: date
 """.strip()
     )
@@ -714,7 +714,7 @@ fetchers:
     assert by_name["enso"] == "Fundamentals"
     assert by_name["wasde"] == "USDA"
     assert by_name["crop_progress"] == "USDA"
-    assert by_name["bdi"] == "Shipping"
+    assert by_name["shipping"] == "Shipping"
 
     group_names = [g["name"] for g in data["groups"]]
     # USDA før Shipping før Other per _GROUP_ORDER

@@ -155,7 +155,7 @@ def test_all_registered_runners() -> None:
     assert "enso" in names
     assert "wasde" in names
     assert "crop_progress" in names
-    assert "bdi" in names
+    assert "shipping" in names  # session 113: bdi-rebrand
 
 
 # ---------------------------------------------------------------------------
@@ -485,7 +485,9 @@ def test_run_crop_progress_without_key_falls_back(store: DataStore, configs_dir)
     assert result.total_rows == 0
 
 
-def test_run_bdi_passes_date_range(store: DataStore, configs_dir) -> None:
+def test_run_shipping_passes_date_range(store: DataStore, configs_dir) -> None:
+    """Sub-fase 12.5+ session 113: bdi-runner rebrandet til shipping
+    (full Baltic-suite via fetch_shipping_indices)."""
     defaults, insts = configs_dir
     captured: dict = {}
 
@@ -494,15 +496,16 @@ def test_run_bdi_passes_date_range(store: DataStore, configs_dir) -> None:
         captured["end"] = end_date
         return pd.DataFrame(
             {
+                "index_code": ["BDI"],
                 "date": ["2026-04-25"],
                 "value": [22.5],
                 "source": ["BDRY"],
             }
         )
 
-    with patch("bedrock.fetch.manual_events.fetch_bdi_via_bdry", side_effect=fake_fetch):
+    with patch("bedrock.fetch.shipping.fetch_shipping_indices", side_effect=fake_fetch):
         result = run_fetcher_by_name(
-            "bdi",
+            "shipping",
             store,
             _spec(),
             from_date=date(2026, 4, 20),
@@ -515,7 +518,7 @@ def test_run_bdi_passes_date_range(store: DataStore, configs_dir) -> None:
     assert result.total_rows == 1
     assert captured["start"] == "2026-04-20"
     assert captured["end"] == "2026-04-26"
-    assert result.items[0].item_id == "BDRY"
+    assert result.items[0].item_id == "shipping_indices"
 
 
 # ---------------------------------------------------------------------------

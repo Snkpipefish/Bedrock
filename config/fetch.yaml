@@ -79,12 +79,16 @@ fetchers:
     table: crop_progress
     ts_column: week_ending
 
-  bdi:
-    module: bedrock.fetch.manual_events
+  # Sub-fase 12.5+ session 113: bdi-runner rebrandet til shipping
+  # (full Baltic-suite BDI+BCI+BPI+BSI, long-format `shipping_indices`).
+  # BDI auto-hentes fra Yahoo BDRY ETF; BCI/BPI/BSI fra manuell CSV
+  # (`data/manual/shipping_indices.csv`) per ADR-007 § 4.
+  shipping:
+    module: bedrock.fetch.shipping
     cron: "30 23 * * 1-5"       # Mon-Fri 23:30 Oslo (etter US close 22 Oslo + Yahoo-lag)
     stale_hours: 30             # daglig på hverdager
     on_failure: retry_with_backoff
-    table: bdi
+    table: shipping_indices
     ts_column: date
 
   # Sub-fase 12.5+ session 105 (ADR-007/008): Forex Factory økonomisk

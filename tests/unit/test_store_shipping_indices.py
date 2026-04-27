@@ -11,13 +11,20 @@ import pandas as pd
 import pytest
 
 from bedrock.data.schemas import (
-    BDI_COLS,
-    DDL_BDI,
     SHIPPING_INDICES_COLS,
     TABLE_BDI,
     ShippingIndexRow,
 )
 from bedrock.data.store import DataStore
+
+# Legacy DDL — gjenskapt lokalt fordi DDL_BDI ble fjernet i session 113-cleanup.
+_LEGACY_DDL_BDI = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_BDI} (
+    date   TEXT NOT NULL PRIMARY KEY,
+    value  REAL NOT NULL,
+    source TEXT NOT NULL
+)
+"""
 
 
 def _ship_df(
@@ -179,7 +186,7 @@ def test_survive_reopen(tmp_path: Path) -> None:
 def _create_legacy_bdi_table(db: Path, rows: list[tuple[str, float, str]]) -> None:
     """Lag gammel `bdi`-tabell direkte med rad-data, før DataStore-init."""
     with sqlite3.connect(db) as conn:
-        conn.execute(DDL_BDI)
+        conn.execute(_LEGACY_DDL_BDI)
         conn.executemany(
             f"INSERT OR REPLACE INTO {TABLE_BDI} (date, value, source) VALUES (?, ?, ?)",
             rows,
@@ -234,31 +241,13 @@ def test_migration_no_op_on_fresh_db(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Legacy BDI delegate-API
+# Legacy BDI-API er fjernet i C4 — bekreft at tilgang feiler
 # ---------------------------------------------------------------------------
 
 
-def test_legacy_append_bdi_writes_to_shipping_indices(store: DataStore) -> None:
-    legacy_df = pd.DataFrame(
-        {
-            "date": ["2025-04-01", "2025-04-02"],
-            "value": [1450.0, 1480.0],
-            "source": ["BDRY", "BDRY"],
-        }
-    )
-    n = store.append_bdi(legacy_df[list(BDI_COLS)])
-    assert n == 2
-    series = store.get_shipping_index("BDI")
-    assert len(series) == 2
+def test_legacy_append_bdi_no_longer_exists(store: DataStore) -> None:
+    assert not hasattr(store, "append_bdi")
 
 
-def test_legacy_get_bdi_reads_from_shipping_indices(store: DataStore) -> None:
-    store.append_shipping_indices(_ship_df("BDI"))
-    series = store.get_bdi()
-    assert len(series) == 3
-    assert series.iloc[0] == 1500.0
-
-
-def test_legacy_get_bdi_raises_when_empty(store: DataStore) -> None:
-    with pytest.raises(KeyError, match="BDI"):
-        store.get_bdi()
+def test_legacy_get_bdi_no_longer_exists(store: DataStore) -> None:
+    assert not hasattr(store, "get_bdi")

@@ -32,7 +32,6 @@ import pandas as pd
 
 from bedrock.data.schemas import (
     ANALOG_OUTCOMES_COLS,
-    BDI_COLS,
     COMEX_INVENTORY_COLS,
     CONAB_ESTIMATES_COLS,
     COT_DISAGGREGATED_COLS,
@@ -41,7 +40,6 @@ from bedrock.data.schemas import (
     COT_LEGACY_COLS,
     CROP_PROGRESS_COLS,
     DDL_ANALOG_OUTCOMES,
-    DDL_BDI,
     DDL_COMEX_INVENTORY,
     DDL_CONAB_ESTIMATES,
     DDL_COT_DISAGGREGATED,
@@ -149,7 +147,6 @@ class DataStore:
             conn.execute(DDL_WASDE)
             conn.execute(DDL_EXPORT_EVENTS)
             conn.execute(DDL_DISEASE_ALERTS)
-            conn.execute(DDL_BDI)
             conn.execute(DDL_IGC)
             # Sub-fase 12.5+ session 105 (ADR-007/008):
             conn.execute(DDL_ECON_EVENTS)
@@ -1544,8 +1541,7 @@ class DataStore:
         Idempotent på (index_code, date) via INSERT OR REPLACE. Returnerer
         antall rader skrevet.
 
-        Erstatter ``append_bdi`` (sub-fase 12.5+ session 113). En tynn
-        legacy-wrapper finnes på ``append_bdi`` for BDI-only-bruk.
+        Erstatter den gamle ``append_bdi`` (sub-fase 12.5+ session 113).
         """
         return self._append_generic(df, TABLE_SHIPPING_INDICES, SHIPPING_INDICES_COLS)
 
@@ -1559,8 +1555,7 @@ class DataStore:
         Sortert ASC på date. Kaster ``KeyError`` hvis ingen rader for
         ``index_code``. Drivere må håndtere det (returnere 0.5 nøytral).
 
-        Erstatter ``get_bdi`` (sub-fase 12.5+ session 113); ``get_bdi``
-        beholdes som legacy-wrapper med ``index_code='BDI'``.
+        Erstatter den gamle ``get_bdi`` (sub-fase 12.5+ session 113).
         """
         code = index_code.upper()
         query = (
@@ -1593,29 +1588,6 @@ class DataStore:
                     (index_code.upper(),),
                 )
             return cursor.fetchone() is not None
-
-    # ----- Legacy BDI-delegates (deprecated; fjernes i C4) ------------
-
-    def append_bdi(self, df: pd.DataFrame) -> int:
-        """Legacy-wrapper. Forventer ``BDI_COLS`` (date, value, source)
-        og forfremmer til shipping_indices-schema med index_code='BDI'.
-        Vil bli fjernet etter session 113 driver-rename.
-        """
-        if df.empty:
-            return 0
-        prepared = df[list(BDI_COLS)].copy()
-        prepared["index_code"] = "BDI"
-        prepared = prepared[list(SHIPPING_INDICES_COLS)]
-        return self.append_shipping_indices(prepared)
-
-    def get_bdi(self, last_n: int | None = None) -> pd.Series:
-        """Legacy-wrapper for ``get_shipping_index('BDI')``. Vil bli
-        fjernet etter session 113 driver-rename.
-        """
-        try:
-            return self.get_shipping_index("BDI", last_n=last_n)
-        except KeyError as exc:
-            raise KeyError("No BDI data") from exc
 
     # ------------------------------------------------------------------
     # Økonomisk kalender (sub-fase 12.5+ session 105)

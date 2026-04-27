@@ -422,29 +422,33 @@ def run_crop_progress(
     return result
 
 
-@register_runner("bdi")
-def run_bdi(
+@register_runner("shipping")
+def run_shipping(
     spec: FetcherSpec,
     store: Any,
     from_date: date,
     to_date: date,
     instruments: Iterable[InstrumentConfig],
 ) -> FetchRunResult:
-    """Baltic Dry Index via BDRY ETF (Yahoo). Daglig Mon-Fri etter US close."""
-    from bedrock.fetch.manual_events import fetch_bdi_via_bdry
+    """Baltic-suite (BDI/BCI/BPI/BSI). BDI auto via BDRY ETF (Yahoo);
+    BCI/BPI/BSI fra manuell CSV-fallback. Daglig Mon-Fri etter US close.
 
-    result = FetchRunResult(fetcher_name="bdi")
+    Erstatter den gamle ``bdi``-runneren (sub-fase 12.5+ session 113).
+    """
+    from bedrock.fetch.shipping import fetch_shipping_indices
+
+    result = FetchRunResult(fetcher_name="shipping")
 
     def _do() -> int:
-        df = fetch_bdi_via_bdry(
+        df = fetch_shipping_indices(
             start_date=from_date.isoformat(),
             end_date=to_date.isoformat(),
         )
         if df.empty:
             return 0
-        return store.append_bdi(df)
+        return store.append_shipping_indices(df)
 
-    _safe_run([("BDRY", _do)], result)
+    _safe_run([("shipping_indices", _do)], result)
     return result
 
 

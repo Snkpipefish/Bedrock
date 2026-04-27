@@ -317,7 +317,8 @@ _FETCHER_GROUPS: dict[str, str] = {
     "weather": "Geo",
     "wasde": "USDA",
     "crop_progress": "USDA",
-    "bdi": "Shipping",
+    # Sub-fase 12.5+ session 113: bdi → shipping (Baltic-suite-rebrand)
+    "shipping": "Shipping",
     # Sub-fase 12.5+ session 105 (ADR-007/008):
     "calendar_ff": "Calendar",
     # Sub-fase 12.5+ session 106 (ADR-007/008): ICE COT.
