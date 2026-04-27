@@ -11,7 +11,7 @@ gratis API-tilgang eller er paid-only.
 | `wasde.csv` | report_date, marketing_year, region, commodity, metric, value, unit | https://www.usda.gov/oce/commodity-markets/wasde |
 | `export_events.csv` | event_date, country, commodity, event_type, severity, bull_bear, description, source_url | News-monitoring (manuelt) — Reuters, Bloomberg, USDA FAS |
 | `disease_alerts.csv` | alert_date, region, commodity, pathogen, severity, yield_impact_pct, description, source_url | PestMon, CABI, FAO Crop Prospects |
-| `bdi.csv` | date, value, source | Trading Economics, Bloomberg, eller manuell daglig registrering |
+| `shipping_indices.csv` | index_code (BDI/BCI/BPI/BSI), date, value, source | Baltic Exchange offentlige sammendrag, Trading Economics, eller manuell registrering. BDI hentes auto via BDRY ETF (Yahoo) — manuell CSV brukes primært for sub-indeksene BCI/BPI/BSI hvor gratis API-er mangler. |
 | `cot_ice.csv` | report_date, contract, mm_long/short, other_long/short, comm_long/short, nonrep_long/short, open_interest | https://www.ice.com/publicdocs/futures/COTHist{YEAR}.csv (manuell nedlasting hvis prod-host blokkeres) |
 | `eia_inventory.csv` | series_id, date, value, units | https://www.eia.gov/petroleum/supply/weekly/ + https://ir.eia.gov/ngs/ngs.html (kun hvis API-key mangler) |
 | `comex_inventory.csv` | metal, date, registered, eligible, total, units | https://metalcharts.org/ eller CME-publiserte daglige stats (kun hvis primær HTTP-kilde feiler) |
@@ -56,13 +56,17 @@ alert_date,region,commodity,pathogen,severity,yield_impact_pct,description,sourc
 2025-04-10,AUSTRALIA,WHEAT,STRIPE_RUST,2,2.5,"Localized stripe rust in WA wheat belt",https://...
 ```
 
-### bdi.csv
+### shipping_indices.csv
+
+Long-format Baltic-suite (BDI/BCI/BPI/BSI). BDI hentes auto via BDRY
+ETF på Yahoo (~0.9 korrelasjon); manuell CSV brukes primært for
+sub-indeksene som mangler gratis kilder.
 
 ```csv
-date,value,source
-2025-04-15,1845.0,MANUAL
-2025-04-16,1862.0,MANUAL
-2025-04-17,1834.0,TRADINGECONOMICS
+index_code,date,value,source
+BCI,2026-04-22,3850.0,MANUAL
+BPI,2026-04-22,1620.0,MANUAL
+BSI,2026-04-22,1150.0,MANUAL
 ```
 
 ### cot_ice.csv
@@ -111,7 +115,8 @@ NW2_EPG0_SWO_R48_BCF,2026-04-17,2063,BCF
 | WASDE | `bedrock.fetch.wasde` | direkte HTTPS til USDA (kan endre seg) | manuell CSV |
 | Eksport-events | — | manuell curation | manuell CSV |
 | Disease-alerts | — | manuell curation (paid services finnes) | manuell CSV |
-| BDI | — | paid feed (Trading Economics, Bloomberg) | manuell CSV |
+| Shipping (BDI) | `bedrock.fetch.shipping` | Yahoo BDRY ETF (gratis, ingen key) | manuell CSV |
+| Shipping (BCI/BPI/BSI) | `bedrock.fetch.shipping` (manuell-CSV-modus) | Baltic Exchange paid feeds | manuell CSV (primær) |
 | ICE COT | `bedrock.fetch.cot_ice` | direkte HTTPS til ICE COTHist{YEAR}.csv | manuell CSV |
 | EIA Inventories | `bedrock.fetch.eia_inventories` | EIA Open Data v2 + `BEDROCK_EIA_API_KEY` | manuell CSV |
 | COMEX Inventories | `bedrock.fetch.comex` | metalcharts.org JSON-API (token-basert, ingen key) | manuell CSV |
