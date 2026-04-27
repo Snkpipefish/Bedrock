@@ -899,3 +899,65 @@ class SeismicEvent(BaseModel):
     url: str | None = None
 
     model_config = ConfigDict(extra="forbid")
+
+
+# ---------------------------------------------------------------------------
+# Euronext COT (sub-fase 12.5+ session 110)
+# ---------------------------------------------------------------------------
+# Euronext publiserer ukentlige MiFID II Commitments-of-Traders-rapporter
+# for sine landbruksprodukter (Milling Wheat EBM, Corn EMA, Canola ECO).
+# MiFID II-kategorier (Investment Funds ≈ Managed Money, Investment Firms,
+# Commercial Undertakings, Other Financial) er likestillingen til CFTC's
+# disaggregated-format.
+#
+# Vi lagrer kun MM-totaler + OI per cot-explorer-presedens — full
+# kategori-breakdown er ikke ekstrahert av cot-explorer's HTML-parser
+# (rowspan-celler i Euronext-HTML gir parsing-utfordring; de tar ut kun
+# Total-raden for Investment Funds-kolonnen).
+#
+# Schema: én rad per (report_date, contract). `contract` er bedrock-
+# canonical: "euronext milling wheat", "euronext corn", "euronext canola".
+
+TABLE_COT_EURONEXT = "cot_euronext"
+
+DDL_COT_EURONEXT = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_COT_EURONEXT} (
+    report_date  TEXT    NOT NULL,    -- ISO YYYY-MM-DD (fredag-snapshot)
+    contract     TEXT    NOT NULL,    -- "euronext milling wheat" etc.
+    mm_long      INTEGER NOT NULL,    -- Investment Funds long
+    mm_short     INTEGER NOT NULL,    -- Investment Funds short
+    open_interest INTEGER NOT NULL,   -- total open interest (alle kategorier)
+    PRIMARY KEY (report_date, contract)
+)
+"""
+
+COT_EURONEXT_COLS: tuple[str, ...] = (
+    "report_date",
+    "contract",
+    "mm_long",
+    "mm_short",
+    "open_interest",
+)
+
+
+class CotEuronextRow(BaseModel):
+    """En rad fra Euronext MiFID II COT-rapport.
+
+    `contract` er bedrock-canonical (f.eks. ``"euronext milling wheat"``,
+    ``"euronext corn"``). MM-feltene representerer Investment Funds-
+    kategorien (≈ CFTC Managed Money). Open interest er summen over
+    alle MiFID II-kategorier.
+
+    Per cot-explorer-presedens lagres kun MM-totaler — Investment Firms
+    / Commercial / Other Financial krever robust rowspan-parsing som
+    ikke er prioritert (driver-bruken er primært MM-positioning-overlay
+    for europeiske grain-kontrakter).
+    """
+
+    report_date: date
+    contract: str
+    mm_long: int = Field(ge=0)
+    mm_short: int = Field(ge=0)
+    open_interest: int = Field(ge=0)
+
+    model_config = ConfigDict(extra="forbid")

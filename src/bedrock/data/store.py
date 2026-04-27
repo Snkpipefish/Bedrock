@@ -35,6 +35,7 @@ from bedrock.data.schemas import (
     BDI_COLS,
     COMEX_INVENTORY_COLS,
     COT_DISAGGREGATED_COLS,
+    COT_EURONEXT_COLS,
     COT_ICE_COLS,
     COT_LEGACY_COLS,
     CROP_PROGRESS_COLS,
@@ -42,6 +43,7 @@ from bedrock.data.schemas import (
     DDL_BDI,
     DDL_COMEX_INVENTORY,
     DDL_COT_DISAGGREGATED,
+    DDL_COT_EURONEXT,
     DDL_COT_ICE,
     DDL_COT_LEGACY,
     DDL_CROP_PROGRESS,
@@ -67,6 +69,7 @@ from bedrock.data.schemas import (
     TABLE_BDI,
     TABLE_COMEX_INVENTORY,
     TABLE_COT_DISAGGREGATED,
+    TABLE_COT_EURONEXT,
     TABLE_COT_ICE,
     TABLE_COT_LEGACY,
     TABLE_CROP_PROGRESS,
@@ -149,6 +152,8 @@ class DataStore:
             conn.execute(DDL_COMEX_INVENTORY)
             # Sub-fase 12.5+ session 109 (ADR-008): USGS seismic events.
             conn.execute(DDL_SEISMIC_EVENTS)
+            # Sub-fase 12.5+ session 110 (ADR-008): Euronext MiFID II COT.
+            conn.execute(DDL_COT_EURONEXT)
             conn.commit()
 
     # ------------------------------------------------------------------
@@ -437,6 +442,85 @@ class DataStore:
         with self._connect() as conn:
             cursor = conn.execute(
                 f"SELECT 1 FROM {TABLE_COT_ICE} WHERE contract = ? LIMIT 1",
+                (contract,),
+            )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # COT — Euronext MiFID II (sub-fase 12.5+ session 110)
+    # ------------------------------------------------------------------
+
+    def append_cot_euronext(self, df: pd.DataFrame) -> int:
+        """Skriv rader til ``cot_euronext``. Returnerer antall rader.
+
+        `df` må ha kolonnene i ``COT_EURONEXT_COLS`` (report_date,
+        contract, mm_long, mm_short, open_interest). Idempotent på
+        (report_date, contract) via INSERT OR REPLACE.
+        """
+        missing = [c for c in COT_EURONEXT_COLS if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_cot_euronext: missing columns {missing}. "
+                f"Required: {list(COT_EURONEXT_COLS)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df[list(COT_EURONEXT_COLS)].copy()
+        prepared["report_date"] = pd.to_datetime(prepared["report_date"]).dt.strftime("%Y-%m-%d")
+
+        rows: Sequence[tuple] = [
+            (
+                row.report_date,
+                str(row.contract),
+                int(row.mm_long),
+                int(row.mm_short),
+                int(row.open_interest),
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_COT_EURONEXT} "
+                f"(report_date, contract, mm_long, mm_short, open_interest) "
+                f"VALUES (?, ?, ?, ?, ?)",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_cot_euronext(
+        self,
+        contract: str,
+        last_n: int | None = None,
+    ) -> pd.DataFrame:
+        """Returner Euronext COT-rader for `contract`, sortert ASC på report_date.
+
+        Returnerer pd.DataFrame med `report_date` som pd.Timestamp.
+        Kaster ``KeyError`` hvis ingen rader for ``contract``.
+        """
+        query = f"""
+            SELECT * FROM {TABLE_COT_EURONEXT}
+            WHERE contract = ?
+            ORDER BY report_date ASC
+        """
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=(contract,))
+
+        if df.empty:
+            raise KeyError(f"No Euronext COT data for contract={contract!r}")
+
+        df["report_date"] = pd.to_datetime(df["report_date"])
+
+        if last_n is None:
+            return df
+        return df.tail(last_n).reset_index(drop=True)
+
+    def has_cot_euronext(self, contract: str) -> bool:
+        """Test-hjelper: sjekk om `contract` har minst én Euronext-rad."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"SELECT 1 FROM {TABLE_COT_EURONEXT} WHERE contract = ? LIMIT 1",
                 (contract,),
             )
             return cursor.fetchone() is not None
