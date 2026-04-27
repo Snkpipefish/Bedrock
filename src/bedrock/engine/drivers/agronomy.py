@@ -468,6 +468,119 @@ def conab_yoy(store: Any, instrument: str, params: dict) -> float:
     return 0.15
 
 
+# ---------------------------------------------------------------------------
+# unica_change (sub-fase 12.5+ session 112)
+# ---------------------------------------------------------------------------
+
+
+@register("unica_change")
+def unica_change(store: Any, instrument: str, params: dict) -> float:
+    """UNICA Brazil sukker-supply-shift, mappet til 0..1 score.
+
+    Leser siste UNICA quinzena-rapport og evaluerer en av flere metrikker:
+
+    Params:
+        metric: hvilket UNICA-felt skal brukes som signal:
+            - ``"sugar_production_yoy"`` (default): YoY-endring i akkumulert
+              sukker-produksjon. Lav (negativ) = supply tight = bullish.
+            - ``"crush_yoy"``: YoY-endring i akkumulert sukkerrør-crush.
+              Lav crush = mindre råvare = bullish.
+            - ``"mix_sugar_pct"``: aktuell akkumulert sukker-mix-prosent
+              (Centro-Sul). Lav (etanol-tilt) = mindre sukker-supply =
+              bullish.
+            - ``"mix_sugar_change"``: differanse current vs prev_year
+              (mix_sugar_pct - mix_sugar_pct_prev). Negativ = mindre
+              sukker enn ifjor = bullish.
+        thresholds: optional override liste av (max_value, score)-tupler.
+
+    Default step-mapping for YoY-metrikker (sugar_production_yoy /
+    crush_yoy):
+        ≤ -10% → 1.00 (sterk shortfall)
+        ≤  -5% → 0.85
+        ≤  -2% → 0.65
+        ≤   0% → 0.50 (flat)
+        ≤  +5% → 0.35
+        >  +5% → 0.15 (klart over forrige safra)
+
+    Default for mix_sugar_pct (absolutt-verdi):
+        ≤ 45% → 1.00 (sterk etanol-tilt)
+        ≤ 47% → 0.80
+        ≤ 49% → 0.65
+        ≤ 51% → 0.50 (balanse)
+        ≤ 53% → 0.35
+        >  53% → 0.15 (sterk sukker-tilt)
+
+    Returnerer 0..1. Defensiv 0.0 ved manglende data/feil. NULL-felter
+    → 0.5 (nøytral).
+    """
+    import pandas as pd
+
+    metric = str(params.get("metric", "sugar_production_yoy"))
+
+    try:
+        df = store.get_unica_reports(last_n=1)
+    except Exception as exc:
+        _log.warning("unica_change.fetch_failed", instrument=instrument, error=str(exc))
+        return 0.0
+
+    if df.empty:
+        _log.warning("unica_change.no_data", instrument=instrument)
+        return 0.0
+
+    last = df.iloc[0]
+
+    # Map metric → DataFrame-kolonne + bruk-modus
+    metric_to_col = {
+        "sugar_production_yoy": ("sugar_production_yoy_pct", "yoy"),
+        "crush_yoy": ("crush_yoy_pct", "yoy"),
+        "mix_sugar_pct": ("mix_sugar_pct", "abs_mix"),
+        "mix_sugar_change": (None, "mix_change"),
+    }
+    if metric not in metric_to_col:
+        _log.warning("unica_change.unknown_metric", instrument=instrument, metric=metric)
+        return 0.0
+
+    col, mode = metric_to_col[metric]
+    if mode == "mix_change":
+        cur = last["mix_sugar_pct"]
+        prev = last["mix_sugar_pct_prev"]
+        if cur is None or prev is None or pd.isna(cur) or pd.isna(prev):
+            return 0.5
+        value = float(cur) - float(prev)
+    else:
+        raw = last[col] if col else None
+        if raw is None or pd.isna(raw):
+            return 0.5
+        value = float(raw)
+
+    user_thresholds = params.get("thresholds")
+    if user_thresholds is None:
+        if mode == "abs_mix":
+            steps: tuple[tuple[float, float], ...] = (
+                (45.0, 1.00),
+                (47.0, 0.80),
+                (49.0, 0.65),
+                (51.0, 0.50),
+                (53.0, 0.35),
+            )
+        else:
+            # yoy + mix_change deler samme step-mapping (yoy-stil)
+            steps = (
+                (-10.0, 1.00),
+                (-5.0, 0.85),
+                (-2.0, 0.65),
+                (0.0, 0.50),
+                (5.0, 0.35),
+            )
+    else:
+        steps = tuple((float(t), float(s)) for t, s in user_thresholds)
+
+    for threshold, score in steps:
+        if value <= threshold:
+            return float(score)
+    return 0.15
+
+
 __all__ = [
     "bdi_chg30d",
     "conab_yoy",
@@ -475,5 +588,6 @@ __all__ = [
     "disease_pressure",
     "export_event_active",
     "igc_stocks_change",
+    "unica_change",
     "wasde_s2u_change",
 ]
