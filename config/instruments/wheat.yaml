@@ -10,7 +10,7 @@ instrument:
   ticker: ZW
   cfd_ticker: Wheat
   yahoo_ticker: ZW=F
-  cot_contract: "WHEAT - CHICAGO BOARD OF TRADE"
+  cot_contract: "WHEAT-SRW - CHICAGO BOARD OF TRADE"
   cot_report: disaggregated
   weather_region: us_great_plains
   weather_lat: 38.0  # mid-Kansas

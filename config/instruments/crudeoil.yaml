@@ -9,7 +9,7 @@ instrument:
   ticker: XTIUSD
   cfd_ticker: CrudeOil
   yahoo_ticker: CL=F
-  cot_contract: "CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE"
+  cot_contract: "WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE"
   cot_report: disaggregated
   fred_series_ids:
     - DGS10

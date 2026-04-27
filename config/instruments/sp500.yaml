@@ -10,7 +10,7 @@ instrument:
   ticker: ES
   cfd_ticker: SPX500
   yahoo_ticker: ES=F
-  cot_contract: "E-MINI S&P 500 STOCK INDEX - CHICAGO MERCANTILE EXCHANGE"
+  cot_contract: "E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE"
   cot_report: legacy
   fred_series_ids:
     - DGS10
