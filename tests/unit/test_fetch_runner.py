@@ -157,6 +157,7 @@ def test_all_registered_runners() -> None:
     assert "crop_progress" in names
     assert "shipping" in names  # session 113: bdi-rebrand
     assert "news_intel" in names  # session 114: Google News RSS
+    assert "crypto_sentiment" in names  # session 115: alt.me F&G + CoinGecko
 
 
 # ---------------------------------------------------------------------------
@@ -484,6 +485,47 @@ def test_run_crop_progress_without_key_falls_back(store: DataStore, configs_dir)
     # Empty df er ok-status (ingen exception) — runneren rapporterer 0 rader.
     assert result.ok_count == 1
     assert result.total_rows == 0
+
+
+def test_run_crypto_sentiment_appends_to_store(store: DataStore, configs_dir) -> None:
+    """Sub-fase 12.5+ session 115: crypto_sentiment-runner skal kalle
+    fetch_crypto_sentiment og skrive til DB."""
+    defaults, insts = configs_dir
+    fake_df = pd.DataFrame(
+        [
+            {
+                "indicator": "crypto_fng",
+                "date": "2026-04-27",
+                "value": 55.0,
+                "source": "ALTERNATIVE_ME",
+            },
+            {
+                "indicator": "btc_dominance",
+                "date": "2026-04-27",
+                "value": 52.3,
+                "source": "COINGECKO",
+            },
+        ]
+    )
+
+    with patch(
+        "bedrock.fetch.crypto_sentiment.fetch_crypto_sentiment",
+        return_value=fake_df,
+    ):
+        result = run_fetcher_by_name(
+            "crypto_sentiment",
+            store,
+            _spec(),
+            from_date=date(2026, 4, 27),
+            to_date=date(2026, 4, 27),
+            instruments_dir=insts,
+            defaults_dir=defaults,
+        )
+
+    assert result.ok_count == 1
+    assert result.total_rows == 2
+    assert result.items[0].item_id == "fng_coingecko"
+    assert store.has_crypto_sentiment("crypto_fng")
 
 
 def test_run_news_intel_appends_to_store(store: DataStore, configs_dir) -> None:

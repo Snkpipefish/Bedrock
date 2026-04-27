@@ -197,3 +197,14 @@ fetchers:
     on_failure: log_and_skip
     table: news_intel
     ts_column: fetched_at
+
+  # Sub-fase 12.5+ session 115 (ADR-007/008): Crypto sentiment
+  # (alternative.me Fear & Greed Index + CoinGecko global market).
+  # UI-only; scoring-driver vurderes etter ≥1 mnds data.
+  crypto_sentiment:
+    module: bedrock.fetch.crypto_sentiment
+    cron: "0 7 * * *"            # Daglig 07:00 Oslo (etter F&G-publisering UTC midnight)
+    stale_hours: 30              # daglig
+    on_failure: log_and_skip
+    table: crypto_sentiment
+    ts_column: date

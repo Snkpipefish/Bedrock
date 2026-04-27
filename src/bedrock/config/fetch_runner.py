@@ -480,6 +480,35 @@ def run_news_intel(
     return result
 
 
+@register_runner("crypto_sentiment")
+def run_crypto_sentiment(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """Alternative.me Fear & Greed + CoinGecko global market data.
+    Sub-fase 12.5+ session 115.
+
+    UI-only foreløpig per ADR-008 § 115; scoring-driver vurderes etter
+    ≥1 mnds empirisk data. Sekvensielle HTTP-kall mellom de to gratis-
+    API-ene (gratis-kilde-etiquette per memory-feedback).
+    """
+    from bedrock.fetch.crypto_sentiment import fetch_crypto_sentiment
+
+    result = FetchRunResult(fetcher_name="crypto_sentiment")
+
+    def _do() -> int:
+        df = fetch_crypto_sentiment()
+        if df.empty:
+            return 0
+        return store.append_crypto_sentiment(df)
+
+    _safe_run([("fng_coingecko", _do)], result)
+    return result
+
+
 def _previous_tuesday(now: datetime | None = None) -> date:
     """ICE-COT rapporteres for tirsdag-snapshot, publisert fredag.
 

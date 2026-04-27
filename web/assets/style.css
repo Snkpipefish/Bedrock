@@ -1009,3 +1009,106 @@ span.status-pill {
   color: var(--c-ink-muted);
   font-size: var(--fs-xs);
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Crypto sentiment-kort (sub-fase 12.5+ session 115)
+   ───────────────────────────────────────────────────────────── */
+.sentiment-section-heading {
+  margin: var(--sp-4) 0 var(--sp-2);
+  font-size: var(--fs-md);
+  color: var(--c-ink-muted);
+  font-weight: 600;
+}
+.crypto-sentiment-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-3);
+  margin-top: var(--sp-2);
+}
+.crypto-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+}
+.crypto-card header {
+  border-bottom: 1px solid var(--c-border);
+  padding-bottom: var(--sp-1);
+  margin-bottom: var(--sp-2);
+}
+.crypto-card h3 {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--c-ink-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.crypto-fng-card {
+  cursor: pointer;
+  transition: transform 0.1s ease, border-color 0.1s ease;
+}
+.crypto-fng-card:hover, .crypto-fng-card:focus {
+  border-color: var(--c-accent, var(--c-ink));
+  transform: translateY(-1px);
+  outline: none;
+}
+.crypto-fng-value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.crypto-fng-label {
+  font-size: var(--fs-sm);
+  color: var(--c-ink-muted);
+  margin-top: 4px;
+}
+.fng-sparkline {
+  width: 100%;
+  height: 28px;
+  margin-top: var(--sp-2);
+  display: block;
+}
+.crypto-fng-hint {
+  font-size: var(--fs-xs);
+  color: var(--c-ink-muted);
+  margin-top: var(--sp-1);
+}
+.crypto-metric {
+  font-size: 1.5rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.crypto-metric-sub {
+  font-size: var(--fs-xs);
+  color: var(--c-ink-muted);
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fng-modal-body .meta {
+  font-size: var(--fs-sm);
+  color: var(--c-ink-muted);
+  margin-bottom: var(--sp-3);
+}
+.fng-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.fng-history-table th,
+.fng-history-table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--c-border);
+}
+.fng-history-table th {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  color: var(--c-ink-muted);
+  font-weight: 600;
+}
+.fng-history-table td {
+  font-variant-numeric: tabular-nums;
+}

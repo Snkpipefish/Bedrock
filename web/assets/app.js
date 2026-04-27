@@ -665,14 +665,168 @@ function renderKartrommet(res) {
 
 // ─── Sentiment-fane (session 114 news_intel + 115 crypto) ────────
 async function loadSentiment() {
-  try {
-    const res = await fetch('/api/ui/news_intel?days=7&limit=120').then(r => r.json());
-    renderSentimentNews(res);
-  } catch (err) {
-    console.error('Sentiment load feilet:', err);
+  // Last begge parallelt — ingen avhengighet mellom dem.
+  const [newsRes, cryptoRes] = await Promise.allSettled([
+    fetch('/api/ui/news_intel?days=7&limit=120').then(r => r.json()),
+    fetch('/api/ui/crypto_sentiment?history_days=30').then(r => r.json()),
+  ]);
+
+  if (newsRes.status === 'fulfilled') {
+    renderSentimentNews(newsRes.value);
+  } else {
+    console.error('News load feilet:', newsRes.reason);
     const el = document.getElementById('sentiment-news-grid');
-    if (el) el.innerHTML = `<p class="empty">Fetch feilet: ${err.message}</p>`;
+    if (el) el.innerHTML = `<p class="empty">Fetch feilet: ${newsRes.reason.message}</p>`;
   }
+
+  if (cryptoRes.status === 'fulfilled') {
+    renderSentimentCrypto(cryptoRes.value);
+  } else {
+    console.error('Crypto load feilet:', cryptoRes.reason);
+    const el = document.getElementById('sentiment-crypto');
+    if (el) el.innerHTML = `<p class="empty">Crypto fetch feilet: ${cryptoRes.reason.message}</p>`;
+  }
+}
+
+function _formatMcap(usd) {
+  if (usd === null || usd === undefined) return '–';
+  if (usd >= 1e12) return (usd / 1e12).toFixed(2) + ' T USD';
+  if (usd >= 1e9) return (usd / 1e9).toFixed(2) + ' B USD';
+  return usd.toLocaleString('nb-NO') + ' USD';
+}
+
+function _formatPct(v, digits = 2) {
+  if (v === null || v === undefined) return '–';
+  const sign = v > 0 ? '+' : '';
+  return sign + v.toFixed(digits) + '%';
+}
+
+function _fngColor(value) {
+  if (value === null || value === undefined) return 'var(--c-ink-muted)';
+  if (value < 25) return 'var(--c-neg, #c62828)';      // Extreme Fear
+  if (value < 45) return 'var(--c-warn, #ef6c00)';     // Fear
+  if (value < 55) return 'var(--c-ink-muted, #757575)';// Neutral
+  if (value < 75) return 'var(--c-pos, #2e7d32)';      // Greed
+  return 'var(--c-warn, #ef6c00)';                     // Extreme Greed (også advarsel)
+}
+
+function _fngSparkline(history) {
+  if (!history || history.length < 2) return '';
+  const w = 100, h = 28, pad = 2;
+  const min = 0, max = 100;
+  const xs = history.map((_, i) => pad + (i / (history.length - 1)) * (w - 2 * pad));
+  const ys = history.map(v => h - pad - ((v - min) / (max - min)) * (h - 2 * pad));
+  const points = xs.map((x, i) => `${x.toFixed(1)},${ys[i].toFixed(1)}`).join(' ');
+  const lastV = history[history.length - 1];
+  const stroke = _fngColor(lastV);
+  return `<svg class="fng-sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+    <polyline points="${points}" fill="none" stroke="${stroke}" stroke-width="1.5"/>
+  </svg>`;
+}
+
+function renderSentimentCrypto(res) {
+  const root = document.getElementById('sentiment-crypto');
+  if (!root) return;
+  if (!res || !res.available) {
+    root.innerHTML = '<p class="empty">Crypto-sentiment ikke populert ennå (fetcher kjører daglig 07:00).</p>';
+    return;
+  }
+
+  const fng = res.fng || {};
+  const market = res.market || {};
+  const fngColor = _fngColor(fng.latest);
+  const fngVal = fng.latest !== null && fng.latest !== undefined
+    ? Math.round(fng.latest)
+    : '–';
+
+  root.innerHTML = `
+    <div class="crypto-sentiment-row">
+      <article class="crypto-card crypto-fng-card" data-clickable="fng" tabindex="0" role="button" aria-label="Vis F&amp;G-historikk">
+        <header><h3>Fear &amp; Greed</h3></header>
+        <div class="crypto-fng-value" style="color: ${fngColor}">${fngVal}</div>
+        <div class="crypto-fng-label">${_escapeHtml(fng.label || '–')}</div>
+        ${_fngSparkline(fng.history)}
+        <div class="crypto-fng-hint">Klikk for ${(fng.history || []).length} dagers historikk</div>
+      </article>
+      <article class="crypto-card">
+        <header><h3>BTC dominance</h3></header>
+        <div class="crypto-metric">${market.btc_dominance !== null ? market.btc_dominance.toFixed(1) + '%' : '–'}</div>
+      </article>
+      <article class="crypto-card">
+        <header><h3>ETH dominance</h3></header>
+        <div class="crypto-metric">${market.eth_dominance !== null ? market.eth_dominance.toFixed(1) + '%' : '–'}</div>
+      </article>
+      <article class="crypto-card">
+        <header><h3>Total market cap</h3></header>
+        <div class="crypto-metric">${_escapeHtml(_formatMcap(market.total_mcap_usd))}</div>
+        <div class="crypto-metric-sub">24h: ${_escapeHtml(_formatPct(market.total_mcap_chg24h_pct))}</div>
+      </article>
+    </div>
+  `;
+
+  // F&G-kort åpner modal med full historikk
+  const fngCard = root.querySelector('.crypto-fng-card');
+  if (fngCard) {
+    const open = () => openFngModal(fng);
+    fngCard.addEventListener('click', open);
+    fngCard.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        open();
+      }
+    });
+  }
+}
+
+function openFngModal(fng) {
+  const modal = document.getElementById('modal');
+  if (!modal) return;
+  const content = modal.querySelector('.modal-content');
+  if (!content) return;
+
+  const history = fng.history || [];
+  const rows = history.length === 0
+    ? '<tr><td colspan="3" class="empty">Ingen historikk.</td></tr>'
+    : history
+        .map((v, i) => {
+          const daysAgo = history.length - 1 - i;
+          const label = _escapeHtml(_fngClassify(v));
+          const color = _fngColor(v);
+          return `<tr>
+            <td>T-${daysAgo}d</td>
+            <td style="color:${color}; font-weight: 600">${Math.round(v)}</td>
+            <td>${label}</td>
+          </tr>`;
+        })
+        .reverse()
+        .join('');
+
+  content.innerHTML = `
+    <header class="modal-header">
+      <h2 id="modal-title">Fear &amp; Greed Index <small>(${history.length} dager)</small></h2>
+      <button class="modal-close" aria-label="Lukk">×</button>
+    </header>
+    <div class="fng-modal-body">
+      <p class="meta">
+        Verdier 0-100 fra <a href="https://alternative.me/crypto/fear-and-greed-index/" target="_blank" rel="noopener">alternative.me</a>.
+        &lt;25 = Extreme Fear (contrarian bullish), &gt;75 = Extreme Greed (contrarian bearish).
+      </p>
+      <table class="fng-history-table">
+        <thead><tr><th>Dag</th><th>Verdi</th><th>Klassifisering</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+  content.querySelector('.modal-close').addEventListener('click', () => modal.close());
+  modal.showModal();
+}
+
+function _fngClassify(v) {
+  if (v < 25) return 'Extreme Fear';
+  if (v < 45) return 'Fear';
+  if (v < 55) return 'Neutral';
+  if (v < 75) return 'Greed';
+  return 'Extreme Greed';
 }
 
 function _escapeHtml(s) {

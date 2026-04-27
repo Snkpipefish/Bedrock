@@ -415,6 +415,101 @@ def news_intel() -> Response:
     )
 
 
+@ui_bp.get("/api/ui/crypto_sentiment")
+def crypto_sentiment() -> Response:
+    """Returner siste crypto-sentiment-snapshot + F&G-historikk.
+
+    Query-params:
+        history_days: int (default 30) — historikk-vindu for F&G-trend.
+
+    Response:
+        {
+          "as_of": "<iso>",
+          "fng": {"latest": <int>, "label": <str>, "history": [int, ...]},
+          "market": {
+            "btc_dominance": <float>,
+            "eth_dominance": <float>,
+            "total_mcap_usd": <float>,
+            "total_mcap_chg24h_pct": <float>
+          },
+          "available": <bool>
+        }
+
+    Felter er null hvis indikator mangler i DB (tom DB → available=False).
+    """
+    from datetime import datetime, timezone
+
+    from flask import jsonify, request
+
+    from bedrock.data.store import DataStore
+
+    cfg = _config()
+    store = DataStore(cfg.db_path)
+
+    history_str = request.args.get("history_days", "30")
+    try:
+        history_days = max(7, min(int(history_str), 365))
+    except (TypeError, ValueError):
+        history_days = 30
+
+    available = store.has_crypto_sentiment()
+
+    # F&G — siste verdi + history_days dagers serie
+    fng_latest: float | None = None
+    fng_history: list[float] = []
+    fng_label: str | None = None
+    try:
+        fng_series = store.get_crypto_sentiment("crypto_fng", last_n=history_days)
+        if not fng_series.empty:
+            fng_latest = float(fng_series.iloc[-1])
+            fng_history = [float(v) for v in fng_series.values]
+            # Klassifisering basert på alternative.me-buckets
+            fng_label = _classify_fng(fng_latest)
+    except KeyError:
+        pass
+
+    # Market dominance + mcap — kun siste verdi
+    def _latest(indicator: str) -> float | None:
+        try:
+            s = store.get_crypto_sentiment(indicator, last_n=1)
+            return float(s.iloc[-1]) if not s.empty else None
+        except KeyError:
+            return None
+
+    market = {
+        "btc_dominance": _latest("btc_dominance"),
+        "eth_dominance": _latest("eth_dominance"),
+        "total_mcap_usd": _latest("total_mcap_usd"),
+        "total_mcap_chg24h_pct": _latest("total_mcap_chg24h_pct"),
+    }
+
+    return jsonify(
+        {
+            "as_of": datetime.now(timezone.utc).isoformat(),
+            "available": available,
+            "fng": {
+                "latest": fng_latest,
+                "label": fng_label,
+                "history": fng_history,
+            },
+            "market": market,
+        }
+    )
+
+
+def _classify_fng(value: float) -> str:
+    """Klassifiser Fear & Greed-verdi (0..100) per alternative.me-buckets."""
+    if value < 25:
+        return "Extreme Fear"
+    if value < 45:
+        return "Fear"
+    if value < 55:
+        return "Neutral"
+    if value < 75:
+        return "Greed"
+    return "Extreme Greed"
+
+
 # ─────────────────────────────────────────────────────────────
 # Pipeline-helse (Kartrommet, session 50)
 # ─────────────────────────────────────────────────────────────
@@ -452,6 +547,8 @@ _FETCHER_GROUPS: dict[str, str] = {
     "unica": "Sektor",
     # Sub-fase 12.5+ session 114 (ADR-007/008): Google News RSS sentiment.
     "news_intel": "Sentiment",
+    # Sub-fase 12.5+ session 115 (ADR-007/008): Crypto F&G + CoinGecko.
+    "crypto_sentiment": "Sentiment",
 }
 _DEFAULT_GROUP = "Other"
 

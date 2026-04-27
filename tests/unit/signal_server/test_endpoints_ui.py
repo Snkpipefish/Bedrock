@@ -1016,3 +1016,138 @@ def test_news_intel_filter_by_category(client: FlaskClient, db_path: Path) -> No
     by_id = {c["id"]: c for c in data["categories"]}
     assert by_id["oil"]["count"] == 1
     assert by_id["gold"]["count"] == 0
+
+
+# ─────────────────────────────────────────────────────────────
+# Crypto sentiment endpoint (sub-fase 12.5+ session 115)
+# ─────────────────────────────────────────────────────────────
+
+
+def test_crypto_sentiment_empty_db_returns_unavailable(client: FlaskClient) -> None:
+    """Tom DB → available=False, alle felter null."""
+    r = client.get("/api/ui/crypto_sentiment")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["available"] is False
+    assert data["fng"]["latest"] is None
+    assert data["fng"]["history"] == []
+    assert data["market"]["btc_dominance"] is None
+
+
+def test_crypto_sentiment_with_fng_data(client: FlaskClient, db_path: Path) -> None:
+    """Når F&G-rader finnes returnerer endpoint latest + label + history."""
+    import pandas as pd
+
+    from bedrock.data.store import DataStore
+
+    store = DataStore(db_path)
+    store.append_crypto_sentiment(
+        pd.DataFrame(
+            [
+                {
+                    "indicator": "crypto_fng",
+                    "date": "2026-04-25",
+                    "value": 30.0,
+                    "source": "ALTERNATIVE_ME",
+                },
+                {
+                    "indicator": "crypto_fng",
+                    "date": "2026-04-26",
+                    "value": 50.0,
+                    "source": "ALTERNATIVE_ME",
+                },
+                {
+                    "indicator": "crypto_fng",
+                    "date": "2026-04-27",
+                    "value": 80.0,
+                    "source": "ALTERNATIVE_ME",
+                },
+            ]
+        )
+    )
+
+    data = client.get("/api/ui/crypto_sentiment").get_json()
+    assert data["available"] is True
+    assert data["fng"]["latest"] == 80.0
+    assert data["fng"]["label"] == "Extreme Greed"
+    assert data["fng"]["history"] == [30.0, 50.0, 80.0]
+
+
+def test_crypto_sentiment_with_market_data(client: FlaskClient, db_path: Path) -> None:
+    """CoinGecko-indikatorer returneres som siste verdi."""
+    import pandas as pd
+
+    from bedrock.data.store import DataStore
+
+    store = DataStore(db_path)
+    store.append_crypto_sentiment(
+        pd.DataFrame(
+            [
+                {
+                    "indicator": "btc_dominance",
+                    "date": "2026-04-27",
+                    "value": 52.3,
+                    "source": "COINGECKO",
+                },
+                {
+                    "indicator": "eth_dominance",
+                    "date": "2026-04-27",
+                    "value": 17.8,
+                    "source": "COINGECKO",
+                },
+                {
+                    "indicator": "total_mcap_usd",
+                    "date": "2026-04-27",
+                    "value": 2.85e12,
+                    "source": "COINGECKO",
+                },
+                {
+                    "indicator": "total_mcap_chg24h_pct",
+                    "date": "2026-04-27",
+                    "value": 1.2,
+                    "source": "COINGECKO",
+                },
+            ]
+        )
+    )
+
+    data = client.get("/api/ui/crypto_sentiment").get_json()
+    assert data["available"] is True
+    assert data["market"]["btc_dominance"] == 52.3
+    assert data["market"]["eth_dominance"] == 17.8
+    assert data["market"]["total_mcap_usd"] == 2.85e12
+    assert data["market"]["total_mcap_chg24h_pct"] == 1.2
+
+
+def test_crypto_sentiment_classifies_fng_correctly(client: FlaskClient, db_path: Path) -> None:
+    """F&G-label skal følge alternative.me-buckets."""
+    import pandas as pd
+
+    from bedrock.data.store import DataStore
+
+    cases = [
+        (10.0, "Extreme Fear"),
+        (35.0, "Fear"),
+        (50.0, "Neutral"),
+        (65.0, "Greed"),
+        (90.0, "Extreme Greed"),
+    ]
+    store = DataStore(db_path)
+    for i, (value, _expected_label) in enumerate(cases):
+        store.append_crypto_sentiment(
+            pd.DataFrame(
+                [
+                    {
+                        "indicator": "crypto_fng",
+                        "date": f"2026-04-{20 + i:02d}",
+                        "value": value,
+                        "source": "ALTERNATIVE_ME",
+                    }
+                ]
+            )
+        )
+
+    data = client.get("/api/ui/crypto_sentiment").get_json()
+    # Siste verdi (i=4 → 90 → Extreme Greed)
+    assert data["fng"]["latest"] == 90.0
+    assert data["fng"]["label"] == "Extreme Greed"
