@@ -39,6 +39,7 @@ from bedrock.data.schemas import (
     COT_ICE_COLS,
     COT_LEGACY_COLS,
     CROP_PROGRESS_COLS,
+    CRYPTO_SENTIMENT_COLS,
     DDL_ANALOG_OUTCOMES,
     DDL_COMEX_INVENTORY,
     DDL_CONAB_ESTIMATES,
@@ -47,6 +48,7 @@ from bedrock.data.schemas import (
     DDL_COT_ICE,
     DDL_COT_LEGACY,
     DDL_CROP_PROGRESS,
+    DDL_CRYPTO_SENTIMENT,
     DDL_DISEASE_ALERTS,
     DDL_ECON_EVENTS,
     DDL_EIA_INVENTORY,
@@ -79,6 +81,7 @@ from bedrock.data.schemas import (
     TABLE_COT_ICE,
     TABLE_COT_LEGACY,
     TABLE_CROP_PROGRESS,
+    TABLE_CRYPTO_SENTIMENT,
     TABLE_DISEASE_ALERTS,
     TABLE_ECON_EVENTS,
     TABLE_EIA_INVENTORY,
@@ -176,6 +179,10 @@ class DataStore:
             # per kategori. UI-only foreløpig; scoring-driver vurderes etter
             # ≥1 mnds empirisk data.
             conn.execute(DDL_NEWS_INTEL)
+            # Sub-fase 12.5+ session 115 (ADR-008): Crypto sentiment-indikatorer
+            # (F&G + CoinGecko dominance/mcap). UI-only; scoring-driver
+            # vurderes etter ≥1 mnds data.
+            conn.execute(DDL_CRYPTO_SENTIMENT)
             conn.commit()
 
     def _migrate_bdi_to_shipping_indices(self, conn: sqlite3.Connection) -> None:
@@ -1697,6 +1704,58 @@ class DataStore:
     def has_news_intel(self) -> bool:
         with self._connect() as conn:
             cursor = conn.execute(f"SELECT 1 FROM {TABLE_NEWS_INTEL} LIMIT 1")
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # Crypto sentiment (sub-fase 12.5+ session 115)
+    # ------------------------------------------------------------------
+
+    def append_crypto_sentiment(self, df: pd.DataFrame) -> int:
+        """Skriv crypto-sentiment-rader. Schema: ``CRYPTO_SENTIMENT_COLS``.
+
+        Idempotent på (indicator, date) via INSERT OR REPLACE — siste
+        observasjon for samme dag overskriver (CoinGecko kan revidere
+        dominance-tall innen samme UTC-dag).
+        """
+        return self._append_generic(df, TABLE_CRYPTO_SENTIMENT, CRYPTO_SENTIMENT_COLS)
+
+    def get_crypto_sentiment(
+        self,
+        indicator: str,
+        last_n: int | None = None,
+    ) -> pd.Series:
+        """Returner verdi-tidsserie for én indikator (sortert ASC på date).
+
+        Kaster ``KeyError`` hvis ingen rader for ``indicator``.
+        Drivere må håndtere det (returnere 0.5 nøytral).
+        """
+        ind = indicator.lower().strip()
+        query = (
+            f"SELECT date, value FROM {TABLE_CRYPTO_SENTIMENT} "
+            f"WHERE indicator = ? ORDER BY date ASC"
+        )
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=(ind,))
+        if df.empty:
+            raise KeyError(f"No crypto_sentiment data for indicator={ind!r}")
+        df["date"] = pd.to_datetime(df["date"])
+        series = df.set_index("date")["value"].astype("float64")
+        series.name = None
+        if last_n is None:
+            return series
+        return series.tail(last_n)
+
+    def has_crypto_sentiment(self, indicator: str | None = None) -> bool:
+        """True hvis det finnes minst én rad. Hvis ``indicator`` gitt,
+        sjekker kun for den indikatoren."""
+        with self._connect() as conn:
+            if indicator is None:
+                cursor = conn.execute(f"SELECT 1 FROM {TABLE_CRYPTO_SENTIMENT} LIMIT 1")
+            else:
+                cursor = conn.execute(
+                    f"SELECT 1 FROM {TABLE_CRYPTO_SENTIMENT} WHERE indicator = ? LIMIT 1",
+                    (indicator.lower().strip(),),
+                )
             return cursor.fetchone() is not None
 
     # ------------------------------------------------------------------

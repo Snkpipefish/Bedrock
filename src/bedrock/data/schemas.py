@@ -1304,3 +1304,74 @@ class NewsIntelArticle(BaseModel):
         if not (0.0 <= v <= 1.0):
             raise ValueError(f"disruption_score must be in [0, 1], got {v!r}")
         return float(v)
+
+
+# ---------------------------------------------------------------------------
+# Crypto sentiment — F&G index + CoinGecko market dominance
+# (sub-fase 12.5+ session 115)
+# ---------------------------------------------------------------------------
+#
+# Long-format tabell parallelt med fundamentals: én rad per
+# (indicator, date). UI-only foreløpig per ADR-008 § 115;
+# scoring-driver vurderes etter ≥1 mnds data-akkumulering.
+#
+# Default-indikatorer (5):
+#   crypto_fng              — Fear & Greed Index 0..100 (alternative.me)
+#   btc_dominance           — Bitcoin % av total market cap
+#   eth_dominance           — Ethereum % av total market cap
+#   total_mcap_usd          — Total crypto market cap (USD, absolutt)
+#   total_mcap_chg24h_pct   — 24h-endring i total mcap (%)
+#
+# Fremtidig `crypto_sentiment_pressure`-driver kan beregne (post-1mnd):
+#   F&G extreme low (<25) → contrarian bullish for BTC/ETH
+#   F&G extreme high (>75) → contrarian bearish
+#   BTC-dominance trend → altcoin rotation-signal
+#
+# Schema-utvidbart: nye indikatorer (f.eks. funding_rate, on-chain
+# metrics) kan legges til uten DDL-endring.
+
+TABLE_CRYPTO_SENTIMENT = "crypto_sentiment"
+
+DDL_CRYPTO_SENTIMENT = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_CRYPTO_SENTIMENT} (
+    indicator TEXT NOT NULL,    -- 'crypto_fng', 'btc_dominance', etc.
+    date      TEXT NOT NULL,    -- ISO YYYY-MM-DD
+    value     REAL NOT NULL,
+    source    TEXT NOT NULL,    -- 'ALTERNATIVE_ME', 'COINGECKO', 'MANUAL'
+    PRIMARY KEY (indicator, date)
+)
+"""
+
+CRYPTO_SENTIMENT_COLS: tuple[str, ...] = ("indicator", "date", "value", "source")
+
+_VALID_CRYPTO_INDICATORS = frozenset(
+    {
+        "crypto_fng",
+        "btc_dominance",
+        "eth_dominance",
+        "total_mcap_usd",
+        "total_mcap_chg24h_pct",
+    }
+)
+
+
+class CryptoSentimentRow(BaseModel):
+    """Én daglig observasjon av en crypto-sentiment-indikator.
+
+    Indicator-navnene er ikke strikt validert i schemaet (kun et hint
+    via ``_VALID_CRYPTO_INDICATORS`` — fremtidig utvidelse skal være
+    enkelt). Validator advarer kun ved ukjent indikator i logging-stil
+    via Pydantic — vi godtar nye indicators så lenge schema er korrekt.
+    """
+
+    indicator: str
+    date: date
+    value: float
+    source: str
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("indicator")
+    @classmethod
+    def _validate_indicator(cls, v: str) -> str:
+        return v.lower().strip()
