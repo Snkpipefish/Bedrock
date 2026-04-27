@@ -51,7 +51,8 @@
   - **110:** **Sjette fetcher-port — cot_euronext (Euronext MiFID II COT) + cot_euronext_mm_pct-driver.** Ny SQLite-tabell `cot_euronext` (PK report_date+contract) med felt mm_long/mm_short/open_interest. Per cot-explorer-presedens lagres KUN MM-totaler (Investment Funds-kolonnen) — Investment Firms / Commercial / Other Financial krever robust rowspan-parsing som ikke er prioritert. `CotEuronextRow` Pydantic + `append_cot_euronext`/`get_cot_euronext`/`has_cot_euronext` på DataStore. Ny `fetch/cot_euronext.py` porter cot-explorer's `fetch_euronext_cot.py` — kun requests-stien (Playwright droppet, for tung dependency). 3 default-products: EBM (milling wheat), EMA (corn), ECO (canola). URL-pattern `live.euronext.com/.../cdwpr_{SYMBOL}_{YYYYMMDD}.html`. `recent_wednesdays(n)` itererer onsdager bakover (default 6) for å fange forsinkede rapporter. `_TableParser` HTMLParser-port + `parse_html_report` finner Investment Funds-header, beregner rowspan-offset, leser MM-totaler + OI fra Total-raden. Cookie-warmup mot Euronext-hjem. Sekvensielle requests med 1.5s pacing per memory-feedback. Per-symbol + per-onsdag feil-toleranse. Manuell CSV-fallback i `data/manual/cot_euronext.csv` (4 sample-rader). Ny `@register_runner("cot_euronext")` med smart-skip via gjenbrukt `_previous_wednesday()` fra session 107. Ny driver `cot_euronext_mm_pct` i positioning.py — parallell til `cot_ice_mm_pct`, reuser `_compute_metric` (mm_net / mm_net_pct) + `rank_percentile`. Ny `_load_euronext_metric_series` helper. YAML-wiring i cross-familien (ikke ny familie — EU-positioning passer strukturelt med dxy_chg5d/bdi_chg30d som er andre cross-region-drivere): Wheat (dxy_chg5d 0.7→0.5, bdi 0.2, event_distance 0.1, cot_euronext_mm_pct 0.2 m/ contract='euronext milling wheat' — likvid ~475K OI), Corn (dxy_chg5d 0.7→0.55, bdi 0.2, event_distance 0.1, cot_euronext_mm_pct 0.15 m/ contract='euronext corn' — lavere vekt fordi Euronext Corn er ~38K OI vs >2M for CBOT). UI: `cot_euronext` → "Ekstern COT"-gruppe (samme som cot_ice). fetch.yaml: cron `0 18 * * 3` Oslo (Ons 18:00 etter Euronext-publisering), stale_hours=168. systemd user-timer aktivert. Live-test: 174 rader backfilt (58 onsdager × 3 produkter, 2025-03-05 til 2026-04-22). Driver-verifisering: **Wheat mm_net_pct=0.885** (siste -6.14% net er på 88. percentil; bullish-tilt), **Corn mm_net_pct=0.923** (siste +12.30% net er på 92. percentil; bullish-tilt). Engine end-to-end: Wheat scorer B (cross 0.377 m/ EU-overlay 0.885), Corn C (cross 0.338 m/ EU 0.923). 47 nye tester (10 schema/store + 19 fetcher + 7 runner + 11 driver). **1778/1778 grønt, pyright 0 errors.** **LUKKET 2026-04-27**.
   - **111:** **Sjuende fetcher-port — conab (Conab Brazil monthly crop estimates) + conab_yoy-driver.** Ny SQLite-tabell `conab_estimates` (PK report_date+commodity) med felt production + production_units (`'kt'` for grains, `'ksacas'` for kaffe), area_kha, yield_value + yield_units, levantamento (`'7o'`/`'1o'`), safra, yoy_change_pct + mom_change_pct. `ConabEstimateRow` Pydantic + `append_conab_estimates`/`get_conab_estimates`/`has_conab_estimates`. Ny `fetch/conab.py` PDF-basert per ADR-007 § 6: `pdftotext -layout` (poppler-utils via subprocess) primær, `pypdf.PdfReader` pure-python fallback. `pypdf>=4.0` lagt til som dependency. `br_num('179.151,6')` Brasiliansk tallformat (punktum=tusen, komma=desimal, parentes=negativ). `find_pdf_on_index` scrape gov.br index, `find_cafe_pdf` 2-nivå (index → levantamento → PDF). `parse_grains` regex over Tabela 1 (Soja/Milho/Trigo/Algodão), `parse_cafe` Tabela 1/2/3 (BRASIL-rad for cafe_total/cafe_arabica/cafe_conilon). `extract_levantamento` finner '7º LEVANTAMENTO' + 'SAFRA 2025/26'. Manuell CSV-fallback. Ny `@register_runner("conab")` med månedlig smart-skip — hopper PDF-nedlasting hvis DB allerede har rad fra inneværende måned (PDF-er er store). Ny driver `conab_yoy` i agronomy.py — leser yoy_change_pct, step-mapping ≤-10%→1.00 (sterk shortfall, bullish), ≤0%→0.50 (flat), >+5%→0.15 (bearish). YAML-wiring i conab-familie (vekt 2 per family_agri-default): Corn (wasde 0.7 + conab_yoy 0.3 m/ commodity=milho — US ~30% global, Brasil ~10%), Soybean (conab_yoy 1.0 m/ soja — Brasil ~40% global DOMINANT), Coffee (conab_yoy 1.0 m/ cafe_arabica — KC-kontrakten er primært arabica). UI: `conab` → 'USDA'-gruppe (samme som wasde/crop_progress). fetch.yaml: cron `0 20 15 * *` Oslo (15. i mnd), stale_hours=720. systemd user-timer aktivert. Live-test mot gov.br: 7 rader hentet fra 7º Levantamento Safra 2025/26 (Soja/Milho/Trigo/Algodão) + 1º Levantamento Café 2026 (cafe_total/arabica/conilon). Driver-verifisering: **Corn -1.1% YoY → 0.50** (flat), **Soybean +4.5% YoY → 0.35** (mild growth, mild bearish), **Coffee arabica +23.3% YoY → 0.15** (sterk rebound etter 2024-frost, bearish for prising). Engine end-to-end: alle 3 instrumenter scorer C, conab_yoy bidrar isolert med riktig fundamentale signal. 61 nye tester (11 schema/store + 30 fetcher + 7 runner + 13 driver). **1839/1839 grønt, pyright 0 errors.** **LUKKET 2026-04-27**.
   - **112:** **Åttende fetcher-port — unica (UNICA Brazil sukker/etanol halvmånedlig) + unica_change-driver.** Ny SQLite-tabell `unica_reports` (PK report_date) — 16 felter inkl. mix-prosent (sukker/etanol) + crush + sugar/ethanol-produksjon, alle med prev_year + yoy_pct. Alle felter etter report_date er nullable (PDF-parsing kan feile på enkeltsegmenter). `UnicaReportRow` Pydantic + `append_unica_reports`/`get_unica_reports`/`has_unica_reports`. Ny `fetch/unica.py` PDF-basert per ADR-007 § 6 — gjenbruker `pdf_to_text`-helper fra session 111 (poppler-utils primær, pypdf fallback). `find_latest_pdf_url` scrape unicadata.com.br index, regex ut PDF-URL fra Google Docs viewer-pattern (`gview?url=...`) eller fallback til direkte .pdf-lenker. `parse_unica` regex-basert ekstraksjon av position_date, period, crop_year, mix_sugar/ethanol_pct (current + prev), crush + sugar_production + ethanol_total (alle med prev + yoy). UNICA-spesifikk `br_num('-2,21%')` med %-stripping. Manuell CSV-fallback i `data/manual/unica_reports.csv`. Ny `@register_runner("unica")` med smart-skip — UNICA publiserer 2× per måned, hopper PDF-nedlasting hvis siste rad er innen 13 dager. Ny driver `unica_change` i agronomy.py med fleksibel metric-param (4 modus): `sugar_production_yoy` (default), `crush_yoy`, `mix_sugar_pct` (abs-mode med egen step-mapping), `mix_sugar_change` (current - prev). Step-mapping for yoy/change: -10→1.00 / -5→0.85 / -2→0.65 / 0→0.50 / 5→0.35 / >5→0.15. Step-mapping for mix_sugar_pct (abs): 45→1.00 / 47→0.80 / 49→0.65 / 51→0.50 / 53→0.35 / >53→0.15. YAML-wiring i unica-familie (vekt 2 per family_agri-default): Sugar med dual-driver — sugar_production_yoy 0.6 + mix_sugar_pct 0.4 (Brazil ~40% global sukker-produksjon, DOMINANT). UI: `unica` → 'Sektor'-gruppe. fetch.yaml: cron `0 21 1,16 * *` Oslo (1. + 16. i mnd 21:00), stale_hours=360. systemd user-timer aktivert. Live-test mot unicadata.com.br: 1 rad fra 1ª quinzena de março de 2026 (mix_sugar_pct=50.61% vs 48.08% prev, crush_yoy -2.21%, sugar_production_yoy +0.71%). Driver-verifisering live: **sugar_production_yoy 0.35** (mild growth, mild bearish), **crush_yoy 0.65** (mild crush-shortfall, mild bullish), **mix_sugar_pct 0.50** (balanse), **mix_sugar_change 0.35** (mer sukker enn ifjor, mild bearish). Engine end-to-end: Sugar **B-grade** med unica-familie 0.41. 59 nye tester (10 schema/store + 25 fetcher + 7 runner + 17 driver). **1898/1898 grønt, pyright 0 errors.** **LUKKET 2026-04-27**.
-  - **113-115:** én fetcher per session per § 7.5: shipping (113 konsolidering med bdi), news_intel (114 UI-only), crypto_sentiment (115 UI-only).
+  - **113:** **Niende fetcher-port — shipping (Baltic-suite konsolidering med bdi) + shipping_pressure-driver.** Refactor + utvidelse istedenfor full fresh port. Ny SQLite-tabell `shipping_indices` (PK index_code+date) i long-format erstatter den single-purpose `bdi`-tabellen fra session 89; valgt over wide-format fordi (a) det matcher fundamentals-mønsteret, (b) er trivielt utvidbart med nye Baltic-sub-indekser uten schema-endring, (c) sparse data er naturlig håndtert (BDI har full Yahoo-historikk fra 2018, BCI/BPI/BSI starter manuelt). `ShippingIndexRow` Pydantic med field_validator som aksepterer kun BDI/BCI/BPI/BSI (case-insensitive uppercase). Idempotent migrasjon i `DataStore._init_schema`: hvis gammel `bdi`-tabell eksisterer, kopier alle rader til shipping_indices med index_code='BDI', verifiser row-count, dropp gammel tabell — kjøres kun én gang, no-op på fresh DB. Ny `fetch/shipping.py` konsoliderer cot-explorer's fetch_shipping.py-strategi: BDI auto via Yahoo BDRY ETF (~0.9 korrelasjon, gratis-løsning fra session 89), BCI/BPI/BSI fra manuell CSV-fallback fra dag 1 per ADR-007 § 4 (Stooq krever nå API-key og symboler er upålitelige). Ny `fetch_shipping_indices()` orchestrator kombinerer Yahoo + manuell CSV til én long-format DataFrame. Sample manuell CSV (`data/manual/shipping_indices.csv`) med 9 rader for BCI/BPI/BSI. Driver-rebrand: `bdi_chg30d` → `shipping_pressure` med ny `index`-param (default 'BDI' for bakoverkompatibilitet, aksepterer 'BCI'/'BPI'/'BSI'). Step-mapping uendret (samme score-logikk som session 89). Driveren leser nå `store.get_shipping_index(index_code)`. Alle 5 eksisterende YAML-wirings migrert samtidig — ingen alias-wrapper (cleaner refactor): Wheat/Corn/Soybean/Cotton/Cocoa cross-familie 0.2-vekt med eksplisitt `index: BDI` (bevarer scoring-atferd 1:1). Runner-rebrand: `register_runner('bdi')` → `register_runner('shipping')`; `fetch.yaml` `bdi:` → `shipping:` med module=`bedrock.fetch.shipping` og table=`shipping_indices` (cron uendret Mon-Fri 23:30 Oslo). UI `_FETCHER_GROUPS` `bdi` → `shipping` (Shipping-gruppe beholdt). Cleanup: `DataStore.append_bdi`/`get_bdi` fjernet, `DDL_BDI`/`BDI_COLS` fjernet fra schemas (TABLE_BDI beholdt som referanse-konstant for migration), `fetch_bdi`/`fetch_bdi_via_bdry`/`_BDI_CSV` fjernet fra manual_events.py, `test_fetch_bdi.py` slettet (erstattet av test_fetch_shipping.py). Live-data: BDI fortsetter å hentes via samme Yahoo BDRY-mekanisme som session 89 — historikken er bevart via migrasjon. BPI-overlay vurderes empirisk når BPI-data faktisk har historikk. 36 nye tester (21 schema/store/migration/Pydantic + 13 fetcher Yahoo+CSV + 8 driver shipping_pressure netto). **1934/1934 grønt, pyright 0 errors.** **LUKKET 2026-04-27**.
+  - **114-115:** én fetcher per session per § 7.5: news_intel (114 UI-only), crypto_sentiment (115 UI-only).
   - **116-117:** Phase D — backtest-validering + ADR-009 cutover-readiness. Tag `v0.12.5-fetch-port-complete`.
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
@@ -92,14 +93,14 @@
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
 - **Branch-modus:** Nivå 1 aktivt for sub-fase 12.5+ (sessions 104-105 commits direkte til main). Nivå 3 (feature-branches + PR) er valgfritt; sub-fase 12.5+ avsluttes med PR-flyt fra evt. session 116.
 - **Blocked:** nei.
-- **Aktive systemd-timere:** 6 system-installerte (calendar_ff [session 105], cot_ice [session 106], signals-all, monitor, compare, server [service]) + 15 user-installerte (prices, cot_disaggregated/legacy, fundamentals, weather, enso, wasde, crop_progress, bdi, eia_inventories [session 107], comex [session 108], seismic [session 109], cot_euronext [session 110], conab [session 111], **unica [session 112, ny]**). Alle 17 fetch-relaterte timere er nå aktivt installert.
+- **Aktive systemd-timere:** 6 system-installerte (calendar_ff [session 105], cot_ice [session 106], signals-all, monitor, compare, server [service]) + 15 user-installerte (prices, cot_disaggregated/legacy, fundamentals, weather, enso, wasde, crop_progress, **shipping [session 113, rebrand av bdi]**, eia_inventories [session 107], comex [session 108], seismic [session 109], cot_euronext [session 110], conab [session 111], unica [session 112]). Alle 17 fetch-relaterte timere er nå aktivt installert. Session 113 endrer ikke timer-cron — kun unit-navnet bør rebranded ved neste regenerering (cron uendret 30 23 * * 1-5).
 - **Instrumenter:** 22 totalt (Gold/Silver/Copper/Platinum metals; CrudeOil/Brent/NaturalGas energy; Corn/Wheat/Soybean grains; Cotton/Sugar/Coffee/Cocoa softs; Nasdaq/SP500 indices; EURUSD/GBPUSD/USDJPY/AUDUSD fx; BTC/ETH crypto).
-- **Drivere:** 30 registrert (29 + `unica_change` ny session 112).
-- **Bedrock-fetchere:** 17 totalt (prices, cot_disaggregated, cot_legacy, fundamentals, weather, enso, wasde, crop_progress, bdi, calendar_ff [session 105], cot_ice [session 106], eia_inventories [session 107], comex [session 108], seismic [session 109], cot_euronext [session 110], conab [session 111], **unica [session 112]**). 3 gjenstår å port per § 7.5 (sessions 113-115).
+- **Drivere:** 30 registrert (uendret antall — session 113 rebrandet `bdi_chg30d` → `shipping_pressure` med ny `index`-param).
+- **Bedrock-fetchere:** 17 totalt (prices, cot_disaggregated, cot_legacy, fundamentals, weather, enso, wasde, crop_progress, **shipping [session 113, rebrand+utvidelse av bdi til full Baltic-suite]**, calendar_ff [session 105], cot_ice [session 106], eia_inventories [session 107], comex [session 108], seismic [session 109], cot_euronext [session 110], conab [session 111], unica [session 112]). 2 gjenstår å port per § 7.5 (sessions 114-115 — begge UI-only).
 - **PLAN § 7.3:** 6/8 live data (WASDE, BRL, ICE softs COT via cot_disaggregated, BDI/BDRY, NASS Crop Progress, ENSO). 2/8 manuell sample (eksport-events, disease-alerts). 1/8 betalt/manuell import (IGC).
 - **System-status:** `docs/system_status_2026-04-26.md` — full ende-til-ende rapport (sub-fase 12.5+ refresh i session 117).
 - **Backtest-resultater siste 12mnd:** Gold 100% hit-rate 90d. Corn ikke lenger invertert.
-- **Sub-fase 12.5+ scope:** 11 ikke-portede cot-explorer-fetchere (PLAN § 7.5) + ADR-007 strategi + ADR-008 mapping. Sessions 105-112 lukket (8/11). Sessions 113-115 (3/11) + 116-117 (Phase D) gjenstår.
+- **Sub-fase 12.5+ scope:** 11 ikke-portede cot-explorer-fetchere (PLAN § 7.5) + ADR-007 strategi + ADR-008 mapping. Sessions 105-113 lukket (9/11). Sessions 114-115 (2/11, UI-only) + 116-117 (Phase D) gjenstår.
 - **Econ_events DB:** 37 rader backfilt fra Forex Factory ved session 105 (25 High + 12 Medium impact). Refresh via systemd-timer 06:15 + 18:15 Oslo daglig.
 - **Cot_ice DB:** 136 rader backfilt fra ICE COTHist2025.csv + COTHist2026.csv ved session 106 — 68 uker Brent + 68 uker Gasoil. **TTF Natural Gas mangler i public ICE feed** (NaturalGas-driver wired men returnerer 0.0 defensive). Refresh via systemd-timer Fre 22:30 Oslo med smart-skip.
 - **Eia_inventory DB:** 5018 rader backfilt fra EIA Open Data v2 ved session 107 (Crude 2273 / Gasoline 1894 / NatGas 851, 1991-2026). Refresh via user-systemd-timer Ons 17:30 Oslo med smart-skip basert på `_previous_wednesday()`.
@@ -108,7 +109,8 @@
 - **Cot_euronext DB:** 174 rader backfilt fra Euronext @ 2026-04-27 ved session 110 (58 onsdager × 3 produkter — milling wheat, corn, canola — 2025-03-05 til 2026-04-22). Refresh via user-systemd-timer Ons 18:00 Oslo med smart-skip basert på `_previous_wednesday()`.
 - **Conab_estimates DB:** 7 rader backfilt fra gov.br @ 2026-04-27 ved session 111 (4 grains: soja/milho/trigo/algodao fra 7º Levantamento Safra 2025/26 + 3 coffee tier: cafe_total/arabica/conilon fra 1º Levantamento Café 2026). Refresh via user-systemd-timer 15. i mnd 20:00 Oslo med månedlig smart-skip.
 - **Unica_reports DB:** 1 rad backfilt fra unicadata.com.br @ 2026-04-27 ved session 112 (1ª quinzena de março de 2026, mix_sugar_pct=50.61%, sugar_production_yoy=+0.71%). Refresh via user-systemd-timer 1. + 16. i mnd 21:00 Oslo med 13d smart-skip.
-- **Next task:** **Session 113** — `fetch_shipping.py` → konsolidering med eksisterende `bdi`-fetcher (BDRY ETF lever som BDI-proxy). Vurdering: utvide eksisterende `bdi`-skjema med port- + container-rate-data, eller ny `shipping_rates`-tabell. PLAN § 7.5 rad 9.
+- **Shipping_indices DB:** Migration fra gammel `bdi`-tabell (session 89) ved session 113 — alle eksisterende BDI-rader bevart med index_code='BDI'. BCI/BPI/BSI sample-data fra `data/manual/shipping_indices.csv` (9 sample-rader 2026-04-22 til -24). Refresh via user-systemd-timer Mon-Fri 23:30 Oslo. BDI auto via Yahoo BDRY; BCI/BPI/BSI fra manuell CSV per ADR-007 § 4.
+- **Next task:** **Session 114** — `fetch_intel.py` → `bedrock/fetch/news_intel.py` (Google News RSS for metals/oil). Per ADR-008 § 114: kun fetcher + UI-context, ingen driver i denne sessionen. Driver-vurdering etter ≥1 mnds empirisk validering (ADR-009).
 - **Git-modus:** Nivå 1 aktivt under sub-fase 12.5+ docs/cleanup-pass. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt valgfri.
 
 ## Workflow-notes (2026-04-26)
@@ -207,6 +209,92 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-27 — Session 113: shipping (Baltic-suite konsolidering med bdi) + shipping_pressure (LUKKET)
+
+**Scope:** Niende fetcher-port i sub-fase 12.5+. Refactor + utvidelse,
+ikke fresh port — eksisterende `bdi`-fetcher (session 89, kun BDI via
+BDRY ETF) utvides til full Baltic-suite: BDI/BCI/BPI/BSI i ny
+long-format `shipping_indices`-tabell. Driver `bdi_chg30d` rebrandes
+til `shipping_pressure` med ny `index`-param. Bruker har bypass-
+permissions på, så commits gikk uten approval-prompts.
+
+**Beslutninger tatt selv (per CLAUDE.md "bestem-og-kjør"):**
+- Schema: long-format `(index_code, date, value, source)` med PK
+  (index_code, date) — utvidbart, matcher fundamentals-mønsteret
+  (én rad per series_id+date), naturlig sparse-håndtering.
+- Migration-mekanikk: idempotent kjøring i `_init_schema` —
+  `INSERT OR IGNORE INTO shipping_indices SELECT 'BDI', ... FROM bdi`
+  + `DROP TABLE bdi` etter row-count-verifisering. No-op på fresh DB.
+- Bakoverkompat: ingen alias-wrapper for `bdi_chg30d` — alle 5
+  YAMLer migrert samtidig (cleaner refactor, færre moving parts).
+- Manuell CSV fra dag 1 for BCI/BPI/BSI per ADR-007 § 4 (Stooq
+  krever nå API-key og symbolene er upålitelige).
+- Vekt-kontinuitet: alle 5 YAMLs bruker fortsatt `index: BDI` for å
+  bevare scoring-atferd 1:1. BPI-overlay vurderes empirisk når BPI
+  faktisk har historikk.
+
+**Commits direkte til main (Nivå 1):**
+
+1. `f6a3cef refactor(data): shipping_indices tabell + DataStore +
+   migration fra bdi + tester` — Ny `TABLE_SHIPPING_INDICES` +
+   `DDL_SHIPPING_INDICES` + `SHIPPING_INDICES_COLS` + `ShippingIndexRow`
+   Pydantic (med `field_validator` som tvinger BDI/BCI/BPI/BSI
+   uppercase). Ny `_migrate_bdi_to_shipping_indices`-helper kjøres
+   ved init. Nye DataStore-metoder: `append_shipping_indices`,
+   `get_shipping_index(code)`, `has_shipping_index(code=None)`. I
+   denne mellom-commiten er `append_bdi`/`get_bdi` beholdt som tynne
+   delegates inntil C3 er fullført. 21 nye tester (`test_store_shipping_indices.py`).
+
+2. `3b92983 feat(fetch): shipping fetcher (BDI+BCI+BPI+BSI) + manuell
+   CSV-fallback + tester` — Ny `bedrock/fetch/shipping.py` med
+   `fetch_bdi_via_bdry()` (Yahoo BDRY → SHIPPING_INDICES_COLS-schema),
+   `fetch_shipping_manual_csv()` (case-insensitive uppercase + filter
+   ukjente koder), og `fetch_shipping_indices()` orchestrator som
+   kombinerer begge. Sample CSV `data/manual/shipping_indices.csv`
+   med 9 rader for BCI/BPI/BSI 2026-04-22 til -24. README oppdatert
+   med ny shipping-entry og auto-fetcher-status. 13 nye tester.
+
+3. `76161f9 refactor(driver): bdi_chg30d → shipping_pressure med
+   index-param + YAML-migrasjon + tester` — Driveren leser nå
+   `store.get_shipping_index(index_code)` istedenfor `store.get_bdi()`.
+   Step-mapping uendret. Default `index='BDI'`. YAML-migrasjon i
+   alle 5 instrumenter (Wheat/Corn/Soybean/Cotton/Cocoa cross-familie
+   0.2-vekt med eksplisitt `index: BDI`). Driver-test-suite oppdatert
+   med 9 nye tester (default-BDI, eksplisitt index, BPI-case, ukjent
+   index, case-insensitive, bull_when=positive, bdi_chg30d
+   avregistrert).
+
+4. `bcd8471 config: rename bdi-runner → shipping i
+   fetch.yaml/fetch_runner/UI + cleanup legacy` — `register_runner('bdi')`
+   → `register_runner('shipping')`; `fetch.yaml` `bdi:` → `shipping:`
+   med module=`bedrock.fetch.shipping` og table=`shipping_indices`;
+   UI `_FETCHER_GROUPS` `bdi` → `shipping`. Legacy-cleanup: fjernet
+   `DataStore.append_bdi`/`get_bdi`, `DDL_BDI`/`BDI_COLS` fra schemas.py
+   (TABLE_BDI beholdt for migration-kode), `fetch_bdi`/`fetch_bdi_via_bdry`/
+   `_BDI_CSV` fra manual_events.py. `test_fetch_bdi.py` slettet
+   (erstattet av `test_fetch_shipping.py`). Tester oppdatert i
+   test_fetch_runner.py + test_fetch_config.py + test_endpoints_ui.py.
+
+**Live-data:** BDI fortsetter å hentes via Yahoo BDRY (session 89-
+mekanisme). Eksisterende BDI-historikk er bevart via migrasjon. BPI
+sample-data demonstrerer at driveren funker for sub-indekser.
+
+**Test-status:** 1934/1934 grønt (5 færre enn før, fra slettet
+test_fetch_bdi.py + nettoopprydding av legacy-tests). Pyright 0
+errors på touched files.
+
+**Følges opp:**
+- Systemd timer-unit-navn er ikke endret (timeren heter fortsatt
+  `bedrock-fetch-bdi.timer`). Cron-cadencen er identisk så det
+  fortsetter å virke. Ny timer-regenerering vil naturlig produsere
+  `bedrock-fetch-shipping.timer`. Bruker kan velge å rebrande
+  manuelt eller la den gamle navnet stå (no-op fra system-perspektiv).
+- BPI/BCI/BSI har sample-data, men ingen empirisk historikk i live-
+  prod — disse blir relevante først når Baltic Exchange / manuell
+  daglig CSV-pipeline er etablert.
+- PLAN § 7.3/7.4 systemd-installasjons-status oppdatering er
+  separat oppgave (utenfor session 113-scope).
 
 ### 2026-04-27 — Session 105: calendar_ff + event_distance på alle 22 instrumenter (LUKKET)
 
