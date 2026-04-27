@@ -584,10 +584,132 @@ def comex_stress(store: Any, instrument: str, params: dict) -> float:
     return max(0.0, min(1.0, round(score, 4)))
 
 
+# ---------------------------------------------------------------------------
+# mining_disruption (sub-fase 12.5+ session 109)
+# ---------------------------------------------------------------------------
+
+# Per-metall mapping fra mining-region-navn (cot-explorer-canonical) til
+# global produksjonsandel. Vekt brukes til weighted score-aggregat:
+# events i regioner med høyere produksjonsandel veier mer. Tall basert på
+# 2024 USGS Mineral Commodity Summaries.
+_REGION_WEIGHTS_BY_METAL: dict[str, dict[str, float]] = {
+    "gold": {
+        "Kina (Mongolia / Kina)": 0.10,
+        "Mongolia / Kina": 0.10,
+        "Australia": 0.10,
+        "USA / Canada": 0.10,
+        "Russland / Sibir": 0.09,
+        "Sør-Afrika": 0.05,
+        "Chile / Peru": 0.10,
+        "Mexico / Mellom-Amerika": 0.04,
+        "DRC / Zambia": 0.02,
+        "Indonesia / Papua": 0.05,
+        "Øst-Afrika": 0.06,  # Tanzania, Ghana etc.
+    },
+    "silver": {
+        "Mexico / Mellom-Amerika": 0.23,
+        "Chile / Peru": 0.18,
+        "Mongolia / Kina": 0.13,
+        "Russland / Sibir": 0.05,
+        "Australia": 0.05,
+        "USA / Canada": 0.06,
+    },
+    "copper": {
+        "Chile / Peru": 0.40,  # Chile + Peru = ~40% global
+        "DRC / Zambia": 0.15,
+        "Mongolia / Kina": 0.10,
+        "USA / Canada": 0.07,
+        "Indonesia / Papua": 0.05,
+        "Australia": 0.04,
+        "Russland / Sibir": 0.04,
+    },
+    "platinum": {
+        "Sør-Afrika": 0.70,  # Bushveld Complex — kritisk!
+        "Russland / Sibir": 0.10,
+        "USA / Canada": 0.04,
+    },
+}
+
+
+@register("mining_disruption")
+def mining_disruption(store: Any, instrument: str, params: dict) -> float:
+    """Mining-disruption score (0..1) basert på USGS-events i mining-regioner.
+
+    Logikk:
+      For hver event i lookback-vinduet (default 7 dager) i en region som
+      har vekt for `metal`:
+        impact = max(0, magnitude - 4.5) / 3.0   # 4.5 → 0, 7.5 → 1
+        weighted_impact = impact * region_weight
+
+      score = clip(sum(weighted_impacts), 0, 1)
+
+    Tolkning: høyere score = supply-disruption-risk = bullish for prising
+    av det metallet (gruver kan stenge i flere uker etter alvorlige skjelv).
+
+    Params:
+        metal (REQUIRED): "gold" | "silver" | "copper" | "platinum".
+            Bestemmer region-vektene.
+        lookback_days: vindu i antall dager (default 7).
+        min_magnitude: filtrer events under denne (default 4.5 — matcher
+            USGS-feed-grense).
+        regions: optional override av default region-vekter for metallet.
+
+    Returnerer 0..1. Defensive 0.0 ved manglende metal/data/exception.
+    """
+    metal = params.get("metal")
+    if not metal:
+        _log.warning("mining_disruption.no_metal_param", instrument=instrument)
+        return 0.0
+
+    lookback_days = int(params.get("lookback_days", 7))
+    min_magnitude = float(params.get("min_magnitude", 4.5))
+
+    custom_regions = params.get("regions")
+    if isinstance(custom_regions, dict):
+        region_weights = {str(k): float(v) for k, v in custom_regions.items()}
+    else:
+        region_weights = _REGION_WEIGHTS_BY_METAL.get(str(metal).lower())
+        if not region_weights:
+            _log.warning("mining_disruption.unknown_metal", instrument=instrument, metal=metal)
+            return 0.0
+
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=lookback_days)
+    regions = list(region_weights.keys())
+
+    try:
+        df = store.get_seismic_events(regions=regions, from_ts=cutoff, min_magnitude=min_magnitude)
+    except Exception as exc:
+        _log.warning(
+            "mining_disruption.fetch_failed",
+            instrument=instrument,
+            error=str(exc),
+        )
+        return 0.0
+
+    if df.empty:
+        return 0.0
+
+    score = 0.0
+    for _, row in df.iterrows():
+        region = str(row["region"])
+        weight = region_weights.get(region, 0.0)
+        if weight <= 0:
+            continue
+        magnitude = float(row["magnitude"])
+        # M4.5 → 0.0, M7.5 → 1.0 (lineært)
+        impact = max(0.0, (magnitude - 4.5) / 3.0)
+        score += impact * weight
+
+    return max(0.0, min(1.0, round(score, 4)))
+
+
 __all__ = [
     "comex_stress",
     "dxy_chg5d",
     "eia_stock_change",
+    "mining_disruption",
     "real_yield",
     "vix_regime",
 ]
