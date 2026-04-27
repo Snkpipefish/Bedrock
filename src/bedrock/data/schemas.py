@@ -1187,3 +1187,120 @@ class ShippingIndexRow(BaseModel):
                 f"index_code must be one of {sorted(_VALID_SHIPPING_INDEX_CODES)}, got {v!r}"
             )
         return v_upper
+
+
+# ---------------------------------------------------------------------------
+# News intel — Google News RSS articles per kategori (sub-fase 12.5+ session 114)
+# ---------------------------------------------------------------------------
+#
+# UI-only foreløpig (per ADR-007 § 5 + ADR-008 § 114). Schema er
+# scoring-ready slik at en fremtidig `news_intel_pressure`-driver kan
+# beregne (etter ≥1 mnds empirisk datainnsamling):
+#
+#   pressure = sum(disruption_score_i * recency_decay(event_ts_i))
+#              for articles in (category, last_n_days)
+#
+# Per ADR-009 (cutover-readiness) vil sentiment_label + disruption_score
+# fylles inn av en separat classifier (regex-basert i første runde,
+# sentiment-NLP senere). Inntil da lagres de som NULL.
+#
+# Kategorier (9): gold, silver, copper (metals), oil, gas (energy),
+# grains, softs (agri), geopolitics, agri_weather. Mer granulært enn
+# cot-explorer's 7 — splittet "geopolitics" inn i oil/gas/geopolitics
+# slik at fremtidig per-instrument-mapping (Gold → gold + geopolitics,
+# Brent → oil + geopolitics) blir trivielt.
+
+TABLE_NEWS_INTEL = "news_intel"
+
+DDL_NEWS_INTEL = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_NEWS_INTEL} (
+    url               TEXT NOT NULL PRIMARY KEY,
+    event_ts          TEXT NOT NULL,    -- ISO datetime (publisering)
+    fetched_at        TEXT NOT NULL,    -- ISO datetime (når vi hentet)
+    category          TEXT NOT NULL,    -- 'gold','silver','copper','oil','gas','grains','softs','geopolitics','agri_weather'
+    title             TEXT NOT NULL,
+    source            TEXT,             -- f.eks. "Reuters" — kan være tom for noen RSS-items
+    query_id          TEXT NOT NULL,    -- RSS-query som produserte denne (traceability)
+    sentiment_label   TEXT,             -- 'bull'/'bear'/'neutral' — fylles av classifier (session 117+)
+    disruption_score  REAL              -- 0..1 — fylles av classifier
+)
+"""
+
+NEWS_INTEL_COLS: tuple[str, ...] = (
+    "url",
+    "event_ts",
+    "fetched_at",
+    "category",
+    "title",
+    "source",
+    "query_id",
+    "sentiment_label",
+    "disruption_score",
+)
+
+_VALID_NEWS_CATEGORIES = frozenset(
+    {
+        "gold",
+        "silver",
+        "copper",
+        "oil",
+        "gas",
+        "grains",
+        "softs",
+        "geopolitics",
+        "agri_weather",
+    }
+)
+
+_VALID_SENTIMENT_LABELS = frozenset({"bull", "bear", "neutral"})
+
+
+class NewsIntelArticle(BaseModel):
+    """Én Google News RSS-artikkel knyttet til en bedrock-kategori.
+
+    `sentiment_label` og `disruption_score` er nullable og fylles inn
+    først av en fremtidig classifier (session 117+) når vi har ≥1 mnds
+    rådata til å validere klassifiseringen mot.
+    """
+
+    url: str
+    event_ts: datetime
+    fetched_at: datetime
+    category: str
+    title: str
+    source: str | None = None
+    query_id: str
+    sentiment_label: str | None = None
+    disruption_score: float | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("category")
+    @classmethod
+    def _validate_category(cls, v: str) -> str:
+        v_lower = v.lower()
+        if v_lower not in _VALID_NEWS_CATEGORIES:
+            raise ValueError(f"category must be one of {sorted(_VALID_NEWS_CATEGORIES)}, got {v!r}")
+        return v_lower
+
+    @field_validator("sentiment_label")
+    @classmethod
+    def _validate_sentiment(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v_lower = v.lower()
+        if v_lower not in _VALID_SENTIMENT_LABELS:
+            raise ValueError(
+                f"sentiment_label must be one of {sorted(_VALID_SENTIMENT_LABELS)} "
+                f"or None, got {v!r}"
+            )
+        return v_lower
+
+    @field_validator("disruption_score")
+    @classmethod
+    def _validate_disruption_score(cls, v: float | None) -> float | None:
+        if v is None:
+            return None
+        if not (0.0 <= v <= 1.0):
+            raise ValueError(f"disruption_score must be in [0, 1], got {v!r}")
+        return float(v)

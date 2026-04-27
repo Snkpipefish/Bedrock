@@ -53,6 +53,7 @@ from bedrock.data.schemas import (
     DDL_EXPORT_EVENTS,
     DDL_FUNDAMENTALS,
     DDL_IGC,
+    DDL_NEWS_INTEL,
     DDL_PRICES,
     DDL_SEISMIC_EVENTS,
     DDL_SHIPPING_INDICES,
@@ -66,6 +67,7 @@ from bedrock.data.schemas import (
     EXPORT_EVENTS_COLS,
     FUNDAMENTALS_COLS,
     IGC_COLS,
+    NEWS_INTEL_COLS,
     SEISMIC_EVENTS_COLS,
     SHIPPING_INDICES_COLS,
     TABLE_ANALOG_OUTCOMES,
@@ -83,6 +85,7 @@ from bedrock.data.schemas import (
     TABLE_EXPORT_EVENTS,
     TABLE_FUNDAMENTALS,
     TABLE_IGC,
+    TABLE_NEWS_INTEL,
     TABLE_PRICES,
     TABLE_SEISMIC_EVENTS,
     TABLE_SHIPPING_INDICES,
@@ -169,6 +172,10 @@ class DataStore:
             # tabellen via idempotent migrasjon under.
             conn.execute(DDL_SHIPPING_INDICES)
             self._migrate_bdi_to_shipping_indices(conn)
+            # Sub-fase 12.5+ session 114 (ADR-008): Google News RSS-articles
+            # per kategori. UI-only foreløpig; scoring-driver vurderes etter
+            # ≥1 mnds empirisk data.
+            conn.execute(DDL_NEWS_INTEL)
             conn.commit()
 
     def _migrate_bdi_to_shipping_indices(self, conn: sqlite3.Connection) -> None:
@@ -1587,6 +1594,109 @@ class DataStore:
                     f"SELECT 1 FROM {TABLE_SHIPPING_INDICES} WHERE index_code = ? LIMIT 1",
                     (index_code.upper(),),
                 )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # News intel — Google News RSS (sub-fase 12.5+ session 114)
+    # ------------------------------------------------------------------
+
+    def append_news_intel(self, df: pd.DataFrame) -> int:
+        """Skriv news_intel-rader. Schema: ``NEWS_INTEL_COLS``.
+
+        Idempotent på (url) via INSERT OR IGNORE — beholder den FØRSTE
+        fetched_at-tidsstemplet siden samme artikkel kan være til stede
+        i RSS-feeden i flere dager. Dette er bevisst forskjellig fra
+        de fleste andre tabellene som bruker INSERT OR REPLACE.
+        Returnerer antall NYE rader (eksisterende dupes telles ikke).
+        """
+        if df.empty:
+            return 0
+        missing = [c for c in NEWS_INTEL_COLS if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_news_intel: missing columns {missing}. "
+                f"Required: {list(NEWS_INTEL_COLS)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df[list(NEWS_INTEL_COLS)].copy()
+        prepared["event_ts"] = pd.to_datetime(prepared["event_ts"]).dt.strftime("%Y-%m-%dT%H:%M:%S")
+        prepared["fetched_at"] = pd.to_datetime(prepared["fetched_at"]).dt.strftime(
+            "%Y-%m-%dT%H:%M:%S"
+        )
+
+        def _opt_str(v: Any) -> str | None:
+            return None if pd.isna(v) else str(v)
+
+        def _opt_float(v: Any) -> float | None:
+            return None if pd.isna(v) else float(v)
+
+        rows: Sequence[tuple] = [
+            (
+                str(row.url),
+                row.event_ts,
+                row.fetched_at,
+                str(row.category).lower(),
+                str(row.title),
+                _opt_str(row.source),
+                str(row.query_id),
+                _opt_str(row.sentiment_label),
+                _opt_float(row.disruption_score),
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            cursor = conn.executemany(
+                f"INSERT OR IGNORE INTO {TABLE_NEWS_INTEL} "
+                f"({', '.join(NEWS_INTEL_COLS)}) "
+                f"VALUES ({', '.join(['?'] * len(NEWS_INTEL_COLS))})",
+                rows,
+            )
+            n_new = cursor.rowcount
+            conn.commit()
+        # rowcount returnerer faktisk insertert (skipper IGNORE-ed dupes)
+        return n_new if n_new is not None and n_new >= 0 else 0
+
+    def get_news_intel(
+        self,
+        category: str | None = None,
+        from_event_ts: str | None = None,
+        last_n: int | None = None,
+    ) -> pd.DataFrame:
+        """Returner news_intel-rader sortert DESC på event_ts (nyeste først).
+
+        Filtrer:
+        - ``category``: 'gold'/'silver'/etc — None = alle.
+        - ``from_event_ts``: ISO-string; kun artikler ≥ denne tiden.
+        - ``last_n``: ta de N siste.
+
+        Returnerer pd.DataFrame med event_ts/fetched_at som timestamps.
+        Tom DataFrame hvis ingen rader.
+        """
+        clauses: list[str] = []
+        params: list[Any] = []
+        if category is not None:
+            clauses.append("category = ?")
+            params.append(category.lower())
+        if from_event_ts is not None:
+            clauses.append("event_ts >= ?")
+            params.append(from_event_ts)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        query = f"SELECT * FROM {TABLE_NEWS_INTEL} {where} ORDER BY event_ts DESC"
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=tuple(params))
+
+        if df.empty:
+            return df
+        df["event_ts"] = pd.to_datetime(df["event_ts"])
+        df["fetched_at"] = pd.to_datetime(df["fetched_at"])
+        if last_n is not None:
+            df = df.head(last_n).reset_index(drop=True)
+        return df
+
+    def has_news_intel(self) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute(f"SELECT 1 FROM {TABLE_NEWS_INTEL} LIMIT 1")
             return cursor.fetchone() is not None
 
     # ------------------------------------------------------------------
