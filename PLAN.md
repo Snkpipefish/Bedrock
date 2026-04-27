@@ -765,28 +765,34 @@ Pipeline-runner leser yaml, orkestrerer. Ingen shell-if-else.
 
 Alle viktige per dine ord. Implementeres i faser (se § 13).
 
-**Status etter session 105:** 6 av 8 har auto-fetcher (live), 1 manuell CSV
+**Status etter session 110:** 6 av 8 har auto-fetcher (live), 1 manuell CSV
 sample, 1 betalt/manuell import. ICE softs COT er live via `cot_disaggregated`-
-runneren; full ICE-COT-fetcher (Brent/Gasoil/TTF) kommer i session 106 — se § 7.5.
+runneren; ICE Brent/Gasoil/TTF har egen full COT-fetcher fra session 106 — se § 7.5.
 
 `Auto-fetcher?`-kolonnen markerer om vi har en `register_runner`-implementasjon
 (kode-nivå). `systemd-timer?`-kolonnen markerer om timer-unit faktisk er
-installert i `/etc/systemd/system/` (system-nivå). Audit i session 105 avdekket
-at de fleste runners er kode-nivå-implementert men ikke deployed som timer
-ennå — se § 7.4.3 for full status og handlingsplan.
+installert (system-nivå). Audit i session 107 avdekket at session 105's audit
+var ufullstendig — den så kun i `/etc/systemd/system/` og misset 8 user-timers
+i `~/.config/systemd/user/`. Korrigert status under viser at alle timers er
+installert (system eller user); se § 7.4.3 for full splittstatus.
 
 | Kilde | Hva | Implementering | Fase | Auto-fetcher? | systemd-timer? |
 |---|---|---|---|---|---|
-| USDA WASDE | Ending stocks, yield-prognoser, S2U | XML-parser fra ESMIS (sessions 85, 87) + manuell CSV-fallback | 4 | Ja (`wasde`-runner, session 103) | ⚠ generert, ikke installert |
-| USDA Crop Progress | % planted/silked/harvested ukentlig | NASS QuickStats API (session 97-98) | 4 | Ja (`crop_progress`-runner, session 103) | ⚠ generert, ikke installert |
+| USDA WASDE | Ending stocks, yield-prognoser, S2U | XML-parser fra ESMIS (sessions 85, 87) + manuell CSV-fallback | 4 | Ja (`wasde`-runner, session 103) | ✅ installert (user-timer) |
+| USDA Crop Progress | % planted/silked/harvested ukentlig | NASS QuickStats API (session 97-98) | 4 | Ja (`crop_progress`-runner, session 103) | ✅ installert (user-timer) |
 | Eksport-policy-tracker | India/Indonesia/Ivory Coast-hendelser | Manuell CSV (`export_events`) | 5 | Nei (manuell CSV) | N/A (manuell) |
-| BRL/USD aktivt drivet | Pris-feed + som driver for softs | DEXBZUS via FRED (session 80) | 4 | Ja (gjennom `fundamentals`-runner) | ⚠ generert, ikke installert |
-| Baltic Dry til agri | Kobling BDI → grain-eksport-pris | BDRY ETF via Yahoo (session 89) | 5 | Ja (`bdi`-runner, session 103) | ⚠ generert, ikke installert |
+| BRL/USD aktivt drivet | Pris-feed + som driver for softs | DEXBZUS via FRED (session 80) | 4 | Ja (gjennom `fundamentals`-runner) | ✅ installert (user-timer) |
+| Baltic Dry til agri | Kobling BDI → grain-eksport-pris | BDRY ETF via Yahoo (session 89) | 5 | Ja (`bdi`-runner, session 103) | ✅ installert (user-timer) |
 | Disease/pest-varsling | Coffee rust, wheat stripe rust | Manuell CSV (`disease_alerts`) | 6 | Nei (manuell CSV) | N/A (manuell) |
-| ICE softs COT | Sukker/kaffe-spesifikk | Finnes delvis; utvid | 4 | Ja (gjennom `cot_disaggregated`) | ⚠ generert, ikke installert |
+| ICE softs COT | Sukker/kaffe-spesifikk via CFTC | Finnes via `cot_disaggregated` | 4 | Ja (gjennom `cot_disaggregated`) | ✅ installert (user-timer) |
+| ICE Brent/Gasoil/TTF COT | EU-basert energy-COT | ICE COTHist*.csv (session 106) | 12.5+ | Ja (`cot_ice`-runner, session 106) | ✅ installert (system-timer) |
 | IGC rapporter | International Grains Council | Månedlig PDF-parse (session 84) | 5 | Nei (manuell import) | N/A (manuell) |
-| NOAA ONI (ENSO) | El Niño / La Niña-regime | NOAA-ASCII (session 57) | 4 | Ja (`enso`-runner, session 103) | ⚠ generert, ikke installert |
-| Forex Factory kalender | High/medium-impact econ events | JSON via faireconomy.media (session 105) | 12.5+ | Ja (`calendar_ff`-runner, session 105) | ✅ installert (session 105) |
+| NOAA ONI (ENSO) | El Niño / La Niña-regime | NOAA-ASCII (session 57) | 4 | Ja (`enso`-runner, session 103) | ✅ installert (user-timer) |
+| Forex Factory kalender | High/medium-impact econ events | JSON via faireconomy.media (session 105) | 12.5+ | Ja (`calendar_ff`-runner, session 105) | ✅ installert (system-timer) |
+| EIA weekly inventories | Crude/Gasoline/Nat Gas Storage | EIA Open Data v2 (session 107) | 12.5+ | Ja (`eia_inventories`-runner, session 107) | ✅ installert (user-timer) |
+| COMEX warehouse | Gold/Silver/Copper supply-stress | metalcharts.org JSON (session 108) | 12.5+ | Ja (`comex`-runner, session 108) | ✅ installert (user-timer) |
+| USGS seismic | M≥4.5 events i mining-regions | USGS GeoJSON feed (session 109) | 12.5+ | Ja (`seismic`-runner, session 109) | ✅ installert (user-timer) |
+| Euronext MiFID II COT | Wheat/Corn EU-positioning-overlay | Euronext HTML-parser (session 110) | 12.5+ | Ja (`cot_euronext`-runner, session 110) | ✅ installert (user-timer) |
 
 ### 7.4 Runner-registry og fetch-schedule
 
@@ -860,7 +866,7 @@ fetching koster nettverk uten verdi.
   (calendar_ff).
 - DOW-felt med navngitte dager (`MON-FRI`) → systemd `Mon-Fri`-prefix.
 
-Gjeldende fetcher-liste (etter session 105, 10 totalt):
+Gjeldende fetcher-liste (etter session 110, 15 totalt):
 
 | Fetcher | Cadence | OnCalendar | Stale_hours | Source |
 |---|---|---|---|---|
@@ -874,30 +880,50 @@ Gjeldende fetcher-liste (etter session 105, 10 totalt):
 | crop_progress | ukentlig (apr-nov) | `Mon *-04..11-* 23:00:00` | 200 | NASS API |
 | bdi | hverdager | `Mon-Fri *-*-* 23:30:00` | 30 | BDRY ETF (Yahoo) |
 | calendar_ff | daglig 2× | `*-*-* 06,18:15:00` | 14 | Forex Factory |
+| cot_ice | ukentlig | `Fri *-*-* 22:30:00` | 168 | ICE COTHist*.csv |
+| eia_inventories | ukentlig (ons) | `Wed *-*-* 17:30:00` | 200 | EIA Open Data v2 |
+| comex | hverdager | `Mon-Fri *-*-* 22:00:00` | 30 | metalcharts.org |
+| seismic | daglig | `*-*-* 04:00:00` | 30 | USGS GeoJSON |
+| cot_euronext | ukentlig (ons) | `Wed *-*-* 18:00:00` | 168 | Euronext HTML |
 
-#### 7.4.3 Generert vs systemd-installert (audit-funn session 105)
+#### 7.4.3 Generert vs systemd-installert (audit korrigert session 107)
 
 **Status:** `bedrock systemd generate` skriver timer/service-filer til
-`/home/pc/bedrock/systemd/` (gitignored). `bedrock systemd install` (eller
-manuell `cp + systemctl daemon-reload + enable --now`) deployer dem til
-`/etc/systemd/system/`. De to stegene er forskjellige.
+`/home/pc/bedrock/systemd/` (gitignored). Installasjon kan skje to steder:
+- **System-nivå:** `/etc/systemd/system/` via `sudo cp + systemctl daemon-reload
+  + enable --now`. Krever NOPASSWD-sudo eller passord-prompt.
+- **User-nivå:** `~/.config/systemd/user/` via `cp + systemctl --user
+  daemon-reload + enable --now`. Krever ikke sudo. Fordel: enklere å
+  rulle ut. Begrensning: kjører kun når brukeren er logget inn (eller
+  `loginctl enable-linger pc`).
 
-Audit i session 105 avdekket at av de 10 fetchere over er kun
-**calendar_ff** faktisk system-deployed (installert i session 105).
-De øvrige 9 fetcherne har genererte timer-filer i repoet, men ingen
-har blitt installert — de kjøres antagelig manuelt eller via annen
-mekanisme (cron i $HOME, manuell `bedrock fetch run <name>`).
+Audit-funn fra session 105 var **ufullstendig** — det listet 9 fetchere som
+"generert, ikke installert" fordi det kun så i `/etc/systemd/system/`. Audit
+korrigert i session 107: 8 av disse var allerede installert som user-timers
+i `~/.config/systemd/user/` siden tidligere sessioner. Korrekt status etter
+session 110 (alle 15 fetchere er aktivt installert):
 
-| Status | Fetchere |
+| Lag | Fetchere |
 |---|---|
-| ✅ Installert + aktiv timer | calendar_ff (session 105) |
-| ⚠ Generert, ikke installert | prices, cot_disaggregated, cot_legacy, fundamentals, weather, enso, wasde, crop_progress, bdi |
+| ✅ System-installert | calendar_ff (105), cot_ice (106) |
+| ✅ User-installert | prices, cot_disaggregated, cot_legacy, fundamentals, weather, enso, wasde, crop_progress, bdi (alle pre-session 105), eia_inventories (107), comex (108), seismic (109), cot_euronext (110) |
 
-**Aksjonsplan:** før Fase 13 cutover må alle 9 ⚠-fetchere installeres
-som systemd-timers eller bekreftes-å-kjøres-via-annen-mekanisme. Dette
-ryddes i ADR-009 cutover-readiness audit (session 117).
+**Hvorfor begge nivåer i bruk?** Tidligere fetchere ble installert som user-
+timers i et tidlig dev-stadium. Sessions 105-106 brukte system-timers fordi
+NOPASSWD-sudo var aktivt. Sessions 107-110 falt tilbake på user-timers fordi
+NOPASSWD-sudo ikke lenger var konfigurert; user-timer er pragmatisk og
+fungerer godt for dev/single-user-systemet.
 
-Service-relaterte units som ER installert per session 105:
+**Aksjonsplan før Fase 13 cutover (ADR-009 audit i session 117):**
+1. Bestemme om alle skal være system- eller user-timers (preferanse: system
+   for prod, fordi `loginctl enable-linger` er ekstra steg). Konvertere
+   etter behov.
+2. Verifisere at alle aktivt fyrer (sjekke `LAST` + `NEXT`-kolonnene mot
+   forventet cron).
+3. Inkludere systemd-status i `bedrock-monitor`-rapporten (per-timer
+   "last run age" + "next run").
+
+Service-relaterte units som ER installert (system-nivå):
 `bedrock-server.service` (24/7 UI), `bedrock-signals-all.timer`
 (daglig signal-generering), `bedrock-monitor.timer` (06:30 pipeline-
 helse), `bedrock-compare.timer` (06:35 signal-diff vs cot-explorer).
