@@ -770,3 +770,66 @@ class EiaInventoryRow(BaseModel):
     units: str | None = None
 
     model_config = ConfigDict(extra="forbid")
+
+
+# ---------------------------------------------------------------------------
+# COMEX warehouse inventories (sub-fase 12.5+ session 108)
+# ---------------------------------------------------------------------------
+# CME Group's COMEX-divisjon publiserer daglige stats over warehouse-
+# inventories for gull (XAU), sølv (XAG) og kobber (HG). Tre verdier:
+# - registered  — fysisk metall klart for delivery mot futures-shorts
+# - eligible    — metall i godkjente warehouses men ikke "warranted"
+#                 til registered-status; krever owner-deklarasjon
+# - total       — total stocks i warehouse-systemet (NB: ikke alltid =
+#                 registered + eligible; varierer per kilde)
+#
+# Stress-tolkning: lav `registered/total`-coverage = supply tight
+# (mer eligible som ikke er klar til delivery) = bullish for prising.
+# `comex_stress`-driver leser denne tabellen.
+#
+# Schema: én rad per (metal, date). Kobber kan ha registered=total
+# fordi CME har fjernet reg/elig-skillet for HG (cot-explorer-presedens).
+
+TABLE_COMEX_INVENTORY = "comex_inventory"
+
+DDL_COMEX_INVENTORY = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_COMEX_INVENTORY} (
+    metal      TEXT    NOT NULL,    -- "gold", "silver", "copper"
+    date       TEXT    NOT NULL,    -- ISO YYYY-MM-DD
+    registered REAL    NOT NULL,    -- registered oz/short tons
+    eligible   REAL    NOT NULL,    -- eligible oz/short tons (0 hvis copper)
+    total      REAL    NOT NULL,    -- total stocks (kan != registered+eligible)
+    units      TEXT,                -- "oz" eller "st"
+    PRIMARY KEY (metal, date)
+)
+"""
+
+COMEX_INVENTORY_COLS: tuple[str, ...] = (
+    "metal",
+    "date",
+    "registered",
+    "eligible",
+    "total",
+    "units",
+)
+
+
+class ComexInventoryRow(BaseModel):
+    """En rad fra COMEX warehouse inventory-rapport.
+
+    `metal` er bedrock-canonical (``"gold"``, ``"silver"``, ``"copper"``);
+    mapping til instrument-id (Gold/Silver/Copper) er driver-laget. `date`
+    er observation date (typisk forrige børsdag, COMEX rapporterer T-1).
+
+    For kobber kan `eligible=0` og `total=registered` fordi CME har
+    fjernet reg/elig-skillet for HG-kontrakten (cot-explorer-presedens).
+    """
+
+    metal: str = Field(min_length=1)
+    date: date
+    registered: float = Field(ge=0)
+    eligible: float = Field(ge=0)
+    total: float = Field(ge=0)
+    units: str | None = None
+
+    model_config = ConfigDict(extra="forbid")

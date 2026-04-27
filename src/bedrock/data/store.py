@@ -33,12 +33,14 @@ import pandas as pd
 from bedrock.data.schemas import (
     ANALOG_OUTCOMES_COLS,
     BDI_COLS,
+    COMEX_INVENTORY_COLS,
     COT_DISAGGREGATED_COLS,
     COT_ICE_COLS,
     COT_LEGACY_COLS,
     CROP_PROGRESS_COLS,
     DDL_ANALOG_OUTCOMES,
     DDL_BDI,
+    DDL_COMEX_INVENTORY,
     DDL_COT_DISAGGREGATED,
     DDL_COT_ICE,
     DDL_COT_LEGACY,
@@ -61,6 +63,7 @@ from bedrock.data.schemas import (
     IGC_COLS,
     TABLE_ANALOG_OUTCOMES,
     TABLE_BDI,
+    TABLE_COMEX_INVENTORY,
     TABLE_COT_DISAGGREGATED,
     TABLE_COT_ICE,
     TABLE_COT_LEGACY,
@@ -139,6 +142,8 @@ class DataStore:
             conn.execute(DDL_COT_ICE)
             # Sub-fase 12.5+ session 107 (ADR-008): EIA weekly inventories.
             conn.execute(DDL_EIA_INVENTORY)
+            # Sub-fase 12.5+ session 108 (ADR-008): COMEX warehouse inventories.
+            conn.execute(DDL_COMEX_INVENTORY)
             conn.commit()
 
     # ------------------------------------------------------------------
@@ -508,6 +513,86 @@ class DataStore:
             cursor = conn.execute(
                 f"SELECT 1 FROM {TABLE_EIA_INVENTORY} WHERE series_id = ? LIMIT 1",
                 (series_id,),
+            )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # COMEX warehouse inventories (sub-fase 12.5+ session 108)
+    # ------------------------------------------------------------------
+
+    def append_comex_inventory(self, df: pd.DataFrame) -> int:
+        """Skriv COMEX-rader til ``comex_inventory``. Returnerer antall rader.
+
+        `df` må ha kolonnene i ``COMEX_INVENTORY_COLS`` (metal, date,
+        registered, eligible, total, units). Idempotent på (metal, date)
+        via INSERT OR REPLACE.
+        """
+        missing = [c for c in COMEX_INVENTORY_COLS if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_comex_inventory: missing columns {missing}. "
+                f"Required: {list(COMEX_INVENTORY_COLS)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df[list(COMEX_INVENTORY_COLS)].copy()
+        prepared["date"] = pd.to_datetime(prepared["date"]).dt.strftime("%Y-%m-%d")
+
+        rows: Sequence[tuple] = [
+            (
+                str(row.metal),
+                row.date,
+                float(row.registered),
+                float(row.eligible),
+                float(row.total),
+                None if pd.isna(row.units) else str(row.units),
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_COMEX_INVENTORY} "
+                f"(metal, date, registered, eligible, total, units) "
+                f"VALUES (?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_comex_inventory(
+        self,
+        metal: str,
+        last_n: int | None = None,
+    ) -> pd.DataFrame:
+        """Returner COMEX-rader for `metal`, sortert ASC på date.
+
+        Returnerer pd.DataFrame med `date` som pd.Timestamp. Kaster
+        ``KeyError`` hvis ingen rader for ``metal``.
+        """
+        query = f"""
+            SELECT * FROM {TABLE_COMEX_INVENTORY}
+            WHERE metal = ?
+            ORDER BY date ASC
+        """
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=(metal,))
+
+        if df.empty:
+            raise KeyError(f"No COMEX inventory data for metal={metal!r}")
+
+        df["date"] = pd.to_datetime(df["date"])
+
+        if last_n is None:
+            return df
+        return df.tail(last_n).reset_index(drop=True)
+
+    def has_comex_inventory(self, metal: str) -> bool:
+        """Test-hjelper: sjekk om `metal` har minst én rad."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"SELECT 1 FROM {TABLE_COMEX_INVENTORY} WHERE metal = ? LIMIT 1",
+                (metal,),
             )
             return cursor.fetchone() is not None
 
