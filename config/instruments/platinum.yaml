@@ -51,16 +51,23 @@ families:
     # Platinum: hybrid — industriell + smykker + auto-katalysator.
     # Behandler som mellomting mellom Gold (safe-haven) og Copper
     # (industriell). VIX-respons mild positiv (svak safe-haven).
+    # Sub-fase 12.5+ session 109: mining_disruption lagt til —
+    # Sør-Afrika står for ~70% global PGM-produksjon (Bushveld
+    # Complex). Et seriøst skjelv der vil dramatisk påvirke
+    # platinum-prising. Tyngst vekt blant metals.
     drivers:
       - name: real_yield
-        weight: 0.3
+        weight: 0.2
         params: {bull_when: low}
       - name: dxy_chg5d
-        weight: 0.5
+        weight: 0.35
         params: {bull_when: negative, window: 5}
       - name: vix_regime
-        weight: 0.2
+        weight: 0.15
         params: {invert: true}  # mild safe-haven-like
+      - name: mining_disruption
+        weight: 0.3  # tyngst vekt — Sør-Afrika 70% global PGM-supply
+        params: {metal: platinum, lookback_days: 7}
   structure:
     drivers:
       - name: range_position

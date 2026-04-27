@@ -56,10 +56,10 @@ families:
     # lavere enn gull/sølv siden kobber-stocks delvis dekkes av LME.
     drivers:
       - name: real_yield
-        weight: 0.25
+        weight: 0.2
         params: {bull_when: low}
       - name: dxy_chg5d
-        weight: 0.4
+        weight: 0.3
         params: {bull_when: negative, window: 5}
       - name: vix_regime
         weight: 0.15
@@ -67,6 +67,13 @@ families:
       - name: comex_stress
         weight: 0.2
         params: {metal: copper, wow_window: 5, copper_handling: skip}
+      # Sub-fase 12.5+ session 109: mining_disruption — Chile/Peru
+      # alene står for ~40% global produksjon. 0.15 vekt — høyeste blant
+      # metals fordi konsentrasjonen i Chile gjør store enkeltskjelv
+      # potensielt dramatiske for global supply.
+      - name: mining_disruption
+        weight: 0.15
+        params: {metal: copper, lookback_days: 7}
   structure:
     drivers:
       - name: range_position

@@ -58,14 +58,20 @@ families:
         weight: 0.2
         params: {bull_when: low}
       - name: dxy_chg5d
-        weight: 0.35
+        weight: 0.3
         params: {bull_when: negative, window: 5}
       - name: vix_regime
         weight: 0.15
         params: {invert: true}
       - name: comex_stress
-        weight: 0.3
+        weight: 0.25
         params: {metal: silver, wow_window: 5}
+      # Sub-fase 12.5+ session 109: mining_disruption — Mexico (23%) +
+      # Chile/Peru (18%) er primære sølv-regioner. 0.10 vekt fordi sølv-
+      # mining er moderat konsentrert.
+      - name: mining_disruption
+        weight: 0.1
+        params: {metal: silver, lookback_days: 7}
   structure:
     drivers:
       - name: range_position

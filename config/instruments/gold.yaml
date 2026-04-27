@@ -85,7 +85,7 @@ families:
         params:
           bull_when: low
       - name: dxy_chg5d
-        weight: 0.3
+        weight: 0.25
         params:
           bull_when: negative
           window: 5
@@ -94,10 +94,18 @@ families:
         params:
           invert: true
       - name: comex_stress
-        weight: 0.25
+        weight: 0.2
         params:
           metal: gold
           wow_window: 5
+      # Sub-fase 12.5+ session 109: mining_disruption — USGS-events i
+      # gull-mining-regioner. Mindre vekt enn comex_stress siden gull-
+      # mining er spredt globalt (ingen enkelt region dominerer).
+      - name: mining_disruption
+        weight: 0.1
+        params:
+          metal: gold
+          lookback_days: 7
   structure:
     # Sub-fase 12.5 Block A polish session 79: range_position erstatter
     # sma200_align (sma er trend, ikke structure). 20-dagers range-posisjon
