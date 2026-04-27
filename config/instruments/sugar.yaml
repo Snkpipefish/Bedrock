@@ -68,6 +68,23 @@ families:
       - name: enso_regime
         weight: 1.0
         params: {}
+  unica:
+    # Sub-fase 12.5+ session 112: UNICA Centro-Sul halvmånedlig
+    # sukker/etanol-rapport. Brazil er ~40% global sukker-produksjon
+    # — DOMINANT. Dual-driver: sugar_production_yoy (akkumulert YoY)
+    # + mix_sugar_pct (current sukker-mix-prosent, lav = etanol-tilt =
+    # bullish). Sub-vekter 0.6/0.4 — production_yoy er tyngre
+    # fundamental.
+    weight: 2
+    drivers:
+      - name: unica_change
+        weight: 0.6
+        params:
+          metric: sugar_production_yoy
+      - name: unica_change
+        weight: 0.4
+        params:
+          metric: mix_sugar_pct
   cross:
     # Sub-fase 12.5+ session 80: erstattet DXY-proxy med direkte BRL-
     # måling via DEXBZUS. USDBRL UP = BRL svakhet = bull for sukker-
