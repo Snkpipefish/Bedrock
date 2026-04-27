@@ -77,11 +77,15 @@ families:
   cross:
     # Sub-fase 12.5+ session 90: utvidet med bdi_chg30d (shipping-
     # kostnad). USD-svakhet OG BDI ned begge bull for US-eksport-flyt.
-    # Sub-vekter: dxy 80%, bdi 20% (BDI er sekundær men reell).
+    # Sub-fase 12.5+ session 110: cot_euronext_mm_pct lagt til —
+    # EU-overlay (Euronext Corn EMA MiFID II MM-positioning).
+    # NB: Euronext Corn er mye mindre likvid enn US-CBOT (~38K OI
+    # vs >2M for CBOT). Settes lav vekt 0.15 — ren cross-region-
+    # spec-signal, ikke primær.
     weight: 2
     drivers:
       - name: dxy_chg5d
-        weight: 0.7
+        weight: 0.55
         params:
           bull_when: negative
           window: 5
@@ -96,6 +100,12 @@ families:
           countries: [USD]
           impact_levels: [High]
           min_hours: 4
+      - name: cot_euronext_mm_pct
+        weight: 0.15
+        params:
+          contract: euronext corn
+          metric: mm_net_pct
+          lookback_weeks: 52
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     weight: 2

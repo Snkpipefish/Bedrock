@@ -80,10 +80,13 @@ families:
   cross:
     # Sub-fase 12.5+ session 90: utvidet med bdi_chg30d (shipping).
     # Wheat-eksport (US #2 globalt) er sensitiv til både USD og BDI.
+    # Sub-fase 12.5+ session 110: cot_euronext_mm_pct lagt til —
+    # EU-overlay (Euronext Milling Wheat MiFID II MM-positioning).
+    # 0.2 vekt — sekundær til DXY men gir cross-region-validering.
     weight: 2
     drivers:
       - name: dxy_chg5d
-        weight: 0.7
+        weight: 0.5
         params:
           bull_when: negative
           window: 5
@@ -98,6 +101,12 @@ families:
           countries: [USD]
           impact_levels: [High]
           min_hours: 4
+      - name: cot_euronext_mm_pct
+        weight: 0.2
+        params:
+          contract: euronext milling wheat
+          metric: mm_net_pct
+          lookback_weeks: 52
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     weight: 2
