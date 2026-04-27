@@ -716,3 +716,57 @@ class CotIceRow(BaseModel):
     open_interest: int = Field(ge=0)
 
     model_config = ConfigDict(extra="forbid")
+
+
+# ---------------------------------------------------------------------------
+# EIA Open Data — petroleum + natural gas weekly inventories
+# (sub-fase 12.5+ session 107)
+# ---------------------------------------------------------------------------
+# US energy department's open data API v2 dekker bl.a.:
+# - Weekly petroleum stocks (US Crude Oil, Gasoline, Distillate, etc.)
+# - Weekly natural gas storage (Lower 48, regions)
+#
+# Skjema: én rad per (series_id, date). EIA series_ids er stabile
+# identifikatorer (f.eks. WCESTUS1 = US Ending Stocks excl. SPR Crude).
+# `units` lagres for å fange fysisk dimensjon — pil bekreftet at
+# samme series alltid gir samme units, men vi lagrer per rad for å
+# tåle EIA-omklassifisering uten data-tap.
+#
+# Bruk: `eia_stock_change`-driver i macro-familien for energy-instrumenter
+# (CrudeOil, Brent, NaturalGas) som co-driver til prising-baserte signaler.
+
+TABLE_EIA_INVENTORY = "eia_inventory"
+
+DDL_EIA_INVENTORY = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_EIA_INVENTORY} (
+    series_id  TEXT    NOT NULL,    -- f.eks. "WCESTUS1"
+    date       TEXT    NOT NULL,    -- ISO YYYY-MM-DD (week-ending)
+    value      REAL    NOT NULL,    -- numerisk verdi
+    units      TEXT,                -- f.eks. "MBBL", "BCF"
+    PRIMARY KEY (series_id, date)
+)
+"""
+
+EIA_INVENTORY_COLS: tuple[str, ...] = (
+    "series_id",
+    "date",
+    "value",
+    "units",
+)
+
+
+class EiaInventoryRow(BaseModel):
+    """En rad fra EIA Open Data v2 weekly-inventory-serie.
+
+    `series_id` er EIA-canonical (f.eks. ``"WCESTUS1"`` for US Crude Oil
+    Stocks excl. SPR). `date` er week-ending date (typisk fredag for
+    petroleum, fredag for natural gas storage). `value` er numerisk;
+    `units` er fysisk dimensjon (``"MBBL"``, ``"BCF"``, etc.).
+    """
+
+    series_id: str = Field(min_length=1)
+    date: date
+    value: float
+    units: str | None = None
+
+    model_config = ConfigDict(extra="forbid")

@@ -45,6 +45,7 @@ from bedrock.data.schemas import (
     DDL_CROP_PROGRESS,
     DDL_DISEASE_ALERTS,
     DDL_ECON_EVENTS,
+    DDL_EIA_INVENTORY,
     DDL_EXPORT_EVENTS,
     DDL_FUNDAMENTALS,
     DDL_IGC,
@@ -54,6 +55,7 @@ from bedrock.data.schemas import (
     DDL_WEATHER_MONTHLY,
     DISEASE_ALERTS_COLS,
     ECON_EVENTS_COLS,
+    EIA_INVENTORY_COLS,
     EXPORT_EVENTS_COLS,
     FUNDAMENTALS_COLS,
     IGC_COLS,
@@ -65,6 +67,7 @@ from bedrock.data.schemas import (
     TABLE_CROP_PROGRESS,
     TABLE_DISEASE_ALERTS,
     TABLE_ECON_EVENTS,
+    TABLE_EIA_INVENTORY,
     TABLE_EXPORT_EVENTS,
     TABLE_FUNDAMENTALS,
     TABLE_IGC,
@@ -134,6 +137,8 @@ class DataStore:
             conn.execute(DDL_ECON_EVENTS)
             # Sub-fase 12.5+ session 106 (ADR-008): ICE Futures Europe COT.
             conn.execute(DDL_COT_ICE)
+            # Sub-fase 12.5+ session 107 (ADR-008): EIA weekly inventories.
+            conn.execute(DDL_EIA_INVENTORY)
             conn.commit()
 
     # ------------------------------------------------------------------
@@ -423,6 +428,86 @@ class DataStore:
             cursor = conn.execute(
                 f"SELECT 1 FROM {TABLE_COT_ICE} WHERE contract = ? LIMIT 1",
                 (contract,),
+            )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # EIA inventories (sub-fase 12.5+ session 107)
+    # ------------------------------------------------------------------
+
+    def append_eia_inventory(self, df: pd.DataFrame) -> int:
+        """Skriv EIA-rader til ``eia_inventory``. Returnerer antall rader.
+
+        `df` må ha kolonnene i ``EIA_INVENTORY_COLS`` (series_id, date,
+        value, units). Idempotent på (series_id, date) via INSERT OR
+        REPLACE.
+        """
+        missing = [c for c in EIA_INVENTORY_COLS if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_eia_inventory: missing columns {missing}. "
+                f"Required: {list(EIA_INVENTORY_COLS)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df[list(EIA_INVENTORY_COLS)].copy()
+        prepared["date"] = pd.to_datetime(prepared["date"]).dt.strftime("%Y-%m-%d")
+
+        rows: Sequence[tuple] = [
+            (
+                str(row.series_id),
+                row.date,
+                float(row.value),
+                None if pd.isna(row.units) else str(row.units),
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_EIA_INVENTORY} "
+                f"(series_id, date, value, units) VALUES (?, ?, ?, ?)",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_eia_inventory(
+        self,
+        series_id: str,
+        last_n: int | None = None,
+    ) -> pd.DataFrame:
+        """Returner EIA-rader for `series_id`, sortert ASC på date.
+
+        Returnerer pd.DataFrame med `date` som pd.Timestamp i en kolonne
+        (ikke index) — stocks er ukentlige diskrete events, samme
+        konvensjon som `get_cot()`.
+
+        Kaster `KeyError` hvis ingen rader finnes for `series_id`.
+        """
+        query = f"""
+            SELECT * FROM {TABLE_EIA_INVENTORY}
+            WHERE series_id = ?
+            ORDER BY date ASC
+        """
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=(series_id,))
+
+        if df.empty:
+            raise KeyError(f"No EIA inventory data for series_id={series_id!r}")
+
+        df["date"] = pd.to_datetime(df["date"])
+
+        if last_n is None:
+            return df
+        return df.tail(last_n).reset_index(drop=True)
+
+    def has_eia_inventory(self, series_id: str) -> bool:
+        """Test-hjelper: sjekk om `series_id` har minst én rad."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"SELECT 1 FROM {TABLE_EIA_INVENTORY} WHERE series_id = ? LIMIT 1",
+                (series_id,),
             )
             return cursor.fetchone() is not None
 
