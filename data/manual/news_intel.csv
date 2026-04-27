@@ -1,0 +1,4 @@
+url,event_ts,fetched_at,category,title,source,query_id,sentiment_label,disruption_score
+https://news.google.com/articles/SAMPLE-A1,2026-04-26T10:00:00,2026-04-27T08:00:00,gold,Gold price hits all-time high on dollar weakness,Reuters,gold,,
+https://news.google.com/articles/SAMPLE-A2,2026-04-26T11:30:00,2026-04-27T08:00:00,oil,Houthi attack disrupts Red Sea shipping; Brent surges,Bloomberg,oil,,
+https://news.google.com/articles/SAMPLE-A3,2026-04-26T08:15:00,2026-04-27T08:00:00,grains,US Midwest drought worsens; corn futures rally,Reuters,grains,,

@@ -19,6 +19,7 @@ gratis API-tilgang eller er paid-only.
 | `cot_euronext.csv` | report_date, contract, mm_long, mm_short, open_interest | https://live.euronext.com/sites/default/files/commodities_reporting/.../cdwpr_{EBM,EMA,ECO}_*.html (manuell hvis HTML-parser feiler) |
 | `conab_estimates.csv` | report_date, commodity, levantamento, safra, production, production_units, area_kha, yield_value, yield_units, yoy_change_pct, mom_change_pct | https://www.gov.br/conab/.../boletim-da-safra-de-graos + .../safra-de-cafe (PDF; manuell hvis poppler/pypdf feiler) |
 | `unica_reports.csv` | report_date, position_date, period, crop_year, mix_sugar_pct(+prev), mix_ethanol_pct(+prev), crush_kt(+prev/yoy), sugar_production_kt(+prev/yoy), ethanol_total_ml(+prev/yoy) | https://unicadata.com.br/listagem.php?idMn=63 (halvmånedlig PDF; manuell hvis poppler/pypdf feiler) |
+| `news_intel.csv` | url, event_ts, fetched_at, category (gold/silver/copper/oil/gas/grains/softs/geopolitics/agri_weather), title, source, query_id, sentiment_label (nullable), disruption_score (nullable) | Manuell pre-seeding eller fallback ved RSS-feil. Auto-fetcher (Google News RSS) skal håndtere normal drift. |
 
 ## Format-eksempler
 
@@ -117,6 +118,7 @@ NW2_EPG0_SWO_R48_BCF,2026-04-17,2063,BCF
 | Disease-alerts | — | manuell curation (paid services finnes) | manuell CSV |
 | Shipping (BDI) | `bedrock.fetch.shipping` | Yahoo BDRY ETF (gratis, ingen key) | manuell CSV |
 | Shipping (BCI/BPI/BSI) | `bedrock.fetch.shipping` (manuell-CSV-modus) | Baltic Exchange paid feeds | manuell CSV (primær) |
+| News intel | `bedrock.fetch.news_intel` | Google News RSS (gratis, ingen key) | manuell CSV |
 | ICE COT | `bedrock.fetch.cot_ice` | direkte HTTPS til ICE COTHist{YEAR}.csv | manuell CSV |
 | EIA Inventories | `bedrock.fetch.eia_inventories` | EIA Open Data v2 + `BEDROCK_EIA_API_KEY` | manuell CSV |
 | COMEX Inventories | `bedrock.fetch.comex` | metalcharts.org JSON-API (token-basert, ingen key) | manuell CSV |
