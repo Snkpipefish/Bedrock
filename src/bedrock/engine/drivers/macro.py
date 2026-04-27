@@ -377,4 +377,119 @@ def vix_regime(store: Any, instrument: str, params: dict) -> float:
     return score
 
 
-__all__ = ["dxy_chg5d", "real_yield", "vix_regime"]
+# ---------------------------------------------------------------------------
+# eia_stock_change (sub-fase 12.5+ session 107)
+# ---------------------------------------------------------------------------
+
+# Default z-mapping for eia_stock_change. Speilet av cot_z_score-trappen:
+# z ≥ +2 → 1.0 (sterk draw, bullish), z ≥ +1 → 0.75, ..., z < -0.5 → 0.0
+# (sterk build, bearish). NB: z er allerede invertert (-z(WoW%)) hvis
+# invert=True (default), så skalaen virker direkte bullish.
+_DEFAULT_EIA_Z_THRESHOLDS: tuple[tuple[float, float], ...] = (
+    (2.0, 1.0),
+    (1.0, 0.75),
+    (0.5, 0.6),
+    (0.0, 0.5),
+    (-0.5, 0.3),
+)
+
+
+@register("eia_stock_change")
+def eia_stock_change(store: Any, instrument: str, params: dict) -> float:
+    """Z-score av week-over-week % endring i EIA-inventories, mappet til 0..1.
+
+    Logikk for energi (CrudeOil/Brent/NaturalGas) — default-tolkningen:
+    - Store builds (positiv WoW%, lager bygger seg) = bearish for prising
+    - Store draws (negativ WoW%, lager tappes) = bullish for prising
+
+    Driver inverterer derfor z-score-fortegnet før step-mapping. Lookback
+    52 uker = 1 år rolling baseline.
+
+    Params:
+        series_id (REQUIRED): EIA-canonical (f.eks. ``"WCESTUS1"`` for crude,
+            ``"WGTSTUS1"`` for gasoline, ``"NW2_EPG0_SWO_R48_BCF"`` for
+            nat-gas). Kommer fra YAML-wiring.
+        lookback_weeks: rolling-vindu (default 52).
+        invert: ``True`` (default) — høy stock-build = bearish. Sett
+            ``False`` hvis brukt for kontrarian-tolkning.
+        z_thresholds: optional override av step-mapping.
+
+    Returnerer:
+    - 1.0 ved sterk uventet stock-draw (z ≥ +2 etter invertering)
+    - 0.5 ved typisk WoW-endring
+    - 0.0 ved sterk uventet stock-build
+
+    Defensiv: alle feil → 0.0 + log.
+    """
+    from bedrock.engine.drivers._stats import MIN_OBS_FOR_PCTILE, rolling_z
+
+    series_id = params.get("series_id")
+    if not series_id:
+        _log.warning("eia_stock_change.no_series_id", instrument=instrument)
+        return 0.0
+
+    lookback = int(params.get("lookback_weeks", 52))
+    invert = bool(params.get("invert", True))
+
+    try:
+        df = store.get_eia_inventory(series_id, last_n=lookback + 2)
+    except KeyError:
+        _log.warning(
+            "eia_stock_change.data_missing",
+            instrument=instrument,
+            series_id=series_id,
+        )
+        return 0.0
+    except Exception as exc:
+        _log.warning(
+            "eia_stock_change.fetch_failed",
+            instrument=instrument,
+            error=str(exc),
+        )
+        return 0.0
+
+    values = pd.Series(pd.to_numeric(df["value"], errors="coerce")).dropna()
+    if len(values) < MIN_OBS_FOR_PCTILE + 2:
+        _log.debug(
+            "eia_stock_change.short_history",
+            instrument=instrument,
+            n=len(values),
+            required=MIN_OBS_FOR_PCTILE + 2,
+        )
+        return 0.0
+
+    # WoW % endring (første rad blir NaN → drop)
+    wow_pct = values.pct_change().dropna() * 100.0
+    if len(wow_pct) < MIN_OBS_FOR_PCTILE + 1:
+        return 0.0
+
+    current = float(wow_pct.iloc[-1])
+    history = [float(v) for v in wow_pct.iloc[:-1]]
+
+    z = rolling_z(current, history)
+    if z is None:
+        return 0.0
+
+    if invert:
+        z = -z
+
+    user_thresholds = params.get("z_thresholds")
+    if user_thresholds is None:
+        steps = _DEFAULT_EIA_Z_THRESHOLDS
+    else:
+        if isinstance(user_thresholds, dict):
+            steps_list: list[tuple[float, float]] = []
+            for k, v in user_thresholds.items():
+                key_str = str(k).replace("+", "")
+                steps_list.append((float(key_str), float(v)))
+            steps = tuple(sorted(steps_list, key=lambda t: -t[0]))
+        else:
+            steps = tuple(user_thresholds)
+
+    for threshold, score in steps:
+        if z >= threshold:
+            return float(score)
+    return 0.0
+
+
+__all__ = ["dxy_chg5d", "eia_stock_change", "real_yield", "vix_regime"]
