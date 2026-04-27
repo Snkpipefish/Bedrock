@@ -1038,3 +1038,97 @@ class ConabEstimateRow(BaseModel):
     mom_change_pct: float | None = None
 
     model_config = ConfigDict(extra="forbid")
+
+
+# ---------------------------------------------------------------------------
+# UNICA Brazil center-south sugar/ethanol reports (sub-fase 12.5+ session 112)
+# ---------------------------------------------------------------------------
+# UNICA publiserer halvmånedlig "Acompanhamento quinzenal da safra"
+# (quinzena = halvmåned). Dekker Centro-Sul Brazil — verdens største
+# sukker/etanol-region. Hver rapport har akkumulert crush + mix-prosent
+# (sukker vs etanol) + produksjon, sammenlignet med samme periode forrige
+# safra (yoy_pct).
+#
+# Schema: én rad per report_date (publiseringsdato). Vi lagrer rå-tall +
+# prev-year-tall for å kunne reberegne YoY ved schema-endring senere.
+
+TABLE_UNICA_REPORTS = "unica_reports"
+
+DDL_UNICA_REPORTS = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_UNICA_REPORTS} (
+    report_date            TEXT    NOT NULL,    -- ISO YYYY-MM-DD (publiseringsdato)
+    position_date          TEXT,                -- 'DD/MM/YYYY' fra rapporten
+    period                 TEXT,                -- f.eks. '1ª quinzena de abril de 2026'
+    crop_year              TEXT,                -- f.eks. '2025/2026'
+    mix_sugar_pct          REAL,                -- akkumulert sucker-mix % (current safra)
+    mix_sugar_pct_prev     REAL,                -- samme periode forrige safra
+    mix_ethanol_pct        REAL,
+    mix_ethanol_pct_prev   REAL,
+    crush_kt               REAL,                -- akkumulert sukkerrør-crush (kt)
+    crush_kt_prev          REAL,
+    crush_yoy_pct          REAL,
+    sugar_production_kt    REAL,                -- akkumulert sukker-produksjon (kt)
+    sugar_production_kt_prev REAL,
+    sugar_production_yoy_pct REAL,
+    ethanol_total_ml       REAL,                -- akkumulert etanol-total (millioner liter)
+    ethanol_total_ml_prev  REAL,
+    ethanol_total_yoy_pct  REAL,
+    PRIMARY KEY (report_date)
+)
+"""
+
+UNICA_REPORTS_COLS: tuple[str, ...] = (
+    "report_date",
+    "position_date",
+    "period",
+    "crop_year",
+    "mix_sugar_pct",
+    "mix_sugar_pct_prev",
+    "mix_ethanol_pct",
+    "mix_ethanol_pct_prev",
+    "crush_kt",
+    "crush_kt_prev",
+    "crush_yoy_pct",
+    "sugar_production_kt",
+    "sugar_production_kt_prev",
+    "sugar_production_yoy_pct",
+    "ethanol_total_ml",
+    "ethanol_total_ml_prev",
+    "ethanol_total_yoy_pct",
+)
+
+
+class UnicaReportRow(BaseModel):
+    """En quinzena-rapport fra UNICA Brasil Centro-Sul.
+
+    `mix_sugar_pct` er akkumulert sukker-mix-prosent for inneværende
+    safra (per `position_date`). `mix_sugar_pct_prev` er samme periode
+    forrige safra — direkte YoY-comparison.
+
+    Sukker-prising: lav `mix_sugar_pct` (etanol-tilt) = mindre sukker-
+    supply = bullish for sukker-pris. Høy mix = mer sukker = bearish.
+
+    Alle felter etter `report_date` er nullable fordi PDF-parsing kan
+    feile på enkeltsegmenter (PDF-format endrer seg over tid; vi
+    foretrekker delvis data over hard fail).
+    """
+
+    report_date: date
+    position_date: str | None = None
+    period: str | None = None
+    crop_year: str | None = None
+    mix_sugar_pct: float | None = None
+    mix_sugar_pct_prev: float | None = None
+    mix_ethanol_pct: float | None = None
+    mix_ethanol_pct_prev: float | None = None
+    crush_kt: float | None = None
+    crush_kt_prev: float | None = None
+    crush_yoy_pct: float | None = None
+    sugar_production_kt: float | None = None
+    sugar_production_kt_prev: float | None = None
+    sugar_production_yoy_pct: float | None = None
+    ethanol_total_ml: float | None = None
+    ethanol_total_ml_prev: float | None = None
+    ethanol_total_yoy_pct: float | None = None
+
+    model_config = ConfigDict(extra="forbid")

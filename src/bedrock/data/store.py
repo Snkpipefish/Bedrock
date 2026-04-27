@@ -57,6 +57,7 @@ from bedrock.data.schemas import (
     DDL_IGC,
     DDL_PRICES,
     DDL_SEISMIC_EVENTS,
+    DDL_UNICA_REPORTS,
     DDL_WASDE,
     DDL_WEATHER,
     DDL_WEATHER_MONTHLY,
@@ -84,9 +85,11 @@ from bedrock.data.schemas import (
     TABLE_IGC,
     TABLE_PRICES,
     TABLE_SEISMIC_EVENTS,
+    TABLE_UNICA_REPORTS,
     TABLE_WASDE,
     TABLE_WEATHER,
     TABLE_WEATHER_MONTHLY,
+    UNICA_REPORTS_COLS,
     WASDE_COLS,
     WEATHER_COLS,
     WEATHER_MONTHLY_COLS,
@@ -159,6 +162,8 @@ class DataStore:
             conn.execute(DDL_COT_EURONEXT)
             # Sub-fase 12.5+ session 111 (ADR-008): Conab Brazil crop estimates.
             conn.execute(DDL_CONAB_ESTIMATES)
+            # Sub-fase 12.5+ session 112 (ADR-008): UNICA Brazil sugar/ethanol.
+            conn.execute(DDL_UNICA_REPORTS)
             conn.commit()
 
     # ------------------------------------------------------------------
@@ -615,6 +620,91 @@ class DataStore:
                 f"SELECT 1 FROM {TABLE_CONAB_ESTIMATES} WHERE commodity = ? LIMIT 1",
                 (commodity,),
             )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # UNICA Brazil sugar/ethanol reports (sub-fase 12.5+ session 112)
+    # ------------------------------------------------------------------
+
+    def append_unica_reports(self, df: pd.DataFrame) -> int:
+        """Skriv rader til ``unica_reports``. Returnerer antall rader.
+
+        `df` må ha kolonnene i ``UNICA_REPORTS_COLS``. Idempotent på
+        report_date via INSERT OR REPLACE.
+        """
+        missing = [c for c in UNICA_REPORTS_COLS if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_unica_reports: missing columns {missing}. "
+                f"Required: {list(UNICA_REPORTS_COLS)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df[list(UNICA_REPORTS_COLS)].copy()
+        prepared["report_date"] = pd.to_datetime(prepared["report_date"]).dt.strftime("%Y-%m-%d")
+
+        def _opt_str(v: Any) -> str | None:
+            return None if pd.isna(v) else str(v)
+
+        def _opt_float(v: Any) -> float | None:
+            return None if pd.isna(v) else float(v)
+
+        rows: Sequence[tuple] = [
+            (
+                row.report_date,
+                _opt_str(row.position_date),
+                _opt_str(row.period),
+                _opt_str(row.crop_year),
+                _opt_float(row.mix_sugar_pct),
+                _opt_float(row.mix_sugar_pct_prev),
+                _opt_float(row.mix_ethanol_pct),
+                _opt_float(row.mix_ethanol_pct_prev),
+                _opt_float(row.crush_kt),
+                _opt_float(row.crush_kt_prev),
+                _opt_float(row.crush_yoy_pct),
+                _opt_float(row.sugar_production_kt),
+                _opt_float(row.sugar_production_kt_prev),
+                _opt_float(row.sugar_production_yoy_pct),
+                _opt_float(row.ethanol_total_ml),
+                _opt_float(row.ethanol_total_ml_prev),
+                _opt_float(row.ethanol_total_yoy_pct),
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_UNICA_REPORTS} "
+                f"({', '.join(UNICA_REPORTS_COLS)}) "
+                f"VALUES ({', '.join(['?'] * len(UNICA_REPORTS_COLS))})",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_unica_reports(self, last_n: int | None = None) -> pd.DataFrame:
+        """Returner alle UNICA-rapporter sortert ASC på report_date.
+
+        Returnerer pd.DataFrame med report_date som pd.Timestamp. Tom
+        DataFrame hvis ingen rader.
+        """
+        query = f"SELECT * FROM {TABLE_UNICA_REPORTS} ORDER BY report_date ASC"
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn)
+
+        if df.empty:
+            return df
+
+        df["report_date"] = pd.to_datetime(df["report_date"])
+
+        if last_n is None:
+            return df
+        return df.tail(last_n).reset_index(drop=True)
+
+    def has_unica_reports(self) -> bool:
+        """Test-hjelper: sjekk om tabellen har minst én rad."""
+        with self._connect() as conn:
+            cursor = conn.execute(f"SELECT 1 FROM {TABLE_UNICA_REPORTS} LIMIT 1")
             return cursor.fetchone() is not None
 
     # ------------------------------------------------------------------
