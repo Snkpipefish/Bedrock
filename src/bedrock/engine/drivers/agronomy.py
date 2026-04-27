@@ -394,8 +394,83 @@ def igc_stocks_change(store: Any, instrument: str, params: dict) -> float:
     return 0.0
 
 
+# ---------------------------------------------------------------------------
+# conab_yoy (sub-fase 12.5+ session 111)
+# ---------------------------------------------------------------------------
+
+
+@register("conab_yoy")
+def conab_yoy(store: Any, instrument: str, params: dict) -> float:
+    """Conab YoY-endring i produksjon, mappet til 0..1 score.
+
+    Leser siste rapport for `commodity` og bruker `yoy_change_pct`-
+    feltet (vs forrige safra).
+
+    Tolkning: lavere produksjon (negativ YoY) = supply tight =
+    bullish for prising → høy score. Høyere produksjon (positiv YoY)
+    = bearish → lav score.
+
+    Step-mapping (default):
+        yoy ≤ -10% → 1.00   (sterk supply-shortfall)
+        yoy ≤  -5% → 0.85
+        yoy ≤  -2% → 0.65
+        yoy ≤   0% → 0.50   (flat)
+        yoy ≤  +5% → 0.35
+        yoy >  +5% → 0.15
+
+    Params:
+        commodity (REQUIRED): bedrock-canonical Conab-id ('soja',
+            'milho', 'cafe_total', etc.).
+        thresholds: optional override.
+
+    Returnerer 0..1. Defensiv 0.0 ved manglende commodity/data/feil.
+    """
+    import pandas as pd
+
+    commodity = params.get("commodity")
+    if not commodity:
+        _log.warning("conab_yoy.no_commodity_param", instrument=instrument)
+        return 0.0
+
+    try:
+        df = store.get_conab_estimates(str(commodity), last_n=1)
+    except KeyError:
+        _log.warning("conab_yoy.data_missing", instrument=instrument, commodity=commodity)
+        return 0.0
+    except Exception as exc:
+        _log.warning("conab_yoy.fetch_failed", instrument=instrument, error=str(exc))
+        return 0.0
+
+    if df.empty:
+        return 0.0
+
+    yoy_pct = df["yoy_change_pct"].iloc[0]
+    if yoy_pct is None or pd.isna(yoy_pct):
+        return 0.5  # ingen YoY-data → nøytral
+
+    yoy_pct = float(yoy_pct)
+
+    user_thresholds = params.get("thresholds")
+    if user_thresholds is None:
+        steps: tuple[tuple[float, float], ...] = (
+            (-10.0, 1.00),
+            (-5.0, 0.85),
+            (-2.0, 0.65),
+            (0.0, 0.50),
+            (5.0, 0.35),
+        )
+    else:
+        steps = tuple((float(t), float(s)) for t, s in user_thresholds)
+
+    for threshold, score in steps:
+        if yoy_pct <= threshold:
+            return float(score)
+    return 0.15
+
+
 __all__ = [
     "bdi_chg30d",
+    "conab_yoy",
     "crop_progress_stage",
     "disease_pressure",
     "export_event_active",
