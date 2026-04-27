@@ -833,3 +833,69 @@ class ComexInventoryRow(BaseModel):
     units: str | None = None
 
     model_config = ConfigDict(extra="forbid")
+
+
+# ---------------------------------------------------------------------------
+# Seismic events — USGS earthquake feed (sub-fase 12.5+ session 109)
+# ---------------------------------------------------------------------------
+# US Geological Survey publiserer åpen GeoJSON-feed med jordskjelv. Vi
+# følger M >= 4.5 siste 7 dager og filtrerer på 10 mining-regions for å
+# fange supply-disruption-risk for metals-instrumenter (Gold/Silver/
+# Copper/Platinum).
+#
+# Schema: én rad per event_id (USGS-canonical, f.eks. "us7000abcd").
+# event_ts lagres som ISO datetime i UTC (USGS publiserer som ms-epoch).
+# `region` er bedrock-canonical mining-region-navn (f.eks.
+# "Chile / Peru", "Sør-Afrika") — None hvis utenfor mining-regions
+# (lagres uansett for full-data-bevaring; driver filtrerer per metall).
+
+TABLE_SEISMIC_EVENTS = "seismic_events"
+
+DDL_SEISMIC_EVENTS = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_SEISMIC_EVENTS} (
+    event_id   TEXT    NOT NULL,    -- USGS-canonical (us7000abcd)
+    event_ts   TEXT    NOT NULL,    -- ISO UTC datetime
+    magnitude  REAL    NOT NULL,    -- Richter (typisk 4.5-9.5)
+    latitude   REAL    NOT NULL,    -- WGS84 -90..90
+    longitude  REAL    NOT NULL,    -- WGS84 -180..180
+    depth_km   REAL,                -- km under havflate (nullable)
+    place      TEXT,                -- USGS place-streng
+    region     TEXT,                -- bedrock-canonical mining-region (NULL hvis utenfor)
+    url        TEXT,                -- USGS event-URL
+    PRIMARY KEY (event_id)
+)
+"""
+
+SEISMIC_EVENTS_COLS: tuple[str, ...] = (
+    "event_id",
+    "event_ts",
+    "magnitude",
+    "latitude",
+    "longitude",
+    "depth_km",
+    "place",
+    "region",
+    "url",
+)
+
+
+class SeismicEvent(BaseModel):
+    """Ett jordskjelv fra USGS earthquake feed.
+
+    `event_id` er USGS-canonical og brukes som PK for idempotent
+    INSERT OR REPLACE. `region` er bedrock-canonical mining-region-
+    navn eller None hvis utenfor mining-regions (events lagres
+    uansett, drivere filtrerer).
+    """
+
+    event_id: str = Field(min_length=1)
+    event_ts: datetime
+    magnitude: float
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    depth_km: float | None = None
+    place: str | None = None
+    region: str | None = None
+    url: str | None = None
+
+    model_config = ConfigDict(extra="forbid")

@@ -24,9 +24,9 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 import pandas as pd
 
@@ -52,6 +52,7 @@ from bedrock.data.schemas import (
     DDL_FUNDAMENTALS,
     DDL_IGC,
     DDL_PRICES,
+    DDL_SEISMIC_EVENTS,
     DDL_WASDE,
     DDL_WEATHER,
     DDL_WEATHER_MONTHLY,
@@ -61,6 +62,7 @@ from bedrock.data.schemas import (
     EXPORT_EVENTS_COLS,
     FUNDAMENTALS_COLS,
     IGC_COLS,
+    SEISMIC_EVENTS_COLS,
     TABLE_ANALOG_OUTCOMES,
     TABLE_BDI,
     TABLE_COMEX_INVENTORY,
@@ -75,6 +77,7 @@ from bedrock.data.schemas import (
     TABLE_FUNDAMENTALS,
     TABLE_IGC,
     TABLE_PRICES,
+    TABLE_SEISMIC_EVENTS,
     TABLE_WASDE,
     TABLE_WEATHER,
     TABLE_WEATHER_MONTHLY,
@@ -144,6 +147,8 @@ class DataStore:
             conn.execute(DDL_EIA_INVENTORY)
             # Sub-fase 12.5+ session 108 (ADR-008): COMEX warehouse inventories.
             conn.execute(DDL_COMEX_INVENTORY)
+            # Sub-fase 12.5+ session 109 (ADR-008): USGS seismic events.
+            conn.execute(DDL_SEISMIC_EVENTS)
             conn.commit()
 
     # ------------------------------------------------------------------
@@ -593,6 +598,113 @@ class DataStore:
             cursor = conn.execute(
                 f"SELECT 1 FROM {TABLE_COMEX_INVENTORY} WHERE metal = ? LIMIT 1",
                 (metal,),
+            )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # Seismic events (sub-fase 12.5+ session 109)
+    # ------------------------------------------------------------------
+
+    def append_seismic_events(self, df: pd.DataFrame) -> int:
+        """Skriv USGS-events til ``seismic_events``. Returnerer antall rader.
+
+        `df` må ha kolonnene i ``SEISMIC_EVENTS_COLS``. event_ts kan være
+        pd.Timestamp eller ISO-streng. Idempotent på event_id via
+        INSERT OR REPLACE.
+        """
+        missing = [c for c in SEISMIC_EVENTS_COLS if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_seismic_events: missing columns {missing}. "
+                f"Required: {list(SEISMIC_EVENTS_COLS)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df[list(SEISMIC_EVENTS_COLS)].copy()
+        prepared["event_ts"] = pd.to_datetime(prepared["event_ts"], utc=True).dt.strftime(
+            "%Y-%m-%dT%H:%M:%S"
+        )
+
+        rows: Sequence[tuple] = [
+            (
+                str(row.event_id),
+                row.event_ts,
+                float(row.magnitude),
+                float(row.latitude),
+                float(row.longitude),
+                None if pd.isna(row.depth_km) else float(row.depth_km),
+                None if pd.isna(row.place) else str(row.place),
+                None if pd.isna(row.region) else str(row.region),
+                None if pd.isna(row.url) else str(row.url),
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_SEISMIC_EVENTS} "
+                f"(event_id, event_ts, magnitude, latitude, longitude, "
+                f"depth_km, place, region, url) "
+                f"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_seismic_events(
+        self,
+        *,
+        region: str | None = None,
+        regions: Sequence[str] | None = None,
+        from_ts: datetime | None = None,
+        min_magnitude: float | None = None,
+    ) -> pd.DataFrame:
+        """Returner events med valgfrie filtre, sortert ASC på event_ts.
+
+        Args:
+            region: en spesifikk region (eks. "Chile / Peru"). None = alle.
+            regions: liste regioner (eks. ["Chile / Peru", "Sør-Afrika"]).
+                Brukes hvis `region` er None.
+            from_ts: kun events med event_ts >= from_ts. None = alle.
+            min_magnitude: kun events med magnitude >= verdi. None = alle.
+
+        Returnerer DataFrame med event_ts som pd.Timestamp. Tom DataFrame
+        hvis ingen rader matcher.
+        """
+        clauses: list[str] = []
+        params: list[Any] = []
+
+        if region is not None:
+            clauses.append("region = ?")
+            params.append(region)
+        elif regions:
+            placeholders = ",".join(["?"] * len(regions))
+            clauses.append(f"region IN ({placeholders})")
+            params.extend(regions)
+
+        if from_ts is not None:
+            clauses.append("event_ts >= ?")
+            params.append(from_ts.strftime("%Y-%m-%dT%H:%M:%S"))
+
+        if min_magnitude is not None:
+            clauses.append("magnitude >= ?")
+            params.append(min_magnitude)
+
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        query = f"SELECT * FROM {TABLE_SEISMIC_EVENTS} {where} ORDER BY event_ts ASC"
+
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=tuple(params))
+
+        if not df.empty:
+            df["event_ts"] = pd.to_datetime(df["event_ts"], utc=True)
+        return df
+
+    def has_seismic_events(self) -> bool:
+        """Test-hjelper: sjekk om tabellen har minst én rad."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"SELECT 1 FROM {TABLE_SEISMIC_EVENTS} LIMIT 1",
             )
             return cursor.fetchone() is not None
 
