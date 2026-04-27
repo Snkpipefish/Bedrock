@@ -53,7 +53,7 @@
   - **112:** **Åttende fetcher-port — unica (UNICA Brazil sukker/etanol halvmånedlig) + unica_change-driver.** Ny SQLite-tabell `unica_reports` (PK report_date) — 16 felter inkl. mix-prosent (sukker/etanol) + crush + sugar/ethanol-produksjon, alle med prev_year + yoy_pct. Alle felter etter report_date er nullable (PDF-parsing kan feile på enkeltsegmenter). `UnicaReportRow` Pydantic + `append_unica_reports`/`get_unica_reports`/`has_unica_reports`. Ny `fetch/unica.py` PDF-basert per ADR-007 § 6 — gjenbruker `pdf_to_text`-helper fra session 111 (poppler-utils primær, pypdf fallback). `find_latest_pdf_url` scrape unicadata.com.br index, regex ut PDF-URL fra Google Docs viewer-pattern (`gview?url=...`) eller fallback til direkte .pdf-lenker. `parse_unica` regex-basert ekstraksjon av position_date, period, crop_year, mix_sugar/ethanol_pct (current + prev), crush + sugar_production + ethanol_total (alle med prev + yoy). UNICA-spesifikk `br_num('-2,21%')` med %-stripping. Manuell CSV-fallback i `data/manual/unica_reports.csv`. Ny `@register_runner("unica")` med smart-skip — UNICA publiserer 2× per måned, hopper PDF-nedlasting hvis siste rad er innen 13 dager. Ny driver `unica_change` i agronomy.py med fleksibel metric-param (4 modus): `sugar_production_yoy` (default), `crush_yoy`, `mix_sugar_pct` (abs-mode med egen step-mapping), `mix_sugar_change` (current - prev). Step-mapping for yoy/change: -10→1.00 / -5→0.85 / -2→0.65 / 0→0.50 / 5→0.35 / >5→0.15. Step-mapping for mix_sugar_pct (abs): 45→1.00 / 47→0.80 / 49→0.65 / 51→0.50 / 53→0.35 / >53→0.15. YAML-wiring i unica-familie (vekt 2 per family_agri-default): Sugar med dual-driver — sugar_production_yoy 0.6 + mix_sugar_pct 0.4 (Brazil ~40% global sukker-produksjon, DOMINANT). UI: `unica` → 'Sektor'-gruppe. fetch.yaml: cron `0 21 1,16 * *` Oslo (1. + 16. i mnd 21:00), stale_hours=360. systemd user-timer aktivert. Live-test mot unicadata.com.br: 1 rad fra 1ª quinzena de março de 2026 (mix_sugar_pct=50.61% vs 48.08% prev, crush_yoy -2.21%, sugar_production_yoy +0.71%). Driver-verifisering live: **sugar_production_yoy 0.35** (mild growth, mild bearish), **crush_yoy 0.65** (mild crush-shortfall, mild bullish), **mix_sugar_pct 0.50** (balanse), **mix_sugar_change 0.35** (mer sukker enn ifjor, mild bearish). Engine end-to-end: Sugar **B-grade** med unica-familie 0.41. 59 nye tester (10 schema/store + 25 fetcher + 7 runner + 17 driver). **1898/1898 grønt, pyright 0 errors.** **LUKKET 2026-04-27**.
   - **113:** **Niende fetcher-port — shipping (Baltic-suite konsolidering med bdi) + shipping_pressure-driver.** Refactor + utvidelse istedenfor full fresh port. Ny SQLite-tabell `shipping_indices` (PK index_code+date) i long-format erstatter den single-purpose `bdi`-tabellen fra session 89; valgt over wide-format fordi (a) det matcher fundamentals-mønsteret, (b) er trivielt utvidbart med nye Baltic-sub-indekser uten schema-endring, (c) sparse data er naturlig håndtert (BDI har full Yahoo-historikk fra 2018, BCI/BPI/BSI starter manuelt). `ShippingIndexRow` Pydantic med field_validator som aksepterer kun BDI/BCI/BPI/BSI (case-insensitive uppercase). Idempotent migrasjon i `DataStore._init_schema`: hvis gammel `bdi`-tabell eksisterer, kopier alle rader til shipping_indices med index_code='BDI', verifiser row-count, dropp gammel tabell — kjøres kun én gang, no-op på fresh DB. Ny `fetch/shipping.py` konsoliderer cot-explorer's fetch_shipping.py-strategi: BDI auto via Yahoo BDRY ETF (~0.9 korrelasjon, gratis-løsning fra session 89), BCI/BPI/BSI fra manuell CSV-fallback fra dag 1 per ADR-007 § 4 (Stooq krever nå API-key og symboler er upålitelige). Ny `fetch_shipping_indices()` orchestrator kombinerer Yahoo + manuell CSV til én long-format DataFrame. Sample manuell CSV (`data/manual/shipping_indices.csv`) med 9 rader for BCI/BPI/BSI. Driver-rebrand: `bdi_chg30d` → `shipping_pressure` med ny `index`-param (default 'BDI' for bakoverkompatibilitet, aksepterer 'BCI'/'BPI'/'BSI'). Step-mapping uendret (samme score-logikk som session 89). Driveren leser nå `store.get_shipping_index(index_code)`. Alle 5 eksisterende YAML-wirings migrert samtidig — ingen alias-wrapper (cleaner refactor): Wheat/Corn/Soybean/Cotton/Cocoa cross-familie 0.2-vekt med eksplisitt `index: BDI` (bevarer scoring-atferd 1:1). Runner-rebrand: `register_runner('bdi')` → `register_runner('shipping')`; `fetch.yaml` `bdi:` → `shipping:` med module=`bedrock.fetch.shipping` og table=`shipping_indices` (cron uendret Mon-Fri 23:30 Oslo). UI `_FETCHER_GROUPS` `bdi` → `shipping` (Shipping-gruppe beholdt). Cleanup: `DataStore.append_bdi`/`get_bdi` fjernet, `DDL_BDI`/`BDI_COLS` fjernet fra schemas (TABLE_BDI beholdt som referanse-konstant for migration), `fetch_bdi`/`fetch_bdi_via_bdry`/`_BDI_CSV` fjernet fra manual_events.py, `test_fetch_bdi.py` slettet (erstattet av test_fetch_shipping.py). Live-data: BDI fortsetter å hentes via samme Yahoo BDRY-mekanisme som session 89 — historikken er bevart via migrasjon. BPI-overlay vurderes empirisk når BPI-data faktisk har historikk. 36 nye tester (21 schema/store/migration/Pydantic + 13 fetcher Yahoo+CSV + 8 driver shipping_pressure netto). **1934/1934 grønt, pyright 0 errors.** **LUKKET 2026-04-27**.
   - **114:** **Tiende fetcher-port — news_intel (Google News RSS, 9 kategorier) + Sentiment-fane.** UI-only per ADR-008 § 114; scoring-ready schema slik at fremtidig `news_intel_pressure`-driver kan beregne pressure per kategori etter ≥1 mnds data-akkumulering. Ny SQLite-tabell `news_intel` (PK url) med felt event_ts, fetched_at, category, title, source, query_id, sentiment_label (nullable), disruption_score (nullable). `NewsIntelArticle` Pydantic med field_validators på category (aksepterer kun 9 bedrock-kategorier), sentiment_label (bull/bear/neutral/None), disruption_score (0..1/None). DataStore: `append_news_intel` bruker INSERT OR IGNORE (ikke REPLACE) for å bevare FØRSTE fetched_at — viktig for fremtidig recency-decay-beregning. `get_news_intel(category, from_event_ts, last_n)` + `has_news_intel`. Migrasjon i `_init_schema` legger til DDL_NEWS_INTEL. 9 kategorier (utvidet fra cot-explorer's 7): gold/silver/copper (metals), oil/gas (energy — splittet ut fra "geopolitics" for finere per-instrument-mapping i fremtidig scoring), grains/softs (agri), geopolitics, agri_weather. Ny `fetch/news_intel.py` med Google News RSS-queries per kategori; `fetch_news_intel_category` parser ett XML-svar (cap 10 artikler/query, robust mot malformed XML/manglende fields/uparsbar pubDate); `fetch_news_intel` orchestrator henter alle 9 sekvensielt med 2s pacing per memory-feedback (gratis-kilde-etiquette), per-kategori feil-toleranse. Manuell CSV-fallback i `data/manual/news_intel.csv` med 3 sample-rader per ADR-007 § 4. Ny `@register_runner("news_intel")` i fetch_runner.py. fetch.yaml ny `news_intel:`-entry med cron `30 6,18 * * *` Oslo (2× daglig matcher calendar_ff-mønsteret), stale_hours=14. UI: ny "Sentiment"-gruppe i `_FETCHER_GROUPS`/`_GROUP_ORDER`. Ny `/api/ui/news_intel?days=7&limit=60&category=...` endpoint som grupperer artikler per kategori med count + norske labels + iso-tidsstempler. Web UI: ny "Sentiment"-fane (mellom "Soft commodities" og "Kartrommet") med 9 kategori-kort som viser top-3 nyeste artikler hver; "+N til"-knapp åpner modal med full liste per kategori. Forberedt for session 115 crypto_sentiment med tomme `#sentiment-crypto`-divs (heading skjult inntil 115 fyller dem). Tokenbasert CSS som matcher resten av UI-paletten. 40 nye tester (18 schema/store/Pydantic + 15 fetcher RSS-parsing/orchestrator/CSV + 4 endpoint + 1 runner + 2 fetch_config-asserts). **1972/1972 grønt, pyright 0 errors.** **LUKKET 2026-04-27**.
-  - **115:** én fetcher per session per § 7.5: crypto_sentiment (115 UI-only — Fear&Greed + market dominance).
+  - **115:** **Ellevte (siste) fetcher-port — crypto_sentiment (alternative.me F&G + CoinGecko global) + Sentiment-fane utvidet.** UI-only per ADR-008 § 115; scoring-driver vurderes etter ≥1 mnds empirisk data. Ny SQLite-tabell `crypto_sentiment` med PK (indicator, date) — long-format som matcher fundamentals-mønsteret, utvidbart med nye indikatorer uten DDL-endring. `CryptoSentimentRow` Pydantic med field_validator som lowercases + strips indicator-navn. DataStore: `append_crypto_sentiment` (INSERT OR REPLACE — siste observasjon for samme dag overskriver, CoinGecko kan revidere innen samme UTC-dag), `get_crypto_sentiment(indicator, last_n)` returnerer pd.Series med date-index, `has_crypto_sentiment(indicator=None)`. 5 default-indikatorer: `crypto_fng` (Fear & Greed 0..100 fra alternative.me), `btc_dominance` + `eth_dominance` (% av total mcap), `total_mcap_usd` (absolutt USD), `total_mcap_chg24h_pct`. Schema er scoring-ready slik at en fremtidig `crypto_sentiment_pressure`-driver kan beregne contrarian-pressure (F&G < 25 → bullish for BTC/ETH, > 75 → bearish) + altcoin rotation-signal (BTC-dominance trend). Ny `fetch/crypto_sentiment.py` med to gratis-kilder, sekvensielle HTTP per memory-feedback: `fetch_fear_and_greed(limit=30)` parser alternative.me's JSON med UNIX-timestamp → UTC-dato, robust mot malformed entries; `fetch_coingecko_global()` henter 4 indikatorer fra `/api/v3/global`-endpoint, skipper indikatorer som mangler. `fetch_crypto_sentiment()` orchestrator henter begge sekvensielt og kombinerer til én DataFrame. Manuell CSV-fallback i `data/manual/crypto_sentiment.csv` med 7 sample-rader (3d F&G + 4 CoinGecko snapshots) per ADR-007 § 4. Ny `@register_runner("crypto_sentiment")` i fetch_runner.py. fetch.yaml ny entry med cron `0 7 * * *` Oslo (daglig 07:00 etter F&G-publisering UTC midnight), stale_hours=30. UI-mapping `_FETCHER_GROUPS['crypto_sentiment'] = 'Sentiment'` (samme gruppe som news_intel). Ny `/api/ui/crypto_sentiment?history_days=30` endpoint som returnerer F&G latest+label+history + market dominance/mcap-snapshots; `available=False` flag når DB tom; `_classify_fng`-helper mapper 0..100 → alternative.me-buckets (Extreme Fear/Fear/Neutral/Greed/Extreme Greed). Sentiment-fanen utvidet: 4 crypto-kort i topp-row (F&G klikkbart med farget tall + SVG sparkline; BTC/ETH dominance; Total mcap m/ 24h-chg). F&G-fargekoder følger samme buckets som backend (rød extreme-fear, oransje fear/extreme-greed, grå neutral, grønn greed). Klikk på F&G-kort åpner modal med 30-dagers historikk-tabell + lenke til alternative.me. News-grid flyttet under "Markedsnyheter"-heading. `Promise.allSettled` i loadSentiment slik at én feilet kilde ikke tar ned den andre. Live-verifisert i preview med 30 dagers sample-data (F&G-sinusoid 30-70): kort rendrer korrekt med fargekoder, sparkline, modal med 30 rader. 32 nye tester (13 schema/store/Pydantic + 14 fetcher F&G/CoinGecko/orchestrator/CSV + 4 endpoint + 1 runner). **2004/2004 grønt, pyright 0 errors.** **LUKKET 2026-04-27**.
   - **116-117:** Phase D — backtest-validering + ADR-009 cutover-readiness. Tag `v0.12.5-fetch-port-complete`.
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
@@ -94,14 +94,14 @@
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
 - **Branch-modus:** Nivå 1 aktivt for sub-fase 12.5+ (sessions 104-105 commits direkte til main). Nivå 3 (feature-branches + PR) er valgfritt; sub-fase 12.5+ avsluttes med PR-flyt fra evt. session 116.
 - **Blocked:** nei.
-- **Aktive systemd-timere:** 6 system-installerte (calendar_ff [session 105], cot_ice [session 106], signals-all, monitor, compare, server [service]) + 15 user-installerte (prices, cot_disaggregated/legacy, fundamentals, weather, enso, wasde, crop_progress, shipping [session 113, rebrand av bdi], eia_inventories [session 107], comex [session 108], seismic [session 109], cot_euronext [session 110], conab [session 111], unica [session 112]). Session 114 timer (`news_intel`, cron 30 6,18 Oslo) er ennå ikke generert/installert — gjøres samtidig med session 115's crypto_sentiment-timer for å unngå dobbel-pass av regenerering.
+- **Aktive systemd-timere:** 6 system-installerte (calendar_ff [session 105], cot_ice [session 106], signals-all, monitor, compare, server [service]) + 15 user-installerte (prices, cot_disaggregated/legacy, fundamentals, weather, enso, wasde, crop_progress, shipping [session 113], eia_inventories [session 107], comex [session 108], seismic [session 109], cot_euronext [session 110], conab [session 111], unica [session 112]). Sessions 114+115 timers (`news_intel` + `crypto_sentiment`) er ennå ikke generert/installert — kan tas i én batch nå når begge fetchere er på plass.
 - **Instrumenter:** 22 totalt (Gold/Silver/Copper/Platinum metals; CrudeOil/Brent/NaturalGas energy; Corn/Wheat/Soybean grains; Cotton/Sugar/Coffee/Cocoa softs; Nasdaq/SP500 indices; EURUSD/GBPUSD/USDJPY/AUDUSD fx; BTC/ETH crypto).
-- **Drivere:** 30 registrert (uendret — session 114 er UI-only, ingen ny driver).
-- **Bedrock-fetchere:** 18 totalt (prices, cot_disaggregated, cot_legacy, fundamentals, weather, enso, wasde, crop_progress, shipping [session 113], calendar_ff [session 105], cot_ice [session 106], eia_inventories [session 107], comex [session 108], seismic [session 109], cot_euronext [session 110], conab [session 111], unica [session 112], **news_intel [session 114, UI-only]**). 1 gjenstår å port per § 7.5 (session 115 — crypto_sentiment, UI-only).
+- **Drivere:** 30 registrert (uendret — sessions 114+115 er UI-only, ingen nye drivere. Begge har scoring-ready schema slik at fremtidige `news_intel_pressure` + `crypto_sentiment_pressure`-drivere kan aktiveres etter ≥1 mnds data).
+- **Bedrock-fetchere:** 19 totalt (prices, cot_disaggregated, cot_legacy, fundamentals, weather, enso, wasde, crop_progress, shipping [session 113], calendar_ff [session 105], cot_ice [session 106], eia_inventories [session 107], comex [session 108], seismic [session 109], cot_euronext [session 110], conab [session 111], unica [session 112], news_intel [session 114, UI-only], **crypto_sentiment [session 115, UI-only]**). **Alle 11 fetchere fra § 7.5 er nå portet — Phase A-C ferdig.**
 - **PLAN § 7.3:** 6/8 live data (WASDE, BRL, ICE softs COT via cot_disaggregated, BDI/BDRY, NASS Crop Progress, ENSO). 2/8 manuell sample (eksport-events, disease-alerts). 1/8 betalt/manuell import (IGC).
 - **System-status:** `docs/system_status_2026-04-26.md` — full ende-til-ende rapport (sub-fase 12.5+ refresh i session 117).
 - **Backtest-resultater siste 12mnd:** Gold 100% hit-rate 90d. Corn ikke lenger invertert.
-- **Sub-fase 12.5+ scope:** 11 ikke-portede cot-explorer-fetchere (PLAN § 7.5) + ADR-007 strategi + ADR-008 mapping. Sessions 105-114 lukket (10/11). Session 115 (1/11, crypto_sentiment UI-only) + 116-117 (Phase D) gjenstår.
+- **Sub-fase 12.5+ scope:** 11 ikke-portede cot-explorer-fetchere (PLAN § 7.5) + ADR-007 strategi + ADR-008 mapping. **Sessions 105-115 lukket (11/11 fetchere portet — Phase A-C ferdig).** Sessions 116-117 (Phase D — backtest-validering + ADR-009 cutover-readiness + tag `v0.12.5-fetch-port-complete`) gjenstår.
 - **Econ_events DB:** 37 rader backfilt fra Forex Factory ved session 105 (25 High + 12 Medium impact). Refresh via systemd-timer 06:15 + 18:15 Oslo daglig.
 - **Cot_ice DB:** 136 rader backfilt fra ICE COTHist2025.csv + COTHist2026.csv ved session 106 — 68 uker Brent + 68 uker Gasoil. **TTF Natural Gas mangler i public ICE feed** (NaturalGas-driver wired men returnerer 0.0 defensive). Refresh via systemd-timer Fre 22:30 Oslo med smart-skip.
 - **Eia_inventory DB:** 5018 rader backfilt fra EIA Open Data v2 ved session 107 (Crude 2273 / Gasoline 1894 / NatGas 851, 1991-2026). Refresh via user-systemd-timer Ons 17:30 Oslo med smart-skip basert på `_previous_wednesday()`.
@@ -112,7 +112,8 @@
 - **Unica_reports DB:** 1 rad backfilt fra unicadata.com.br @ 2026-04-27 ved session 112 (1ª quinzena de março de 2026, mix_sugar_pct=50.61%, sugar_production_yoy=+0.71%). Refresh via user-systemd-timer 1. + 16. i mnd 21:00 Oslo med 13d smart-skip.
 - **Shipping_indices DB:** Migration fra gammel `bdi`-tabell (session 89) ved session 113 — alle eksisterende BDI-rader bevart med index_code='BDI'. BCI/BPI/BSI sample-data fra `data/manual/shipping_indices.csv` (9 sample-rader 2026-04-22 til -24). Refresh via user-systemd-timer Mon-Fri 23:30 Oslo. BDI auto via Yahoo BDRY; BCI/BPI/BSI fra manuell CSV per ADR-007 § 4.
 - **News_intel DB:** Tom på commit-tidspunkt (3 sample-rader i `data/manual/news_intel.csv`). Refresh via fetch.yaml `news_intel`-entry (cron 30 6,18 Oslo). Forventet vekst ~30 artikler/dag × 9 kategorier ≈ ~270 artikler/dag. ≥1 mnds akkumulering (~8000 artikler) før driver-vurdering.
-- **Next task:** **Session 115** — `fetch_crypto.py` → `bedrock/fetch/crypto_sentiment.py` (alternative.me Fear & Greed daily 0-100 + CoinGecko BTC/ETH-dominance + total market cap). Per ADR-008 § 115: kun fetcher + UI-context. Skal integreres i samme Sentiment-fane som session 114 (heading + #sentiment-crypto-div er allerede plassholdt).
+- **Crypto_sentiment DB:** Tom på commit-tidspunkt (7 sample-rader i `data/manual/crypto_sentiment.csv`). Refresh via fetch.yaml `crypto_sentiment`-entry (cron 0 7 Oslo, daglig). Forventet vekst ~5 indikatorer/dag (1 F&G + 4 CoinGecko). ≥30 dager akkumulering før driver-vurdering. Live-verifisert i preview med 30d sample-data — kort + sparkline + modal rendrer korrekt.
+- **Next task:** **Session 116** — Phase D oppstart: backtest-validering på alle 22 instrumenter med komplett data-grunnlag (sjekk om noen drivere endrer scoring etter at calendar_ff/cot_ice/eia/comex/seismic/cot_euronext/conab/unica/shipping har bidratt med ferske observasjoner). Sammenlign med backtest-baseline fra session 99 (whitelist-rapporten).
 - **Git-modus:** Nivå 1 aktivt under sub-fase 12.5+ docs/cleanup-pass. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt valgfri.
 
 ## Workflow-notes (2026-04-26)
@@ -211,6 +212,81 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-27 — Session 115: crypto_sentiment (alt.me F&G + CoinGecko) + Sentiment-fane utvidet (LUKKET)
+
+**Scope:** Ellevte og siste fetcher-port i sub-fase 12.5+. UI-only
+per ADR-008 § 115. **Schema er scoring-ready** for fremtidig
+`crypto_sentiment_pressure`-driver:
+
+  contrarian: F&G < 25 → bullish for BTC/ETH
+              F&G > 75 → bearish
+  rotation:   BTC-dominance trend → altcoin rotation-signal
+
+Bruker har bedt om: ~1 mnd data-akkumulering før backtest, minimal
+UI-utvidelse i samme Sentiment-fane som 114. **Phase A-C er nå ferdig
+(11/11 fetchere portet).**
+
+**Beslutninger tatt selv:**
+- Long-format schema `(indicator, date, value, source)` parallelt
+  med fundamentals — utvidbart med nye indikatorer (funding_rate,
+  on-chain metrics) uten DDL-endring.
+- INSERT OR REPLACE (ikke IGNORE) — CoinGecko kan revidere dominance/
+  mcap-tall innen samme UTC-dag, så siste observasjon vinner.
+- 5 default-indikatorer: crypto_fng + 4 CoinGecko-felter. Tilstrekkelig
+  for første drivervurdering uten å overload-e DB.
+- F&G-modal med 30d-historikk-tabell (ikke chart) — gir mer
+  diagnostisk verdi enn en tom sparkline-overlay.
+- Cron 0 7 * Oslo (daglig 07:00 etter F&G UTC midnight publisering).
+
+**Commits direkte til main (Nivå 1):**
+
+1. `ab47603 feat(data): crypto_sentiment tabell + DataStore + Pydantic
+   + tester` — TABLE_CRYPTO_SENTIMENT, DDL, CRYPTO_SENTIMENT_COLS,
+   `CryptoSentimentRow` Pydantic med field_validator (lowercase +
+   strip indicator). DataStore: `append_crypto_sentiment` (INSERT OR
+   REPLACE), `get_crypto_sentiment(indicator, last_n)`,
+   `has_crypto_sentiment(indicator)`. 13 nye tester.
+
+2. `b180567 feat(fetch): crypto_sentiment fetcher (alternative.me F&G
+   + CoinGecko) + manuell CSV + tester` — `bedrock/fetch/crypto_sentiment.py`
+   med `fetch_fear_and_greed(limit=30)` (UNIX-timestamp → UTC-dato,
+   robust mot malformed entries), `fetch_coingecko_global()` (4
+   indikatorer, skipper missing fields), `fetch_crypto_sentiment()`
+   orchestrator (sekvensielt med 1.5s pacing per memory-feedback).
+   Sample CSV (7 rader) + README oppdatert. 14 nye tester med
+   raw-response-injection (ingen network-IO).
+
+3. `4a6d9c1 config: crypto_sentiment runner + fetch.yaml + UI Sentiment-
+   utvidelse + /api/ui/crypto_sentiment + tester` — `register_runner('crypto_sentiment')`
+   + fetch.yaml entry (cron 0 7 daglig) + UI-mapping. Ny endpoint
+   `/api/ui/crypto_sentiment?history_days=30` med F&G latest+label+
+   history + market dominance/mcap-snapshots, `available`-flag,
+   `_classify_fng`-helper. UI Sentiment-fane utvidet med 4 crypto-
+   kort: F&G klikkbart med farget tall + SVG sparkline; BTC/ETH
+   dominance; Total mcap m/ 24h-chg. F&G-modal viser 30d-historikk-
+   tabell. Promise.allSettled for parallell loading. 5 nye tester.
+
+**Test-status:** 2004/2004 grønt (+32 fra forrige). Pyright 0 errors.
+
+**Live-verifisering i preview:**
+- Sample-data: 30d F&G-sinusoid (30-70) + 4 CoinGecko-snapshots.
+- F&G=41 ("Fear", oransje farge), BTC=52.3%, ETH=17.8%, mcap=2.85T USD.
+- Sparkline rendrer korrekt.
+- Modal åpner med 30 rader, fargekoder følger samme buckets som
+  backend, lenke til alternative.me.
+
+**Følges opp:**
+- Sessions 114+115 systemd timer-units ikke ennå generert/installert
+  — kan tas i én batch nå når begge fetchere er på plass.
+- ≥30 dager data-akkumulering før driver-vurdering. Forventet ~150
+  rader (5 ind/dag × 30d) ved da. ADR-009 (session 117) bestemmer
+  om `crypto_sentiment_pressure` skal aktiveres for BTC/ETH-instrumenter.
+
+**Phase A-C status:** Sub-fase 12.5+ port-roadmap ferdig — alle 11
+fetchere fra § 7.5 portet. Phase D (sessions 116-117) starter neste:
+backtest-validering + ADR-009 cutover-readiness + tag
+`v0.12.5-fetch-port-complete`.
 
 ### 2026-04-27 — Session 114: news_intel (Google News RSS, 9 kategorier) + Sentiment-fane (LUKKET)
 
