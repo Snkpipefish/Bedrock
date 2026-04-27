@@ -55,6 +55,24 @@ case "$job" in
       "$REPO_ROOT/scripts/backfill_cftc_name_drift.py"
     )
     ;;
+  harvest-drivers)
+    LABEL="harvest_drivers"
+    COMMAND=(
+      bash "$REPO_ROOT/scripts/run_full_history_harvest.sh"
+    )
+    ;;
+  analyze)
+    LABEL="analyze"
+    # Sekvensiell: driver_performance først, så cross_correlations.
+    # bash -c brukes for å chain'e dem i samme detached process.
+    COMMAND=(
+      bash -c "cd '$REPO_ROOT' && \
+        echo '=== analyze_driver_performance.py ===' && \
+        PYTHONUNBUFFERED=1 PYTHONPATH=src .venv/bin/python scripts/analyze_driver_performance.py && \
+        echo '=== analyze_cross_correlations.py ===' && \
+        PYTHONUNBUFFERED=1 PYTHONPATH=src .venv/bin/python scripts/analyze_cross_correlations.py"
+    )
+    ;;
   help|*)
     echo "Bruk: $0 <job> {start|status|stop|tail}"
     echo ""
@@ -63,6 +81,8 @@ case "$job" in
     echo "  usgs-seismic          USGS earthquake historikk (2010+)"
     echo "  euronext              Euronext COT optimalisert backfill"
     echo "  cftc-name-drift       CFTC kontrakt-navn-drift (Brent, Copper)"
+    echo "  harvest-drivers       Full historisk driver-harvest (~24-35 timer)"
+    echo "  analyze               Driver-performance + kryss-korrelasjon (etter harvest)"
     exit 0
     ;;
 esac
