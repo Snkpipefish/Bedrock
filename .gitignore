@@ -76,3 +76,8 @@ data/agri_signals.json
 # Tier 2 backfill runtime files
 data/_meta/tier2_backfill.pid
 data/_meta/tier2_backfill.log
+
+# Manuelt nedlastede kilder (store filer, ikke checkes inn)
+bedrock manuell data/
+data/_meta/backfill_*.pid
+data/_meta/backfill_*.log
