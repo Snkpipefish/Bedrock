@@ -1,0 +1,8 @@
+indicator,date,value,source
+crypto_fng,2026-04-25,52,MANUAL
+crypto_fng,2026-04-26,55,MANUAL
+crypto_fng,2026-04-27,58,MANUAL
+btc_dominance,2026-04-27,52.3,MANUAL
+eth_dominance,2026-04-27,17.8,MANUAL
+total_mcap_usd,2026-04-27,2850000000000,MANUAL
+total_mcap_chg24h_pct,2026-04-27,1.2,MANUAL
