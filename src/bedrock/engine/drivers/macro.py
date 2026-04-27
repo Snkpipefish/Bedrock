@@ -492,4 +492,102 @@ def eia_stock_change(store: Any, instrument: str, params: dict) -> float:
     return 0.0
 
 
-__all__ = ["dxy_chg5d", "eia_stock_change", "real_yield", "vix_regime"]
+# ---------------------------------------------------------------------------
+# comex_stress (sub-fase 12.5+ session 108)
+# ---------------------------------------------------------------------------
+
+
+@register("comex_stress")
+def comex_stress(store: Any, instrument: str, params: dict) -> float:
+    """COMEX warehouse-stress score (0..1) for metals.
+
+    Port av cot-explorer's `fetch_comex.py` `stress()`-funksjon (skala
+    konvertert fra 0..100 → 0..1).
+
+    Logikk:
+        coverage = registered / total
+        base = (1 - coverage) * 0.80
+        + 0.15  hvis WoW%-endring < -5%  (registered faller raskt = stress)
+        + 0.05  hvis WoW%-endring < 0%
+        - 0.05  hvis WoW%-endring > +5%
+
+    Tolkning: høy stress = supply tight = bullish for prising
+    (få oz klare til delivery vs futures-shorts → squeeze-risk).
+    Low stress = supply rikelig = bearish.
+
+    Params:
+        metal (REQUIRED): "gold" | "silver" | "copper" — bedrock-canonical.
+            Kommer fra YAML-wiring.
+        wow_window: antall handelsdager som teller som "uke" for WoW-
+            sammenligning (default 5).
+        copper_handling: hvis ``"skip"`` (default) returner 0.5 (nøytral)
+            for kobber siden CME har fjernet reg/elig-skillet og
+            coverage-baseberegningen ikke gir mening. ``"trend_only"``
+            ignorerer base, bruker bare WoW-bonusene.
+
+    Returnerer:
+        float i [0, 1]. 0.5 ved tomt history. Defensive 0.0 ved feil.
+    """
+    metal = params.get("metal")
+    if not metal:
+        _log.warning("comex_stress.no_metal_param", instrument=instrument)
+        return 0.0
+
+    wow_window = int(params.get("wow_window", 5))
+    copper_handling = str(params.get("copper_handling", "skip"))
+
+    try:
+        df = store.get_comex_inventory(metal, last_n=wow_window + 5)
+    except KeyError:
+        _log.warning("comex_stress.data_missing", instrument=instrument, metal=metal)
+        return 0.0
+    except Exception as exc:
+        _log.warning(
+            "comex_stress.fetch_failed",
+            instrument=instrument,
+            error=str(exc),
+        )
+        return 0.0
+
+    if len(df) == 0:
+        return 0.5
+
+    last = df.iloc[-1]
+    registered = float(last["registered"])
+    total = float(last["total"])
+
+    is_copper = metal == "copper"
+
+    # Kobber: CME har fjernet reg/elig-skillet → coverage-base meningsløs.
+    if is_copper and copper_handling == "skip":
+        score = 0.5  # nøytral start
+    else:
+        if total <= 0:
+            return 0.5
+        coverage = registered / total
+        # Klamrer til [0, 1] for å håndtere edge-cases der reg > total
+        coverage = max(0.0, min(1.0, coverage))
+        score = (1.0 - coverage) * 0.80
+
+    # WoW-bonus: hvis det finnes en rad ~wow_window dager tilbake.
+    if len(df) > wow_window:
+        prev_reg = float(df.iloc[-1 - wow_window]["registered"])
+        if prev_reg > 0:
+            chg_pct = (registered - prev_reg) / prev_reg
+            if chg_pct < -0.05:
+                score += 0.15
+            elif chg_pct < 0:
+                score += 0.05
+            elif chg_pct > 0.05:
+                score -= 0.05
+
+    return max(0.0, min(1.0, round(score, 4)))
+
+
+__all__ = [
+    "comex_stress",
+    "dxy_chg5d",
+    "eia_stock_change",
+    "real_yield",
+    "vix_regime",
+]
