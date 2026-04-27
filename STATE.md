@@ -52,7 +52,8 @@
   - **111:** **Sjuende fetcher-port — conab (Conab Brazil monthly crop estimates) + conab_yoy-driver.** Ny SQLite-tabell `conab_estimates` (PK report_date+commodity) med felt production + production_units (`'kt'` for grains, `'ksacas'` for kaffe), area_kha, yield_value + yield_units, levantamento (`'7o'`/`'1o'`), safra, yoy_change_pct + mom_change_pct. `ConabEstimateRow` Pydantic + `append_conab_estimates`/`get_conab_estimates`/`has_conab_estimates`. Ny `fetch/conab.py` PDF-basert per ADR-007 § 6: `pdftotext -layout` (poppler-utils via subprocess) primær, `pypdf.PdfReader` pure-python fallback. `pypdf>=4.0` lagt til som dependency. `br_num('179.151,6')` Brasiliansk tallformat (punktum=tusen, komma=desimal, parentes=negativ). `find_pdf_on_index` scrape gov.br index, `find_cafe_pdf` 2-nivå (index → levantamento → PDF). `parse_grains` regex over Tabela 1 (Soja/Milho/Trigo/Algodão), `parse_cafe` Tabela 1/2/3 (BRASIL-rad for cafe_total/cafe_arabica/cafe_conilon). `extract_levantamento` finner '7º LEVANTAMENTO' + 'SAFRA 2025/26'. Manuell CSV-fallback. Ny `@register_runner("conab")` med månedlig smart-skip — hopper PDF-nedlasting hvis DB allerede har rad fra inneværende måned (PDF-er er store). Ny driver `conab_yoy` i agronomy.py — leser yoy_change_pct, step-mapping ≤-10%→1.00 (sterk shortfall, bullish), ≤0%→0.50 (flat), >+5%→0.15 (bearish). YAML-wiring i conab-familie (vekt 2 per family_agri-default): Corn (wasde 0.7 + conab_yoy 0.3 m/ commodity=milho — US ~30% global, Brasil ~10%), Soybean (conab_yoy 1.0 m/ soja — Brasil ~40% global DOMINANT), Coffee (conab_yoy 1.0 m/ cafe_arabica — KC-kontrakten er primært arabica). UI: `conab` → 'USDA'-gruppe (samme som wasde/crop_progress). fetch.yaml: cron `0 20 15 * *` Oslo (15. i mnd), stale_hours=720. systemd user-timer aktivert. Live-test mot gov.br: 7 rader hentet fra 7º Levantamento Safra 2025/26 (Soja/Milho/Trigo/Algodão) + 1º Levantamento Café 2026 (cafe_total/arabica/conilon). Driver-verifisering: **Corn -1.1% YoY → 0.50** (flat), **Soybean +4.5% YoY → 0.35** (mild growth, mild bearish), **Coffee arabica +23.3% YoY → 0.15** (sterk rebound etter 2024-frost, bearish for prising). Engine end-to-end: alle 3 instrumenter scorer C, conab_yoy bidrar isolert med riktig fundamentale signal. 61 nye tester (11 schema/store + 30 fetcher + 7 runner + 13 driver). **1839/1839 grønt, pyright 0 errors.** **LUKKET 2026-04-27**.
   - **112:** **Åttende fetcher-port — unica (UNICA Brazil sukker/etanol halvmånedlig) + unica_change-driver.** Ny SQLite-tabell `unica_reports` (PK report_date) — 16 felter inkl. mix-prosent (sukker/etanol) + crush + sugar/ethanol-produksjon, alle med prev_year + yoy_pct. Alle felter etter report_date er nullable (PDF-parsing kan feile på enkeltsegmenter). `UnicaReportRow` Pydantic + `append_unica_reports`/`get_unica_reports`/`has_unica_reports`. Ny `fetch/unica.py` PDF-basert per ADR-007 § 6 — gjenbruker `pdf_to_text`-helper fra session 111 (poppler-utils primær, pypdf fallback). `find_latest_pdf_url` scrape unicadata.com.br index, regex ut PDF-URL fra Google Docs viewer-pattern (`gview?url=...`) eller fallback til direkte .pdf-lenker. `parse_unica` regex-basert ekstraksjon av position_date, period, crop_year, mix_sugar/ethanol_pct (current + prev), crush + sugar_production + ethanol_total (alle med prev + yoy). UNICA-spesifikk `br_num('-2,21%')` med %-stripping. Manuell CSV-fallback i `data/manual/unica_reports.csv`. Ny `@register_runner("unica")` med smart-skip — UNICA publiserer 2× per måned, hopper PDF-nedlasting hvis siste rad er innen 13 dager. Ny driver `unica_change` i agronomy.py med fleksibel metric-param (4 modus): `sugar_production_yoy` (default), `crush_yoy`, `mix_sugar_pct` (abs-mode med egen step-mapping), `mix_sugar_change` (current - prev). Step-mapping for yoy/change: -10→1.00 / -5→0.85 / -2→0.65 / 0→0.50 / 5→0.35 / >5→0.15. Step-mapping for mix_sugar_pct (abs): 45→1.00 / 47→0.80 / 49→0.65 / 51→0.50 / 53→0.35 / >53→0.15. YAML-wiring i unica-familie (vekt 2 per family_agri-default): Sugar med dual-driver — sugar_production_yoy 0.6 + mix_sugar_pct 0.4 (Brazil ~40% global sukker-produksjon, DOMINANT). UI: `unica` → 'Sektor'-gruppe. fetch.yaml: cron `0 21 1,16 * *` Oslo (1. + 16. i mnd 21:00), stale_hours=360. systemd user-timer aktivert. Live-test mot unicadata.com.br: 1 rad fra 1ª quinzena de março de 2026 (mix_sugar_pct=50.61% vs 48.08% prev, crush_yoy -2.21%, sugar_production_yoy +0.71%). Driver-verifisering live: **sugar_production_yoy 0.35** (mild growth, mild bearish), **crush_yoy 0.65** (mild crush-shortfall, mild bullish), **mix_sugar_pct 0.50** (balanse), **mix_sugar_change 0.35** (mer sukker enn ifjor, mild bearish). Engine end-to-end: Sugar **B-grade** med unica-familie 0.41. 59 nye tester (10 schema/store + 25 fetcher + 7 runner + 17 driver). **1898/1898 grønt, pyright 0 errors.** **LUKKET 2026-04-27**.
   - **113:** **Niende fetcher-port — shipping (Baltic-suite konsolidering med bdi) + shipping_pressure-driver.** Refactor + utvidelse istedenfor full fresh port. Ny SQLite-tabell `shipping_indices` (PK index_code+date) i long-format erstatter den single-purpose `bdi`-tabellen fra session 89; valgt over wide-format fordi (a) det matcher fundamentals-mønsteret, (b) er trivielt utvidbart med nye Baltic-sub-indekser uten schema-endring, (c) sparse data er naturlig håndtert (BDI har full Yahoo-historikk fra 2018, BCI/BPI/BSI starter manuelt). `ShippingIndexRow` Pydantic med field_validator som aksepterer kun BDI/BCI/BPI/BSI (case-insensitive uppercase). Idempotent migrasjon i `DataStore._init_schema`: hvis gammel `bdi`-tabell eksisterer, kopier alle rader til shipping_indices med index_code='BDI', verifiser row-count, dropp gammel tabell — kjøres kun én gang, no-op på fresh DB. Ny `fetch/shipping.py` konsoliderer cot-explorer's fetch_shipping.py-strategi: BDI auto via Yahoo BDRY ETF (~0.9 korrelasjon, gratis-løsning fra session 89), BCI/BPI/BSI fra manuell CSV-fallback fra dag 1 per ADR-007 § 4 (Stooq krever nå API-key og symboler er upålitelige). Ny `fetch_shipping_indices()` orchestrator kombinerer Yahoo + manuell CSV til én long-format DataFrame. Sample manuell CSV (`data/manual/shipping_indices.csv`) med 9 rader for BCI/BPI/BSI. Driver-rebrand: `bdi_chg30d` → `shipping_pressure` med ny `index`-param (default 'BDI' for bakoverkompatibilitet, aksepterer 'BCI'/'BPI'/'BSI'). Step-mapping uendret (samme score-logikk som session 89). Driveren leser nå `store.get_shipping_index(index_code)`. Alle 5 eksisterende YAML-wirings migrert samtidig — ingen alias-wrapper (cleaner refactor): Wheat/Corn/Soybean/Cotton/Cocoa cross-familie 0.2-vekt med eksplisitt `index: BDI` (bevarer scoring-atferd 1:1). Runner-rebrand: `register_runner('bdi')` → `register_runner('shipping')`; `fetch.yaml` `bdi:` → `shipping:` med module=`bedrock.fetch.shipping` og table=`shipping_indices` (cron uendret Mon-Fri 23:30 Oslo). UI `_FETCHER_GROUPS` `bdi` → `shipping` (Shipping-gruppe beholdt). Cleanup: `DataStore.append_bdi`/`get_bdi` fjernet, `DDL_BDI`/`BDI_COLS` fjernet fra schemas (TABLE_BDI beholdt som referanse-konstant for migration), `fetch_bdi`/`fetch_bdi_via_bdry`/`_BDI_CSV` fjernet fra manual_events.py, `test_fetch_bdi.py` slettet (erstattet av test_fetch_shipping.py). Live-data: BDI fortsetter å hentes via samme Yahoo BDRY-mekanisme som session 89 — historikken er bevart via migrasjon. BPI-overlay vurderes empirisk når BPI-data faktisk har historikk. 36 nye tester (21 schema/store/migration/Pydantic + 13 fetcher Yahoo+CSV + 8 driver shipping_pressure netto). **1934/1934 grønt, pyright 0 errors.** **LUKKET 2026-04-27**.
-  - **114-115:** én fetcher per session per § 7.5: news_intel (114 UI-only), crypto_sentiment (115 UI-only).
+  - **114:** **Tiende fetcher-port — news_intel (Google News RSS, 9 kategorier) + Sentiment-fane.** UI-only per ADR-008 § 114; scoring-ready schema slik at fremtidig `news_intel_pressure`-driver kan beregne pressure per kategori etter ≥1 mnds data-akkumulering. Ny SQLite-tabell `news_intel` (PK url) med felt event_ts, fetched_at, category, title, source, query_id, sentiment_label (nullable), disruption_score (nullable). `NewsIntelArticle` Pydantic med field_validators på category (aksepterer kun 9 bedrock-kategorier), sentiment_label (bull/bear/neutral/None), disruption_score (0..1/None). DataStore: `append_news_intel` bruker INSERT OR IGNORE (ikke REPLACE) for å bevare FØRSTE fetched_at — viktig for fremtidig recency-decay-beregning. `get_news_intel(category, from_event_ts, last_n)` + `has_news_intel`. Migrasjon i `_init_schema` legger til DDL_NEWS_INTEL. 9 kategorier (utvidet fra cot-explorer's 7): gold/silver/copper (metals), oil/gas (energy — splittet ut fra "geopolitics" for finere per-instrument-mapping i fremtidig scoring), grains/softs (agri), geopolitics, agri_weather. Ny `fetch/news_intel.py` med Google News RSS-queries per kategori; `fetch_news_intel_category` parser ett XML-svar (cap 10 artikler/query, robust mot malformed XML/manglende fields/uparsbar pubDate); `fetch_news_intel` orchestrator henter alle 9 sekvensielt med 2s pacing per memory-feedback (gratis-kilde-etiquette), per-kategori feil-toleranse. Manuell CSV-fallback i `data/manual/news_intel.csv` med 3 sample-rader per ADR-007 § 4. Ny `@register_runner("news_intel")` i fetch_runner.py. fetch.yaml ny `news_intel:`-entry med cron `30 6,18 * * *` Oslo (2× daglig matcher calendar_ff-mønsteret), stale_hours=14. UI: ny "Sentiment"-gruppe i `_FETCHER_GROUPS`/`_GROUP_ORDER`. Ny `/api/ui/news_intel?days=7&limit=60&category=...` endpoint som grupperer artikler per kategori med count + norske labels + iso-tidsstempler. Web UI: ny "Sentiment"-fane (mellom "Soft commodities" og "Kartrommet") med 9 kategori-kort som viser top-3 nyeste artikler hver; "+N til"-knapp åpner modal med full liste per kategori. Forberedt for session 115 crypto_sentiment med tomme `#sentiment-crypto`-divs (heading skjult inntil 115 fyller dem). Tokenbasert CSS som matcher resten av UI-paletten. 40 nye tester (18 schema/store/Pydantic + 15 fetcher RSS-parsing/orchestrator/CSV + 4 endpoint + 1 runner + 2 fetch_config-asserts). **1972/1972 grønt, pyright 0 errors.** **LUKKET 2026-04-27**.
+  - **115:** én fetcher per session per § 7.5: crypto_sentiment (115 UI-only — Fear&Greed + market dominance).
   - **116-117:** Phase D — backtest-validering + ADR-009 cutover-readiness. Tag `v0.12.5-fetch-port-complete`.
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
@@ -93,14 +94,14 @@
 - Session 65 lukket — `compare_signals(v1, v2)` + CLI `bedrock backtest compare`. Ny `bedrock/backtest/compare.py` med `CompareReport` (n_signals_v1/v2, n_only_v1/v2, n_common, n_changed, n_score_changed, n_grade_changed/promoted/demoted, n_published_added/removed, n_hit_changed, signal_count_delta, diff_rows) + `DiffRow` (kind only_v1/only_v2/changed). Grade-rangering A+→D; ukjent grade rangeres som verste. Numerisk støy < 1e-9 filtreres. `format_compare_markdown` (max_rows-cappet diff-tabell) + `format_compare_json` (full audit). CLI: `bedrock backtest compare --v1 X.json --v2 Y.json --label-v1 --label-v2 --report markdown|json --output --max-rows`. Mismatch-warnings (instrument/horizon) men ingen exception. 1234/1234 tester (+22 nye).
 - **Branch-modus:** Nivå 1 aktivt for sub-fase 12.5+ (sessions 104-105 commits direkte til main). Nivå 3 (feature-branches + PR) er valgfritt; sub-fase 12.5+ avsluttes med PR-flyt fra evt. session 116.
 - **Blocked:** nei.
-- **Aktive systemd-timere:** 6 system-installerte (calendar_ff [session 105], cot_ice [session 106], signals-all, monitor, compare, server [service]) + 15 user-installerte (prices, cot_disaggregated/legacy, fundamentals, weather, enso, wasde, crop_progress, **shipping [session 113, rebrand av bdi]**, eia_inventories [session 107], comex [session 108], seismic [session 109], cot_euronext [session 110], conab [session 111], unica [session 112]). Alle 17 fetch-relaterte timere er nå aktivt installert. Session 113 endrer ikke timer-cron — kun unit-navnet bør rebranded ved neste regenerering (cron uendret 30 23 * * 1-5).
+- **Aktive systemd-timere:** 6 system-installerte (calendar_ff [session 105], cot_ice [session 106], signals-all, monitor, compare, server [service]) + 15 user-installerte (prices, cot_disaggregated/legacy, fundamentals, weather, enso, wasde, crop_progress, shipping [session 113, rebrand av bdi], eia_inventories [session 107], comex [session 108], seismic [session 109], cot_euronext [session 110], conab [session 111], unica [session 112]). Session 114 timer (`news_intel`, cron 30 6,18 Oslo) er ennå ikke generert/installert — gjøres samtidig med session 115's crypto_sentiment-timer for å unngå dobbel-pass av regenerering.
 - **Instrumenter:** 22 totalt (Gold/Silver/Copper/Platinum metals; CrudeOil/Brent/NaturalGas energy; Corn/Wheat/Soybean grains; Cotton/Sugar/Coffee/Cocoa softs; Nasdaq/SP500 indices; EURUSD/GBPUSD/USDJPY/AUDUSD fx; BTC/ETH crypto).
-- **Drivere:** 30 registrert (uendret antall — session 113 rebrandet `bdi_chg30d` → `shipping_pressure` med ny `index`-param).
-- **Bedrock-fetchere:** 17 totalt (prices, cot_disaggregated, cot_legacy, fundamentals, weather, enso, wasde, crop_progress, **shipping [session 113, rebrand+utvidelse av bdi til full Baltic-suite]**, calendar_ff [session 105], cot_ice [session 106], eia_inventories [session 107], comex [session 108], seismic [session 109], cot_euronext [session 110], conab [session 111], unica [session 112]). 2 gjenstår å port per § 7.5 (sessions 114-115 — begge UI-only).
+- **Drivere:** 30 registrert (uendret — session 114 er UI-only, ingen ny driver).
+- **Bedrock-fetchere:** 18 totalt (prices, cot_disaggregated, cot_legacy, fundamentals, weather, enso, wasde, crop_progress, shipping [session 113], calendar_ff [session 105], cot_ice [session 106], eia_inventories [session 107], comex [session 108], seismic [session 109], cot_euronext [session 110], conab [session 111], unica [session 112], **news_intel [session 114, UI-only]**). 1 gjenstår å port per § 7.5 (session 115 — crypto_sentiment, UI-only).
 - **PLAN § 7.3:** 6/8 live data (WASDE, BRL, ICE softs COT via cot_disaggregated, BDI/BDRY, NASS Crop Progress, ENSO). 2/8 manuell sample (eksport-events, disease-alerts). 1/8 betalt/manuell import (IGC).
 - **System-status:** `docs/system_status_2026-04-26.md` — full ende-til-ende rapport (sub-fase 12.5+ refresh i session 117).
 - **Backtest-resultater siste 12mnd:** Gold 100% hit-rate 90d. Corn ikke lenger invertert.
-- **Sub-fase 12.5+ scope:** 11 ikke-portede cot-explorer-fetchere (PLAN § 7.5) + ADR-007 strategi + ADR-008 mapping. Sessions 105-113 lukket (9/11). Sessions 114-115 (2/11, UI-only) + 116-117 (Phase D) gjenstår.
+- **Sub-fase 12.5+ scope:** 11 ikke-portede cot-explorer-fetchere (PLAN § 7.5) + ADR-007 strategi + ADR-008 mapping. Sessions 105-114 lukket (10/11). Session 115 (1/11, crypto_sentiment UI-only) + 116-117 (Phase D) gjenstår.
 - **Econ_events DB:** 37 rader backfilt fra Forex Factory ved session 105 (25 High + 12 Medium impact). Refresh via systemd-timer 06:15 + 18:15 Oslo daglig.
 - **Cot_ice DB:** 136 rader backfilt fra ICE COTHist2025.csv + COTHist2026.csv ved session 106 — 68 uker Brent + 68 uker Gasoil. **TTF Natural Gas mangler i public ICE feed** (NaturalGas-driver wired men returnerer 0.0 defensive). Refresh via systemd-timer Fre 22:30 Oslo med smart-skip.
 - **Eia_inventory DB:** 5018 rader backfilt fra EIA Open Data v2 ved session 107 (Crude 2273 / Gasoline 1894 / NatGas 851, 1991-2026). Refresh via user-systemd-timer Ons 17:30 Oslo med smart-skip basert på `_previous_wednesday()`.
@@ -110,7 +111,8 @@
 - **Conab_estimates DB:** 7 rader backfilt fra gov.br @ 2026-04-27 ved session 111 (4 grains: soja/milho/trigo/algodao fra 7º Levantamento Safra 2025/26 + 3 coffee tier: cafe_total/arabica/conilon fra 1º Levantamento Café 2026). Refresh via user-systemd-timer 15. i mnd 20:00 Oslo med månedlig smart-skip.
 - **Unica_reports DB:** 1 rad backfilt fra unicadata.com.br @ 2026-04-27 ved session 112 (1ª quinzena de março de 2026, mix_sugar_pct=50.61%, sugar_production_yoy=+0.71%). Refresh via user-systemd-timer 1. + 16. i mnd 21:00 Oslo med 13d smart-skip.
 - **Shipping_indices DB:** Migration fra gammel `bdi`-tabell (session 89) ved session 113 — alle eksisterende BDI-rader bevart med index_code='BDI'. BCI/BPI/BSI sample-data fra `data/manual/shipping_indices.csv` (9 sample-rader 2026-04-22 til -24). Refresh via user-systemd-timer Mon-Fri 23:30 Oslo. BDI auto via Yahoo BDRY; BCI/BPI/BSI fra manuell CSV per ADR-007 § 4.
-- **Next task:** **Session 114** — `fetch_intel.py` → `bedrock/fetch/news_intel.py` (Google News RSS for metals/oil). Per ADR-008 § 114: kun fetcher + UI-context, ingen driver i denne sessionen. Driver-vurdering etter ≥1 mnds empirisk validering (ADR-009).
+- **News_intel DB:** Tom på commit-tidspunkt (3 sample-rader i `data/manual/news_intel.csv`). Refresh via fetch.yaml `news_intel`-entry (cron 30 6,18 Oslo). Forventet vekst ~30 artikler/dag × 9 kategorier ≈ ~270 artikler/dag. ≥1 mnds akkumulering (~8000 artikler) før driver-vurdering.
+- **Next task:** **Session 115** — `fetch_crypto.py` → `bedrock/fetch/crypto_sentiment.py` (alternative.me Fear & Greed daily 0-100 + CoinGecko BTC/ETH-dominance + total market cap). Per ADR-008 § 115: kun fetcher + UI-context. Skal integreres i samme Sentiment-fane som session 114 (heading + #sentiment-crypto-div er allerede plassholdt).
 - **Git-modus:** Nivå 1 aktivt under sub-fase 12.5+ docs/cleanup-pass. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt valgfri.
 
 ## Workflow-notes (2026-04-26)
@@ -209,6 +211,79 @@
 ---
 
 ## Session log (newest first)
+
+### 2026-04-27 — Session 114: news_intel (Google News RSS, 9 kategorier) + Sentiment-fane (LUKKET)
+
+**Scope:** Tiende fetcher-port i sub-fase 12.5+. UI-only per ADR-008
+§ 114 — ingen driver, ingen YAML-wiring. **Schema er scoring-ready**
+slik at en fremtidig `news_intel_pressure`-driver kan beregne
+pressure per kategori etter ≥1 mnds empirisk data:
+
+  pressure = sum(disruption_score_i * recency_decay(event_ts_i))
+              for articles in (category, last_n_days)
+
+Bruker har bedt om: (a) data-akkumulering i ~1 mnd før backtest,
+(b) minimal UI-fane med popup-vinduer for både 114 og 115.
+
+**Beslutninger tatt selv:**
+- 9 kategorier (utvidet fra cot-explorer's 7) med `oil` og `gas`
+  splittet ut fra "geopolitics" — gjør per-instrument-mapping
+  (Brent → oil + geopolitics) trivielt for fremtidig driver.
+- PK på `url` med INSERT OR IGNORE (ikke REPLACE) — bevarer FØRSTE
+  fetched_at, kritisk for recency-decay-beregning.
+- `sentiment_label` + `disruption_score` lagres som NULL nå; fylles
+  inn av en fremtidig classifier (regex-basert i første runde,
+  sentiment-NLP senere) per ADR-009 cutover-readiness.
+- Cron 2× daglig (06:30 + 18:30 Oslo) matcher calendar_ff-mønsteret
+  — RSS-feeden oppdateres ofte men 2×/dag fanger nok for 1 mnds
+  observasjons-vindu.
+- UI: én "Sentiment"-fane med 9 kategori-kort + popup-modal for full
+  liste. Forberedt for session 115 med tom `#sentiment-crypto`-div
+  + skjult heading.
+
+**Commits direkte til main (Nivå 1):**
+
+1. `9411bb2 feat(data): news_intel tabell + DataStore + Pydantic-
+   validering + tester` — TABLE_NEWS_INTEL, DDL, NEWS_INTEL_COLS,
+   `NewsIntelArticle` Pydantic med 3 field_validators (category,
+   sentiment_label, disruption_score range). DataStore: `append_news_intel`
+   med INSERT OR IGNORE for url-PK, `get_news_intel(category,
+   from_event_ts, last_n)`, `has_news_intel`. 18 nye tester.
+
+2. `ba75a88 feat(fetch): news_intel fetcher (Google News RSS, 9
+   kategorier) + manuell CSV-fallback + tester` — `bedrock/fetch/news_intel.py`
+   med `_CATEGORIES`-tuple (gold/silver/copper/oil/gas/grains/softs/
+   geopolitics/agri_weather), `fetch_news_intel_category` med robust
+   RSS-parsing (cap 10 artikler/query, faller tilbake til fetched_at
+   ved uparsbar pubDate, skipper items uten title/link), `fetch_news_intel`
+   orchestrator med 2s pacing + per-kategori feil-toleranse,
+   `fetch_news_intel_manual_csv` fallback. Sample CSV i
+   `data/manual/news_intel.csv`. 15 nye tester (bruker raw_responses-
+   injection — ingen network-IO).
+
+3. `c3cc704 config: news_intel runner + fetch.yaml + Sentiment-fane +
+   /api/ui/news_intel endpoint + tester` — `register_runner('news_intel')`
+   + fetch.yaml entry + UI `_FETCHER_GROUPS['news_intel'] = 'Sentiment'` +
+   ny "Sentiment"-gruppe i `_GROUP_ORDER`. Endpoint `/api/ui/news_intel`
+   med `?days`/`?limit`/`?category`-params. Web UI ny "Sentiment"-fane
+   (mellom "Soft commodities" og "Kartrommet") med 9 kategori-kort
+   som viser top-3 nyeste artikler + popup-modal med full liste.
+   Tokenbasert CSS som matcher resten. 7 nye tester (4 endpoint +
+   1 runner + 2 fetch_config).
+
+**Test-status:** 1972/1972 grønt, pyright 0 errors på touched files.
+
+**Følges opp:**
+- Systemd timer-unit for news_intel ikke ennå generert/installert —
+  gjøres samtidig med session 115's crypto_sentiment-timer.
+- Live-test mot Google News RSS er ikke utført på commit-tidspunkt
+  (feed kan kanskje endre format). Ved første systemd-fyring vil
+  vi se om parser-en holder.
+- ≥1 mnds data-akkumulering før `news_intel_pressure`-driver
+  vurderes. Forventet ~8000 artikler i DB ved da. ADR-009 (session
+  117) bestemmer om driveren skal aktiveres + per-instrument-mapping
+  (Gold → ['gold','geopolitics'], Brent → ['oil','geopolitics'],
+  Wheat → ['grains','agri_weather'], etc.).
 
 ### 2026-04-27 — Session 113: shipping (Baltic-suite konsolidering med bdi) + shipping_pressure (LUKKET)
 
