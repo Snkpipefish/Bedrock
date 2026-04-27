@@ -18,6 +18,7 @@ gratis API-tilgang eller er paid-only.
 | `seismic_events.csv` | event_id, event_ts, magnitude, latitude, longitude, depth_km, place, region, url | https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week.geojson (manuell hvis USGS ikke tilgjengelig) |
 | `cot_euronext.csv` | report_date, contract, mm_long, mm_short, open_interest | https://live.euronext.com/sites/default/files/commodities_reporting/.../cdwpr_{EBM,EMA,ECO}_*.html (manuell hvis HTML-parser feiler) |
 | `conab_estimates.csv` | report_date, commodity, levantamento, safra, production, production_units, area_kha, yield_value, yield_units, yoy_change_pct, mom_change_pct | https://www.gov.br/conab/.../boletim-da-safra-de-graos + .../safra-de-cafe (PDF; manuell hvis poppler/pypdf feiler) |
+| `unica_reports.csv` | report_date, position_date, period, crop_year, mix_sugar_pct(+prev), mix_ethanol_pct(+prev), crush_kt(+prev/yoy), sugar_production_kt(+prev/yoy), ethanol_total_ml(+prev/yoy) | https://unicadata.com.br/listagem.php?idMn=63 (halvmånedlig PDF; manuell hvis poppler/pypdf feiler) |
 
 ## Format-eksempler
 
@@ -117,3 +118,4 @@ NW2_EPG0_SWO_R48_BCF,2026-04-17,2063,BCF
 | USGS Seismic | `bedrock.fetch.seismic` | USGS GeoJSON feed (M≥4.5 siste 7d, ingen key) | manuell CSV |
 | Euronext COT | `bedrock.fetch.cot_euronext` | Euronext per-produkt HTML-rapporter (requests-basert) | manuell CSV |
 | Conab Brazil | `bedrock.fetch.conab` | gov.br PDF (pdftotext primær, pypdf fallback) | manuell CSV |
+| UNICA Brazil | `bedrock.fetch.unica` | unicadata.com.br PDF (poppler-utils + pypdf-fallback, gjenbruker session 111-helper) | manuell CSV |

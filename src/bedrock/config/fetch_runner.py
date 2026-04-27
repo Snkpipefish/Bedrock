@@ -657,6 +657,61 @@ def run_comex(
     return result
 
 
+@register_runner("unica")
+def run_unica(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """UNICA Brazil sugar/ethanol halvmånedlige rapporter (session 112).
+
+    Henter siste quinzenal-rapport via PDF (poppler-utils primær,
+    pypdf fallback gjenbrukt fra session 111). Idempotent på
+    report_date — hvis dagens dato allerede er lagret hopper vi over.
+    Smart-skip: UNICA publiserer 2× per måned (ca 1. og 16.); hvis
+    siste rad er innen 13 dager, hopp over.
+    """
+    from datetime import timedelta
+
+    from bedrock.data.schemas import TABLE_UNICA_REPORTS
+    from bedrock.fetch.unica import fetch_unica
+
+    result = FetchRunResult(fetcher_name="unica")
+
+    today = datetime.now(timezone.utc).date()
+    skip_threshold = today - timedelta(days=13)
+    latest = None
+    try:
+        latest = store.latest_observation_ts(TABLE_UNICA_REPORTS, "report_date")
+    except Exception as exc:
+        _log.warning("unica.smart_skip_lookup_failed error=%s", exc)
+
+    if latest is not None:
+        try:
+            latest_date = datetime.strptime(str(latest)[:10], "%Y-%m-%d").date()
+            if latest_date >= skip_threshold:
+                _log.info(
+                    "unica.up_to_date latest=%s threshold=%s — skipping PDF",
+                    latest_date,
+                    skip_threshold,
+                )
+                result.items.append(ItemOutcome(item_id="unica", ok=True, rows_written=0))
+                return result
+        except ValueError:
+            _log.warning("unica.smart_skip_bad_date raw=%r", latest)
+
+    def _do() -> int:
+        df = fetch_unica()
+        if df.empty:
+            return 0
+        return store.append_unica_reports(df)
+
+    _safe_run([("unica", _do)], result)
+    return result
+
+
 @register_runner("conab")
 def run_conab(
     spec: FetcherSpec,

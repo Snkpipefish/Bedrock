@@ -332,6 +332,8 @@ _FETCHER_GROUPS: dict[str, str] = {
     "cot_euronext": "Ekstern COT",
     # Sub-fase 12.5+ session 111 (ADR-007/008): Conab Brazil crop estimates.
     "conab": "USDA",
+    # Sub-fase 12.5+ session 112 (ADR-007/008): UNICA Brazil sugar/ethanol.
+    "unica": "Sektor",
 }
 _DEFAULT_GROUP = "Other"
 
