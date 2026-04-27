@@ -13,6 +13,7 @@ gratis API-tilgang eller er paid-only.
 | `disease_alerts.csv` | alert_date, region, commodity, pathogen, severity, yield_impact_pct, description, source_url | PestMon, CABI, FAO Crop Prospects |
 | `bdi.csv` | date, value, source | Trading Economics, Bloomberg, eller manuell daglig registrering |
 | `cot_ice.csv` | report_date, contract, mm_long/short, other_long/short, comm_long/short, nonrep_long/short, open_interest | https://www.ice.com/publicdocs/futures/COTHist{YEAR}.csv (manuell nedlasting hvis prod-host blokkeres) |
+| `eia_inventory.csv` | series_id, date, value, units | https://www.eia.gov/petroleum/supply/weekly/ + https://ir.eia.gov/ngs/ngs.html (kun hvis API-key mangler) |
 
 ## Format-eksempler
 
@@ -72,6 +73,24 @@ report_date,contract,mm_long,mm_short,other_long,other_short,comm_long,comm_shor
 2026-04-22,ice gasoil,55000,42000,18000,15000,210000,225000,9000,10000,485000
 ```
 
+### eia_inventory.csv
+
+EIA weekly inventories. Default series:
+- `WCESTUS1` — US Crude Oil Stocks excl. SPR (MBBL)
+- `WGTSTUS1` — US Total Gasoline Stocks (MBBL)
+- `NW2_EPG0_SWO_R48_BCF` — US Working Natural Gas Storage Lower 48 (BCF)
+
+Brukes kun hvis API-key mangler (registrer gratis på
+https://www.eia.gov/opendata/register.php og sett `BEDROCK_EIA_API_KEY`
+i `~/.bedrock/secrets.env`).
+
+```csv
+series_id,date,value,units
+WCESTUS1,2026-04-17,465729,MBBL
+WGTSTUS1,2026-04-17,228374,MBBL
+NW2_EPG0_SWO_R48_BCF,2026-04-17,2063,BCF
+```
+
 ## Workflow for å populere
 
 1. **Daglig/ukentlig**: Sjekk Reuters/Bloomberg agri-news for eksport-policy events. Append-er til `export_events.csv` med severity 1-5.
@@ -89,3 +108,4 @@ report_date,contract,mm_long,mm_short,other_long,other_short,comm_long,comm_shor
 | Disease-alerts | — | manuell curation (paid services finnes) | manuell CSV |
 | BDI | — | paid feed (Trading Economics, Bloomberg) | manuell CSV |
 | ICE COT | `bedrock.fetch.cot_ice` | direkte HTTPS til ICE COTHist{YEAR}.csv | manuell CSV |
+| EIA Inventories | `bedrock.fetch.eia_inventories` | EIA Open Data v2 + `BEDROCK_EIA_API_KEY` | manuell CSV |

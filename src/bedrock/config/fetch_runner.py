@@ -519,6 +519,76 @@ def run_cot_ice(
     return result
 
 
+def _previous_wednesday(now: datetime | None = None) -> date:
+    """EIA weekly petroleum-rapporter publiseres typisk onsdag 10:30 ET
+    (~16:30 Oslo) for forrige fredag-snapshot. Naturgass-storage onsdag/
+    torsdag avhengig av kalender.
+
+    Returnerer siste onsdag på eller før ``now`` (UTC). Brukes av
+    ``run_eia_inventories`` til smart-skip.
+    """
+    n = now or datetime.now(timezone.utc)
+    today = n.date()
+    # Mandag=0 ... Søndag=6. Onsdag=2.
+    delta = (today.weekday() - 2) % 7
+    return today - timedelta(days=delta)
+
+
+@register_runner("eia_inventories")
+def run_eia_inventories(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """EIA Open Data weekly inventories (sub-fase 12.5+ session 107).
+
+    Henter US Crude Oil Stocks, Total Gasoline Stocks, og Lower 48 Natural
+    Gas Storage. Ikke instrument-spesifikk; én global fetch dekker alle
+    energy-relaterte instrumenter (CrudeOil, Brent, NaturalGas).
+
+    Smart-skip: EIA petroleum publiserer typisk onsdag, naturgass onsdag/
+    torsdag. Hvis DB allerede har rader med ``date >= forrige onsdag``,
+    hopper runneren over HTTP-kallet.
+    """
+    from bedrock.data.schemas import TABLE_EIA_INVENTORY
+    from bedrock.fetch.eia_inventories import fetch_eia
+
+    result = FetchRunResult(fetcher_name="eia_inventories")
+
+    # Smart-skip
+    target_wednesday = _previous_wednesday()
+    latest = None
+    try:
+        latest = store.latest_observation_ts(TABLE_EIA_INVENTORY, "date")
+    except Exception as exc:
+        _log.warning("eia.smart_skip_lookup_failed error=%s", exc)
+
+    if latest is not None:
+        try:
+            latest_date = datetime.strptime(str(latest)[:10], "%Y-%m-%d").date()
+            if latest_date >= target_wednesday:
+                _log.info(
+                    "eia.up_to_date latest=%s target=%s — skipping HTTP",
+                    latest_date,
+                    target_wednesday,
+                )
+                result.items.append(ItemOutcome(item_id="eia_inventories", ok=True, rows_written=0))
+                return result
+        except ValueError:
+            _log.warning("eia.smart_skip_bad_date raw=%r", latest)
+
+    def _do() -> int:
+        df = fetch_eia()
+        if df.empty:
+            return 0
+        return store.append_eia_inventory(df)
+
+    _safe_run([("eia_inventories", _do)], result)
+    return result
+
+
 @register_runner("calendar_ff")
 def run_calendar_ff(
     spec: FetcherSpec,

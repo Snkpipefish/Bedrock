@@ -322,6 +322,8 @@ _FETCHER_GROUPS: dict[str, str] = {
     "calendar_ff": "Calendar",
     # Sub-fase 12.5+ session 106 (ADR-007/008): ICE COT.
     "cot_ice": "Ekstern COT",
+    # Sub-fase 12.5+ session 107 (ADR-007/008): EIA weekly inventories.
+    "eia_inventories": "Sektor",
 }
 _DEFAULT_GROUP = "Other"
 
