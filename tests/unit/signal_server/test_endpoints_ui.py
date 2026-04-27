@@ -846,3 +846,173 @@ def test_pipeline_health_includes_cron_and_stale_hours(
     assert prices["stale_hours"] == 30
     assert prices["table"] == "prices"
     assert prices["module"] == "bedrock.fetch.prices"
+
+
+# ─────────────────────────────────────────────────────────────
+# News intel — Sentiment-fane (sub-fase 12.5+ session 114)
+# ─────────────────────────────────────────────────────────────
+
+
+def test_news_intel_empty_db_returns_empty_categories(client: FlaskClient) -> None:
+    """Tom DB → alle 9 kategorier returneres med count=0."""
+    r = client.get("/api/ui/news_intel")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["total"] == 0
+    cat_ids = [c["id"] for c in data["categories"]]
+    assert set(cat_ids) == {
+        "gold",
+        "silver",
+        "copper",
+        "oil",
+        "gas",
+        "grains",
+        "softs",
+        "geopolitics",
+        "agri_weather",
+    }
+    for c in data["categories"]:
+        assert c["count"] == 0
+        assert c["articles"] == []
+
+
+def test_news_intel_returns_articles_grouped(client: FlaskClient, db_path: Path) -> None:
+    """Etter populering skal endpoint gruppere per kategori med riktig count."""
+    import pandas as pd
+
+    from bedrock.data.store import DataStore
+
+    store = DataStore(db_path)
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    store.append_news_intel(
+        pd.DataFrame(
+            [
+                {
+                    "url": "https://x.test/A1",
+                    "event_ts": now.isoformat(),
+                    "fetched_at": now.isoformat(),
+                    "category": "gold",
+                    "title": "Gold rally",
+                    "source": "Reuters",
+                    "query_id": "gold",
+                    "sentiment_label": None,
+                    "disruption_score": None,
+                },
+                {
+                    "url": "https://x.test/A2",
+                    "event_ts": now.isoformat(),
+                    "fetched_at": now.isoformat(),
+                    "category": "oil",
+                    "title": "Oil supply shock",
+                    "source": "Bloomberg",
+                    "query_id": "oil",
+                    "sentiment_label": None,
+                    "disruption_score": None,
+                },
+            ]
+        )
+    )
+
+    data = client.get("/api/ui/news_intel").get_json()
+    assert data["total"] == 2
+    by_id = {c["id"]: c for c in data["categories"]}
+    assert by_id["gold"]["count"] == 1
+    assert by_id["oil"]["count"] == 1
+    assert by_id["silver"]["count"] == 0
+    gold_article = by_id["gold"]["articles"][0]
+    assert gold_article["url"] == "https://x.test/A1"
+    assert gold_article["title"] == "Gold rally"
+
+
+def test_news_intel_filter_by_days(client: FlaskClient, db_path: Path) -> None:
+    """?days=N skal filtrere ut gamle artikler."""
+    import pandas as pd
+
+    from bedrock.data.store import DataStore
+
+    store = DataStore(db_path)
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    old = now - timedelta(days=30)
+    store.append_news_intel(
+        pd.DataFrame(
+            [
+                {
+                    "url": "https://x.test/recent",
+                    "event_ts": now.isoformat(),
+                    "fetched_at": now.isoformat(),
+                    "category": "gold",
+                    "title": "Recent",
+                    "source": None,
+                    "query_id": "gold",
+                    "sentiment_label": None,
+                    "disruption_score": None,
+                },
+                {
+                    "url": "https://x.test/old",
+                    "event_ts": old.isoformat(),
+                    "fetched_at": old.isoformat(),
+                    "category": "gold",
+                    "title": "Old",
+                    "source": None,
+                    "query_id": "gold",
+                    "sentiment_label": None,
+                    "disruption_score": None,
+                },
+            ]
+        )
+    )
+
+    data = client.get("/api/ui/news_intel?days=7").get_json()
+    by_id = {c["id"]: c for c in data["categories"]}
+    assert by_id["gold"]["count"] == 1
+    assert by_id["gold"]["articles"][0]["url"] == "https://x.test/recent"
+
+
+def test_news_intel_filter_by_category(client: FlaskClient, db_path: Path) -> None:
+    """?category=oil skal kun returnere oil-artikler."""
+    import pandas as pd
+
+    from bedrock.data.store import DataStore
+
+    store = DataStore(db_path)
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    store.append_news_intel(
+        pd.DataFrame(
+            [
+                {
+                    "url": "https://x.test/G",
+                    "event_ts": now.isoformat(),
+                    "fetched_at": now.isoformat(),
+                    "category": "gold",
+                    "title": "G",
+                    "source": None,
+                    "query_id": "gold",
+                    "sentiment_label": None,
+                    "disruption_score": None,
+                },
+                {
+                    "url": "https://x.test/O",
+                    "event_ts": now.isoformat(),
+                    "fetched_at": now.isoformat(),
+                    "category": "oil",
+                    "title": "O",
+                    "source": None,
+                    "query_id": "oil",
+                    "sentiment_label": None,
+                    "disruption_score": None,
+                },
+            ]
+        )
+    )
+
+    data = client.get("/api/ui/news_intel?category=oil").get_json()
+    assert data["total"] == 1
+    by_id = {c["id"]: c for c in data["categories"]}
+    assert by_id["oil"]["count"] == 1
+    assert by_id["gold"]["count"] == 0

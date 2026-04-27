@@ -19,6 +19,7 @@
             <button class="tab active" data-tab="skipsloggen" role="tab">Skipsloggen</button>
             <button class="tab" data-tab="financial" role="tab">Financial setups</button>
             <button class="tab" data-tab="agri" role="tab">Soft commodities</button>
+            <button class="tab" data-tab="sentiment" role="tab">Sentiment</button>
             <button class="tab" data-tab="kartrom" role="tab">Kartrommet</button>
         </nav>
     </header>
@@ -85,7 +86,21 @@
                 <p class="empty">Laster…</p>
             </div>
         </section>
-        <!-- Fane 4: Kartrommet (session 50) -->
+        <!-- Fane 4: Sentiment (sub-fase 12.5+ session 114) -->
+        <!-- News intel + crypto sentiment (115). Liten fane med popup-modal
+             for full liste per kategori. UI-only inntil scoring-driver
+             aktiveres etter ≥1 mnds empirisk data. -->
+        <section id="sentiment" class="tab-panel" role="tabpanel">
+            <p class="meta">
+                Markedssentiment fra Google News RSS + Fear&Greed.
+                Sist sjekket: <span id="sentiment-last-check">–</span>.
+                <span id="sentiment-total">–</span> artikler siste 7 dager.
+            </p>
+            <div id="sentiment-news-grid"><p class="empty">Laster…</p></div>
+            <h3 id="sentiment-crypto-heading" style="display:none">Crypto sentiment</h3>
+            <div id="sentiment-crypto"></div>
+        </section>
+        <!-- Fane 5: Kartrommet (session 50) -->
         <section id="kartrom" class="tab-panel" role="tabpanel">
             <p class="meta">Pipeline-helse. Sist sjekket: <span id="kartrom-last-check">–</span></p>
             <div id="kartrom-groups"><p class="empty">Laster…</p></div>

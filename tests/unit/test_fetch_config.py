@@ -118,11 +118,14 @@ def test_load_fetch_config_on_checked_in_file() -> None:
     assert "wasde" in cfg.fetchers
     assert "crop_progress" in cfg.fetchers
     assert "shipping" in cfg.fetchers  # session 113: bdi-rebrand
+    assert "news_intel" in cfg.fetchers  # session 114: Google News RSS
     # Smartere schedules — sanity-sjekker
     assert cfg.fetchers["wasde"].table == "wasde"
     assert cfg.fetchers["crop_progress"].cron == "0 23 * 4-11 1"  # apr-nov
     assert cfg.fetchers["shipping"].cron == "30 23 * * 1-5"  # mon-fri etter close
     assert cfg.fetchers["shipping"].table == "shipping_indices"
+    assert cfg.fetchers["news_intel"].table == "news_intel"
+    assert cfg.fetchers["news_intel"].cron == "30 6,18 * * *"  # 2× daglig
 
 
 # ---------------------------------------------------------------------------

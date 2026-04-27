@@ -663,11 +663,122 @@ function renderKartrommet(res) {
   `).join('');
 }
 
+// ─── Sentiment-fane (session 114 news_intel + 115 crypto) ────────
+async function loadSentiment() {
+  try {
+    const res = await fetch('/api/ui/news_intel?days=7&limit=120').then(r => r.json());
+    renderSentimentNews(res);
+  } catch (err) {
+    console.error('Sentiment load feilet:', err);
+    const el = document.getElementById('sentiment-news-grid');
+    if (el) el.innerHTML = `<p class="empty">Fetch feilet: ${err.message}</p>`;
+  }
+}
+
+function _escapeHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function _formatNewsTime(iso) {
+  if (!iso) return '–';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString('nb-NO', { dateStyle: 'short', timeStyle: 'short' });
+  } catch (e) {
+    return String(iso).slice(0, 16);
+  }
+}
+
+function renderSentimentNews(res) {
+  const lastCheckEl = document.getElementById('sentiment-last-check');
+  const totalEl = document.getElementById('sentiment-total');
+  const grid = document.getElementById('sentiment-news-grid');
+  if (!grid) return;
+
+  if (lastCheckEl) {
+    lastCheckEl.textContent = res.as_of
+      ? new Date(res.as_of).toLocaleTimeString('nb-NO', { timeStyle: 'short' })
+      : '–';
+  }
+  if (totalEl) totalEl.textContent = res.total ?? '0';
+
+  const cats = res.categories || [];
+  if (cats.length === 0) {
+    grid.innerHTML = '<p class="empty">Ingen kategorier konfigurert.</p>';
+    return;
+  }
+
+  grid.innerHTML = cats.map(cat => {
+    const top = (cat.articles || []).slice(0, 3);
+    const previewItems = top.length === 0
+      ? '<li class="empty">Ingen artikler siste 7 dager</li>'
+      : top.map(a => `
+          <li>
+            <a href="${_escapeHtml(a.url)}" target="_blank" rel="noopener" title="${_escapeHtml(a.source || '')}">
+              ${_escapeHtml(a.title)}
+            </a>
+            <span class="news-time">${_escapeHtml(_formatNewsTime(a.event_ts))}</span>
+          </li>`
+        ).join('');
+    const moreBtn = cat.count > 3
+      ? `<button class="news-more-btn" data-cat="${_escapeHtml(cat.id)}">+${cat.count - 3} til</button>`
+      : '';
+    return `
+      <article class="news-card" data-cat="${_escapeHtml(cat.id)}">
+        <header>
+          <h3>${_escapeHtml(cat.label)}</h3>
+          <span class="news-count">${cat.count}</span>
+        </header>
+        <ul>${previewItems}</ul>
+        ${moreBtn}
+      </article>`;
+  }).join('');
+
+  // Wire popup-modal-knapper
+  grid.querySelectorAll('.news-more-btn').forEach(btn => {
+    btn.addEventListener('click', () => openNewsModal(cats, btn.dataset.cat));
+  });
+}
+
+function openNewsModal(allCats, catId) {
+  const cat = (allCats || []).find(c => c.id === catId);
+  if (!cat) return;
+  const modal = document.getElementById('modal');
+  if (!modal) return;
+  const content = modal.querySelector('.modal-content');
+  if (!content) return;
+
+  const items = (cat.articles || []).map(a => `
+    <li>
+      <a href="${_escapeHtml(a.url)}" target="_blank" rel="noopener">${_escapeHtml(a.title)}</a>
+      <div class="news-meta">
+        <span>${_escapeHtml(a.source || '–')}</span>
+        <span>${_escapeHtml(_formatNewsTime(a.event_ts))}</span>
+      </div>
+    </li>`).join('');
+
+  content.innerHTML = `
+    <header class="modal-header">
+      <h2 id="modal-title">${_escapeHtml(cat.label)} <small>(${cat.count})</small></h2>
+      <button class="modal-close" aria-label="Lukk">×</button>
+    </header>
+    <ul class="news-list-full">${items || '<li class="empty">Ingen artikler.</li>'}</ul>
+  `;
+  content.querySelector('.modal-close').addEventListener('click', () => modal.close());
+  modal.showModal();
+}
+
 // ─── Lazy-load per fane ───────────────────────────────────────
 const loaders = {
   skipsloggen: loadSkipsloggen,
   financial: loadFinancialSetups,
   agri: loadAgriSetups,
+  sentiment: loadSentiment,
   kartrom: loadKartrommet,
 };
 

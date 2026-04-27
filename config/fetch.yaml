@@ -184,3 +184,16 @@ fetchers:
     on_failure: log_and_skip
     table: unica_reports
     ts_column: report_date
+
+  # Sub-fase 12.5+ session 114 (ADR-007/008): Google News RSS per
+  # bedrock-kategori (gold/silver/copper/oil/gas/grains/softs/
+  # geopolitics/agri_weather). UI-only foreløpig; scoring-driver
+  # vurderes etter ≥1 mnds empirisk data. 2× daglig matcher
+  # calendar_ff-mønsteret (morgen EU + ettermiddag US).
+  news_intel:
+    module: bedrock.fetch.news_intel
+    cron: "30 6,18 * * *"        # 06:30 + 18:30 Oslo
+    stale_hours: 14              # 14h slack — første timer-fire kveld OK
+    on_failure: log_and_skip
+    table: news_intel
+    ts_column: fetched_at

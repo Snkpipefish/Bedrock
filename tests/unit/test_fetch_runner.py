@@ -156,6 +156,7 @@ def test_all_registered_runners() -> None:
     assert "wasde" in names
     assert "crop_progress" in names
     assert "shipping" in names  # session 113: bdi-rebrand
+    assert "news_intel" in names  # session 114: Google News RSS
 
 
 # ---------------------------------------------------------------------------
@@ -483,6 +484,43 @@ def test_run_crop_progress_without_key_falls_back(store: DataStore, configs_dir)
     # Empty df er ok-status (ingen exception) — runneren rapporterer 0 rader.
     assert result.ok_count == 1
     assert result.total_rows == 0
+
+
+def test_run_news_intel_appends_to_store(store: DataStore, configs_dir) -> None:
+    """Sub-fase 12.5+ session 114: news_intel-runner skal kalle
+    fetch_news_intel og skrive til DB."""
+    defaults, insts = configs_dir
+    fake_df = pd.DataFrame(
+        [
+            {
+                "url": "https://x.test/A1",
+                "event_ts": "2026-04-27T10:00:00",
+                "fetched_at": "2026-04-27T12:00:00",
+                "category": "gold",
+                "title": "Gold rally",
+                "source": "Reuters",
+                "query_id": "gold",
+                "sentiment_label": None,
+                "disruption_score": None,
+            }
+        ]
+    )
+
+    with patch("bedrock.fetch.news_intel.fetch_news_intel", return_value=fake_df):
+        result = run_fetcher_by_name(
+            "news_intel",
+            store,
+            _spec(),
+            from_date=date(2026, 4, 27),
+            to_date=date(2026, 4, 27),
+            instruments_dir=insts,
+            defaults_dir=defaults,
+        )
+
+    assert result.ok_count == 1
+    assert result.total_rows == 1
+    assert result.items[0].item_id == "rss_categories"
+    assert store.has_news_intel()
 
 
 def test_run_shipping_passes_date_range(store: DataStore, configs_dir) -> None:

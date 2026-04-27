@@ -452,6 +452,34 @@ def run_shipping(
     return result
 
 
+@register_runner("news_intel")
+def run_news_intel(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """Google News RSS per bedrock-kategori. Sub-fase 12.5+ session 114.
+
+    UI-only foreløpig per ADR-008 § 114; scoring-driver vurderes etter
+    ≥1 mnds empirisk data-akkumulering. Ingen API-key; sekvensielt med
+    2s pacing per memory-feedback.
+    """
+    from bedrock.fetch.news_intel import fetch_news_intel
+
+    result = FetchRunResult(fetcher_name="news_intel")
+
+    def _do() -> int:
+        df = fetch_news_intel()
+        if df.empty:
+            return 0
+        return store.append_news_intel(df)
+
+    _safe_run([("rss_categories", _do)], result)
+    return result
+
+
 def _previous_tuesday(now: datetime | None = None) -> date:
     """ICE-COT rapporteres for tirsdag-snapshot, publisert fredag.
 

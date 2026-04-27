@@ -1,3 +1,7 @@
+# pyright: reportAttributeAccessIssue=false
+# pandas-stubs har dårlig dekning av itertuples() (NamedTuple med dynamiske
+# attributter). Konsekvent false-positive.
+
 """Web-UI endpoints (Fase 9 runde 1 sessions 47-50).
 
 Serverer `web/index.html` + `web/assets/*` + JSON-APIer som UI-et
@@ -35,6 +39,7 @@ from datetime import timezone
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 from flask import Blueprint, Response, abort, current_app, jsonify, send_from_directory
 
 from bedrock.signal_server.config import ServerConfig
@@ -301,6 +306,116 @@ def setups_agri() -> Response:
 
 
 # ─────────────────────────────────────────────────────────────
+# News intel (Sentiment-fane, sub-fase 12.5+ session 114)
+# ─────────────────────────────────────────────────────────────
+
+
+@ui_bp.get("/api/ui/news_intel")
+def news_intel() -> Response:
+    """Returner siste news_intel-artikler gruppert per kategori.
+
+    Query-params:
+        category: 'gold'/'silver'/etc — filter til én kategori.
+        days: int (default 7) — kun artikler nyere enn N dager.
+        limit: int (default 60) — total cap på rader returnert.
+
+    Response:
+        {
+          "categories": [
+            {"id": "gold", "label": "Gull", "count": N, "articles": [...]},
+            ...
+          ],
+          "total": <int>,
+          "as_of": "<iso>"
+        }
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from flask import jsonify, request
+
+    from bedrock.data.store import DataStore
+
+    cfg = _config()
+    store = DataStore(cfg.db_path)
+
+    days_str = request.args.get("days", "7")
+    limit_str = request.args.get("limit", "60")
+    category = request.args.get("category")
+    try:
+        days = max(1, int(days_str))
+    except (TypeError, ValueError):
+        days = 7
+    try:
+        limit = max(1, int(limit_str))
+    except (TypeError, ValueError):
+        limit = 60
+
+    from_ts = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
+
+    df = store.get_news_intel(
+        category=category,
+        from_event_ts=from_ts,
+        last_n=limit,
+    )
+
+    # Norske labels for kategorier (UI-visning)
+    _category_labels = {
+        "gold": "Gull",
+        "silver": "Sølv",
+        "copper": "Kobber",
+        "oil": "Olje",
+        "gas": "Gass",
+        "grains": "Korn",
+        "softs": "Bløte råvarer",
+        "geopolitics": "Geopolitikk",
+        "agri_weather": "Landbruk & vær",
+    }
+
+    grouped: dict[str, list[dict[str, Any]]] = {k: [] for k in _category_labels}
+    if not df.empty:
+        for row in df.itertuples(index=False):
+            cat = str(row.category)
+            if cat not in grouped:
+                grouped[cat] = []
+            grouped[cat].append(
+                {
+                    "url": row.url,
+                    "title": row.title,
+                    "source": row.source if not pd.isna(row.source) else None,
+                    "event_ts": row.event_ts.isoformat()
+                    if hasattr(row.event_ts, "isoformat")
+                    else str(row.event_ts),
+                    "category": cat,
+                    "query_id": row.query_id,
+                    "sentiment_label": (
+                        row.sentiment_label if not pd.isna(row.sentiment_label) else None
+                    ),
+                    "disruption_score": (
+                        float(row.disruption_score) if not pd.isna(row.disruption_score) else None
+                    ),
+                }
+            )
+
+    categories = [
+        {
+            "id": cat_id,
+            "label": _category_labels.get(cat_id, cat_id),
+            "count": len(grouped[cat_id]),
+            "articles": grouped[cat_id],
+        }
+        for cat_id in _category_labels
+    ]
+
+    return jsonify(
+        {
+            "categories": categories,
+            "total": len(df) if not df.empty else 0,
+            "as_of": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
+
+# ─────────────────────────────────────────────────────────────
 # Pipeline-helse (Kartrommet, session 50)
 # ─────────────────────────────────────────────────────────────
 
@@ -335,6 +450,8 @@ _FETCHER_GROUPS: dict[str, str] = {
     "conab": "USDA",
     # Sub-fase 12.5+ session 112 (ADR-007/008): UNICA Brazil sugar/ethanol.
     "unica": "Sektor",
+    # Sub-fase 12.5+ session 114 (ADR-007/008): Google News RSS sentiment.
+    "news_intel": "Sentiment",
 }
 _DEFAULT_GROUP = "Other"
 
@@ -349,6 +466,7 @@ _GROUP_ORDER = [
     "USDA",
     "Shipping",
     "Sektor",
+    "Sentiment",
     "Geo",
     "Other",
 ]
