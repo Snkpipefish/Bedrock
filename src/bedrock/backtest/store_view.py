@@ -226,6 +226,213 @@ class AsOfDateStore:
         return full[mask].reset_index(drop=True)
 
     # ------------------------------------------------------------------
+    # Phase A-C tabeller (sub-fase 12.5+ sessions 105-115)
+    #
+    # Hver getter bevarer signatur og return-type fra DataStore. Clipping
+    # gjøres på den naturlige dato-kolonnen (event_ts / report_date / date)
+    # slik at orchestrator-replay ikke ser frem-i-tid-data.
+    # ------------------------------------------------------------------
+
+    def get_econ_events(
+        self,
+        countries: Sequence[str] | None = None,
+        impact_levels: Sequence[str] | None = None,
+        from_ts: str | None = None,
+        to_ts: str | None = None,
+    ) -> pd.DataFrame:
+        """Som DataStore.get_econ_events, men clipped på fetched_at.
+
+        Bruker fetched_at fordi calendar-events er scheduled i fremtiden;
+        spørsmålet er "hva visste vi på as_of_date?" — ikke "hvilke events
+        hadde skjedd?". Hvis fetched_at-kolonnen mangler (gamle rader),
+        faller vi tilbake til event_ts.
+        """
+        full = self._underlying.get_econ_events(
+            countries=countries,
+            impact_levels=impact_levels,
+            from_ts=from_ts,
+            to_ts=to_ts,
+        )
+        if full.empty:
+            return full
+        as_of_utc = self._as_of.tz_localize("UTC") if self._as_of.tz is None else self._as_of
+        if "fetched_at" in full.columns:
+            mask = full["fetched_at"] <= as_of_utc
+        else:
+            mask = full["event_ts"] <= as_of_utc
+        return full[mask].reset_index(drop=True)
+
+    # COT-ICE — samme mønster som get_cot
+
+    def get_cot_ice(self, contract: str, last_n: int | None = None) -> pd.DataFrame:
+        """Som DataStore.get_cot_ice, men clipped på report_date ≤ as_of_date."""
+        try:
+            full = self._underlying.get_cot_ice(contract, last_n=None)
+        except KeyError:
+            raise
+        clipped = full[full["report_date"] <= self._as_of].copy()
+        if clipped.empty:
+            raise KeyError(f"No ICE COT for contract={contract!r} as of {self._as_of.date()}")
+        if last_n is not None:
+            clipped = clipped.tail(last_n).reset_index(drop=True)
+        return clipped
+
+    def has_cot_ice(self, contract: str) -> bool:
+        try:
+            return not self.get_cot_ice(contract).empty
+        except KeyError:
+            return False
+
+    # COT-Euronext
+
+    def get_cot_euronext(self, contract: str, last_n: int | None = None) -> pd.DataFrame:
+        """Som DataStore.get_cot_euronext, men clipped på report_date."""
+        try:
+            full = self._underlying.get_cot_euronext(contract, last_n=None)
+        except KeyError:
+            raise
+        clipped = full[full["report_date"] <= self._as_of].copy()
+        if clipped.empty:
+            raise KeyError(f"No Euronext COT for contract={contract!r} as of {self._as_of.date()}")
+        if last_n is not None:
+            clipped = clipped.tail(last_n).reset_index(drop=True)
+        return clipped
+
+    def has_cot_euronext(self, contract: str) -> bool:
+        try:
+            return not self.get_cot_euronext(contract).empty
+        except KeyError:
+            return False
+
+    # Conab
+
+    def get_conab_estimates(self, commodity: str, last_n: int | None = None) -> pd.DataFrame:
+        """Som DataStore.get_conab_estimates, men clipped på report_date."""
+        try:
+            full = self._underlying.get_conab_estimates(commodity, last_n=None)
+        except KeyError:
+            raise
+        clipped = full[full["report_date"] <= self._as_of].copy()
+        if clipped.empty:
+            raise KeyError(f"No Conab data for commodity={commodity!r} as of {self._as_of.date()}")
+        if last_n is not None:
+            clipped = clipped.tail(last_n).reset_index(drop=True)
+        return clipped
+
+    def has_conab_estimates(self, commodity: str) -> bool:
+        try:
+            return not self.get_conab_estimates(commodity).empty
+        except KeyError:
+            return False
+
+    # UNICA
+
+    def get_unica_reports(self, last_n: int | None = None) -> pd.DataFrame:
+        """Som DataStore.get_unica_reports, men clipped på report_date."""
+        full = self._underlying.get_unica_reports(last_n=None)
+        if full.empty:
+            return full
+        clipped = full[full["report_date"] <= self._as_of].reset_index(drop=True)
+        if last_n is not None and not clipped.empty:
+            clipped = clipped.tail(last_n).reset_index(drop=True)
+        return clipped
+
+    def has_unica_reports(self) -> bool:
+        return not self.get_unica_reports().empty
+
+    # EIA inventories
+
+    def get_eia_inventory(self, series_id: str, last_n: int | None = None) -> pd.DataFrame:
+        """Som DataStore.get_eia_inventory, men clipped på date."""
+        try:
+            full = self._underlying.get_eia_inventory(series_id, last_n=None)
+        except KeyError:
+            raise
+        clipped = full[full["date"] <= self._as_of].copy()
+        if clipped.empty:
+            raise KeyError(
+                f"No EIA inventory for series_id={series_id!r} as of {self._as_of.date()}"
+            )
+        if last_n is not None:
+            clipped = clipped.tail(last_n).reset_index(drop=True)
+        return clipped
+
+    def has_eia_inventory(self, series_id: str) -> bool:
+        try:
+            return not self.get_eia_inventory(series_id).empty
+        except KeyError:
+            return False
+
+    # COMEX
+
+    def get_comex_inventory(self, metal: str, last_n: int | None = None) -> pd.DataFrame:
+        """Som DataStore.get_comex_inventory, men clipped på date."""
+        try:
+            full = self._underlying.get_comex_inventory(metal, last_n=None)
+        except KeyError:
+            raise
+        clipped = full[full["date"] <= self._as_of].copy()
+        if clipped.empty:
+            raise KeyError(f"No COMEX inventory for metal={metal!r} as of {self._as_of.date()}")
+        if last_n is not None:
+            clipped = clipped.tail(last_n).reset_index(drop=True)
+        return clipped
+
+    def has_comex_inventory(self, metal: str) -> bool:
+        try:
+            return not self.get_comex_inventory(metal).empty
+        except KeyError:
+            return False
+
+    # Seismic
+
+    def get_seismic_events(
+        self,
+        *,
+        region: str | None = None,
+        regions: Sequence[str] | None = None,
+        from_ts: datetime | None = None,
+        min_magnitude: float | None = None,
+    ) -> pd.DataFrame:
+        """Som DataStore.get_seismic_events, men clipped på event_ts."""
+        full = self._underlying.get_seismic_events(
+            region=region,
+            regions=regions,
+            from_ts=from_ts,
+            min_magnitude=min_magnitude,
+        )
+        if full.empty:
+            return full
+        as_of_utc = self._as_of.tz_localize("UTC") if self._as_of.tz is None else self._as_of
+        return full[full["event_ts"] <= as_of_utc].reset_index(drop=True)
+
+    def has_seismic_events(self) -> bool:
+        return self._underlying.has_seismic_events()
+
+    # Shipping indices (Series med date-index)
+
+    def get_shipping_index(self, index_code: str, last_n: int | None = None) -> pd.Series:
+        """Som DataStore.get_shipping_index, men clipped på date-index."""
+        try:
+            full = self._underlying.get_shipping_index(index_code, last_n=None)
+        except KeyError:
+            raise
+        clipped = self._clip_index(full)
+        if clipped.empty:
+            raise KeyError(f"No shipping index data for {index_code!r} as of {self._as_of.date()}")
+        if last_n is not None:
+            clipped = clipped.tail(last_n)
+        return clipped
+
+    def has_shipping_index(self, index_code: str | None = None) -> bool:
+        if index_code is None:
+            return self._underlying.has_shipping_index()
+        try:
+            return not self.get_shipping_index(index_code).empty
+        except KeyError:
+            return False
+
+    # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 
