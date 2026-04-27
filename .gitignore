@@ -72,3 +72,7 @@ systemd/bedrock-fetch-*.timer
 # Volatil signal-output (regeneres av orchestrator)
 data/signals.json
 data/agri_signals.json
+
+# Tier 2 backfill runtime files
+data/_meta/tier2_backfill.pid
+data/_meta/tier2_backfill.log
