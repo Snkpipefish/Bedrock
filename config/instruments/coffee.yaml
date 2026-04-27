@@ -60,6 +60,16 @@ families:
       - name: enso_regime
         weight: 1.0
         params: {}
+  conab:
+    # Sub-fase 12.5+ session 111: Brasil er ~40% av global kaffeproduksjon
+    # — DOMINANT. KC-kontrakten er primært arabica-basert, så cafe_arabica
+    # er mest relevant metrikk. conab_yoy som eneste driver.
+    weight: 2
+    drivers:
+      - name: conab_yoy
+        weight: 1.0
+        params:
+          commodity: cafe_arabica
   cross:
     # Sub-fase 12.5+ session 80: erstattet DXY-proxy med direkte BRL-
     # måling via DEXBZUS. USDBRL UP = BRL svakhet = bull for

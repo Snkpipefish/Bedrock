@@ -63,6 +63,17 @@ families:
       - name: enso_regime
         weight: 1.0
         params: {}
+  conab:
+    # Sub-fase 12.5+ session 111: Brasil er ~40% av global soybean-
+    # produksjon — DOMINANT. Conab er PRIMÆR data-kilde for soybean
+    # (overstyrer family_agri-default-placeholder). conab_yoy som
+    # eneste driver.
+    weight: 2
+    drivers:
+      - name: conab_yoy
+        weight: 1.0
+        params:
+          commodity: soja
   cross:
     weight: 2
     drivers:

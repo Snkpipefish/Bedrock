@@ -63,17 +63,20 @@ families:
         weight: 1.0
         params: {}
   conab:
-    # Sub-fase 12.5+ session 86: erstattet sma200_align placeholder med
-    # wasde_s2u_change. USDA WASDE er primær data-kilde for global
-    # corn-balanse (US dominerer global produksjon, ~30% av total).
-    # Conab-data (Brasil) er fortsatt ikke implementert; familie-navnet
-    # beholdes men driver er nå reell USDA-supply-data.
+    # Sub-fase 12.5+ session 86: brukte wasde_s2u_change som placeholder
+    # inntil Conab var implementert. Sub-fase 12.5+ session 111: ekte
+    # conab_yoy lagt til. WASDE forblir primær (US ~30% global, Brasil
+    # ~10%); Conab supplerer for Brazil-spesifikk supply-status.
     weight: 2
     drivers:
       - name: wasde_s2u_change
-        weight: 1.0
+        weight: 0.7
         params:
           region: US
+      - name: conab_yoy
+        weight: 0.3
+        params:
+          commodity: milho
   cross:
     # Sub-fase 12.5+ session 90: utvidet med bdi_chg30d (shipping-
     # kostnad). USD-svakhet OG BDI ned begge bull for US-eksport-flyt.
