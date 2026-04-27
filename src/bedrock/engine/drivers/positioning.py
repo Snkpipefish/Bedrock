@@ -376,4 +376,94 @@ def cot_ice_mm_pct(store: Any, instrument: str, params: dict) -> float:
     return round(pct / 100.0, 4)
 
 
-__all__ = ["cot_ice_mm_pct", "cot_z_score", "positioning_mm_pct"]
+# ---------------------------------------------------------------------------
+# Euronext COT (sub-fase 12.5+ session 110)
+# ---------------------------------------------------------------------------
+
+
+def _load_euronext_metric_series(
+    store: Any,
+    params: dict,
+) -> tuple[float, list[float]] | None:
+    """Datastrøm-loader for Euronext-COT, parallell til ICE-versjonen.
+
+    `contract` er bedrock-canonical (``"euronext milling wheat"``,
+    ``"euronext corn"``, ``"euronext canola"``) og leses fra params.
+    Returnerer ``(current, history)`` eller None ved feil.
+    """
+    contract = params.get("contract")
+    if not contract:
+        _log.warning("cot_euronext.no_contract_in_params params=%s", params)
+        return None
+
+    lookback = int(params.get("lookback_weeks", _DEFAULT_LOOKBACK))
+    metric = str(params.get("metric", _DEFAULT_METRIC))
+
+    try:
+        df = store.get_cot_euronext(contract, last_n=lookback + 1)
+    except KeyError:
+        _log.warning("cot_euronext.data_missing contract=%s", contract)
+        return None
+    except Exception as exc:
+        _log.warning("cot_euronext.fetch_failed contract=%s error=%s", contract, exc)
+        return None
+
+    series = _compute_metric(df, metric)
+    if series is None:
+        _log.warning("cot_euronext.unknown_metric contract=%s metric=%s", contract, metric)
+        return None
+
+    series = series.dropna()
+    if len(series) < MIN_OBS_FOR_PCTILE + 1:
+        _log.debug(
+            "cot_euronext.short_history contract=%s n=%d required=%d",
+            contract,
+            len(series),
+            MIN_OBS_FOR_PCTILE + 1,
+        )
+        return None
+
+    current = float(series.iloc[-1])
+    history = [float(v) for v in series.iloc[:-1]]
+    return current, history
+
+
+@register("cot_euronext_mm_pct")
+def cot_euronext_mm_pct(store: Any, instrument: str, params: dict) -> float:
+    """Rank-percentile av MM net positioning fra Euronext COT, normalisert til 0..1.
+
+    Parallell til ``cot_ice_mm_pct`` men leser fra ``store.get_cot_euronext``
+    (Euronext MiFID II COT). Brukes som EU-overlay for grain-kontrakter
+    (Wheat, Corn) — co-driver til CFTC ``positioning_mm_pct``.
+
+    Params:
+        contract (REQUIRED): bedrock-canonical streng. ``"euronext milling
+            wheat"``, ``"euronext corn"``, eller ``"euronext canola"``.
+        lookback_weeks: rolling-vindu (default 52).
+        metric: ``"mm_net"`` (default) eller ``"mm_net_pct"``.
+
+    Returnerer:
+    - 1.0 ved ekstrem MM long
+    - 0.5 ved median posisjonering
+    - 0.0 ved ekstrem MM short eller manglende data
+
+    Defensiv: alle feil → 0.0 + log.
+    """
+    loaded = _load_euronext_metric_series(store, params)
+    if loaded is None:
+        return 0.0
+    current, history = loaded
+
+    pct = rank_percentile(current, history)
+    if pct is None:
+        return 0.0
+
+    return round(pct / 100.0, 4)
+
+
+__all__ = [
+    "cot_euronext_mm_pct",
+    "cot_ice_mm_pct",
+    "cot_z_score",
+    "positioning_mm_pct",
+]
