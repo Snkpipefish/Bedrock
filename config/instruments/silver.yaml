@@ -50,16 +50,22 @@ families:
   macro:
     # Silver: like Gold men mer industriell — også føler igjennom på
     # vekstbekymring. Real-yield-følsomhet mindre enn Gold.
+    # Sub-fase 12.5+ session 108: comex_stress lagt til — sølv har
+    # historisk lavere coverage enn gull (mer industriell etterspørsel)
+    # så supply-stress er sterkere fundamental (vekt 0.30).
     drivers:
       - name: real_yield
-        weight: 0.3
+        weight: 0.2
         params: {bull_when: low}
       - name: dxy_chg5d
-        weight: 0.5
+        weight: 0.35
         params: {bull_when: negative, window: 5}
       - name: vix_regime
-        weight: 0.2
+        weight: 0.15
         params: {invert: true}
+      - name: comex_stress
+        weight: 0.3
+        params: {metal: silver, wow_window: 5}
   structure:
     drivers:
       - name: range_position

@@ -74,23 +74,30 @@ families:
           metric: mm_net_pct
           lookback_weeks: 52
   macro:
-    # Sub-fase 12.5 session 71: ekte macro-drivere fra FRED.
+    # Sub-fase 12.5 session 71 + 108: ekte macro-drivere.
     # Gold som ikke-rentebærende metall får støtte når real-yield faller,
     # USD svekkes, og når VIX viser stress (safe-haven via invert=true).
+    # Sub-fase 12.5+ session 108: comex_stress lagt til — låg coverage
+    # (registered/total) = supply tight = squeeze-risk = bullish.
     drivers:
       - name: real_yield
-        weight: 0.4
+        weight: 0.3
         params:
-          bull_when: low   # låg/negativ real yield = bull for Gold
+          bull_when: low
       - name: dxy_chg5d
-        weight: 0.4
+        weight: 0.3
         params:
-          bull_when: negative  # USD-svakhet = bull for Gold
+          bull_when: negative
           window: 5
       - name: vix_regime
-        weight: 0.2
+        weight: 0.15
         params:
-          invert: true  # Gold er safe-haven; høy VIX er bull
+          invert: true
+      - name: comex_stress
+        weight: 0.25
+        params:
+          metal: gold
+          wow_window: 5
   structure:
     # Sub-fase 12.5 Block A polish session 79: range_position erstatter
     # sma200_align (sma er trend, ikke structure). 20-dagers range-posisjon

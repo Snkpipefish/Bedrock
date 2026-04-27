@@ -50,16 +50,23 @@ families:
   macro:
     # Copper: industriell — risk-on assets. VIX HIGH = bear (typisk
     # demand-shock). Lav real-yield = bull (vekst-stimulus).
+    # Sub-fase 12.5+ session 108: comex_stress lagt til — kobber bruker
+    # copper_handling=skip (CME har fjernet reg/elig-skillet for HG;
+    # bruker kun WoW-trend i registered/total). Vekt 0.20 — relativt
+    # lavere enn gull/sølv siden kobber-stocks delvis dekkes av LME.
     drivers:
       - name: real_yield
-        weight: 0.3
+        weight: 0.25
         params: {bull_when: low}
       - name: dxy_chg5d
-        weight: 0.5
+        weight: 0.4
         params: {bull_when: negative, window: 5}
       - name: vix_regime
+        weight: 0.15
+        params: {invert: false}
+      - name: comex_stress
         weight: 0.2
-        params: {invert: false}  # Copper IKKE safe-haven; lav VIX = bull
+        params: {metal: copper, wow_window: 5, copper_handling: skip}
   structure:
     drivers:
       - name: range_position
