@@ -11,6 +11,9 @@
 #   usgs-seismic          USGS earthquake historikk (2010+)
 #   euronext              Euronext COT historikk (optimalisert)
 #   cftc-name-drift       CFTC kontrakt-navn-drift (Brent, Copper)
+#   harvest-drivers       Full historisk driver-harvest
+#   analyze               Driver-performance + kryss-korrelasjon
+#   cafe-history          CONAB café-historikk-PDF-nedlasting + ingest
 
 set -euo pipefail
 
@@ -61,6 +64,14 @@ case "$job" in
       bash "$REPO_ROOT/scripts/run_full_history_harvest.sh"
     )
     ;;
+  cafe-history)
+    LABEL="cafe_history"
+    COMMAND=(
+      env PYTHONUNBUFFERED=1 PYTHONPATH=src
+      "$REPO_ROOT/.venv/bin/python"
+      "$REPO_ROOT/scripts/backfill_conab_cafe.py"
+    )
+    ;;
   analyze)
     LABEL="analyze"
     # Sekvensiell: driver_performance først, så cross_correlations.
@@ -83,6 +94,7 @@ case "$job" in
     echo "  cftc-name-drift       CFTC kontrakt-navn-drift (Brent, Copper)"
     echo "  harvest-drivers       Full historisk driver-harvest (~24-35 timer)"
     echo "  analyze               Driver-performance + kryss-korrelasjon (etter harvest)"
+    echo "  cafe-history          CONAB café-historikk-PDF-er (~15-25 min, sekvensiell)"
     exit 0
     ;;
 esac
