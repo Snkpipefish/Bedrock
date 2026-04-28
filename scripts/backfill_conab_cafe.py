@@ -65,13 +65,19 @@ DEFAULT_DB = Path("data/bedrock.db")
 
 YEAR_RANGE = range(2017, 2027)  # safra-årene CONAB sannsynligvis har
 LEVANTAMENTO_RANGE = range(1, 5)  # 4 levantamentos per safra-år (1-4)
-PACING_SECONDS = 5.0  # mellom HTTP-requests
-PROBE_PACING = 2.0  # raskere ved probe-only (HEAD-aktig)
+PACING_SECONDS = 15.0  # mellom PDF-nedlastninger (CONAB throttler aggressivt)
+PROBE_PACING = 8.0  # mellom probe-requests — testet at 5s ble blokkert med 403
 HTTP_TIMEOUT = 30.0
-USER_AGENT = "bedrock-backfill/0.1 (+https://github.com/bedrock; sequential)"
-HEADERS = {"User-Agent": USER_AGENT}
+USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) bedrock-backfill/0.1"
+HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "text/html,application/xhtml+xml,application/pdf,*/*",
+    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+}
 RETRY_STATUSES = {429, 500, 502, 503, 504}
+THROTTLE_STATUSES = {403, 429}  # 403 = CONAB rate-limiter
 MAX_RETRIES = 3
+THROTTLE_BACKOFF_BASE = 60.0  # ved 403/429: vent 60s, deretter 120, 240
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +112,12 @@ def _get_with_retry(
     *,
     timeout: float = HTTP_TIMEOUT,
 ) -> requests.Response | None:
-    """GET med backoff på 429/5xx. None hvis alle retries feiler."""
+    """GET med backoff på 403/429/5xx. None hvis alle retries feiler.
+
+    403 fra CONAB betyr ofte rate-limiter, ikke permanent forbud — vi
+    venter THROTTLE_BACKOFF_BASE sek og prøver igjen. Hvis 3x 403 på rad,
+    gi opp denne URL-en (caller logger og fortsetter).
+    """
     delay = PACING_SECONDS
     for attempt in range(1, MAX_RETRIES + 1):
         try:
@@ -121,6 +132,18 @@ def _get_with_retry(
             return r
         if r.status_code == 404:
             return r  # ikke retry, men return så caller kan inspisere
+        if r.status_code in THROTTLE_STATUSES and attempt < MAX_RETRIES:
+            wait = THROTTLE_BACKOFF_BASE * (2 ** (attempt - 1))
+            log.warning(
+                "GET %s → %d (throttled), backoff %.0fs (attempt %d/%d)",
+                url,
+                r.status_code,
+                wait,
+                attempt,
+                MAX_RETRIES,
+            )
+            time.sleep(wait)
+            continue
         if r.status_code in RETRY_STATUSES and attempt < MAX_RETRIES:
             log.warning("GET %s → %d, retry %d", url, r.status_code, attempt)
             time.sleep(delay)
@@ -136,16 +159,35 @@ def _get_with_retry(
 
 
 def _extract_pdf_links_from_lev_page(html: str) -> list[str]:
-    """Returnerer alle absolutte URL-er til PDF-er i en levantamento-side
-    som ser ut som café-rapporter (innholder 'cafe' eller 'boletim'-mønster).
+    """Returnerer absolutte URL-er som peker til café-boletim-PDF-er.
+
+    CONAB Plone serverer PDF-er via katalog-URL UTEN .pdf-suffix (f.eks.
+    `boletim-cafe-dezembro-2025`). Vi matcher derfor på navne-mønsteret
+    "boletim-cafe-..." istedenfor file-extension. Tabela-data-lenker
+    (Excel) ekskluderes eksplisitt.
     """
     pdfs: list[str] = []
+    # Mønster 1: rene .pdf-filer (eldre kataloger eller direktelenker)
     for match in re.findall(r'href=["\']([^"\']+\.pdf)["\']', html):
-        if not ("cafe" in match.lower() or "boletim-de-safras" in match.lower()):
+        if "cafe" in match.lower() or "boletim-de-safras" in match.lower():
+            url = match if match.startswith("http") else f"https://www.gov.br{match}"
+            if url not in pdfs:
+                pdfs.append(url)
+
+    # Mønster 2: Plone-katalog-lenker uten suffix — boletim-cafe-{måned}-{år}
+    # Vi vil prioritere boletim foran tabela-de-dados (Excel).
+    plone_pattern = re.compile(
+        r'href=["\']([^"\']*?/boletim-cafe-[^"\']+?)["\']',
+        re.IGNORECASE,
+    )
+    for match in plone_pattern.findall(html):
+        # Skip tabela-data og andre ikke-PDF-ressurser
+        if "tabela-de-dados" in match.lower() or "estimativas" in match.lower():
             continue
         url = match if match.startswith("http") else f"https://www.gov.br{match}"
         if url not in pdfs:
             pdfs.append(url)
+
     return pdfs
 
 
@@ -192,7 +234,12 @@ def _scrape_index_for_extra_levantamentos(
 
 
 def download_pdf(url: str, dest: Path, log: logging.Logger) -> bool:
-    """Last ned PDF til dest. True hvis ny, False hvis hoppet eller feilet."""
+    """Last ned PDF til dest. True hvis ny, False hvis hoppet eller feilet.
+
+    Plone serverer PDF via katalog-URL, så Content-Type er det som forteller
+    om vi får PDF-bytes. Vi sjekker også %PDF-magic-bytes for ekstra
+    sikkerhet (HTML 403-sider innehold ikke %PDF).
+    """
     if dest.exists() and dest.stat().st_size > 0:
         log.info("SKIP %s (finnes: %s, %d bytes)", dest.name, dest, dest.stat().st_size)
         return False
@@ -202,7 +249,8 @@ def download_pdf(url: str, dest: Path, log: logging.Logger) -> bool:
         log.error("PDF-nedlasting feilet (%s, status=%s)", url, getattr(r, "status_code", "n/a"))
         return False
     if not r.content or not r.content.startswith(b"%PDF"):
-        log.error("Innhold er ikke PDF (%s, første bytes=%r)", url, r.content[:8])
+        ctype = r.headers.get("Content-Type", "?")
+        log.error("Innhold er ikke PDF (%s, ctype=%s, første bytes=%r)", url, ctype, r.content[:8])
         return False
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(r.content)
@@ -247,10 +295,11 @@ def run_download_phase(
             continue
         # Velg den første som er en levantamento-PDF (filtrert allerede).
         pdf_url = pdf_urls[0]
-        # Filnavn: bruk slug fra URL
+        # Filnavn: bruk slug fra URL. Plone-lenker har ikke .pdf-suffix —
+        # legg til så filsystemet ser det som PDF.
         slug = pdf_url.rsplit("/", 1)[-1]
-        if not slug.endswith(".pdf"):
-            slug += ".pdf"
+        if not slug.lower().endswith(".pdf"):
+            slug = f"{slug}.pdf"
         # Prefiks med safra+levantamento for sortering
         dest = output_dir / f"safra-{year}_{n}o_{slug}"
         time.sleep(PACING_SECONDS)
