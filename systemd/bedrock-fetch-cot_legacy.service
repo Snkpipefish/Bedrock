@@ -4,6 +4,7 @@
 Description=Bedrock fetch: cot_legacy (bedrock.fetch.cot_cftc)
 After=network-online.target
 Wants=network-online.target
+OnFailure=bedrock-notify@%N.service
 
 [Service]
 Type=oneshot

@@ -1,0 +1,26 @@
+# Sub-fase 12.6 — user-side desktop-varsel etter daglig monitor-kjøring.
+#
+# Trigges av bedrock-monitor-alert.timer (06:40) — leser
+# data/_meta/monitor_<dato>.json som er skrevet av system-scope
+# bedrock-monitor.service kl 06:30 og pinger user via notify-send hvis
+# overall_ok=false eller fila mangler.
+#
+# Hvorfor user-scope: monitor-service kjører som root og kan ikke nå
+# brukerens DBus uten å bryte sandboxing. User-systemd har naturlig
+# DBus-tilgang og loginctl linger=yes sørger for at den kjører ved boot
+# uavhengig av om bruker er logget inn.
+#
+# Manuelt redigert. Ikke auto-generert.
+[Unit]
+Description=Bedrock pipeline-helse desktop-varsel (etter daglig monitor)
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/pc/bedrock
+ExecStart=/home/pc/bedrock/scripts/monitor_alert.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

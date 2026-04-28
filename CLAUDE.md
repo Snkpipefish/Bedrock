@@ -14,8 +14,12 @@ driver-registry) slik at nye regler kan legges til uten kode-endring.
 1. Les denne fila (auto)
 2. Les `STATE.md` fra topp til første `---`
 3. Les relevant fase-seksjon i `PLAN.md` for gjeldende task
-4. Bekreft til bruker: "Fortsetter på [task]. Blockers: [...]. Jeg starter med [handling]."
-5. Vent på bekreftelse eller ny retning
+4. **Pipeline-helse-blikk** (sub-fase 12.6): kjør `bash scripts/session_health.sh`.
+   Skriptet listet failed bedrock-services + dagens `overall_ok` fra monitor.
+   Hvis output sier "RØD", flagg det som blocker før task — ikke bygg ny kode på
+   et trasig datagrunnlag. Skriptet gjør ingen endringer, kun leser status.
+5. Bekreft til bruker: "Fortsetter på [task]. Helse: [grønn|rød — X]. Blockers: [...]. Jeg starter med [handling]."
+6. Vent på bekreftelse eller ny retning
 
 ## Slutt av session (følg alltid)
 

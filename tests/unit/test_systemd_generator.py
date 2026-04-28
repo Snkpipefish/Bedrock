@@ -130,6 +130,19 @@ def test_generate_service_unit_contains_required_fields() -> None:
     assert "WantedBy=default.target" in content
 
 
+def test_generate_service_unit_has_notify_on_failure() -> None:
+    """Sub-fase 12.6: hver fetch-service skal trigger notify-send ved fail."""
+    content = generate_service_unit(
+        "prices",
+        working_dir=Path("/repo"),
+        bedrock_executable="/bin/bedrock",
+    )
+    assert "OnFailure=bedrock-notify@%N.service" in content
+    # Må ligge i [Unit]-seksjonen, ikke [Service]
+    unit_section = content.split("[Service]", 1)[0]
+    assert "OnFailure=" in unit_section
+
+
 def test_generate_service_with_module_hint() -> None:
     content = generate_service_unit(
         "prices",

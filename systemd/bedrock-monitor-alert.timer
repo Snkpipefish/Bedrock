@@ -1,0 +1,17 @@
+# Sub-fase 12.6 — timer for user-side monitor-varsling.
+#
+# 06:40 lokal tid (10 min etter system-scope bedrock-monitor.service som
+# kjører 06:30). Persistent=true sørger for catch-up hvis maskinen var av.
+#
+# Manuelt redigert. Ikke auto-generert.
+[Unit]
+Description=Bedrock monitor-alert timer (user)
+Requires=bedrock-monitor-alert.service
+
+[Timer]
+OnCalendar=*-*-* 06:40:00
+Persistent=true
+Unit=bedrock-monitor-alert.service
+
+[Install]
+WantedBy=timers.target

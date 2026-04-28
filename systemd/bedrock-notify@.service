@@ -1,0 +1,18 @@
+# Sub-fase 12.6 — failure-varsling for bedrock systemd-tjenester.
+#
+# Template-tjeneste som kalles via `OnFailure=bedrock-notify@%n.service`
+# fra hver bedrock-fetch-*-service. `%i` settes til failet service-navn
+# (f.eks. "bedrock-fetch-shipping.service").
+#
+# notify-send skriver til DBus session-bussen — krever XDG_RUNTIME_DIR
+# pekende på brukerens runtime-dir (typisk /run/user/UID), som user-systemd
+# uansett har satt. Vi sender også `--urgency=critical` så popup
+# persisterer til bruker dismisser den.
+#
+# Ikke auto-generert. Endres manuelt ved behov.
+[Unit]
+Description=Bedrock failure notification (notify-send) for %i
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/notify-send --urgency=critical --app-name=bedrock --icon=dialog-error "Bedrock: %i feilet" "Service %i exit-code != 0. Sjekk: journalctl --user -u %i -n 50"

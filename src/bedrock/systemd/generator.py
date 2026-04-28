@@ -27,6 +27,14 @@ from bedrock.config.fetch import FetchConfig
 
 UNIT_FILENAME_PREFIX = "bedrock-fetch-"
 
+# Sub-fase 12.6: alle bedrock-fetch-* services trigger
+# `bedrock-notify@<unit-navn>.service` ved exit-code != 0. Templaten ligger
+# i `systemd/bedrock-notify@.service` og kaller notify-send med urgency=critical
+# slik at user får desktop-popup uten å sjekke kartrom-UI. `%N` blir til full
+# unit-navn uten suffix (f.eks. `bedrock-fetch-shipping`), som dukker opp som
+# `%i` i template.
+NOTIFY_ON_FAILURE_TARGET = "bedrock-notify@%N.service"
+
 
 # ---------------------------------------------------------------------------
 # Cron → OnCalendar
@@ -190,6 +198,7 @@ def generate_service_unit(
         f"Description={description}\n"
         "After=network-online.target\n"
         "Wants=network-online.target\n"
+        f"OnFailure={NOTIFY_ON_FAILURE_TARGET}\n"
         "\n"
         "[Service]\n"
         "Type=oneshot\n"
@@ -273,6 +282,7 @@ def write_units(units: dict[str, str], output_dir: Path | str) -> list[Path]:
 
 
 __all__ = [
+    "NOTIFY_ON_FAILURE_TARGET",
     "UNIT_FILENAME_PREFIX",
     "CronConversionError",
     "cron_to_oncalendar",
