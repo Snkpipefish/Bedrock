@@ -1,4 +1,4 @@
-"""Macro-familie drivere (Sub-fase 12.5 session 71).
+"""Macro-familie drivere (Sub-fase 12.5 session 71 + 12.7 R3).
 
 Erstatter ``sma200_align``-placeholder i macro-familien for finansielle
 instrumenter. Bruker FRED-fundamentals (DataStore.get_fundamentals) til
@@ -10,7 +10,9 @@ Tre drivere implementert:
   (DGS10 − T10YIE). Mappet til 0..1 via konfigurerbar terskel-trapp.
   ``bull_when="low"`` (default for Gold/Silver — ikke-rentebærende
   metaller får støtte når real-yield faller). ``bull_when="high"``
-  for USD-positive assets (USD, T-bonds).
+  for USD-positive assets (USD, T-bonds). **R3 (sub-fase 12.7)**:
+  utvidet med horisont-bevisste modes via ``params["mode"]``. Default-
+  output (mode=None) er bit-identisk pre-R3.
 
 - ``dxy_chg5d``: 5-dager rolling % endring i DTWEXBGS (broad dollar
   index). USD-styrke. Default ``bull_when="negative"`` (USD-svakhet
@@ -28,6 +30,20 @@ manglende fundamentals-serie eller utilstrekkelig historikk.
 Driver-funksjoner trenger ingen ``cot_contract`` — de leser FRED-
 serier som er felles på tvers av instrumenter. ``instrument``-
 parameteren brukes kun for logging.
+
+real_yield-spesifikk (R3):
+- ``mode``: feature-velger. ``None``/utelatt (default) = dagens
+  terskel-trapp på absolutt real-yield-nivå (bit-identisk pre-R3).
+  ``"pct_12m"`` = rank-percentile over 252 trading-days, bull_when-
+  invertert. ``"pct_36m"`` = 756 trading-days, fall-back til pct_12m
+  ved utilstrekkelig historikk. ``"delta_5d_z"`` = z-score av 5d
+  trading-days-delta over 252-obs-vindu, mappet via momentum-trapp
+  med bull_when-respekt. ``"delta_20d_z"`` = 20d-delta. ``"extreme_
+  flag_hard"`` / ``"extreme_flag_soft"`` = 1.0 ved 2/98- eller
+  5/95-percentile-tersklene (bull_when-agnostisk — ekstremitet er
+  symmetrisk).
+- ``_horizon``: engine-injisert per ADR-010. Lest men ikke brukt for
+  output-endring i R3.
 """
 
 from __future__ import annotations
@@ -38,8 +54,68 @@ import pandas as pd
 import structlog
 
 from bedrock.engine.drivers import register
+from bedrock.engine.drivers._stats import (
+    MIN_OBS_FOR_PCTILE,
+    rank_percentile,
+    rolling_z,
+)
 
 _log = structlog.get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# R3 mode-helpers (real_yield)
+# ---------------------------------------------------------------------------
+
+# Daglige FRED-serier: 252 trading-days ≈ 12m, 756 ≈ 36m.
+_LOOKBACK_PCT_12M_DAILY = 252
+_LOOKBACK_PCT_36M_DAILY = 756
+_DELTA_5D_DAYS = 5
+_DELTA_20D_DAYS = 20
+_LOOKBACK_DELTA_DAILY = 252  # historikk-obs av diff-serien
+
+# Tersklene for extreme_flag-modes (PLAN § 19.3 låst, sammenfaller med
+# konstantene i positioning.py — lokal duplisering for å unngå
+# kryss-modul-import for to-linjer-helpers).
+_EXTREME_HARD_HI = 0.98
+_EXTREME_HARD_LO = 0.02
+_EXTREME_SOFT_HI = 0.95
+_EXTREME_SOFT_LO = 0.05
+
+
+def _z_to_score_with_bull_when(z: float, bull_when: str) -> float:
+    """Map z-score til [0..1] via momentum-trapp, bull_when-aware.
+
+    bull_when="high": positiv z = bull-of-instrument ⇒ standard trapp.
+    bull_when="low":  negativ z = bull-of-instrument ⇒ inverter z først.
+
+    Trappen følger _DEFAULT_Z_THRESHOLDS-konvensjonen i
+    positioning.py (z≥2→1.0, ...) for konsistens på tvers av drivere.
+    """
+    z_oriented = -z if bull_when == "low" else z
+    if z_oriented >= 2.0:
+        return 1.0
+    if z_oriented >= 1.0:
+        return 0.75
+    if z_oriented >= 0.5:
+        return 0.6
+    if z_oriented >= 0.0:
+        return 0.5
+    if z_oriented >= -0.5:
+        return 0.3
+    return 0.0
+
+
+def _extreme_flag(pct_0_to_1: float, *, hard: bool) -> float:
+    """Returner 1.0 hvis pct er ekstrem, ellers 0.0.
+
+    Symmetrisk i begge ender — bull_when-agnostisk per § 1.1.
+    """
+    hi = _EXTREME_HARD_HI if hard else _EXTREME_SOFT_HI
+    lo = _EXTREME_HARD_LO if hard else _EXTREME_SOFT_LO
+    if pct_0_to_1 >= hi or pct_0_to_1 <= lo:
+        return 1.0
+    return 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -66,52 +142,38 @@ _DEFAULT_REAL_YIELD_THRESHOLDS_HIGH: tuple[tuple[float, float], ...] = (
 )
 
 
-@register("real_yield")
-def real_yield(store: Any, instrument: str, params: dict) -> float:
-    """Real yield (DGS10 − T10YIE) mappet til 0..1.
+def _compute_real_yield_series(store: Any, instrument: str, params: dict) -> pd.Series | None:
+    """Bygg real-yield-serie (DGS10 − T10YIE), eller None ved feil.
 
-    Params:
-        nominal_series: FRED-serie for nominell yield (default ``DGS10``)
-        inflation_series: FRED-serie for inflation expectation
-            (default ``T10YIE``)
-        bull_when: ``"low"`` (default) eller ``"high"`` — om låg eller høy
-            real yield gir høyest score.
-        thresholds: optional override-liste av ``[[level, score], ...]``
-            som tolkes som "real_yield ≤ level → score". Sortert
-            descending automatisk hvis ``bull_when="low"``, ascending
-            for ``"high"``.
-
-    Defensiv 0.0-retur ved manglende serier eller manglende overlapp.
+    Felles loader for default-mode og R3-modes for å unngå duplisering
+    av FRED-fetch-logikken.
     """
     nominal_id = params.get("nominal_series", "DGS10")
     inflation_id = params.get("inflation_series", "T10YIE")
-    bull_when = params.get("bull_when", "low")
 
     try:
         nominal = store.get_fundamentals(nominal_id)
         inflation = store.get_fundamentals(inflation_id)
     except KeyError as exc:
-        _log.debug(
-            "real_yield.series_missing",
-            instrument=instrument,
-            error=str(exc),
-        )
-        return 0.0
+        _log.debug("real_yield.series_missing", instrument=instrument, error=str(exc))
+        return None
     except Exception as exc:
-        _log.warning(
-            "real_yield.fetch_failed",
-            instrument=instrument,
-            error=str(exc),
-        )
-        return 0.0
+        _log.warning("real_yield.fetch_failed", instrument=instrument, error=str(exc))
+        return None
 
     real = (nominal - inflation).dropna()
     if real.empty:
         _log.debug("real_yield.no_overlap", instrument=instrument)
-        return 0.0
+        return None
+    return real
 
-    current = float(real.iloc[-1])
 
+def _real_yield_default_score(current: float, bull_when: str, params: dict) -> float:
+    """Pre-R3 default-output: terskel-trapp på absolutt real_yield-nivå.
+
+    Bit-identisk med pre-R3-implementasjonen — ekstrahert til egen
+    funksjon kun for å holde mode-dispatcheren lesbar.
+    """
     user_thresholds = params.get("thresholds")
     if user_thresholds is None:
         if bull_when == "high":
@@ -122,18 +184,189 @@ def real_yield(store: Any, instrument: str, params: dict) -> float:
         steps = tuple((float(t), float(s)) for t, s in user_thresholds)
 
     if bull_when == "high":
-        # Høyere real_yield → høyere score: kjør thresholds i synkende
-        # rekkefølge og treff på første som tilfredsstilles ovenfra.
         for threshold, score in sorted(steps, key=lambda t: -t[0]):
             if current >= threshold:
                 return float(score)
     else:
-        # Default: lav real_yield → høy score. Tester nedover.
         for threshold, score in sorted(steps, key=lambda t: t[0]):
             if current <= threshold:
                 return float(score)
-
     return 0.0
+
+
+def _real_yield_pct_score(
+    real: pd.Series, bull_when: str, lookback: int, instrument: str
+) -> float | None:
+    """Rank-percentile av current mot siste `lookback` obs, bull_when-aware.
+
+    bull_when="low":  score = 1 - rank/100 (lav rank ⇒ høy score)
+    bull_when="high": score = rank/100
+    """
+    if len(real) < MIN_OBS_FOR_PCTILE + 1:
+        _log.debug(
+            "real_yield.short_history_for_pct",
+            instrument=instrument,
+            n=len(real),
+            required=MIN_OBS_FOR_PCTILE + 1,
+        )
+        return None
+    window = real.iloc[-(lookback + 1) :] if len(real) > lookback else real
+    if len(window) < MIN_OBS_FOR_PCTILE + 1:
+        return None
+    current = float(window.iloc[-1])
+    history = [float(v) for v in window.iloc[:-1]]
+    pct = rank_percentile(current, history)
+    if pct is None:
+        return None
+    pct_0_1 = pct / 100.0
+    return 1.0 - pct_0_1 if bull_when == "low" else pct_0_1
+
+
+def _real_yield_delta_score(
+    real: pd.Series,
+    bull_when: str,
+    *,
+    delta_days: int,
+    lookback: int,
+    instrument: str,
+) -> float | None:
+    """Z-score av N-trading-days-delta, bull_when-aware via _z_to_score.
+
+    delta_days=5  ⇒ "delta_5d_z"
+    delta_days=20 ⇒ "delta_20d_z"
+
+    Frekvens-translasjonen (5d/20d på daglig FRED ≈ 5d/20d natural)
+    logges via debug per call slik at den ikke er skjult — viktig når
+    output sammenlignes på tvers av drivere med ulike datafrekvenser
+    (positioning på ukentlig COT bruker N-rapport-delta).
+    """
+    required = delta_days + lookback + 1
+    if len(real) < required:
+        _log.debug(
+            "real_yield.short_history_for_delta",
+            instrument=instrument,
+            delta_days=delta_days,
+            n=len(real),
+            required=required,
+        )
+        return None
+
+    diff_series = real.diff(periods=delta_days).dropna()
+    if len(diff_series) < MIN_OBS_FOR_PCTILE + 1:
+        return None
+
+    _log.debug(
+        "real_yield.delta_z_natural_translation",
+        instrument=instrument,
+        delta_days=delta_days,
+        natural_days=delta_days,
+        note="daily FRED data; delta interpreted as N-trading-day-delta",
+    )
+
+    current_diff = float(diff_series.iloc[-1])
+    history_diff = [float(v) for v in diff_series.iloc[-(lookback + 1) : -1]]
+    z = rolling_z(current_diff, history_diff)
+    if z is None:
+        return None
+    return _z_to_score_with_bull_when(z, bull_when)
+
+
+@register("real_yield")
+def real_yield(store: Any, instrument: str, params: dict) -> float:
+    """Real yield (DGS10 − T10YIE) mappet til 0..1.
+
+    Default (mode=None): konfigurerbar terskel-trapp på absolutt real-
+    yield-nivå (bit-identisk med pre-R3).
+
+    R3 (sub-fase 12.7): horisont-bevisst via ``params["mode"]``. Se
+    docstring øverst i modulen for full mode-tabell. ``bull_when``
+    respekteres på ALLE modes (pct_*, delta_*_z); extreme_flag-modes
+    er bull_when-agnostiske per § 1.1.
+
+    Params:
+        nominal_series: FRED-serie for nominell yield (default ``DGS10``)
+        inflation_series: FRED-serie for inflation expectation
+            (default ``T10YIE``)
+        bull_when: ``"low"`` (default) eller ``"high"``.
+        thresholds: optional override for default-mode-trapp.
+        mode: R3 feature-velger (None for default).
+
+    Defensiv 0.0-retur ved manglende serier eller manglende overlapp.
+    """
+    horizon = params.get("_horizon")  # noqa: F841 — bevisst lest for ADR-010
+    bull_when = params.get("bull_when", "low")
+    mode = params.get("mode")
+
+    real = _compute_real_yield_series(store, instrument, params)
+    if real is None:
+        return 0.0
+
+    current = float(real.iloc[-1])
+
+    if mode is None:
+        return _real_yield_default_score(current, bull_when, params)
+
+    if mode == "pct_12m":
+        result = _real_yield_pct_score(real, bull_when, _LOOKBACK_PCT_12M_DAILY, instrument)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "pct_36m":
+        result = _real_yield_pct_score(real, bull_when, _LOOKBACK_PCT_36M_DAILY, instrument)
+        if result is None:
+            _log.info(
+                "real_yield.pct_36m_fallback_to_12m",
+                instrument=instrument,
+                available_obs=len(real),
+                required=_LOOKBACK_PCT_36M_DAILY + 1,
+            )
+            result = _real_yield_pct_score(real, bull_when, _LOOKBACK_PCT_12M_DAILY, instrument)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_5d_z":
+        result = _real_yield_delta_score(
+            real,
+            bull_when,
+            delta_days=_DELTA_5D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_20d_z":
+        result = _real_yield_delta_score(
+            real,
+            bull_when,
+            delta_days=_DELTA_20D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        # Beregn rå rank (uten bull_when-inversjon) — extreme_flag er
+        # symmetrisk per § 1.1.
+        if len(real) < MIN_OBS_FOR_PCTILE + 1:
+            return 0.0
+        window = (
+            real.iloc[-(_LOOKBACK_PCT_12M_DAILY + 1) :]
+            if len(real) > _LOOKBACK_PCT_12M_DAILY
+            else real
+        )
+        if len(window) < MIN_OBS_FOR_PCTILE + 1:
+            return 0.0
+        history = [float(v) for v in window.iloc[:-1]]
+        pct = rank_percentile(current, history)
+        if pct is None:
+            return 0.0
+        return _extreme_flag(pct / 100.0, hard=(mode == "extreme_flag_hard"))
+
+    # Ukjent mode: log + fall-back til default.
+    _log.warning(
+        "real_yield.unknown_mode_falling_back_to_default",
+        instrument=instrument,
+        mode=mode,
+    )
+    return _real_yield_default_score(current, bull_when, params)
 
 
 # ---------------------------------------------------------------------------
