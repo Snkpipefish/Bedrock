@@ -194,23 +194,31 @@ def _real_yield_default_score(current: float, bull_when: str, params: dict) -> f
     return 0.0
 
 
-def _real_yield_pct_score(
-    real: pd.Series, bull_when: str, lookback: int, instrument: str
+def _fundamentals_pct_score(
+    series: pd.Series, bull_when: str, lookback: int, instrument: str
 ) -> float | None:
     """Rank-percentile av current mot siste `lookback` obs, bull_when-aware.
 
+    Generisk helper for daglig FRED-baserte drivere (real_yield, dxy_chg5d,
+    brl_chg5d, vix_regime). Argument-navnet ``series`` er nøytralt; tidligere
+    var helperen knyttet til real_yield (R3) og argumentet het ``real``.
+
     bull_when="low":  score = 1 - rank/100 (lav rank ⇒ høy score)
-    bull_when="high": score = rank/100
+    bull_when="high"/"positive"/"negative": delegert via caller — denne
+        helperen kjenner kun "low" som inversjons-trigger; andre verdier
+        får standard rank/100. Caller normaliserer bull_when-konvensjonen
+        før kallet (f.eks. dxy_chg5d's "negative" tolkes som "low" av
+        caller-side).
     """
-    if len(real) < MIN_OBS_FOR_PCTILE + 1:
+    if len(series) < MIN_OBS_FOR_PCTILE + 1:
         _log.debug(
-            "real_yield.short_history_for_pct",
+            "fundamentals.short_history_for_pct",
             instrument=instrument,
-            n=len(real),
+            n=len(series),
             required=MIN_OBS_FOR_PCTILE + 1,
         )
         return None
-    window = real.iloc[-(lookback + 1) :] if len(real) > lookback else real
+    window = series.iloc[-(lookback + 1) :] if len(series) > lookback else series
     if len(window) < MIN_OBS_FOR_PCTILE + 1:
         return None
     current = float(window.iloc[-1])
@@ -222,18 +230,18 @@ def _real_yield_pct_score(
     return 1.0 - pct_0_1 if bull_when == "low" else pct_0_1
 
 
-def _real_yield_delta_score(
-    real: pd.Series,
+def _fundamentals_delta_score(
+    series: pd.Series,
     bull_when: str,
     *,
     delta_days: int,
     lookback: int,
     instrument: str,
 ) -> float | None:
-    """Z-score av N-trading-days-delta, bull_when-aware via _z_to_score.
+    """Z-score av N-trading-days-delta, bull_when-aware.
 
-    delta_days=5  ⇒ "delta_5d_z"
-    delta_days=20 ⇒ "delta_20d_z"
+    Generisk helper for daglig FRED-baserte drivere. delta_days=5 ⇒
+    "delta_5d_z", delta_days=20 ⇒ "delta_20d_z".
 
     Frekvens-translasjonen (5d/20d på daglig FRED ≈ 5d/20d natural)
     logges via debug per call slik at den ikke er skjult — viktig når
@@ -241,22 +249,22 @@ def _real_yield_delta_score(
     (positioning på ukentlig COT bruker N-rapport-delta).
     """
     required = delta_days + lookback + 1
-    if len(real) < required:
+    if len(series) < required:
         _log.debug(
-            "real_yield.short_history_for_delta",
+            "fundamentals.short_history_for_delta",
             instrument=instrument,
             delta_days=delta_days,
-            n=len(real),
+            n=len(series),
             required=required,
         )
         return None
 
-    diff_series = real.diff(periods=delta_days).dropna()
+    diff_series = series.diff(periods=delta_days).dropna()
     if len(diff_series) < MIN_OBS_FOR_PCTILE + 1:
         return None
 
     _log.debug(
-        "real_yield.delta_z_natural_translation",
+        "fundamentals.delta_z_natural_translation",
         instrument=instrument,
         delta_days=delta_days,
         natural_days=delta_days,
@@ -269,6 +277,29 @@ def _real_yield_delta_score(
     if z is None:
         return None
     return _z_to_score_with_bull_when(z, bull_when)
+
+
+def _fundamentals_extreme_flag(
+    series: pd.Series, *, hard: bool, lookback: int, instrument: str
+) -> float | None:
+    """Beregn extreme_flag på rank-percentile av current vs `lookback`-obs.
+
+    Symmetrisk i begge ender — bull_when-agnostisk per § 1.1.
+    Returnerer None hvis utilstrekkelig historikk slik at caller kan
+    rapportere 0.0.
+    """
+    if len(series) < MIN_OBS_FOR_PCTILE + 1:
+        return None
+    window = series.iloc[-(lookback + 1) :] if len(series) > lookback else series
+    if len(window) < MIN_OBS_FOR_PCTILE + 1:
+        return None
+    current = float(window.iloc[-1])
+    history = [float(v) for v in window.iloc[:-1]]
+    pct = rank_percentile(current, history)
+    if pct is None:
+        _log.debug("fundamentals.short_history_for_extreme", instrument=instrument)
+        return None
+    return _extreme_flag(pct / 100.0, hard=hard)
 
 
 @register("real_yield")
@@ -307,11 +338,11 @@ def real_yield(store: Any, instrument: str, params: dict) -> float:
         return _real_yield_default_score(current, bull_when, params)
 
     if mode == "pct_12m":
-        result = _real_yield_pct_score(real, bull_when, _LOOKBACK_PCT_12M_DAILY, instrument)
+        result = _fundamentals_pct_score(real, bull_when, _LOOKBACK_PCT_12M_DAILY, instrument)
         return round(result, 4) if result is not None else 0.0
 
     if mode == "pct_36m":
-        result = _real_yield_pct_score(real, bull_when, _LOOKBACK_PCT_36M_DAILY, instrument)
+        result = _fundamentals_pct_score(real, bull_when, _LOOKBACK_PCT_36M_DAILY, instrument)
         if result is None:
             _log.info(
                 "real_yield.pct_36m_fallback_to_12m",
@@ -319,11 +350,11 @@ def real_yield(store: Any, instrument: str, params: dict) -> float:
                 available_obs=len(real),
                 required=_LOOKBACK_PCT_36M_DAILY + 1,
             )
-            result = _real_yield_pct_score(real, bull_when, _LOOKBACK_PCT_12M_DAILY, instrument)
+            result = _fundamentals_pct_score(real, bull_when, _LOOKBACK_PCT_12M_DAILY, instrument)
         return round(result, 4) if result is not None else 0.0
 
     if mode == "delta_5d_z":
-        result = _real_yield_delta_score(
+        result = _fundamentals_delta_score(
             real,
             bull_when,
             delta_days=_DELTA_5D_DAYS,
@@ -333,7 +364,7 @@ def real_yield(store: Any, instrument: str, params: dict) -> float:
         return round(result, 4) if result is not None else 0.0
 
     if mode == "delta_20d_z":
-        result = _real_yield_delta_score(
+        result = _fundamentals_delta_score(
             real,
             bull_when,
             delta_days=_DELTA_20D_DAYS,
@@ -392,6 +423,31 @@ _DEFAULT_DXY_THRESHOLDS_POSITIVE: tuple[tuple[float, float], ...] = (
 )
 
 
+def _normalize_bull_when_for_chg(bull_when: str) -> str:
+    """Oversett dxy/brl chg-driver-konvensjon til generic helper-konvensjon.
+
+    chg-drivere bruker ``bull_when="negative"`` (negativ endring = bull) og
+    ``"positive"`` (positiv endring = bull). Helper-konvensjonen er
+    ``"low"`` (lav verdi = bull) / ``"high"`` (høy verdi = bull). Når
+    helperen jobber på rå-serien (DTWEXBGS-nivåer, ikke pct-change) er
+    semantikken den samme: "negative bull_when" på chg-driver = "high
+    bull_when" på rå-serien (hvis DTWEXBGS-NIVÅ stiger over tid er det
+    USD-styrkelse, motsatt av "negative chg = bull"). Men for rå-nivåer
+    er det ikke meningsfylt å snakke om "high vs low DXY-nivå" som
+    bull-trigger — modes er per-driver-tolket.
+
+    R4-konvensjon for chg-drivere: pct_*-modes ranker **rå-serien**;
+    bull_when="negative" tolkes som "lav rå-nivå = bull" (siden lav
+    DXY-nivå korresponderer med USD-svakhet generelt). bull_when=
+    "positive" tolkes som "høy rå-nivå = bull".
+    """
+    if bull_when == "negative":
+        return "low"
+    if bull_when == "positive":
+        return "high"
+    return bull_when
+
+
 @register("dxy_chg5d")
 def dxy_chg5d(store: Any, instrument: str, params: dict) -> float:
     """5-dager % endring i broad dollar index (DTWEXBGS), mappet til 0..1.
@@ -404,13 +460,26 @@ def dxy_chg5d(store: Any, instrument: str, params: dict) -> float:
             risk-on / Gold) eller ``"positive"`` (USD-styrke er bull
             for USD-relaterte longs).
         thresholds: optional override.
+        mode: R4 feature-velger per ADR-010. ``None``/utelatt (default) =
+            dagens 5d-pct-change-trapp (bit-identisk pre-R4). Modes
+            opererer på den underliggende DTWEXBGS-rå-serien
+            (ikke pct-change-output): ``"pct_12m"``/``"pct_36m"``/
+            ``"delta_5d_z"``/``"delta_20d_z"``/``"extreme_flag_*"`` per
+            § 1.1. ``bull_when="negative"`` på rå-serien tolkes som
+            "low" (lav DXY = USD-svakhet = bull). delta_5d_z på rå-
+            serien er IKKE samme som default 5d-pct-change — modes er
+            parallelle aggregeringer, ikke "delta av default-output".
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt i R4.
 
     Defensiv 0.0-retur ved manglende DTWEXBGS-serie eller for kort
     historikk.
     """
+    # ADR-010: les _horizon for fremtidig bruk. R4-kontrakt: ikke endre
+    # default-output basert på _horizon.
+    _horizon = params.get("_horizon")
     series_id = params.get("series", "DTWEXBGS")
-    window = int(params.get("window", 5))
     bull_when = params.get("bull_when", "negative")
+    mode = params.get("mode")
 
     try:
         series = store.get_fundamentals(series_id).dropna()
@@ -420,6 +489,81 @@ def dxy_chg5d(store: Any, instrument: str, params: dict) -> float:
     except Exception as exc:
         _log.warning("dxy_chg5d.fetch_failed", instrument=instrument, error=str(exc))
         return 0.0
+
+    if mode is None:
+        return _dxy_chg5d_default(series, bull_when, params, instrument)
+
+    # Mode-banen opererer på rå-serien; bull_when normaliseres til
+    # helper-konvensjonen (negative→low, positive→high).
+    helper_bull_when = _normalize_bull_when_for_chg(bull_when)
+
+    if mode == "pct_12m":
+        result = _fundamentals_pct_score(
+            series, helper_bull_when, _LOOKBACK_PCT_12M_DAILY, instrument
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "pct_36m":
+        result = _fundamentals_pct_score(
+            series, helper_bull_when, _LOOKBACK_PCT_36M_DAILY, instrument
+        )
+        if result is None:
+            _log.info(
+                "dxy_chg5d.pct_36m_fallback_to_12m",
+                instrument=instrument,
+                available_obs=len(series),
+                required=_LOOKBACK_PCT_36M_DAILY + 1,
+            )
+            result = _fundamentals_pct_score(
+                series, helper_bull_when, _LOOKBACK_PCT_12M_DAILY, instrument
+            )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_5d_z":
+        result = _fundamentals_delta_score(
+            series,
+            helper_bull_when,
+            delta_days=_DELTA_5D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_20d_z":
+        result = _fundamentals_delta_score(
+            series,
+            helper_bull_when,
+            delta_days=_DELTA_20D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        result = _fundamentals_extreme_flag(
+            series,
+            hard=(mode == "extreme_flag_hard"),
+            lookback=_LOOKBACK_PCT_12M_DAILY,
+            instrument=instrument,
+        )
+        return result if result is not None else 0.0
+
+    # Ukjent mode: log + fall-back til default.
+    _log.warning(
+        "dxy_chg5d.unknown_mode_falling_back_to_default",
+        instrument=instrument,
+        mode=mode,
+    )
+    return _dxy_chg5d_default(series, bull_when, params, instrument)
+
+
+def _dxy_chg5d_default(series: pd.Series, bull_when: str, params: dict, instrument: str) -> float:
+    """Pre-R4-default-bane for dxy_chg5d: 5d-pct-change-trapp.
+
+    Isolert i egen helper for å garantere bit-identisk pre-R4-output
+    uavhengig av om mode-dispatcher rammer fall-back-grenen.
+    """
+    window = int(params.get("window", 5))
 
     if len(series) < window + 1:
         _log.debug(
