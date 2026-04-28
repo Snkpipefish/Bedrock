@@ -551,9 +551,122 @@ def cot_z_score(store: Any, instrument: str, params: dict) -> float:
         z ≥ −0.5 → 0.3
         ellers   → 0.0
 
-    Defensiv 0.0-retur ved manglende COT-data, MAD=0 eller utilstrekkelig
-    historikk.
+    R4 (sub-fase 12.7): horisont-bevisst via ``params["mode"]`` per
+    ADR-010 og ``docs/driver_horizon_pattern.md`` § 1.1. Default-output
+    (mode=None) er bit-identisk med pre-R4 — kontraktuelt krav per
+    § 5.3 (R4 = disiplin B, YAML uendret, score uendret).
+
+    Mode-tabell (parallell til ``positioning_mm_pct`` siden begge
+    leser MM net-serien fra samme COT-data):
+    - ``None`` (default): z-score-trapp som over.
+    - ``"pct_12m"``: rank-percentile av MM net over 52-rapport-vindu.
+    - ``"pct_36m"``: rank-percentile over 156-rapport-vindu, fall-back
+      til pct_12m + log ved utilstrekkelig historikk.
+    - ``"delta_5d_z"``: z-score-trapp av 1-rapport-delta i MM net
+      (~7d natural for ukentlig COT). Operates på en ANNEN underliggende
+      serie enn default (delta vs rå MM net) — verdiene er ikke
+      kommensurable, men begge er bull-of-instrument-konvensjon.
+    - ``"delta_20d_z"``: 4-rapport-delta (~28d natural).
+    - ``"extreme_flag_hard"``: 1.0 ved pct_12m ≥ 0.98 eller ≤ 0.02.
+    - ``"extreme_flag_soft"``: 1.0 ved pct_12m ≥ 0.95 eller ≤ 0.05.
+
+    Default ↔ mode-relasjon: default returnerer en z-score-trapp av
+    rå MM net (current vs history). ``delta_*_z``-modes returnerer
+    z-score-trapp av delta-aggregat på samme underliggende MM net.
+    Modes er IKKE "delta av default-output" — de er parallelle
+    aggregeringer.
+
+    Defensiv 0.0-retur ved manglende COT-data, MAD=0, eller
+    utilstrekkelig historikk. Ukjent mode → log warning + fall-back
+    til default.
     """
+    # ADR-010: les _horizon for fremtidig bruk. R4-kontrakt: ikke endre
+    # default-output basert på _horizon.
+    _horizon = params.get("_horizon")
+    mode = params.get("mode")
+
+    if mode is None:
+        return _cot_z_score_default(store, instrument, params)
+
+    # Eksplisitt mode-håndtering (R4-utvidelse, parallell til positioning_mm_pct).
+    if mode == "pct_12m":
+        series = _load_metric_full_series(store, instrument, params, n_obs=_LOOKBACK_PCT_12M + 1)
+        if series is None:
+            return 0.0
+        result = _mode_pct(series, instrument, _LOOKBACK_PCT_12M)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "pct_36m":
+        series = _load_metric_full_series(store, instrument, params, n_obs=_LOOKBACK_PCT_36M + 1)
+        if series is None:
+            return 0.0
+        result = _mode_pct(series, instrument, _LOOKBACK_PCT_36M)
+        if result is None:
+            _log.info(
+                "cot_z_score.pct_36m_fallback_to_12m",
+                instrument=instrument,
+                available_obs=len(series),
+                required=_LOOKBACK_PCT_36M + 1,
+            )
+            result = _mode_pct(series, instrument, _LOOKBACK_PCT_12M)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_5d_z":
+        series = _load_metric_full_series(
+            store,
+            instrument,
+            params,
+            n_obs=_DELTA_5D_REPORTS + _LOOKBACK_DELTA + 1,
+        )
+        if series is None:
+            return 0.0
+        result = _mode_delta_z(
+            series,
+            instrument,
+            delta_reports=_DELTA_5D_REPORTS,
+            lookback=_LOOKBACK_DELTA,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_20d_z":
+        series = _load_metric_full_series(
+            store,
+            instrument,
+            params,
+            n_obs=_DELTA_20D_REPORTS + _LOOKBACK_DELTA + 1,
+        )
+        if series is None:
+            return 0.0
+        result = _mode_delta_z(
+            series,
+            instrument,
+            delta_reports=_DELTA_20D_REPORTS,
+            lookback=_LOOKBACK_DELTA,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        series = _load_metric_full_series(store, instrument, params, n_obs=_LOOKBACK_PCT_12M + 1)
+        if series is None:
+            return 0.0
+        pct = _mode_pct(series, instrument, _LOOKBACK_PCT_12M)
+        if pct is None:
+            return 0.0
+        return _extreme_flag(pct, hard=(mode == "extreme_flag_hard"))
+
+    # Ukjent mode: log + fall-back til default.
+    _log.warning(
+        "cot_z_score.unknown_mode_falling_back_to_default",
+        instrument=instrument,
+        mode=mode,
+    )
+    return _cot_z_score_default(store, instrument, params)
+
+
+def _cot_z_score_default(store: Any, instrument: str, params: dict) -> float:
+    """Pre-R4-default-bane for cot_z_score, isolert for å garantere bit-
+    identisk output uavhengig av om mode-dispatcher rammer fall-back-grenen
+    eller ikke."""
     loaded = _load_metric_series(store, instrument, params)
     if loaded is None:
         return 0.0
