@@ -640,12 +640,18 @@ def brl_chg5d(store: Any, instrument: str, params: dict) -> float:
             = bull for brasiliansk-eksport: sukker, kaffe) eller
             ``"negative"`` (BRL-styrke er bull).
         thresholds: optional override.
+        mode: R4 feature-velger per ADR-010. ``None``/utelatt (default) =
+            dagens 5d-pct-change-trapp. Modes opererer på underliggende
+            DEXBZUS rå-serien (samme pattern som dxy_chg5d).
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt i R4.
 
     Defensiv 0.0-retur ved manglende serie eller for kort historikk.
     """
+    # ADR-010: les _horizon for fremtidig bruk.
+    _horizon = params.get("_horizon")
     series_id = params.get("series", "DEXBZUS")
-    window = int(params.get("window", 5))
     bull_when = params.get("bull_when", "positive")
+    mode = params.get("mode")
 
     try:
         series = store.get_fundamentals(series_id).dropna()
@@ -655,6 +661,75 @@ def brl_chg5d(store: Any, instrument: str, params: dict) -> float:
     except Exception as exc:
         _log.warning("brl_chg5d.fetch_failed", instrument=instrument, error=str(exc))
         return 0.0
+
+    if mode is None:
+        return _brl_chg5d_default(series, bull_when, params, instrument)
+
+    helper_bull_when = _normalize_bull_when_for_chg(bull_when)
+
+    if mode == "pct_12m":
+        result = _fundamentals_pct_score(
+            series, helper_bull_when, _LOOKBACK_PCT_12M_DAILY, instrument
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "pct_36m":
+        result = _fundamentals_pct_score(
+            series, helper_bull_when, _LOOKBACK_PCT_36M_DAILY, instrument
+        )
+        if result is None:
+            _log.info(
+                "brl_chg5d.pct_36m_fallback_to_12m",
+                instrument=instrument,
+                available_obs=len(series),
+                required=_LOOKBACK_PCT_36M_DAILY + 1,
+            )
+            result = _fundamentals_pct_score(
+                series, helper_bull_when, _LOOKBACK_PCT_12M_DAILY, instrument
+            )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_5d_z":
+        result = _fundamentals_delta_score(
+            series,
+            helper_bull_when,
+            delta_days=_DELTA_5D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_20d_z":
+        result = _fundamentals_delta_score(
+            series,
+            helper_bull_when,
+            delta_days=_DELTA_20D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        result = _fundamentals_extreme_flag(
+            series,
+            hard=(mode == "extreme_flag_hard"),
+            lookback=_LOOKBACK_PCT_12M_DAILY,
+            instrument=instrument,
+        )
+        return result if result is not None else 0.0
+
+    # Ukjent mode: log + fall-back til default.
+    _log.warning(
+        "brl_chg5d.unknown_mode_falling_back_to_default",
+        instrument=instrument,
+        mode=mode,
+    )
+    return _brl_chg5d_default(series, bull_when, params, instrument)
+
+
+def _brl_chg5d_default(series: pd.Series, bull_when: str, params: dict, instrument: str) -> float:
+    """Pre-R4-default-bane for brl_chg5d: 5d-pct-change-trapp på DEXBZUS."""
+    window = int(params.get("window", 5))
 
     if len(series) < window + 1:
         _log.debug("brl_chg5d.short_history", instrument=instrument, n=len(series), window=window)
