@@ -111,7 +111,7 @@
 - **Comex_inventory DB:** 3 rader (Gold/Silver/Copper @ 2026-04-24). **Data-gjeld:** historikk pre-2026 kommer kun via daglig timer-akkumulering eller manuell Quandl/Kitco-import. Refresh via user-systemd-timer Mon-Fri 22:00 Oslo med smart-skip basert på `_previous_business_day()`.
 - **Seismic_events DB:** **123 350 events 2010-2026** (session 118 USGS FDSN-API år-walker, ~7000-15000 events/år hvorav ~10-15% i mining-regions). Refresh via user-systemd-timer daglig 04:00 Oslo. Idempotent på event_id — INSERT OR REPLACE håndterer USGS-revisjoner naturlig.
 - **Cot_euronext DB:** **1 218 rader 2018-2026** (3 produkter — milling wheat, corn, canola; session 118 optimalisert backfill med DB-skip + 0.7s pacing for 240 manglende onsdager × 3 produkter). Pre-2018 finnes ikke (Euronext startet MiFID II-rapportering i 2018). Refresh via user-systemd-timer Ons 18:00 Oslo med smart-skip.
-- **Conab_estimates DB:** **118 rader 2022-2026** (session 118 manuell Excel-ingest av 41 grains-boletim-filer, safra 2021/22-2025/26 — kun milho/soja/trigo plukket opp). **Data-gjeld presisert 2026-04-28:** (a) Café-historikk mangler (Excel-filene er grains-only, café er separat CONAB-boletim — § 3); (b) pre-2021/22 grains mangler (krever Pentaho-API-arbeid — § 7); (c) algodao 2021/22-2024/25 mangler pga ingest-bug ("ALGODÃO EM PLUMA"-rad ikke i product-mapping — § 7b). Refresh via user-systemd-timer 15. i mnd 20:00 Oslo.
+- **Conab_estimates DB:** **155 rader 2022-2026** (session 118 + ad-hoc 2026-04-28 fix). 4 grains symmetrisk 2021/22-2025/26: hver av algodao/milho/soja/trigo har 2/11/7/12/6 rader hhv (totalt 152 grain-rader + 6 café). § 7b (algodao-bug) **lukket 2026-04-28** via `_CONAB_PRODUCT_MAP`-fix. Resterende data-gjeld: § 3 (café-historikk under arbeid via `scripts/backfill_conab_cafe.py`, 1/30+ PDF-er lastet ned, IP throttled) og § 7 (pre-2021/22 grains, krever Pentaho-API). Refresh via user-systemd-timer 15. i mnd 20:00 Oslo.
 - **Unica_reports DB:** 1 rad (1ª quinzena de março de 2026). **Data-gjeld:** full historikk 2010+ mangler (UNICA har ingen public archive-API; manuell anuário-Excel-import per safra-år). Refresh via user-systemd-timer 1. + 16. i mnd 21:00 Oslo.
 - **Shipping_indices DB:** **2 885 rader BDI 2014-2026** (session 118 Investing.com PDF 2014-08-28→2018-01-26 fyller pre-Yahoo-BDRY-gap; session 89 BDRY-ETF 2018+; migration fra `bdi`-tabell ved session 113). BCI/BPI/BSI sample-data fra `data/manual/shipping_indices.csv`. Refresh via user-systemd-timer Mon-Fri 23:30 Oslo.
 - **Crop_progress DB:** 817 rader 2021-2026 ved session 117. **Session 118 NASS-fetcher fixet** med per-commodity metric-whitelist (wheat→HEADING, soybeans→BLOOMING, cotton→SQUARING; CORN→SILKING). 2010-2021 backfill kjører detached. **Data-gjeld:** pre-2010 fra NASS QuickStats (sannsynlig API-cutoff).
@@ -143,7 +143,7 @@ URL-mønstre + CSV-format-krav: `docs/manual_download_shopping_list.md`.
 6. **WASDE pre-2019**: kun 8703 rader fra 2019-05+. ESMIS-arkivet har data 2002+. **Fix:** utvide ESMIS-paginering-walker i `fetch_wasde.py` (estimat 1-2 timer kode).
 7. **CONAB grains pre-2021/22**: ingen data før safra-2021/22. De 41 Excel-filene i `bedrock manuell data/conab_boletins/` dekker safra-2021/22 til 2025/26 (DB-status: milho/soja/trigo har 38/49/19/37/19 rader hhv 2021/22-2025/26). Pre-2021/22 (crop-years som startet før okt 2021) har CONAB Pentaho-dashboard via reverse-engineering av CDA `doQuery`-API (estimat 2-3 timer kode).
 
-7b. **CONAB algodao Excel-ingest-bug** (oppdaget 2026-04-28): `_CONAB_PRODUCT_MAP` i `scripts/ingest_manual_data.py:117-124` matcher kun eksakt "ALGODÃO"/"ALGODAO", men Excel-filene har "ALGODÃO EM PLUMA" og "ALGODÃO - CAROÇO" som splittete rader. Resultat: 0 algodao-rader 2021/22-2024/25 fra Excel-ingest (én sole rad eksisterer fra session 111 PDF-fetcher). **Fix:** legg til "ALGODÃO EM PLUMA" → "algodao" i mappingen (pluma er primær export-vare; caroço/frø er biprodukt og bør ignoreres for å unngå PK-kollisjon på (report_date, commodity)). Estimat 30 min kode + reingest. Påvirker `conab_yoy`-driver for Cotton (vekt 0.3 i Cotton's conab-familie hvis aktivert).
+7b. **CONAB algodao Excel-ingest-bug** **LUKKET 2026-04-28** (commit `64a8469`): `_CONAB_PRODUCT_MAP` i `scripts/ingest_manual_data.py` matchet kun eksakt "ALGODÃO"/"ALGODAO", men Excel-filene har "ALGODÃO EM PLUMA" + "ALGODÃO - CAROÇO". Lagt til "ALGODÃO EM PLUMA" + ASCII-alias; caroço beholdt som ikke-match for å unngå PK-kollisjon. Re-ingest la til 37 nye algodao-rader (DB nå symmetrisk 4 grains × 5 safra-år).
 
 **LAV — driver-aktivering avhenger av data-akkumulering:**
 
@@ -245,6 +245,70 @@ URL-mønstre + CSV-format-krav: `docs/manual_download_shopping_list.md`.
 ---
 
 ## Session log (newest first)
+
+### 2026-04-28 — Ad-hoc: CONAB algodao-fix (§ 7b) + café-historikk-backfill-script (DELVIS)
+
+**Scope:** Bruker observerte at CONAB-historikk allerede ligger i
+`bedrock manuell data/conab_boletins/` (41 Excel-filer, safra-2021/22 til
+2025/26) og spurte hvorfor data-gjeld § 3 + § 7 fortsatt sto åpne.
+
+**Funn ved DB-sanity-check:**
+- 41 Excel-filer dekker grains (algodao/milho/soja/trigo) 2021/22-2025/26
+- DB hadde 118 rader, men **0 algodao-rader fra Excel** (kun 1 fra session
+  111 PDF-fetcher). Ingest-bug i `_CONAB_PRODUCT_MAP` matchet kun "ALGODÃO"
+  eksakt, men Excel-filer har "ALGODÃO EM PLUMA" (lint, primær export-vare)
+  og "ALGODÃO - CAROÇO" (frø, biprodukt).
+- Café (3 rader fra fetcher) er separat boletim-serie som ikke er i
+  Excel-mappen.
+
+**Commits direkte til main (Nivå 1):**
+
+1. `64a8469 fix(ingest): CONAB Excel-mapping — algodão em pluma → algodao
+   (§ 7b)` — Lagt til `"ALGODÃO EM PLUMA"` + ASCII-alias i
+   `_CONAB_PRODUCT_MAP`. Caroço beholdes som ikke-match (PK-kollisjon).
+   Re-ingest av samme 41 filer la til 37 nye algodao-rader. DB-fordeling
+   nå symmetrisk over alle 4 grains 2021/22-2025/26 (155 rader totalt).
+   4 nye tester for mappingen. § 7b lukket.
+
+2. `9c56e98 feat(backfill): standalone CONAB café-historikk-nedlaster +
+   ingest` — Nytt `scripts/backfill_conab_cafe.py`. Phase 1 prober gov.br
+   for safra 2017-2026 × levantamento 1-4 + index-scrape. Phase 2 parser
+   PDF-er med eksisterende `parse_cafe()` og skriver til DB. Ny
+   `cafe-history`-job i `run_backfill.sh` for detached-kjøring via
+   nohup+disown. Idempotent.
+
+3. `5522a83 fix(backfill): café-script — Plone-URL-mønster + 403-throttle-
+   backoff + lengre pacing` — Live-test mot gov.br avdekket 3 bugs etter
+   første kjøring (kun 1/40 PDF-er lastet ned): (a) PDF-regex matchet ikke
+   Plone-CMS-lenker uten .pdf-suffix (CONAB serverer via katalog-URL som
+   `/boletim-cafe-dezembro-2025`); (b) 5s pacing trigget 403-throttle etter
+   ~40 requests; (c) User-Agent var ikke browser-aktig. Fix: Plone-mønster
+   `/boletim-cafe-*` + ekskluder tabela/estimativas; PROBE_PACING 5→8s,
+   PACING 5→15s; THROTTLE_STATUSES={403, 429} med eksp.backoff
+   60s→120s→240s; Mozilla-pseudo UA + Accept-Language pt-BR.
+
+**Live-status etter første kjøring (`5522a83` ikke testet ennå):**
+- 1 PDF lastet ned: `safra-2026_1o_boletim-de-safras-cafe-fevereiro-26.pdf`
+- 3 nye café-rader i DB (cafe_total/cafe_arabica/cafe_conilon for
+  report_date=2026-01-15, levantamento=1o, safra=2026)
+- Total café-rader nå 6 (3 fra session 111 fetcher + 3 fra dette scriptet
+  for SAMME 1o-levantamento men med report_date=2026-04-27 hhv 2026-01-15
+  — semantisk duplikat, ikke PK-kollisjon)
+- IP er for tiden 403-blokkert av CONAB → må vente til block opphører
+  (typisk 1-24t) før neste kjøring
+
+**Følges opp:**
+- Re-kjøring av cafe-history-script når CONAB-blokk opphører.
+  Forventning: 5522a83-fixen skal plukke opp PDF-er fra Plone-katalog-
+  lenker. Idempotent — hopper over allerede-lastet 2026 1o.
+- Eldre safra (2017-2024) returnerer 200 + tom innhold på direkte URL-
+  mønster. Plone har sannsynligvis flyttet dem ved site-migrasjon. Hvis
+  fix ikke gir flere resultater enn null, må jeg scrape via
+  `resolveuid`-lenker (fant noen i Twitter-share-knapp) som separat
+  sub-oppgave.
+- Café-driver `conab_yoy` med `commodity=cafe_arabica` (Coffee yield-
+  familie, vekt 1.0) blir relevant når historikk er ≥30d (akkumulering
+  via månedlig timer + dette scriptet etter fix-verifisering).
 
 ### 2026-04-28 — Ad-hoc: notify-send-varsling + bdi→shipping timer-cleanup (LUKKET)
 
