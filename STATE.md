@@ -58,7 +58,8 @@
   - **117:** **Sub-fase 12.5+ LUKKET — ADR-009 cutover-readiness + sub-fase 12.6 åpnet + tag `v0.12.5-fetch-port-complete`.** Bruker re-direkterte session 117 fra cutover-tagging mot å bygge fundamentet for empirisk vekt-rebalansering først (full historisk kryss-asset-backtest). Resultat: 3 nye SQLite-tabeller (`driver_observations` long-format med 3 horisonter inkl. SWING/60d, `signal_setups` med entry/SL/TP/RR/ATR fra Engine.build_setup, `feature_snapshots` med 22 priser + 5 FRED + 4 shipping + 22 COT MM-net%). 5 nye scripts: harvester for driver_observations (per-instrument, resumable), harvester for feature_snapshots (Gold-kalenderdrevet, ~20-30 min for full historikk), nohup-vennlig wrapper-script for alle 22 inst sekvensielt, analyzer for per-driver IC/kvartil-hit-rate/monotonisitet, analyzer for forward-looking kryss-asset IC-matrise (alle prediktorer × alle targets). For instrumenter uten analog_outcomes (BTC/ETH/NaturalGas/Copper/Platinum) syntetiserer harvester forward_return fra prices. Detached harvest startet i session 117 — kjører ~24-35 timer i bakgrunnen. ADR-009 skrevet med 5 låste beslutninger: (a) sub-fase 12.5+ teknisk lukket; (b) ny sub-fase 12.6 "data-driven rebalansering" innføres mellom 12.5+ og Fase 13; (c) news_intel/crypto_sentiment driver-aktivering UTSETTES til harvest-data foreligger; (d) Branch-modus forblir Nivå 1 inntil Fase 13-nærhet; (e) Cutover-tidspunkt for Fase 13 IKKE besluttet — kriterier skjerpet med sub-fase 12.6-konvergens-krav. PLAN § 12.3 cutover-kriterier utvidet, ny § 12.5+ "LUKKET"-blokk, ny § 12.6 "data-driven rebalansering" med scope-detaljer (sesong-bucketing, lead-lag-IC, setup-walker), § 13-tabell oppdatert. Tag `v0.12.5-fetch-port-complete` settes på siste session 117-commit. **2036/2036 grønt, pyright 0 errors.** **LUKKET 2026-04-27**.
   - **118:** **Sub-fase 12.6 historisk datagrunnlag — massiv backfill av Phase A-C-tabeller.** Bruker rapporterte at backtest scoret over perioder uten data og kalkulerte sløsing av ressurser. Tre arbeidsstrømmer i én session: (a) Komplett gap-analyse + shopping-liste (`docs/manual_download_shopping_list.md`) som dokumenterer hva som kan automatiseres vs hva bruker må laste manuelt, med eksakte URL-mønstre og CSV-format-krav per kilde. (b) **Automatiserbare backfills** kjørt detached via ny `scripts/run_backfill.sh` (nohup + disown, overlever session-exit): USGS seismic 2010-2026 via FDSN-API år-walker → 123 350 events; ICE-COT 2011-2024 via COTHist<YEAR>.csv-arkiv → 1 598 rader; Euronext optimalisert med DB-skip + 0.7s pacing → 636 nye rader 2018-2026; CFTC navn-drift Tier 1 fortsatt → 6/8 instrumenter renamed til canonical (Brent + Copper har CFTC-data først fra 2022, ikke navn-drift). (c) **Manuell ingest** via ny `scripts/ingest_manual_data.py` (forex/conab/bdi subcommands): Forex Factory CSV 83k → 41 021 events (High+Medium impact, 2007-2026); CONAB Excel 41 filer (algodao/milho/soja/trigo, 2021/22-2025/26) → 111 rader; Investing.com BDI PDF via pdftotext → 851 rader 2014-2018 fyller pre-Yahoo-BDRY-gap. NASS-fetcher fixet med per-commodity metric-whitelist (`_VALID_METRICS_PER_COMMODITY`) — wheat har HEADING ikke SILKING; pre-flight skip av invalid kombinasjoner unngår 400 Bad Request fra USDA. **DB-effekt:** econ_events 37→41058, seismic_events 100→123 350, cot_ice 136→1598, cot_euronext 15→1218, shipping BDI 2018+→2014+, conab 7→118. **Data-gjeld dokumentert** under §Data-gjeld i denne fila — gaps som krever ekstra manuell innsats. **LUKKET 2026-04-28**.
   - **119+:** Sub-fase 12.6 fortsettelse — vente på NASS 2010-2021 (kjører detached med fix), sesong-bucketing-analyzer, setup-walker, YAML-rebalansering basert på empiri.
-- **Sub-fase 12.7 PLANLAGT 2026-04-28** — horisont-refactor + data-utvidelse. Se PLAN § 19. **Alt γ LÅST**: bruker-policy "ingen backtest før all data er på plass" → 12.6 PAUSES (harvest fortsetter detached), Spor R (R1-R4) kjøres nå (bit-identisk score), Spor D (D0-D3) etter R, 12.6 gjenåpnes etter D3 over hele systemet. Trading-logikk-svar låst: 12m+36m percentil-vinduer, 2/98+5/95 ekstrem-terskler, drop GHS/XOF (Cocoa cross = dxy@0.85 + event_distance@0.15), Cotton ENSO uendret. Arkitektur låst: Alt 1 (YAML-styrt `_horizon`-param via engine-propagering analogt med `_direction`/ADR-006). ADR-010 (horisont-pattern) + ADR-011 (backfill-policy: 2010-cutoff, sekvensiell pacing 1.5s, engangs-skripts i `scripts/backfill/`, lov til å være "shitty") leveres i R1. (Nummerert 010/011 fordi ADR-009 er allerede tatt av cutover-readiness 2026-04-27.) ADR-012 (deprecation) + ADR-013 (failure-mode) UTSATT (Alt Z) — håndteres reaktivt per fetcher.
+- **Sub-fase 12.7 ÅPEN 2026-04-28** — horisont-refactor + data-utvidelse. Se PLAN § 19. **Alt γ LÅST**: bruker-policy "ingen backtest før all data er på plass" → 12.6 PAUSES (harvest fortsetter detached), Spor R (R1-R4) kjøres nå (bit-identisk score), Spor D (D0-D3) etter R, 12.6 gjenåpnes etter D3 over hele systemet. Trading-logikk-svar låst: 12m+36m percentil-vinduer, 2/98+5/95 ekstrem-terskler, drop GHS/XOF (Cocoa cross = dxy@0.85 + event_distance@0.15), Cotton ENSO uendret. Arkitektur låst: Alt 1 (YAML-styrt `_horizon`-param via engine-propagering analogt med `_direction`/ADR-006). ADR-012 (deprecation) + ADR-013 (failure-mode) UTSATT (Alt Z) — håndteres reaktivt per fetcher.
+  - **119:** **R1 ferdig 2026-04-28**: audit (`docs/horizon_refactor_audit.md`) + **ADR-010** (horisont-bevisst driver-pattern, Alt 1: YAML-styrt `_horizon` via engine-propagering analogt med `_direction`) + **ADR-011** (backfill-policy: 2010-cutoff, sekvensiell pacing 1.5s, engangs-skripts i `scripts/backfill/<source>.py` separat fra `bedrock backfill`-CLI). Engine-patch: `_score_families` setter `_horizon` i `params_with_dir` (~5 linjer + ny `horizon: str | None`-parameter). 5 micro-tester for propagering + bit-identitet. Snapshot-baseline (104 rader: 15 financial × 3 × 2 + 7 agri × 1 × 2) tatt PRE-patch og verifisert **0 forskjeller POST-patch** — score-uendret-garantien (PLAN § 19.1) konkret bekreftet. Renumret fra opprinnelig "ADR-009/010" fordi ADR-009 var tatt av cutover-readiness 2026-04-27. **2046/2046 grønt, pyright src/ 0 errors. LUKKET 2026-04-28**.
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -122,7 +123,7 @@
 - **AsOfDateStore (session 116):** utvidet med 9 nye proxy-getters (econ_events/cot_ice/cot_euronext/eia_inventory/comex_inventory/seismic_events/conab_estimates/unica_reports/shipping_indices) + tilsvarende `has_*`-helpers. Kritisk fix — uten denne falt orchestrator-replay tilbake til defensive 0.0 for alle nye Phase A-C-drivere fordi underlying-getterne kastet `AttributeError`. 24 nye tester dekker hver getter + region/from_ts-filter + tom-clip-fallback.
 - **Phase D-output (session 116):** `data/_meta/backtest_phase_d_baseline.json` (68 rader, session 99-reprise), `data/_meta/backtest_phase_d_orchestrator.json` (48 rader, 86.4 min sweep), `data/_meta/backtest_phase_d_spike_{cot_ice_mm_pct,conab_yoy,unica_change}.json` (3 spikes). Rapport: `docs/backtest_phase_d_2026-04.md` med diff-tabeller + flagg-terskel ≥3pp Δhit_rate eller ≥2 grade-flips.
 - **Sub-fase 12.6-fundament (session 117):** 3 nye SQLite-tabeller (`driver_observations` long-format, `signal_setups`, `feature_snapshots`) + 5 nye scripts (`harvest_driver_observations.py`, `harvest_feature_snapshots.py`, `run_full_history_harvest.sh`, `analyze_driver_performance.py`, `analyze_cross_correlations.py`). Detached harvest startet 2026-04-27 21:58 — features ETA ~10 min, driver_observations ETA ~24-35 timer.
-- **Next task:** **Session 119 = R1** (Spor R åpning per Alt γ — § 19.7). Audit + ADR-010 (horisont-pattern Alt 1: YAML-styrt `_horizon`-param via engine-propagering analogt med `_direction`) + ADR-011 (backfill-policy: 2010-cutoff, sekvensiell pacing 1.5s, engangs-skripts i `scripts/backfill/`, lov til å være "shitty") + engine `_horizon`-propagering (~5 linjer + 1 micro-test). Sub-fase 12.6 PAUSES (detached harvest fortsetter i bakgrunnen — kun data-innsamling, ikke backtest); analyzer/rebalansering venter til etter D3 per bruker-policy "ingen backtest før all data er på plass". Manuell ingest av COMEX/UNICA/Café-historikk fortsetter parallelt — det er data-arbeid, ikke backtest.
+- **Next task:** **Session 120 = R2** (M-fase per § 19.4). Feature-konvensjon (`pct_12m`/`pct_36m`/`delta_5d_z`/`delta_20d_z`/`extreme_flag`/`approaching_extreme`/`surprise_z`/`time_to_release_min`/`post_release_drift_3d`/`extreme_contrarian_score`) + per-horisont test-strategi (snapshot, monotonisitet, regime-shift) + sesong-driver-mønster + 2 ende-til-ende-eksempler (Brent SWING onsdag 10:30 ET post-EIA + Corn yield-familie i juli). Leveranse: `docs/driver_horizon_pattern.md`. Engine-patchen fra R1 er allerede på plass — R2 er pure dokumentasjon + design-låsing før R3 (refactor 3 referanse-drivere). Sub-fase 12.6 forblir PAUSET (detached harvest fortsetter); manuell ingest av COMEX/UNICA/Café-historikk fortsetter parallelt.
 - **Git-modus:** Nivå 1 aktivt under sub-fase 12.5+ docs/cleanup-pass. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt valgfri.
 
 ## Data-gjeld (sub-fase 12.6)
@@ -265,6 +266,94 @@ URL-mønstre + CSV-format-krav: `docs/manual_download_shopping_list.md`.
 ---
 
 ## Session log (newest first)
+
+### 2026-04-28 — Session 119: sub-fase 12.7 R1 ferdig (Spor R åpning, horisont-pattern + backfill-policy låst)
+
+**Scope:** R1 per Alt γ (PLAN § 19.4/§ 19.7) — Spor R åpning. S-fase,
+én session, bit-identisk. Audit + 2 ADR-er + engine-patch + micro-test
++ snapshot-baseline.
+
+**Leveranser:**
+- `docs/horizon_refactor_audit.md` (ny) — engine-flow-audit + driver-
+  pattern-analyse + sammenligning Alt 1/2/3 + valg-begrunnelse for
+  Alt 1 + implementasjons-skisse for R1 + følge-leveranser R2-R4.
+- `docs/decisions/010-horizon-aware-driver-pattern.md` (ny ADR-010,
+  status `accepted`). YAML-styrt `_horizon`-param via engine-
+  propagering analogt med ADR-006s `_direction`. Driver-kontrakt
+  uendret. Nummerert 010 fordi ADR-009 var allerede tatt av cutover-
+  readiness 2026-04-27.
+- `docs/decisions/011-backfill-policy.md` (ny ADR-011, status
+  `accepted`). Engangs-skripts i `scripts/backfill/<source>.py`
+  separat fra `bedrock backfill <source>`-CLI; 2010-cutoff;
+  sekvensiell HTTP ≥1.5s pacing; "shitty" lov; ingen forurensing av
+  produksjons-fetcher-kode.
+- `src/bedrock/engine/engine.py` — `_score_families` tar
+  `horizon: str | None`-parameter, setter `_horizon` i
+  `params_with_dir`. Begge dispatchere
+  (`_score_financial`/`_score_agri`) sender riktig verdi (financial:
+  horizon-streng; agri: None).
+- `tests/unit/test_engine_horizon_propagation.py` (ny) — 5 micro-
+  tester: (a) propagering for SCALP/SWING/MAKRO på financial;
+  (b) None for agri; (c) bit-identitet for horisont-uavhengig
+  driver; (d) bit-identitet kombinert med direction=BUY/SELL.
+- `scripts/snapshot/score_baseline.py` (ny) — deterministisk
+  baseline-generator + `--diff-against`-modus. 104 rader
+  (15 financial × 3 horisonter × 2 retninger + 7 agri × 1 × 2).
+- `tests/snapshot/expected/score_baseline.json` — fryst baseline
+  (forward-going regresjons-anker for R3/R4).
+- `tests/snapshot/README.md` — bruks-instruksjoner + DB-drift-
+  advarsel + refactor-arbeidsflyt for R3/R4.
+
+**Verifikasjon:**
+- PRE-patch baseline tatt 12:27 (104 rader). POST-patch diff 12:36 →
+  **0 forskjeller på 104 rader**. Score-uendret-garantien (PLAN § 19.1)
+  konkret bekreftet.
+- 5 nye micro-tester grønne. Full test-suite **2046/2046 grønt** (var
+  2041 før R1 + 5 nye = 2046).
+- Pyright src/: 0 errors. Tests/unit: 84 pre-eksisterende
+  Pydantic-alias-vs-field-noise; nye test-fil følger samme pattern som
+  `test_engine_direction_polarity.py`.
+
+**Audit-flagg fra brukerens R1-prep-review (alle adressert):**
+1. Snapshot-rekkefølge: baseline tatt PRE-patch, diff'et POST-patch
+   (0 forskjeller). Anker er gyldig.
+2. ADR-011 CLI-konsistens: ADR-011 § 4 distinguerer eksplisitt mellom
+   produksjons-`bedrock backfill <source>`-CLI (uendret) og engangs-
+   `scripts/backfill/<source>.py` (ny i 12.7).
+3. Micro-test dekker 2 ting: Test A engine setter key korrekt; Test B
+   (3 underseksjoner) bit-identitet for horisont-uavhengig driver
+   inkl. BUY/SELL-flip.
+
+**Renumrering:** PLAN/STATE refererte opprinnelig "ADR-009 (horisont-
+pattern) + ADR-010 (backfill-policy)", men ADR-009 var allerede tatt av
+cutover-readiness (2026-04-27). Renumret til ADR-010/011 i samme commit
+som ADR-leveransen. ADR-012/013 (deprecation/failure-mode) UTSATT
+(Alt Z).
+
+**Commits:**
+- `9b7e49d` docs(audit): R1 horizon-refactor audit
+- `f495ceb` docs(adr): ADR-010 horisont-bevisst driver-pattern (Alt 1)
+- `e1ae966` docs(adr): ADR-011 backfill-policy for sub-fase 12.7-fetchere
+- `3ae8be4` feat(engine): horisont-propagering via _horizon param (ADR-010)
+- `6c81a5b` test(snapshot): score-baseline regresjons-anker for sub-fase 12.7 R3+R4
+
+**Funn / blockers:** Ingen kode-blockers. DB-drift observert mellom
+PRE-baseline (12:27) og POST-pytest-suite (12:43) — ikke kode-relatert,
+men dokumentert i `tests/snapshot/README.md` som workflow-advarsel for
+R3/R4: baseline må regenereres rett før refactor-start, og diff må
+gjøres i samme session.
+
+**Pipeline-helse:** RØD ved session-start (4 aging fetchere, 2 stale, 2
+missing) — ikke-blocker for R1 fordi engine-patch er bit-identisk.
+Data-gjelden adresseres i Spor D (12.7 D0-D3).
+
+**Next task:** **Session 120 = R2** (M-fase). Feature-konvensjon
+(`pct_12m`, `pct_36m`, `delta_5d_z`, `delta_20d_z`, `extreme_flag`,
+`approaching_extreme`, `surprise_z`, `time_to_release_min`,
+`post_release_drift_3d`, `extreme_contrarian_score`). Per-horisont test-
+strategi (snapshot, monotonisitet, regime-shift). Sesong-driver-mønster.
+2 ende-til-ende-eksempler (Brent SWING onsdag 10:30 ET post-EIA + Corn
+yield-familie i juli). Leveranse: `docs/driver_horizon_pattern.md`.
 
 ### 2026-04-28 — Planleggings-session: sub-fase 12.7 (horisont-refactor + data-utvidelse)
 
