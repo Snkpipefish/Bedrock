@@ -113,10 +113,18 @@ def ingest_forex_factory(csv_path: Path, store: DataStore) -> int:
 # ===========================================================================
 
 # Mapping fra Excel-rad-navn (Área_Brasil/Produção_Brasil/Produtividade_Brasil)
-# til bedrock-canonical commodity-navn (matcher fetcher i fetch/conab.py)
+# til bedrock-canonical commodity-navn (matcher fetcher i fetch/conab.py).
+#
+# Algodao-merknad (fix § 7b 2026-04-28): CONAB-Excel splitter algodao i to
+# rader — "ALGODÃO EM PLUMA" (lint, primær eksport-vare = ICE Cotton-prising)
+# og "ALGODÃO - CAROÇO" (frø, biprodukt). Vi mapper KUN pluma → algodao for
+# å unngå PK-kollisjon på (report_date, commodity). PDF-fetcher (eldre kode)
+# kan returnere bare "ALGODÃO" — beholdt som alias.
 _CONAB_PRODUCT_MAP = {
     "ALGODÃO": "algodao",
     "ALGODAO": "algodao",
+    "ALGODÃO EM PLUMA": "algodao",
+    "ALGODAO EM PLUMA": "algodao",
     "MILHO TOTAL": "milho",
     "MILHO": "milho",
     "SOJA": "soja",
