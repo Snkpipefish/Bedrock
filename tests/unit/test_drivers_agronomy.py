@@ -99,6 +99,21 @@ def test_crop_progress_high_is_bull_inverts() -> None:
     assert score >= 0.85
 
 
+def test_crop_progress_horizon_param_does_not_change_output() -> None:
+    """R3 (sub-fase 12.7): _horizon LESES per ADR-010 men brukes ikke
+    til å endre output. Verifiserer kontrakts-kravet i § 5.3.
+
+    crop_progress_stage er rank-basert mot 10-års-historikk allerede
+    og pålegges IKKE pct_*/delta_*-modes per audit-flagg fra R2.
+    """
+    fn = get("crop_progress_stage")
+    df = pd.DataFrame({"value_pct": [80.0] * 9 + [50.0]})
+    no_horizon = fn(_DummyStore(crop_progress=df), "Corn", {})
+    with_swing = fn(_DummyStore(crop_progress=df), "Corn", {"_horizon": "SWING"})
+    with_makro = fn(_DummyStore(crop_progress=df), "Corn", {"_horizon": "MAKRO"})
+    assert no_horizon == with_swing == with_makro
+
+
 # ---------------------------------------------------------------------------
 # wasde_s2u_change
 # ---------------------------------------------------------------------------

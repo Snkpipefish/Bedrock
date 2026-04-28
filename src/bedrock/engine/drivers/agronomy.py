@@ -57,9 +57,22 @@ def crop_progress_stage(store: Any, instrument: str, params: dict) -> float:
     Bruker default `mode=low_is_bull` (yield-risk-drevet), eller
     `mode=high_is_bull` for trend-confirmation.
 
+    **R3 (sub-fase 12.7):** ``params["_horizon"]`` LESES per ADR-010
+    men brukes ikke til å endre output. Driveren er rank-basert
+    allerede (vs siste 10 års observasjoner) og rolling-percentile-
+    overlay ville ødelegge domene-logikken. Per § 5.3-kontrakt og
+    audit-flagg fra R2: kun Type A snapshot for denne driveren —
+    ingen pct_*/delta_*-modes pålegges. ``params["mode"]`` beholder
+    sin eksisterende ``low_is_bull``/``high_is_bull``-semantikk;
+    R3-feature-modes (pct_12m osv.) er ikke gyldige her og vil
+    bare bli tolket som ``low_is_bull`` per default.
+
     Params:
         metric: "GOOD_EXCELLENT" (default), "PLANTED", "HARVESTED".
         mode: "low_is_bull" (default — yield-risk) eller "high_is_bull".
+            **NB:** ikke å forveksle med R3-feature-modes (pct_*, delta_*).
+            Crop_progress_stage's mode er agronomi-spesifikk
+            tolknings-orientering, ikke en standard horisont-feature.
         state: "US TOTAL" (default).
 
     Returns:
@@ -67,6 +80,12 @@ def crop_progress_stage(store: Any, instrument: str, params: dict) -> float:
         eller hvis ingen rader finnes. 0.0 hvis crop-progress-data er
         helt utilgjengelig (defensive).
     """
+    # ADR-010: les _horizon for å oppfylle horisont-bevisst-konvensjonen.
+    # Lest men ikke brukt — crop_progress_stage er kalender-aware via
+    # NASS-rapport-tidspunktet, ikke horisont-aware. Per § 5.3 (R3-
+    # kontrakt): output uendret med eller uten _horizon.
+    _horizon = params.get("_horizon")
+
     usda_commodity = _INSTRUMENT_TO_USDA.get(instrument)
     if usda_commodity is None:
         _log.debug("crop_progress.no_usda_mapping", instrument=instrument)
