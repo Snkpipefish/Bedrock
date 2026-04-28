@@ -262,7 +262,7 @@ class Engine:
             raise KeyError(f"Horizon '{horizon}' not defined in rules. Known: {known}")
 
         family_results, family_scores = self._score_families(
-            store, instrument, rules.families, direction
+            store, instrument, rules.families, direction, horizon
         )
 
         total_score = aggregators.weighted_horizon(family_scores, horizon_spec.family_weights)
@@ -306,7 +306,7 @@ class Engine:
         direction: Direction,
     ) -> GroupResult:
         family_results, family_scores = self._score_families(
-            store, instrument, rules.families, direction
+            store, instrument, rules.families, direction, horizon=None
         )
 
         family_caps = {name: spec.weight for name, spec in rules.families.items()}
@@ -348,6 +348,7 @@ class Engine:
         instrument: str,
         families: dict[str, _AnyFamilySpec],
         direction: Direction,
+        horizon: str | None,
     ) -> tuple[dict[str, FamilyResult], dict[str, float]]:
         """Kjør alle drivere per familie. Felles for financial og agri.
 
@@ -356,6 +357,12 @@ class Engine:
         med ``polarity="directional"`` flippes hver drivers ``value`` til
         ``1 - value`` (se ADR-006). ``polarity="neutral"`` er identisk for
         BUY og SELL.
+
+        ``horizon`` propageres til driver-laget via en intern
+        ``_horizon``-key (analog til ``_direction``, ADR-006). Drivere som
+        er horisont-bevisste leser ``params["_horizon"]`` og velger
+        feature; andre ignorerer key-en og scorer som før. ``None`` for
+        agri (ADR-010, sub-fase 12.7 R1).
         """
         family_results: dict[str, FamilyResult] = {}
         family_scores: dict[str, float] = {}
@@ -368,15 +375,16 @@ class Engine:
 
             for driver_spec in family_spec.drivers:
                 fn = drivers.get(driver_spec.name)
-                # Propagér direction via en intern `_direction`-key i en
-                # kopi av params. Drivere som er direction-aware (eks.
-                # analog_*) leser dette; andre ignorerer det.
-                # Session 100: gjør det mulig for analog-driver å invertere
-                # forward-return-threshold for SELL istedenfor mekanisk
-                # 1-x-flip på engine-siden (se ADR-006 § Spesialtilfeller).
+                # Propagér direction + horisont via interne `_direction`/
+                # `_horizon`-keys i en kopi av params. Drivere som er
+                # context-aware (analog_* for direction; multi-horisont-
+                # drivere fra sub-fase 12.7 R3+ for horisont) leser disse;
+                # andre ignorerer dem. Se ADR-006 (direction) og ADR-010
+                # (horisont).
                 params_with_dir = {
                     **driver_spec.params,
                     "_direction": direction.value,
+                    "_horizon": horizon,
                 }
                 raw_value = fn(store, instrument, params_with_dir)
                 value = (1.0 - raw_value) if do_flip else raw_value
