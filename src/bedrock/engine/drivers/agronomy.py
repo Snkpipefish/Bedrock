@@ -137,13 +137,23 @@ def wasde_s2u_change(store: Any, instrument: str, params: dict) -> float:
     Tolkning: -10% S2U-endring er ekstrem bullish; +10% er ekstrem bear.
     Mellom-verdier mappes lineært.
 
+    **R4 (sub-fase 12.7):** ``params["_horizon"]`` LESES per ADR-010 men
+    brukes ikke til å endre output. Driveren er domene-spesifikk
+    (rapport-til-rapport pct-change i månedlig WASDE), ikke en rolling
+    tids-serie. Per crop_progress-presedens: kun `_horizon`-lesing.
+
     Params:
         marketing_year: optional override (default = nyeste i data).
         region: "US" (default) eller "WORLD".
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt.
 
     Returns:
         Score 0..1. 0.5 (nøytral) hvis utilstrekkelig data.
     """
+    # ADR-010: les _horizon. Månedlig rapport-til-rapport endring,
+    # domene-spesifikk step-mapping — output uendret med eller uten
+    # _horizon (R4 disiplin B).
+    _horizon = params.get("_horizon")
     usda_commodity = _INSTRUMENT_TO_USDA.get(instrument)
     if usda_commodity is None:
         return 0.5
@@ -198,16 +208,25 @@ def export_event_active(store: Any, instrument: str, params: dict) -> float:
 
     Bruker manuell-curated `export_events`-tabell (PLAN § 7.3 Fase-5).
 
+    **R4 (sub-fase 12.7):** ``params["_horizon"]`` LESES per ADR-010 men
+    brukes ikke til å endre output. Driveren er event-basert (severity 1-5
+    fra DB-tabell), ikke en rolling tids-serie. Per event_distance-
+    presedens: kun `_horizon`-lesing.
+
     Params:
         lookback_days: hvor lenge events teller (default 60).
         bull_bear: "BULL" (default) eller "BEAR" — hvilken retning
             som skal scores. Bull-events bidrar til bull-score, bear
             til bear-score.
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt.
 
     Returns:
         Score 0..1. 1.0 = severity-5 BULL-event innen vinduet.
         0.5 = ingen events (nøytral).
     """
+    # ADR-010: les _horizon. Event-basert driver — output uendret
+    # (R4 disiplin B).
+    _horizon = params.get("_horizon")
     from datetime import date, timedelta
 
     lookback_days = int(params.get("lookback_days", 60))

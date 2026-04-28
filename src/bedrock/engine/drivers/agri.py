@@ -88,6 +88,12 @@ def weather_stress(store: Any, instrument: str, params: dict) -> float:
 
     Default-vekter: hot=0.4, dry=0.4, water=0.2 (sum=1).
 
+    **R4 (sub-fase 12.7):** ``params["_horizon"]`` LESES per ADR-010 men
+    brukes ikke til å endre output. Driveren er domene-spesifikk
+    (vekter på siste-månedsobservasjon av hot_days/dry_days/water_bal),
+    ikke en rolling tids-serie. Per crop_progress-presedens: kun
+    `_horizon`-lesing, ingen pct_*/delta_*-modes.
+
     Params:
         weights: optional ``{"hot_days": w1, "dry_days": w2,
             "water_bal": w3}`` for å overstyre default-vekter.
@@ -97,10 +103,14 @@ def weather_stress(store: Any, instrument: str, params: dict) -> float:
             ``True`` for crops der lite stress er bull.
         lookback_months: hvor mange måneder data som kreves for
             å returnere score (default 1 — siste måned).
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt.
 
     Defensiv 0.0-retur ved manglende region, manglende data, eller
     månedstall som ikke kan parses.
     """
+    # ADR-010: les _horizon. Domene-spesifikk vær-formel — output
+    # uendret med eller uten _horizon (R4 disiplin B).
+    _horizon = params.get("_horizon")
     region = _resolve_weather_region(instrument)
     if region is None:
         return 0.0
@@ -182,6 +192,13 @@ _DEFAULT_ENSO_THRESHOLDS: tuple[tuple[float, float], ...] = (
 def enso_regime(store: Any, instrument: str, params: dict) -> float:
     """ENSO-regime fra NOAA ONI, mappet til 0..1.
 
+    **R4 (sub-fase 12.7):** ``params["_horizon"]`` LESES per ADR-010 men
+    brukes ikke til å endre output. ONI er månedlig-frekvens og driver
+    er domene-spesifikk regime-mapper på siste-obs. Modes pct_12m
+    teoretisk mulig (12 mnd ONI-percentil), men delta_5d_z/delta_20d_z
+    har lite mening på månedlig data — partial mode-utbygging skaper
+    inkonsistens. Per crop_progress-presedens: kun `_horizon`-lesing.
+
     Params:
         series: FRED-serie (default ``NOAA_ONI``)
         invert: ``False`` (default — La Niña er bull) eller ``True``
@@ -189,10 +206,14 @@ def enso_regime(store: Any, instrument: str, params: dict) -> float:
         thresholds: optional override-liste av ``[[oni_max, score], ...]``
             tolket som "ONI ≤ oni_max → score" (siden ONI er
             monotont fra mest-La Niña til mest-El Niño).
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt.
 
     Default-mapping (asset = Corn): La Niña = bull = høy score,
     El Niño = bear = lav score.
     """
+    # ADR-010: les _horizon. Domene-spesifikk månedlig regime-mapper —
+    # output uendret med eller uten _horizon (R4 disiplin B).
+    _horizon = params.get("_horizon")
     series_id = params.get("series", "NOAA_ONI")
     invert = bool(params.get("invert", False))
 
