@@ -1775,7 +1775,7 @@ etterpå, må alle nye drivere skrives om.
 
 | Fase | Innhold | Størrelse | Leveranse |
 |---|---|---|---|
-| **R1** | Audit + ADR-009 (horisont-pattern Alt 1) + ADR-010 (backfill-policy: 2010-cutoff, sekvensiell pacing 1.5s, engangs-skripts i `scripts/backfill/`, lov til å være "shitty"). Engine `_horizon`-propagering (~5 linjer + 1 micro-test). | S | `docs/horizon_refactor_audit.md`, ADR-009, ADR-010, engine-patch |
+| **R1** | Audit + ADR-010 (horisont-pattern Alt 1) + ADR-011 (backfill-policy: 2010-cutoff, sekvensiell pacing 1.5s, engangs-skripts i `scripts/backfill/`, lov til å være "shitty"). Engine `_horizon`-propagering (~5 linjer + 1 micro-test). | S | `docs/horizon_refactor_audit.md`, ADR-010, ADR-011, engine-patch |
 | **R2** | Feature-konvensjon: standard typer (`pct_12m`, `pct_36m`, `delta_5d_z`, `delta_20d_z`, `extreme_flag`, `approaching_extreme`, `surprise_z`, `time_to_release_min`, `post_release_drift_3d`, `extreme_contrarian_score`). Per-horisont test-strategi (3 typer: snapshot score-uendret, monotonisitet ved gradvis data-tilkomst, regime-shift fanger delta). Sesong-driver-mønster (driver-intern kalender-aware, ingen ny polarity). 2 ende-til-ende-eksempler: "Brent SWING onsdag 10:30 ET (post-EIA)" + "Corn yield-familie i juli". | M | `docs/driver_horizon_pattern.md` |
 | **R3** | Refactor 3 referanse-drivere: `positioning_mm_pct`, `real_yield`, `crop_progress_stage`. Hver produserer flere horizon-features via samme funksjon, valgt via `params["_horizon"]`. Snapshot-tester må gi bit-identisk output for default-horizon. | M | 3 refactored drivere + snapshot/logiske/monotonisitet-tester |
 | **R4** | Batch-vis migrering i 7 commits (én per familie-gruppe per rekkefølge over). Snapshot-tester må være grønne for hver batch. Score-uendret-garanti låst på 22 inst × 3 horisonter × 2 retninger. | L | Alle drivere migrert, snapshot grønt |
@@ -1908,17 +1908,18 @@ Eksempler på reduksjoner ved D-fasene (ikke-uttømmende):
 
 ### 19.9 ADR-er som leveres i denne sub-fasen
 
-- **ADR-009 — Horisont-bevisst driver-pattern.** Låser Alt 1 (YAML-styrt
+- **ADR-010 — Horisont-bevisst driver-pattern.** Låser Alt 1 (YAML-styrt
   `horizon`-param via engine-propagering). Driver-kontrakt uendret;
-  `_horizon`-key analog til `_direction` (ADR-006).
-- **ADR-010 — Backfill-policy.** 2010-01-01 cutoff for alle nye fetchere.
+  `_horizon`-key analog til `_direction` (ADR-006). (Nummerert 010 fordi
+  ADR-009 er allerede tatt av cutover-readiness 2026-04-27.)
+- **ADR-011 — Backfill-policy.** 2010-01-01 cutoff for alle nye fetchere.
   Engangs-skripts i `scripts/backfill/<source>.py` (separat fra
-  produksjons-cron). Sekvensiell HTTP med ≥1.5s pacing. Lov til å være
-  "shitty": manuell kjøring, sleep mellom requests, ingen retry-policy
-  beyond exponential backoff. Skal IKKE forurense produksjons-fetcher-
-  koden.
+  produksjons-`bedrock backfill <source>`-CLI). Sekvensiell HTTP med ≥1.5s
+  pacing. Lov til å være "shitty": manuell kjøring, sleep mellom
+  requests, ingen retry-policy beyond exponential backoff. Skal IKKE
+  forurense produksjons-fetcher-koden.
 
-ADR-011 (deprecation) + ADR-012 (failure-mode): **ikke i denne sub-
+ADR-012 (deprecation) + ADR-013 (failure-mode): **ikke i denne sub-
 fasen**. "Sekundær" = vekt 0 i YAML + kommentar `# DEPRECATED-<session>`.
 Driver-feil → 0.0 per eksisterende kontrakt.
 
