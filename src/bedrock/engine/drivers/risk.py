@@ -35,6 +35,19 @@ Defensive: kort historikk gir 0.0.
 
     Defensive: ingen kalender-data → 0.5 (neutral) i stedet for 0.0
     eller 1.0 — hverken false-safe eller false-block ved tom DB.
+
+R4 (sub-fase 12.7): begge drivere leser ``params["_horizon"]`` per
+ADR-010 (lest, ikke brukt for output). Per crop_progress_stage-
+presedens (R3 commit ``d543161``) får de IKKE pct_*/delta_*/
+extreme_flag_*-modes:
+
+- ``vol_regime`` har allerede ``mode``-namespace tatt av
+  high_is_bull/low_is_bull, og ATR-percentilen er konseptuelt en
+  rank-basert feature (rolling-percentile av rolling-ATR-serien
+  ville vært dobbel rangering).
+- ``event_distance`` er event-basert (h2e i timer), domene-spesifikk
+  retning-nøytral risk-gate. Tids-serie-modes gir ikke mening på
+  diskret event-avstand.
 """
 
 from __future__ import annotations
@@ -85,6 +98,11 @@ def vol_regime(store: Any, instrument: str, params: dict) -> float:
     Returns:
         Score 0..1. 0.0 ved kort historikk eller udefinert ATR.
     """
+    # ADR-010: les _horizon for fremtidig bruk. R4-kontrakt: ikke endre
+    # output basert på _horizon. Driver er rank-basert (ATR-percentil);
+    # ingen pct_*/delta_*-modes (mode-namespace tatt av high_is_bull/
+    # low_is_bull).
+    _horizon = params.get("_horizon")
     period = int(params.get("period", _DEFAULT_ATR_PERIOD))
     lookback = int(params.get("lookback", _DEFAULT_LOOKBACK))
     tf = params.get("tf", "D1")
@@ -164,6 +182,10 @@ def event_distance(store: Any, instrument: str, params: dict) -> float:
     Returns:
         Score 0..1. Retning-nøytral (samme verdi for BUY og SELL).
     """
+    # ADR-010: les _horizon for fremtidig bruk. R4-kontrakt: ikke endre
+    # output basert på _horizon. Driver er event-basert (domene-spesifikk);
+    # ingen tids-serie-modes.
+    _horizon = params.get("_horizon")
     min_hours = float(params.get("min_hours", _DEFAULT_EVENT_MIN_HOURS))
     lookahead = float(params.get("lookahead_hours", 24.0))
     impact_levels = tuple(params.get("impact_levels", _DEFAULT_EVENT_IMPACT_LEVELS))

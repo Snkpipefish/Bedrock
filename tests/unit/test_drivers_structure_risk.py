@@ -199,6 +199,42 @@ def test_vol_regime_handles_store_error() -> None:
     assert score == 0.0
 
 
+def test_vol_regime_horizon_param_does_not_affect_output() -> None:
+    """R4 ADR-010: ``params["_horizon"]`` leses men endrer ikke output."""
+    fn = get("vol_regime")
+    closes = [100.0 + 5.0 * ((-1) ** i) for i in range(300)]
+    store = _DummyStore(_build_ohlc(closes))
+    no_horizon = fn(store, "X", {"period": 14, "lookback": 252})
+    swing = fn(store, "X", {"period": 14, "lookback": 252, "_horizon": "SWING"})
+    makro = fn(store, "X", {"period": 14, "lookback": 252, "_horizon": "MAKRO"})
+    assert no_horizon == swing == makro
+
+
+# ---------------------------------------------------------------------------
+# event_distance — R4 _horizon-lesing
+# ---------------------------------------------------------------------------
+
+
+def test_event_distance_horizon_param_does_not_affect_output() -> None:
+    """R4 ADR-010: ``params["_horizon"]`` leses men endrer ikke output.
+
+    event_distance er event-basert (h2e i timer), domene-spesifikk.
+    Tids-serie-modes gir ikke mening, så driveren får KUN _horizon-
+    lesing per crop_progress_stage-presedensen.
+    """
+    fn = get("event_distance")
+
+    class _NoEventStore:
+        def get_econ_events(self, *a: Any, **kw: Any) -> pd.DataFrame:
+            return pd.DataFrame(columns=["event_ts", "country", "impact"])
+
+    store = _NoEventStore()
+    no_horizon = fn(store, "X", {})
+    swing = fn(store, "X", {"_horizon": "SWING"})
+    makro = fn(store, "X", {"_horizon": "MAKRO"})
+    assert no_horizon == swing == makro
+
+
 def test_drivers_registered() -> None:
     assert get("range_position") is not None
     assert get("vol_regime") is not None
