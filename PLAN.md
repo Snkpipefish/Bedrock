@@ -1,11 +1,34 @@
 # Bedrock — implementasjonsplan
 
 Dato opprettet: 2026-04-23
-Sist oppdatert: 2026-04-27
-Status: Fase 0-11 fullført, Fase 12 åpen (sub-fase 12.5+ aktiv)
+Sist oppdatert: 2026-04-28
+Status: Fase 0-11 fullført, Fase 12 åpen (sub-fase 12.6 aktiv + sub-fase 12.7 planlagt — se § 19)
 Referanser: `NYTT_PROSJEKT_UTKAST.md` (i cot-explorer), `AGRI_KARTLEGGING.md` (i cot-explorer), fase-1-audit-rapport (i chat-logg).
 
 ## Endringshistorikk (etter initial godkjenning)
+
+**2026-04-28 (planleggings-session, sub-fase 12.7):** Ny § 19 lagt til —
+"Horisont-refactor + data-utvidelse". To-spors plan godkjent etter audit
++ tre patcher fra bruker:
+- **Spor R (R1-R4):** horisont-bevisst driver-arkitektur (Alt 1 — YAML-
+  styrt `horizon`-param via engine-propagering av `_horizon` analogt med
+  `_direction`). Score-uendret-garanti via snapshot-tester.
+- **Spor D (D0-D3):** 13 nye fetchere + 5 utvidelser + 7 mapping-
+  refaktorer organisert i tiers. Eskom som egen fetcher (A14, ikke
+  kilde-bytte). GHS/XOF droppet helt — Cocoa cross blir
+  `dxy@0.85 + event_distance@0.15`.
+- **ADR-er:** ADR-009 (horisont-pattern, Alt 1) + ADR-010 (backfill-
+  policy: 2010-cutoff, sekvensiell pacing 1.5s, engangs-skripts i
+  `scripts/backfill/`, lov til å være "shitty"). ADR-011 (deprecation)
+  + ADR-012 (failure-mode) bevisst utsatt — håndteres reaktivt per
+  fetcher (Alt Z).
+- **Scalp-arkitektur** (release-clock, surprise-z som schema-kontrakt,
+  cross-asset-ledere, vol-regime-sizing) UTSATT til separat Plan-S
+  etter D2.
+- **Trading-logikk-svar:** percentil 12m+36m, ekstrem-terskler 2/98
+  (hard) + 5/95 (soft), Cotton ENSO uendret.
+- Sub-fase 12.7 koordineres med 12.6 (data-driven rebalansering) —
+  rekkefølge er åpent spørsmål, se § 19 og STATE.md open questions.
 
 **2026-04-27 (session 105 follow-up):** § 7.3 og § 7.4 utvidet:
 - § 7.3 tabell fikk ny kolonne `systemd-timer?` som markerer
@@ -1475,6 +1498,11 @@ Aktivt nå (sessions 118+):
 5. Etter sub-fase 12.6: re-aktiver observasjonsvinduet (parallell-drift sub-
    session 68) før Fase 13 cutover.
 
+**Sub-fase 12.7 (planlagt 2026-04-28) — se § 19** for horisont-refactor +
+data-utvidelse. Spor R kan starte parallelt med 12.6 (score-uendret); Spor D
+koordineres etter 12.6-konvergens (anbefalt Alt β). Åpent spørsmål: alt α/β/γ
+låses i første 12.7-session.
+
 ---
 
 ## 17. Session-disiplin (ny seksjon)
@@ -1644,3 +1672,270 @@ git push origin v0.1.0-fase-1
 ```
 
 Gir rollback-punkt uten avhengighet av commit-hashes.
+
+---
+
+## 19. Sub-fase 12.7 — Horisont-refactor + data-utvidelse
+
+**Status:** PLANLAGT (godkjent 2026-04-28). Aktiveres etter koordinering med
+sub-fase 12.6 — se § 19.7.
+
+### 19.1 Bakgrunn og to spor
+
+Drivere returnerer i dag én skalar `[0..1]` per kall. Dette dekker én horisont
+av gangen, men flere planlagte datakilder har **ulik signal-verdi per horisont
+fra samme rådata** (CFTC TFF: 12m-percentil → MACRO, ukentlig delta → SWING,
+mandag-gap → SCALP. Baker Hughes: 13w trend → MACRO, 4-8w break → SWING.
+VIX-termstruktur: regime → MACRO, regime-switch → SWING, VIX9D/VIX-ratio →
+SCALP). Hvis hver kilde implementeres som tre uavhengige drivere, vokser
+driver-registry 3× og feature-engineering dupliseres.
+
+To spor, må kjøres i rekkefølge:
+
+- **Spor R (R1-R4) — refactor først:** gjør driver-arkitekturen horisont-
+  bevisst slik at samme rådata kan produsere ulike features for SCALP/SWING/
+  MACRO. **Score-uendret-garanti** for alle 22 instrumenter × 3 horisonter ×
+  2 retninger.
+- **Spor D (D0-D3) — data-utvidelse etterpå:** 13 nye fetchere + 5 utvidelser
+  + 7 mapping-refaktorer. Med horisont-pattern på plass kan hver ny driver
+  implementeres riktig fra dag én.
+
+**Hvorfor i denne rekkefølgen:** Hvis vi tar inn data først og refactorer
+etterpå, må alle nye drivere skrives om.
+
+### 19.2 Hva endres ikke
+
+- `max_score` per instrument forblir uendret
+- Familie-strukturen (financial: 6 familier; agri: 6-7) forblir uendret
+- Grade-terskler (A+/A/B) forblir uendret
+- Aggregerings-logikk (`weighted_horizon` for financial, `additive_sum` for
+  agri) forblir uendret
+- Polarity-system (`directional`/`neutral` på familie-nivå) forblir uendret
+- Engine-API for bot/signal_server forblir uendret
+
+### 19.3 Låste beslutninger (audit + samtale 2026-04-28)
+
+**Arkitektur — Alt 1 (YAML-styrt `horizon`-param):**
+- Engine får ~5 linjer: i tillegg til eksisterende `_direction`-propagering
+  via `params_with_dir` (engine.py:377-380), legges en `_horizon`-key inn
+  basert på financial horizon-arg. Drivere kan lese `params["_horizon"]`
+  for å velge feature.
+- For financial er horisonten kjent ved scoring-tid (kommer fra YAML-key).
+- For agri (no horizon på engine-siden): drivere kan ta `horizon` eksplisitt
+  som YAML-param hvis nødvendig — ingen engine-endring kreves.
+- Driver-kontrakten `(store, instrument, params) -> float` er uendret. Mønstret
+  matcher analog-driver-presedens (session 100, ADR-006).
+- Begrunnelse: minst engine-endring; lesbar YAML; feilsøkbar; konsistent
+  med eksisterende direction-propagering.
+
+**Trading-logikk:**
+- Percentil-vinduer: **12m + 36m** (12m fanger sesong-syklus + matcher
+  eksisterende 52w-bruk; 36m fanger fed-syklus + multi-commodity-cykler)
+- Ekstrem-terskler: **2/98 hard `extreme_flag` + 5/95 soft
+  `approaching_extreme`-feature** (begge eksponert; YAML-vekting velger)
+- Cocoa GHS/XOF: **dropp helt nå.** Cocoa cross-familie blir
+  `dxy@0.85 + event_distance@0.15`. EM-FX-pipeline kan tas opp i egen syklus.
+- Cotton ENSO: **uendret** (familie-konsistens).
+
+**Refactor-spesifikke valg:**
+- R3 referanse-drivere: `positioning_mm_pct` (financial-positioning, alle
+  instrumenter), `real_yield` (financial-macro, alle), `crop_progress_stage`
+  (agri-agronomy — validerer agri-pattern)
+- R4 batch-rekkefølge: trend → structure → risk → positioning → macro →
+  agri/agronomy → analog/seasonal (lavest blast-radius først)
+- TFF-driver-komposisjon (A4): **to separate drivere** —
+  `positioning_lev_funds_pct` + `positioning_asset_mgr_pct` deler privat
+  helper i `positioning.py`. `cot_z_score` beholdes uendret.
+- AAII mean-reversion (A12): **driver-intern logikk** — driveren returnerer
+  invertert score (1.0 = bull-of-instrument ved bear-ekstrem). YAML-polarity
+  forblir `directional`. Ingen ny polarity-type.
+- Sesong-modulert polarity (`hdd_cdd_anomaly`): **driver-intern logikk** —
+  driveren vet kalender-måned, returnerer "demand-pressure-score" som er
+  bull-of-NG (vinter+HDD eller sommer+CDD bullish). YAML `directional`,
+  ingen ny polarity-type.
+- ADR-011 (deprecation) + ADR-012 (failure-mode): **utsatt** (Alt Z).
+  Håndteres reaktivt per fetcher; "sekundær"-drivere settes til vekt 0 i
+  YAML med kommentar `# DEPRECATED-<session>`. Driver-feil returnerer 0.0
+  per eksisterende kontrakt; ingen dynamisk vekt-reweight.
+
+**Out-of-scope (eksplisitt):**
+- Scalp-arkitektur (release-clock-orchestrator, surprise-z som schema-
+  kontrakt, cross-asset-ledere, vol-regime-sizing-multiplier, real-time-
+  pipeline) — egen Plan-S etter D2.
+- C4 news_intel/F&G scoring — egen design-syklus etter ≥1 mnds data.
+- Grade-terskel-rekalibrering — flagges hvis distribusjon drifter, men
+  rekalibreres ikke i denne syklusen.
+- Bot/signal_server-API-endringer, UI-endringer for nye drivere,
+  backtest-rammeverk-utvidelser, live-cutover (Fase 13).
+- Datakilder vurdert men ute: MOVE Index, crypto-spesifikke (funding rates,
+  on-chain, ETF-flows, stablecoin supply), Bolsa de Cereales, AHDB UK,
+  EU MARS, Cocobod / CCC.
+
+### 19.4 Fase-tabell
+
+| Fase | Innhold | Størrelse | Leveranse |
+|---|---|---|---|
+| **R1** | Audit + ADR-009 (horisont-pattern Alt 1) + ADR-010 (backfill-policy: 2010-cutoff, sekvensiell pacing 1.5s, engangs-skripts i `scripts/backfill/`, lov til å være "shitty"). Engine `_horizon`-propagering (~5 linjer + 1 micro-test). | S | `docs/horizon_refactor_audit.md`, ADR-009, ADR-010, engine-patch |
+| **R2** | Feature-konvensjon: standard typer (`pct_12m`, `pct_36m`, `delta_5d_z`, `delta_20d_z`, `extreme_flag`, `approaching_extreme`, `surprise_z`, `time_to_release_min`, `post_release_drift_3d`, `extreme_contrarian_score`). Per-horisont test-strategi (3 typer: snapshot score-uendret, monotonisitet ved gradvis data-tilkomst, regime-shift fanger delta). Sesong-driver-mønster (driver-intern kalender-aware, ingen ny polarity). 2 ende-til-ende-eksempler: "Brent SWING onsdag 10:30 ET (post-EIA)" + "Corn yield-familie i juli". | M | `docs/driver_horizon_pattern.md` |
+| **R3** | Refactor 3 referanse-drivere: `positioning_mm_pct`, `real_yield`, `crop_progress_stage`. Hver produserer flere horizon-features via samme funksjon, valgt via `params["_horizon"]`. Snapshot-tester må gi bit-identisk output for default-horizon. | M | 3 refactored drivere + snapshot/logiske/monotonisitet-tester |
+| **R4** | Batch-vis migrering i 7 commits (én per familie-gruppe per rekkefølge over). Snapshot-tester må være grønne for hver batch. Score-uendret-garanti låst på 22 inst × 3 horisonter × 2 retninger. | L | Alle drivere migrert, snapshot grønt |
+| **D0** | Smoke-tests for 13 nye + 5 utvidelser. Engangs-skripts i `scripts/smoke/`. Inkluderer eksplisitt: (a) **A14 Eskom-historikk** (≥2010? hvis <2014, behold seismic for Platinum), (b) **B5 Yahoo `@F`-curve-feasibility** for calendar spreads (høyrisiko), (c) **A11 ICE TTF-status** (NaturalGas TFF-spørsmål). ADR-010 brukes som mal for backfill-skripts. | M | `docs/smoke_test_results.md` med per-kilde GO/NO-GO/UTSATT |
+| **D1** | **Tier 1.** A1 Baker Hughes, A2 AGSI, A3 FAS Export Sales, A4 CFTC TFF + C1 (cot_legacy→cot_tff for finansielle), B1 yield-diff + kreditt/NFCI/NetFedLiq, B3 DXY-bytte (Yahoo `DX-Y.NYB`). Hver kilde commit-isolert. YAML-diff per instrument med Pydantic-validering at familie-sum=1.0. | L | 6 nye fetchere/utvidelser + ~10 nye drivere + YAML-diff |
+| **D2** | **Tier 2.** A5-A7 ETF-holdings, A8 NOPA, A9 Drought Monitor, A11 ICE certified stocks, A12 AAII (mean-reversion driver-intern). B2 VIX-termstruktur, B4 HDD/CDD→NG (sesong-modulert), B5 calendar spreads (kun energi, kun hvis D0 grønn). C2 Eskom→Platinum (kun hvis D0 grønn). C3 drop shipping (Cotton/Cocoa). | L | 5-7 nye fetchere + ~8 nye drivere + YAML-diff |
+| **D3** | **Tier 3.** A10 Cecafé. B5 calendar spreads metaller/korn (hvis D0 viste Yahoo-curve). Backtest-validering av grade-distribusjon × 12mnd × 22 instrumenter; flagg drift > 25 pp i A+/A/B-andel for senere terskel-rekalibrering (ikke i scope). | M | 1-2 nye fetchere + grade-distribusjons-rapport |
+
+**Estimat:** R1+R2 = 1-2 sessioner. R3 = 1 session. R4 = 3-4 sessioner.
+D0 = 1-2 sessioner. D1 = 4-6. D2 = 4-6. D3 = 2-3. Totalt **16-24 sessioner**.
+
+**Tag-strategi:** `v0.X.0-fase-R1`, `-R4`, `-D0`, `-D1`, `-D2`, `-D3`.
+R2/R3 commits men ingen tag (mellom-fase).
+
+### 19.5 Ny data — oversikt
+
+**13 nye fetchere (Del A):**
+A1 Baker Hughes Rig Count (CSV, 1944+, ukentlig fre, macro low_bull) ·
+A2 AGSI EU gas storage (API, 2011+, daglig, macro low_bull) ·
+A3 FAS Export Sales (ESR API, 1990+, ukentlig tor 8:30 ET, cross high_bull) ·
+A4 CFTC TFF (ny tabell-variant i eksisterende COT-Socrata-modul, 2010+) ·
+A5 GLD ETF holdings (CSV, 2004+, daglig) ·
+A6 SLV ETF holdings (CSV, 2006+) ·
+A7 PPLT ETF holdings (CSV, 2010+) ·
+A8 NOPA Crush (PDF, 1990+, månedlig ~15.) ·
+A9 US Drought Monitor (CSV API, 2000+, ukentlig tor) ·
+A10 Cecafé Brasil kaffe-eksport (PDF, 2002+, månedlig — Tier 3) ·
+A11 ICE certified stocks (CSV, 2008+, daglig) ·
+A12 AAII Sentiment (CSV, 1987+, ukentlig tor) ·
+A13 BRL=X (kun ny ticker i eksisterende `prices`-fetcher) ·
+A14 Eskom load-shedding (API, ≥2014?, real-time — egen fetcher, ikke kilde-bytte i seismic).
+
+**5 utvidelser av eksisterende fetchere (Del B):**
+B1 `fundamentals` med yield-diff + kreditt-spreads + NFCI + NetFedLiq ·
+B2 `prices` med VIX-termstruktur (^VIX3M, ^VIX6M, ^VIX9D) ·
+B3 DXY-bytte FRED→Yahoo `DX-Y.NYB` (sekundær FRED beholdes) ·
+B4 `weather` til NaturalGas (HDD/CDD i NE-USA, TX/LA, Midwest) ·
+B5 Calendar spreads beregnet fra eksisterende `prices` (Brent/CrudeOil/NG først).
+
+**7 mapping-refaktorer (Del C):**
+C1 cot_legacy→cot_tff for finansielle (følger A4) ·
+C2 Platinum mining_disruption seismic→Eskom ·
+C3 Drop shipping for Cotton/Cocoa ·
+C4 news_intel/F&G UI-only→scoring (UTE av scope, egen syklus) ·
+C5 BRL→Coffee/Sugar (dekket i A13) ·
+C6 Weather→NaturalGas (dekket i B4) ·
+C7 Cotton ENSO uendret.
+
+### 19.6 Per-horisont-mapping (Del E fra pre-plan)
+
+Samme rådata brukes ulikt per horisont. Hver horisont-bevisst driver
+produserer features som dekker relevante horisonter:
+
+- **MAKRO (uker-måneder):** regime-klassifisering, posisjonerings-
+  ekstremer, strukturell tilbud/etterspørsel. Features: 12m/36m-percentil,
+  regime-flagg. Datafrekvens ukentlig-månedlig holder.
+- **SWING (dager-uker):** katalysator + teknisk konfluens, pre-positioning
+  før events, mean-reversion ved ekstremer. Features: 5d/20d-delta z-score,
+  surprise-z, ekstrem-flagg. Datafrekvens daglig-ukentlig.
+- **SCALP (minutter-timer):** vol-ekspansjon rundt scheduled releases,
+  surprise vs consensus. Features: time-to-release, surprise-magnitude,
+  vol-regime. **NB:** Full scalp-arkitektur er Plan-S — denne fasen leverer
+  kun trivielle scalp-features (time_to_release_min, basic surprise_z fra
+  wasde/eia hvis schema gir consensus).
+
+Per-kilde × horisont-mapping (full tabell i pre-plan-dokument; bevart der):
+A1 Baker Hughes (●●●/●●●/◐), A3 FAS (●●/●●●/●●●), A4 TFF (●●●/●●●/◐),
+A8 NOPA (●●●/●●●/●●●), A12 AAII (●●●/●●●/–), B2 VIX-term (●●●/●●●/●●●),
+B4 HDD/CDD (●●●/●●●/◐), B5 cal-spreads (●●●/●●●/●●), A14 Eskom
+(●●●/●●●/◐). `●●●`=primær, `●●`=sekundær, `◐`=marginal, `–`=ikke relevant.
+
+### 19.7 Koordinering med sub-fase 12.6
+
+Sub-fase 12.6 (data-driven rebalansering) er ÅPEN siden 2026-04-27.
+Detached harvest startet, NASS 2010-2021-backfill kjører, neste mål er
+analyzer + YAML-rebalansering basert på empirisk IC.
+
+Sub-fase 12.7 må koordineres mot 12.6:
+
+- **Spor R (refactor)** kan kjøre parallelt med 12.6 fordi score-output
+  er bit-identisk før/etter (snapshot-tester garanterer det). 12.6 sin
+  harvester ser ingen forskjell.
+- **Spor D (nye drivere)** vil endre score-output → invalider 12.6 sine
+  IC-resultater for berørte instrumenter/familier. Tre alternativer:
+  - **Alt α — 12.6 først, så 12.7:** rebalanser eksisterende drivere
+    først, deretter Spor R+D. Etter D3 må 12.6 re-kjøres for å rebalanser
+    nye drivere. Dobbelt arbeid på rebalansering, men tydelig før/etter-
+    måling per spor.
+  - **Alt β — Spor R parallelt, 12.6 fullført + Spor D etter:** R kjører
+    nå (uavhengig). 12.6 fullføres på dagens drivere. Spor D etter — ny
+    12.6-runde for nye drivere.
+  - **Alt γ — Pause 12.6, full 12.7, så ny 12.6 over alt:** stopp 12.6
+    nå, kjør R1-R4 + D0-D3, kjør 12.6 én gang over hele settet. Lengst
+    tid før neste rebalansering, men eliminerer dobbelt arbeid.
+
+**Låst 2026-04-28: Alt γ.** Bruker-policy: ingen backtest før all data er
+på plass. Sub-fase 12.6 er empirisk rebalansering (analyzer + setup-walker
+over harvested data) — det ER backtesting. Derfor:
+1. **Sub-fase 12.6 PAUSES** (detached harvest fortsetter i bakgrunnen,
+   men analyzer/rebalansering venter)
+2. **Spor R kjøres nå** (bit-identisk score, trygt parallelt med harvest)
+3. **Spor D kjøres etter R** (nye fetchere + nye drivere, full backfill
+   per ADR-010)
+4. **Sub-fase 12.6 GJENÅPNES** etter D3 — ett rebalanserings-pass over
+   det komplette systemet (gamle + nye drivere). Ingen dobbelt arbeid.
+
+Estimert tid før første rebalansering er lengre enn Alt α/β, men
+empirisk grunnlag dekker hele datasettet inkludert nye kilder.
+
+### 19.8 Patch 2 — eksisterende drivere som mister vekt
+
+Når en ny driver legges til en familie, må eksisterende drivere reduseres
+slik at familie-sum=1.0. Patch 2 fra 2026-04-28 leverer en
+verifikasjons-checklist (ikke autoritativ tabell — Del D fra pre-plan-
+dokument er sannhetskilde). Pydantic-schema som validerer familie-sum=1.0
+ved YAML-lasting er førstelinje-forsvar. Hvis Claude Code finner at
+familie-sum ≠ 1.0 etter migrering, **stopp og spør** — ikke fiks stille.
+
+Eksempler på reduksjoner ved D-fasene (ikke-uttømmende):
+- `real_yield` 0.40→0.25 i EURUSD macro (yield-diff legges til, B1)
+- `dxy_chg5d` 0.50→0.30 i EURUSD macro (yield-diff)
+- `eia_stock_change` 0.50→0.30 i NaturalGas macro (rig_count + AGSI)
+- `weather_stress` 0.25→0.20 i Soybean yield (NOPA legges til, A8)
+- `dxy_chg5d` 0.55→0.45 i Corn cross (FAS legges til, A3)
+- `shipping_pressure` droppes (0.20→0) i Cotton/Cocoa cross (C3)
+- `seasonal_stage` 1.00→0.75 i Coffee/Cocoa/Sugar outlook (ICE certified stocks, A11)
+- `weather_stress` 1.00→0.55 i Corn/Soybean/Wheat/Cotton weather (drought_monitor, A9)
+- `vol_regime` 0.70→0.50 i Nasdaq/SP500 risk (vix_term_ratio, B2)
+- `range_position` 1.00→0.55 i Brent/CrudeOil/NaturalGas structure (calspread, B5)
+
+### 19.9 ADR-er som leveres i denne sub-fasen
+
+- **ADR-009 — Horisont-bevisst driver-pattern.** Låser Alt 1 (YAML-styrt
+  `horizon`-param via engine-propagering). Driver-kontrakt uendret;
+  `_horizon`-key analog til `_direction` (ADR-006).
+- **ADR-010 — Backfill-policy.** 2010-01-01 cutoff for alle nye fetchere.
+  Engangs-skripts i `scripts/backfill/<source>.py` (separat fra
+  produksjons-cron). Sekvensiell HTTP med ≥1.5s pacing. Lov til å være
+  "shitty": manuell kjøring, sleep mellom requests, ingen retry-policy
+  beyond exponential backoff. Skal IKKE forurense produksjons-fetcher-
+  koden.
+
+ADR-011 (deprecation) + ADR-012 (failure-mode): **ikke i denne sub-
+fasen**. "Sekundær" = vekt 0 i YAML + kommentar `# DEPRECATED-<session>`.
+Driver-feil → 0.0 per eksisterende kontrakt.
+
+### 19.10 Plan-S — scalp-arkitektur (utsatt referanse)
+
+Plan-S leveres som egen syklus etter D2. Forutsetninger som må være på
+plass:
+- Minst 3 av Tier-1/2-fetchere live (FAS A3, NOPA A8, EIA, calendar_ff)
+- Surprise-vs-consensus som strukturert numerisk schema (krever schema-
+  endring av wasde + eventuelt ny event_outcomes-tabell)
+- Release-clock-infrastruktur (sentralisert kalender for FAS tor 8:30 ET,
+  NOPA mnd ~15., EIA ons 10:30 ET, WASDE mnd 12pm ET, NFP, FOMC, CPI)
+- Cross-asset-ledere (BRL→Coffee/Sugar 1-5 min, DXY→Gold, US10Y→USDJPY,
+  VIX→SP500)
+- Trigger-driver-konseptet (event-trigget vs kontinuerlig) — påvirker om
+  scoring-pipeline må splittes i batch (macro/swing) + real-time (scalp)
+- Vol-regime-sizing-multiplier (ikke direksjon — sizing-input)
+
+Plan-S er ikke designet ferdig her. Reservert som own-track når Tier 1/2-
+data har akkumulert tilstrekkelig.
