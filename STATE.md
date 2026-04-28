@@ -123,7 +123,7 @@
 - **AsOfDateStore (session 116):** utvidet med 9 nye proxy-getters (econ_events/cot_ice/cot_euronext/eia_inventory/comex_inventory/seismic_events/conab_estimates/unica_reports/shipping_indices) + tilsvarende `has_*`-helpers. Kritisk fix — uten denne falt orchestrator-replay tilbake til defensive 0.0 for alle nye Phase A-C-drivere fordi underlying-getterne kastet `AttributeError`. 24 nye tester dekker hver getter + region/from_ts-filter + tom-clip-fallback.
 - **Phase D-output (session 116):** `data/_meta/backtest_phase_d_baseline.json` (68 rader, session 99-reprise), `data/_meta/backtest_phase_d_orchestrator.json` (48 rader, 86.4 min sweep), `data/_meta/backtest_phase_d_spike_{cot_ice_mm_pct,conab_yoy,unica_change}.json` (3 spikes). Rapport: `docs/backtest_phase_d_2026-04.md` med diff-tabeller + flagg-terskel ≥3pp Δhit_rate eller ≥2 grade-flips.
 - **Sub-fase 12.6-fundament (session 117):** 3 nye SQLite-tabeller (`driver_observations` long-format, `signal_setups`, `feature_snapshots`) + 5 nye scripts (`harvest_driver_observations.py`, `harvest_feature_snapshots.py`, `run_full_history_harvest.sh`, `analyze_driver_performance.py`, `analyze_cross_correlations.py`). Detached harvest startet 2026-04-27 21:58 — features ETA ~10 min, driver_observations ETA ~24-35 timer.
-- **Next task:** **Session 124 = R4 fortsettelse** (L-fase per § 19.4). Session 123 lukket batch 4 (positioning: cot_z_score + cot_ice_mm_pct + cot_euronext_mm_pct = 3 drivere) + 3 av 6 i batch 5 (macro: dxy_chg5d + brl_chg5d + vix_regime). Totalt R4 så langt: 11 drivere refactored av 30. Gjenstår batch 5 macro: eia_stock_change (full mode-utbygging — ukentlig EIA, samme pattern som positioning's _load_*_full_series men på inventory-data) + comex_stress (klassifisering: domene-spesifikk warehouse-stress-formel ⇒ kun `_horizon`-lesing per crop_progress-presedens) + mining_disruption (event-basert USGS seismic ⇒ kun `_horizon`-lesing per event_distance-presedens). Batch 6 (agri/agronomy: 9 drivere). Batch 7 (analog/seasonal/currency: 4 drivere). Total ~16 drivere igjen over ~2 sessioner. **R4-kontrakt:** disiplin B = YAML uendret, score bit-identisk; mode-infrastruktur legges til drivere men aktiveres ikke. Sub-fase 12.6 forblir PAUSET; detached harvest fortsetter parallelt.
+- **Next task:** **Session 125 = R4 finish** (L-fase per § 19.4, siste R4-session). Session 124 lukket batch 5 finish (eia_stock_change full mode + comex_stress + mining_disruption kun `_horizon`) + 4 av 9 i batch 6 (weather_stress, enso_regime, wasde_s2u_change, export_event_active — alle kun `_horizon`). Totalt R4 så langt: 18 drivere refactored av 30. Gjenstår batch 6 second half (5 drivere: disease_pressure, shipping_pressure, igc_stocks_change, conab_yoy, unica_change) + batch 7 (analog/seasonal/currency: analog_hit_rate, analog_avg_return, seasonal_stage, currency_cross_trend = 4) + buffer (3 drivere klassifiseres ved sessionsstart). Total 12 drivere for session 125. **`shipping_pressure`** sannsynligvis full mode-utbygging (Baltic daglig); resten kun `_horizon`-lesing per domene-spesifikk/event-basert klassifisering. **R4-kontrakt:** disiplin B = YAML uendret, score bit-identisk. Sub-fase 12.6 forblir PAUSET; detached harvest fortsetter parallelt.
 - **Git-modus:** Nivå 1 aktivt under sub-fase 12.5+ docs/cleanup-pass. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt valgfri.
 
 ## Data-gjeld (sub-fase 12.6)
@@ -266,6 +266,102 @@ URL-mønstre + CSV-format-krav: `docs/manual_download_shopping_list.md`.
 ---
 
 ## Session log (newest first)
+
+### 2026-04-29 — Session 124: sub-fase 12.7 R4 batch 5 finish + del av batch 6 (eia + 6 horizon-only)
+
+**Scope:** R4 fortsettelse per PLAN § 19.4. Mål: levere batch 5
+fullstendig (3 drivere: eia_stock_change + comex_stress + mining_disruption)
++ første halvdel av batch 6 (4-5 av 9 agri/agronomy-drivere). Stop-
+criterion: 7-8 drivere eller 3-strikes drift. Sessionen leverte 7
+drivere (alle 3 i batch 5 finish + 4 av 9 i batch 6) på ~3t.
+
+**Audit-flagg adressert ved sessionsstart:**
+
+- *Helpers-rename mid-batch (fra session 123):* `_fundamentals_*`-helpers
+  fortsatt generiske; nye ukentlig-konstanter (`_LOOKBACK_PCT_12M_WEEKLY`
+  osv.) er konstanter, ikke helpers — ingen separat helper-commit.
+  Driver-spesifikk `_load_eia_pct_change_series` hører til driver-commiten.
+- *Test-coverage-mandat:* eia_stock_change leverte 13 tester (Type A/B/C
+  + extreme_flag + invert + missing-data). 6 horizon-only-drivere fikk
+  2 tester per driver = 12 totalt (Type A via tests/snapshot/ +
+  horizon-noop-mini-test).
+- *Drift-frekvens og pytest-DB-bug:* drift-kilden er
+  **bedrock-fetch-prices.timer** som fyrer per time (sist 00:40:45),
+  ikke pytest-DB-isolasjon. Drift-runder per session er nå konsekvent
+  ~2-3, alltid orthogonal til R4 (positioning/macro identisk; bare
+  risk på USDJPY/AUDUSD endret pga prices/ATR-data).
+
+**Per-driver-arbeid:**
+
+- **Batch 5 finish:**
+  - `eia_stock_change` (commit `b32a617`): full mode-utbygging.
+    Default isolert i `_eia_stock_change_default`. Modes opererer på
+    underliggende WoW%-serien — pct_12m/pct_36m/delta_5d_z/delta_20d_z/
+    extreme_flag_*. Nye ukentlig-konstanter (52/156 obs); driver-
+    spesifikke loaders `_load_eia_inventory_series` + `_load_eia_pct_
+    change_series`. invert-param oversettes til helper bull_when. 13
+    nye tester. delta_5d_z på ukentlig EIA tolkes som "1-rapport-delta"
+    (~7d natural), parallel til positioning's COT-presedens.
+  - `comex_stress` (commit `d89c00a`): kun `_horizon`-lesing.
+    Domene-spesifikk warehouse-coverage-formel.
+  - `mining_disruption` (commit `d89c00a`): kun `_horizon`-lesing.
+    Event-basert seismic + region-vekter.
+
+- **Batch 6 start (4 av 9, alle commit `d89c00a`):**
+  - `weather_stress`: kun `_horizon`-lesing. Domene-spesifikk vær-
+    formel (hot_days/dry_days/water_bal-vekter).
+  - `enso_regime`: kun `_horizon`-lesing. Domene-spesifikk månedlig
+    ONI regime-mapper. delta_5d_z/delta_20d_z gir ikke mening på
+    månedlig data; partial mode-utbygging ville skape inkonsistens.
+  - `wasde_s2u_change`: kun `_horizon`-lesing. Rapport-til-rapport
+    pct-change i månedlig WASDE.
+  - `export_event_active`: kun `_horizon`-lesing. Event-basert
+    severity 1-5.
+
+**Drift-håndtering:** 3 baseline-refresh-runder pga aktiv prices-fetcher.
+Alle orthogonal til R4-driverne. Drift-kilden identifisert som
+`bedrock-fetch-prices.timer` (per-time-cron). For session 125 vurder
+om fetcher-timer kan settes pause under R4-arbeid eller om commit-
+disiplin holder seg trygg uten det (drift er ALLTID orthogonal til R4
+per design — default-banen er bit-identisk uten å endre prices-flyt).
+
+**Verifikasjon:**
+- Snapshot-diff verifisert: kontraktuelt 0 per design (default-bane
+  bit-identisk), faktisk 0 etter siste baseline-refresh på prices.
+- Pyright `src/`: **0 errors, 0 warnings, 0 informations.**
+- Full pytest-suite: **2183 passed in 784.02s** (var 2164 før session
+  124, +19 nye tester: 13 eia + 6 horizon-noop ✓).
+
+**R4-progresjon:** 18 av 30 drivere refactored (5 fra session 122 + 6
+fra session 123 + 7 fra session 124). Gjenstår 12 drivere for
+session 125 (R4 finish): batch 6 second half (5: disease_pressure,
+shipping_pressure, igc_stocks_change, conab_yoy, unica_change) + batch
+7 (4: analog_hit_rate, analog_avg_return, seasonal_stage, currency_
+cross_trend) + 3 buffer.
+
+**Klassifisering for session 125:**
+- `shipping_pressure`: tids-serie (Baltic daglig pct-change). Mulig
+  full mode-utbygging — gjenbruker `_fundamentals_*`-helpers.
+- `disease_pressure`: event-basert (severity + yield_impact). Kun
+  `_horizon`-lesing.
+- `igc_stocks_change`: rapport-til-rapport pct-change i månedlig IGC.
+  Kun `_horizon`-lesing per wasde-presedens.
+- `conab_yoy`: månedlig CONAB-rapport med årlig YoY-metric. Kun
+  `_horizon`-lesing per session 124-prompt-veiledning.
+- `unica_change`: ~2-ukentlig multi-metric. Kun `_horizon`-lesing
+  per domene-spesifikk multi-metric.
+- `analog_hit_rate` / `analog_avg_return`: trolig domene-spesifikke
+  analog-pattern-matching. Klassifiser ved sessionsstart.
+- `seasonal_stage`: kalender-aware. Kun `_horizon`-lesing per
+  hdd_cdd_anomaly-presedens.
+- `currency_cross_trend`: trolig tids-serie FX-cross. Vurder full
+  mode-utbygging.
+
+**Commits:** 2 driver-commits (b32a617 eia + d89c00a sammenslåtte 6
+horizon-only) + STATE-commit til slutt. Ingen YAML-endringer (R4-
+kontrakt overholdt).
+
+**Ingen blockers.**
 
 ### 2026-04-28 — Session 123: sub-fase 12.7 R4 batch 4 + del av batch 5 (positioning + dxy/brl/vix)
 
