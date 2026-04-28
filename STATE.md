@@ -123,7 +123,7 @@
 - **AsOfDateStore (session 116):** utvidet med 9 nye proxy-getters (econ_events/cot_ice/cot_euronext/eia_inventory/comex_inventory/seismic_events/conab_estimates/unica_reports/shipping_indices) + tilsvarende `has_*`-helpers. Kritisk fix — uten denne falt orchestrator-replay tilbake til defensive 0.0 for alle nye Phase A-C-drivere fordi underlying-getterne kastet `AttributeError`. 24 nye tester dekker hver getter + region/from_ts-filter + tom-clip-fallback.
 - **Phase D-output (session 116):** `data/_meta/backtest_phase_d_baseline.json` (68 rader, session 99-reprise), `data/_meta/backtest_phase_d_orchestrator.json` (48 rader, 86.4 min sweep), `data/_meta/backtest_phase_d_spike_{cot_ice_mm_pct,conab_yoy,unica_change}.json` (3 spikes). Rapport: `docs/backtest_phase_d_2026-04.md` med diff-tabeller + flagg-terskel ≥3pp Δhit_rate eller ≥2 grade-flips.
 - **Sub-fase 12.6-fundament (session 117):** 3 nye SQLite-tabeller (`driver_observations` long-format, `signal_setups`, `feature_snapshots`) + 5 nye scripts (`harvest_driver_observations.py`, `harvest_feature_snapshots.py`, `run_full_history_harvest.sh`, `analyze_driver_performance.py`, `analyze_cross_correlations.py`). Detached harvest startet 2026-04-27 21:58 — features ETA ~10 min, driver_observations ETA ~24-35 timer.
-- **Next task:** **Session 123 = R4 fortsettelse** (L-fase per § 19.4). Session 122 lukket batch 1+2+3 (trend + structure + risk = 5 drivere). Gjenstår: batch 4 (positioning: cot_z_score + cot_ice_mm_pct + cot_euronext_mm_pct), batch 5 (macro: dxy_chg5d + brl_chg5d + vix_regime + eia_stock_change + comex_stress + mining_disruption), batch 6 (agri/agronomy: weather_stress + enso_regime + 7 agronomy-drivere = 9), batch 7 (analog/seasonal/currency: analog_hit_rate + analog_avg_return + seasonal_stage + currency_cross_trend = 4). Total ~22 drivere igjen over ~2-3 sessioner. **R4-kontrakt korrigert (commit `08ea08a`):** disiplin B = YAML uendret, score bit-identisk; mode-infrastruktur legges til drivere men aktiveres ikke. PLAN § 19.4 er autoritativ; pattern-doc § 5.3 R2-versjon var feil og er rettet. Sub-fase 12.6 forblir PAUSET; detached harvest fortsetter parallelt.
+- **Next task:** **Session 124 = R4 fortsettelse** (L-fase per § 19.4). Session 123 lukket batch 4 (positioning: cot_z_score + cot_ice_mm_pct + cot_euronext_mm_pct = 3 drivere) + 3 av 6 i batch 5 (macro: dxy_chg5d + brl_chg5d + vix_regime). Totalt R4 så langt: 11 drivere refactored av 30. Gjenstår batch 5 macro: eia_stock_change (full mode-utbygging — ukentlig EIA, samme pattern som positioning's _load_*_full_series men på inventory-data) + comex_stress (klassifisering: domene-spesifikk warehouse-stress-formel ⇒ kun `_horizon`-lesing per crop_progress-presedens) + mining_disruption (event-basert USGS seismic ⇒ kun `_horizon`-lesing per event_distance-presedens). Batch 6 (agri/agronomy: 9 drivere). Batch 7 (analog/seasonal/currency: 4 drivere). Total ~16 drivere igjen over ~2 sessioner. **R4-kontrakt:** disiplin B = YAML uendret, score bit-identisk; mode-infrastruktur legges til drivere men aktiveres ikke. Sub-fase 12.6 forblir PAUSET; detached harvest fortsetter parallelt.
 - **Git-modus:** Nivå 1 aktivt under sub-fase 12.5+ docs/cleanup-pass. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt valgfri.
 
 ## Data-gjeld (sub-fase 12.6)
@@ -266,6 +266,89 @@ URL-mønstre + CSV-format-krav: `docs/manual_download_shopping_list.md`.
 ---
 
 ## Session log (newest first)
+
+### 2026-04-28 — Session 123: sub-fase 12.7 R4 batch 4 + del av batch 5 (positioning + dxy/brl/vix)
+
+**Scope:** R4 fortsettelse per PLAN § 19.4 og audit-flag-mandat fra
+session 122-runde. Mål: levere batch 4 fullstendig (3 positioning-
+drivere) + minst 2 av 6 batch-5-drivere (macro). Stop-criterion: 5-6
+drivere eller 3-strikes drift eller ~3 timer arbeid. Sessionen leverte
+6 drivere (alle 3 i batch 4 + 3 av 6 i batch 5) på ~2t — innenfor mål.
+
+**Audit-flagg adressert ved sessionsstart:**
+
+- *Flagg 1 (pattern-doc-rename):* allerede gjort i commit `08ea08a`
+  ved session 122. Ikke aktuell.
+- *Flagg 2 (z-score-akselerasjon på cot_z_score):* docstring eksplisitt
+  forklarer default ↔ mode-relasjon — default returnerer z-score-trapp
+  av rå MM net; delta_*_z-modes z-score-trapp av delta-aggregat på
+  samme MM net. Modes er IKKE "delta av default-output" — parallelle
+  aggregeringer.
+
+**Per-driver-arbeid:**
+
+- **Batch 4 — positioning, alle 3 commits:**
+  - `cot_z_score` (commit `ecf5b3e`): full mode-utbygging. Default-bane
+    isolert i `_cot_z_score_default` for bit-identisk pre-R4. Mode-
+    helpers (`_load_metric_full_series` / `_mode_pct` / `_mode_delta_z`
+    / `_extreme_flag`) gjenbrukt direkte fra positioning_mm_pct (samme
+    modul). 11 nye tester. Snapshot-diff = 0.
+  - `cot_ice_mm_pct` (commit `7a127ff`, m/baseline-refresh): ny helper
+    `_load_ice_metric_full_series` parallell til CFTC-versjonen. 13
+    nye tester. Drift orthogonal sammenslått i samme commit per R3-
+    presedens (USDJPY|SWING|sell trend/structure/risk drift, cot_ice
+    påvirker ikke USDJPY).
+  - `cot_euronext_mm_pct` (commit `7790773`): ny helper
+    `_load_euronext_metric_full_series`. 13 nye tester. Snapshot-diff
+    = 0.
+
+- **Batch 5 partial — macro, 3 av 6:**
+  - `dxy_chg5d` (commit `93d1749`): full mode-utbygging på underliggende
+    DTWEXBGS rå-serien. Generaliserte real_yield-helpers til
+    `_fundamentals_pct_score` / `_fundamentals_delta_score` /
+    `_fundamentals_extreme_flag` (rename fra `_real_yield_*`; logikken
+    uendret). Real_yield-tester verifisert grønne etter rename. Ny
+    `_normalize_bull_when_for_chg` oversetter chg-driver-konvensjon
+    (negative/positive) til helper-konvensjon (low/high). 12 nye
+    tester. Snapshot-diff = 0.
+  - `brl_chg5d` (commit `90a3df5`, m/baseline-refresh): samme pattern
+    som dxy. 12 nye tester. Drift orthogonal sammenslått.
+  - `vix_regime` (commit `694bb25`): full mode-utbygging på rolling
+    VIXCLS-serien. invert oversettes til helper bull_when (False=low
+    siden lav VIX = bull risk-on; True=high siden høy VIX = bull
+    safe-haven). 14 nye tester. Snapshot-diff = 0.
+
+**Drift-frekvens:** 2 baseline-refresh-runder i denne sessionen
+(batch-1-cot_ice, batch-2-brl_chg5d). Begge USDJPY|SWING|sell trend/
+structure/risk-drift fra prices/ATR-data. Konsistent med session 122-
+mønster — pytest-DB-isolasjon-bug forblir åpen for senere task.
+
+**Verifikasjon:**
+- Snapshot-diff verifisert per driver-commit: 0 forskjeller på 104
+  rader hver gang.
+- Pyright `src/`: **0 errors, 0 warnings, 0 informations.**
+- Full pytest-suite: **2164 passed in 729.96s** (var 2089 før session
+  123, +75 nye tester: 11+13+13+12+12+14 = 75. ✓).
+
+**R4-progresjon:** 11 av 30 drivere refactored (5 fra session 122 +
+6 fra session 123). Gjenstår 19 drivere over ~2 sessioner. Helper-
+generaliseringen i denne sessionen (real_yield → fundamentals)
+reduserer per-driver-kost for de gjenstående FRED-baserte (eia_stock_
+change er en) og ukentlig EIA (kan gjenbruke positioning's
+_load_*_full_series-pattern).
+
+**Klassifisering for neste session:**
+- `eia_stock_change`: tids-serie (ukentlig EIA WoW%), full mode-
+  utbygging — ny helper for EIA-data-source.
+- `comex_stress`: domene-spesifikk warehouse-formel, kun `_horizon`-
+  lesing per crop_progress-presedens.
+- `mining_disruption`: event-basert seismic + region-vekter, kun
+  `_horizon`-lesing per event_distance-presedens.
+
+**Commits:** 6 driver-commits (alle auto-pushet), STATE-commit til
+slutt. Ingen YAML-endringer (R4-kontrakt overholdt).
+
+**Ingen blockers.**
 
 ### 2026-04-28 — Session 122: sub-fase 12.7 R4 batch 1+2+3 (trend + structure + risk)
 
