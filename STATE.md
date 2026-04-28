@@ -58,6 +58,7 @@
   - **117:** **Sub-fase 12.5+ LUKKET — ADR-009 cutover-readiness + sub-fase 12.6 åpnet + tag `v0.12.5-fetch-port-complete`.** Bruker re-direkterte session 117 fra cutover-tagging mot å bygge fundamentet for empirisk vekt-rebalansering først (full historisk kryss-asset-backtest). Resultat: 3 nye SQLite-tabeller (`driver_observations` long-format med 3 horisonter inkl. SWING/60d, `signal_setups` med entry/SL/TP/RR/ATR fra Engine.build_setup, `feature_snapshots` med 22 priser + 5 FRED + 4 shipping + 22 COT MM-net%). 5 nye scripts: harvester for driver_observations (per-instrument, resumable), harvester for feature_snapshots (Gold-kalenderdrevet, ~20-30 min for full historikk), nohup-vennlig wrapper-script for alle 22 inst sekvensielt, analyzer for per-driver IC/kvartil-hit-rate/monotonisitet, analyzer for forward-looking kryss-asset IC-matrise (alle prediktorer × alle targets). For instrumenter uten analog_outcomes (BTC/ETH/NaturalGas/Copper/Platinum) syntetiserer harvester forward_return fra prices. Detached harvest startet i session 117 — kjører ~24-35 timer i bakgrunnen. ADR-009 skrevet med 5 låste beslutninger: (a) sub-fase 12.5+ teknisk lukket; (b) ny sub-fase 12.6 "data-driven rebalansering" innføres mellom 12.5+ og Fase 13; (c) news_intel/crypto_sentiment driver-aktivering UTSETTES til harvest-data foreligger; (d) Branch-modus forblir Nivå 1 inntil Fase 13-nærhet; (e) Cutover-tidspunkt for Fase 13 IKKE besluttet — kriterier skjerpet med sub-fase 12.6-konvergens-krav. PLAN § 12.3 cutover-kriterier utvidet, ny § 12.5+ "LUKKET"-blokk, ny § 12.6 "data-driven rebalansering" med scope-detaljer (sesong-bucketing, lead-lag-IC, setup-walker), § 13-tabell oppdatert. Tag `v0.12.5-fetch-port-complete` settes på siste session 117-commit. **2036/2036 grønt, pyright 0 errors.** **LUKKET 2026-04-27**.
   - **118:** **Sub-fase 12.6 historisk datagrunnlag — massiv backfill av Phase A-C-tabeller.** Bruker rapporterte at backtest scoret over perioder uten data og kalkulerte sløsing av ressurser. Tre arbeidsstrømmer i én session: (a) Komplett gap-analyse + shopping-liste (`docs/manual_download_shopping_list.md`) som dokumenterer hva som kan automatiseres vs hva bruker må laste manuelt, med eksakte URL-mønstre og CSV-format-krav per kilde. (b) **Automatiserbare backfills** kjørt detached via ny `scripts/run_backfill.sh` (nohup + disown, overlever session-exit): USGS seismic 2010-2026 via FDSN-API år-walker → 123 350 events; ICE-COT 2011-2024 via COTHist<YEAR>.csv-arkiv → 1 598 rader; Euronext optimalisert med DB-skip + 0.7s pacing → 636 nye rader 2018-2026; CFTC navn-drift Tier 1 fortsatt → 6/8 instrumenter renamed til canonical (Brent + Copper har CFTC-data først fra 2022, ikke navn-drift). (c) **Manuell ingest** via ny `scripts/ingest_manual_data.py` (forex/conab/bdi subcommands): Forex Factory CSV 83k → 41 021 events (High+Medium impact, 2007-2026); CONAB Excel 41 filer (algodao/milho/soja/trigo, 2021/22-2025/26) → 111 rader; Investing.com BDI PDF via pdftotext → 851 rader 2014-2018 fyller pre-Yahoo-BDRY-gap. NASS-fetcher fixet med per-commodity metric-whitelist (`_VALID_METRICS_PER_COMMODITY`) — wheat har HEADING ikke SILKING; pre-flight skip av invalid kombinasjoner unngår 400 Bad Request fra USDA. **DB-effekt:** econ_events 37→41058, seismic_events 100→123 350, cot_ice 136→1598, cot_euronext 15→1218, shipping BDI 2018+→2014+, conab 7→118. **Data-gjeld dokumentert** under §Data-gjeld i denne fila — gaps som krever ekstra manuell innsats. **LUKKET 2026-04-28**.
   - **119+:** Sub-fase 12.6 fortsettelse — vente på NASS 2010-2021 (kjører detached med fix), sesong-bucketing-analyzer, setup-walker, YAML-rebalansering basert på empiri.
+- **Sub-fase 12.7 PLANLAGT 2026-04-28** — horisont-refactor + data-utvidelse. Se PLAN § 19. **Alt γ LÅST**: bruker-policy "ingen backtest før all data er på plass" → 12.6 PAUSES (harvest fortsetter detached), Spor R (R1-R4) kjøres nå (bit-identisk score), Spor D (D0-D3) etter R, 12.6 gjenåpnes etter D3 over hele systemet. Trading-logikk-svar låst: 12m+36m percentil-vinduer, 2/98+5/95 ekstrem-terskler, drop GHS/XOF (Cocoa cross = dxy@0.85 + event_distance@0.15), Cotton ENSO uendret. Arkitektur låst: Alt 1 (YAML-styrt `_horizon`-param via engine-propagering analogt med `_direction`/ADR-006). ADR-009 (horisont-pattern) + ADR-010 (backfill-policy: 2010-cutoff, sekvensiell pacing 1.5s, engangs-skripts i `scripts/backfill/`, lov til å være "shitty") leveres i R1. ADR-011 (deprecation) + ADR-012 (failure-mode) UTSATT (Alt Z) — håndteres reaktivt per fetcher.
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -121,7 +122,7 @@
 - **AsOfDateStore (session 116):** utvidet med 9 nye proxy-getters (econ_events/cot_ice/cot_euronext/eia_inventory/comex_inventory/seismic_events/conab_estimates/unica_reports/shipping_indices) + tilsvarende `has_*`-helpers. Kritisk fix — uten denne falt orchestrator-replay tilbake til defensive 0.0 for alle nye Phase A-C-drivere fordi underlying-getterne kastet `AttributeError`. 24 nye tester dekker hver getter + region/from_ts-filter + tom-clip-fallback.
 - **Phase D-output (session 116):** `data/_meta/backtest_phase_d_baseline.json` (68 rader, session 99-reprise), `data/_meta/backtest_phase_d_orchestrator.json` (48 rader, 86.4 min sweep), `data/_meta/backtest_phase_d_spike_{cot_ice_mm_pct,conab_yoy,unica_change}.json` (3 spikes). Rapport: `docs/backtest_phase_d_2026-04.md` med diff-tabeller + flagg-terskel ≥3pp Δhit_rate eller ≥2 grade-flips.
 - **Sub-fase 12.6-fundament (session 117):** 3 nye SQLite-tabeller (`driver_observations` long-format, `signal_setups`, `feature_snapshots`) + 5 nye scripts (`harvest_driver_observations.py`, `harvest_feature_snapshots.py`, `run_full_history_harvest.sh`, `analyze_driver_performance.py`, `analyze_cross_correlations.py`). Detached harvest startet 2026-04-27 21:58 — features ETA ~10 min, driver_observations ETA ~24-35 timer.
-- **Next task:** **Session 119** — etter NASS 2010-2021-backfill ferdig: kjøre `analyze_driver_performance.py` + `analyze_cross_correlations.py` på det utvidede datagrunnlaget (123k seismic, 41k events, 11k CFTC, 5790 cot_legacy etc.), identifisere svake/sterke drivere, foreslå første runde YAML-vekt-rebalansering. Senere sessions: legg til sesong-bucketing + lead-lag-IC i analyzer, bygg setup-walker for ekte P&L-distribusjon. Manuell ingest av COMEX/UNICA/Café-historikk når brukeren har skaffet filene. Iterer til konvergens.
+- **Next task:** **Session 119 = R1** (Spor R åpning per Alt γ — § 19.7). Audit + ADR-009 (horisont-pattern Alt 1: YAML-styrt `_horizon`-param via engine-propagering analogt med `_direction`) + ADR-010 (backfill-policy: 2010-cutoff, sekvensiell pacing 1.5s, engangs-skripts i `scripts/backfill/`, lov til å være "shitty") + engine `_horizon`-propagering (~5 linjer + 1 micro-test). Sub-fase 12.6 PAUSES (detached harvest fortsetter i bakgrunnen — kun data-innsamling, ikke backtest); analyzer/rebalansering venter til etter D3 per bruker-policy "ingen backtest før all data er på plass". Manuell ingest av COMEX/UNICA/Café-historikk fortsetter parallelt — det er data-arbeid, ikke backtest.
 - **Git-modus:** Nivå 1 aktivt under sub-fase 12.5+ docs/cleanup-pass. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt valgfri.
 
 ## Data-gjeld (sub-fase 12.6)
@@ -161,6 +162,25 @@ URL-mønstre + CSV-format-krav: `docs/manual_download_shopping_list.md`.
   `git status` før retry; aldri `git add -u`.
 
 ## Open questions to user
+
+### Sub-fase 12.7 — koordinering med 12.6 (åpnet 2026-04-28)
+
+- **Alt γ låst 2026-04-28** (PLAN § 19.7): bruker-policy "ingen backtest før
+  all data er på plass". 12.6 PAUSES (harvest fortsetter detached); Spor R
+  kjøres nå (bit-identisk, trygt); Spor D etter R; 12.6 GJENÅPNES etter D3
+  med ett rebalanserings-pass over hele systemet.
+- **R3 referanse-driver-bekreftelse** (sannsynlig auto-bestem):
+  `positioning_mm_pct` + `real_yield` + `crop_progress_stage`. Bekreft eller
+  bytt ut når R3 åpnes.
+- **D0 smoke-test-utfall som påvirker D-fasene:**
+  - A14 Eskom-historikk ≥2010? Hvis <2014, behold seismic for Platinum (C2
+    droppes eller utsettes).
+  - B5 Yahoo `@F`-curve-feasibility for calendar spreads (høyrisiko —
+    Yahoo `GC=F` etc. er continuous front-month, ikke M1/M2/M12-curve).
+    Hvis ikke fungerer: B5 utsettes eller ny kilde (CME settlement-CSV).
+  - A11 ICE certified stocks for TTF Natural Gas: ifølge session 106 er
+    TTF fjernet fra public ICE feed. Bekreft i smoke-test, evt. fall
+    tilbake på CFTC-only for NaturalGas TFF.
 
 ### Eldre, fortsatt åpne
 
@@ -245,6 +265,94 @@ URL-mønstre + CSV-format-krav: `docs/manual_download_shopping_list.md`.
 ---
 
 ## Session log (newest first)
+
+### 2026-04-28 — Planleggings-session: sub-fase 12.7 (horisont-refactor + data-utvidelse)
+
+**Scope:** Pure planlegging, ingen kode. Bruker leverte pre-plan-dokument
+"horisont-bevisst arkitektur + data-utvidelse" (~13 nye fetchere + 5
+utvidelser + 7 mapping-refaktorer + arkitektur-refactor for å la samme
+rådata produsere ulike features per SCALP/SWING/MACRO-horisont).
+
+**Auditfunn (fra denne fil):**
+- Engine har allerede param-propagering via `params_with_dir` for
+  `_direction` (engine.py:377-380, ADR-006). En `_horizon`-key kan
+  legges inn med ~5 linjer.
+- Driver-kontrakt `(store, instrument, params) -> float` er stabil; alle
+  22 instrumenter bruker den.
+- `engine/drivers/_stats.py` finnes som privat helper-modul — pattern
+  for "én underliggende beregning, flere driver-fasader" er etablert.
+- Polarity er på familie-nivå, ikke driver-nivå → AAII mean-reversion
+  må gjøres som driver-intern logikk, ikke ny polarity-type.
+- Risiko-flagg: B5 calendar spreads krever data Yahoo ikke gir
+  (continuous front-month, ikke M1/M2/M12-curve) — smoke-test
+  avgjørende.
+- TTF Natural Gas mangler i public ICE-feed (session 106-funn).
+- 6 fetchere allerede portet (calendar_ff, cot_ice, eia_inventories,
+  comex, seismic, cot_euronext fra sessions 105-110) — koordineres mot
+  D-fasene.
+
+**Tre patcher gjennomgått fra bruker:**
+1. PATCH 1 — Eskom som EGEN fetcher A14 (ikke kilde-bytte i seismic) +
+   GHS/XOF fallback-trapp (A15).
+2. PATCH 2 — Konsekvens-tabell for eksisterende drivere som mister
+   vekt. Bekreftet som verifikasjons-checklist; Del D er sannhetskilde;
+   Pydantic-schema validerer familie-sum=1.0 ved YAML-lasting.
+3. PATCH 3 — Eksplisitt out-of-scope-liste. Motsigelse mot mine
+   tidligere "må-patch"-anbefalinger på gap 6/7/8 ble flagget; bruker
+   valgte **Alt Z** — ADR-010 (backfill) beholdes, ADR-011/012
+   (deprecation/failure-mode) utsettes.
+
+**Låste beslutninger:**
+- Plan-B på scalp-arkitektur: utsettes til separat **Plan-S** etter D2.
+  Beholder kun trivielle scalp-features (time_to_release_min,
+  surprise_z) i denne planen.
+- Trading-logikk-svar: 12m+36m percentil-vinduer, 2/98 hard +5/95 soft
+  ekstrem-terskler, drop GHS/XOF helt (Cocoa cross =
+  `dxy@0.85 + event_distance@0.15`), Cotton ENSO uendret.
+- Arkitektur Alt 1: YAML-styrt `_horizon`-param via engine-propagering
+  (analog til `_direction`). ADR-009 + ADR-010 leveres i R1.
+- ADR-010 backfill-policy: 2010-cutoff, sekvensiell pacing 1.5s,
+  engangs-skripts i `scripts/backfill/`, lov til å være "shitty" (ikke
+  i produksjons-cron-pipeline).
+- R3 referanse-drivere: `positioning_mm_pct` + `real_yield` +
+  `crop_progress_stage`.
+- R4 batch-rekkefølge: trend → structure → risk → positioning → macro
+  → agri/agronomy → analog/seasonal.
+- TFF-driver-komposisjon: to separate drivere (lev_funds_pct +
+  asset_mgr_pct) sharing privat helper.
+- AAII mean-reversion + hdd_cdd_anomaly sesong-modulering: driver-
+  intern logikk, ingen ny polarity-type.
+
+**Fase-tabell (16-24 sessioner totalt):**
+- R1 (S): audit + ADR-009 + ADR-010 + engine-patch
+- R2 (M): feature-konvensjon + per-horisont test-strategi + sesong-
+  mønster + 2 ende-til-ende-eksempler
+- R3 (M): 3 referanse-drivere refaktorert
+- R4 (L): batch-vis migrering, snapshot grønt
+- D0 (M): smoke-tests (Eskom, B5 Yahoo-curve, ICE TTF kritiske)
+- D1 (L): Tier 1 — Baker Hughes, AGSI, FAS, CFTC TFF + C1, B1, B3
+- D2 (L): Tier 2 — ETF-holdings, NOPA, Drought Monitor, ICE certified,
+  AAII, VIX-term, HDD/CDD→NG, B5 (energi), C2 Eskom, C3 drop-shipping
+- D3 (M): Tier 3 — Cecafé, B5 (metaller/korn), grade-distribusjons-
+  rapport
+
+**Endringer i PLAN.md:**
+- Header status oppdatert: sub-fase 12.6 aktiv + 12.7 planlagt
+- Endringshistorikk: ny entry 2026-04-28 dokumenterer hele plan-
+  beslutningen
+- § 16 Neste steg utvidet med 12.7-pekere
+- Ny § 19 (~250 linjer) "Sub-fase 12.7 — Horisont-refactor + data-
+  utvidelse" med fase-tabell, låste beslutninger, ADR-pekere,
+  per-horisont-mapping, koordinering mot 12.6.
+
+**Endringer i STATE.md (denne fil):**
+- Current state: ny linje for "Sub-fase 12.7 PLANLAGT"
+- Next task utvidet med (a)/(b)-spor for session 119
+- Open questions: ny seksjon for 12.7-koordinering (Alt α/β/γ-valg,
+  R3-bekreftelse, D0 smoke-test-utfall)
+- Session log: denne entry
+
+**Ingen kode endret. Ingen tester kjørt. Kun PLAN.md + STATE.md.**
 
 ### 2026-04-28 — Ad-hoc: CONAB algodao-fix (§ 7b) + café-historikk-backfill-script (DELVIS)
 
