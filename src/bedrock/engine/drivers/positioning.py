@@ -751,6 +751,46 @@ def _load_ice_metric_series(
     return current, history
 
 
+def _load_ice_metric_full_series(
+    store: Any,
+    params: dict,
+    *,
+    n_obs: int,
+) -> pd.Series | None:
+    """Hent ICE-COT-metric-serie med eksplisitt antall obs (inkl. current).
+
+    Parallell til ``_load_metric_full_series`` for CFTC-COT. Returnerer
+    pd.Series sortert chronologisk eller None ved feil. Brukes av R4-
+    modes som trenger full serie (delta-modes må bygge diff-serien)
+    eller utvidet historikk (pct_36m).
+    """
+    contract = params.get("contract")
+    if not contract:
+        _log.warning("cot_ice.no_contract_in_params params=%s", params)
+        return None
+
+    metric = str(params.get("metric", _DEFAULT_METRIC))
+
+    try:
+        df = store.get_cot_ice(contract, last_n=n_obs)
+    except KeyError:
+        _log.debug("cot_ice.data_missing contract=%s", contract)
+        return None
+    except Exception as exc:
+        _log.warning("cot_ice.fetch_failed contract=%s error=%s", contract, exc)
+        return None
+
+    series = _compute_metric(df, metric)
+    if series is None:
+        _log.warning("cot_ice.unknown_metric contract=%s metric=%s", contract, metric)
+        return None
+
+    series = series.dropna()
+    if series.empty:
+        return None
+    return series
+
+
 @register("cot_ice_mm_pct")
 def cot_ice_mm_pct(store: Any, instrument: str, params: dict) -> float:
     """Rank-percentile av MM net positioning fra ICE COT, normalisert til 0..1.
@@ -766,8 +806,18 @@ def cot_ice_mm_pct(store: Any, instrument: str, params: dict) -> float:
             ``"ice gasoil"``, ``"ice ttf gas"``. Kommer fra YAML-wiring,
             ikke fra instrument-config (siden bedrock per i dag har
             ``cot_contract`` knyttet til CFTC).
-        lookback_weeks: rolling-vindu (default 52).
+        lookback_weeks: rolling-vindu (default 52). Når ``mode`` er satt
+            overstyres lookback_weeks av mode-spesifikt vindu (52 for
+            pct_12m/delta_*_z, 156 for pct_36m).
         metric: ``"mm_net"`` (default) eller ``"mm_net_pct"``.
+        mode: feature-velger per ADR-010. ``None``/utelatt (default) =
+            dagens output (bit-identisk pre-R4). ``"pct_12m"`` /
+            ``"pct_36m"`` / ``"delta_5d_z"`` / ``"delta_20d_z"`` /
+            ``"extreme_flag_hard"`` / ``"extreme_flag_soft"`` per
+            docs/driver_horizon_pattern.md § 1.1. Mode-implementasjonen
+            gjenbruker helpers fra positioning_mm_pct (samme modul).
+        _horizon: engine-injisert kontekst-key per ADR-010. Lest men
+            ikke brukt til å endre output i R4 (per § 5.3 R4-kontrakt).
 
     Returnerer:
     - 1.0 ved ekstrem MM long (top-percentile)
@@ -776,6 +826,91 @@ def cot_ice_mm_pct(store: Any, instrument: str, params: dict) -> float:
 
     Defensiv: alle feil → 0.0 + log, ingen exception.
     """
+    # ADR-010: les _horizon for fremtidig bruk. R4-kontrakt: ikke endre
+    # default-output basert på _horizon.
+    _horizon = params.get("_horizon")
+    mode = params.get("mode")
+
+    if mode is None:
+        return _cot_ice_mm_pct_default(store, params)
+
+    # Eksplisitt mode-håndtering (R4-utvidelse).
+    if mode == "pct_12m":
+        series = _load_ice_metric_full_series(store, params, n_obs=_LOOKBACK_PCT_12M + 1)
+        if series is None:
+            return 0.0
+        result = _mode_pct(series, params.get("contract", "ice"), _LOOKBACK_PCT_12M)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "pct_36m":
+        series = _load_ice_metric_full_series(store, params, n_obs=_LOOKBACK_PCT_36M + 1)
+        if series is None:
+            return 0.0
+        result = _mode_pct(series, params.get("contract", "ice"), _LOOKBACK_PCT_36M)
+        if result is None:
+            _log.info(
+                "cot_ice.pct_36m_fallback_to_12m",
+                contract=params.get("contract"),
+                available_obs=len(series),
+                required=_LOOKBACK_PCT_36M + 1,
+            )
+            result = _mode_pct(series, params.get("contract", "ice"), _LOOKBACK_PCT_12M)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_5d_z":
+        series = _load_ice_metric_full_series(
+            store,
+            params,
+            n_obs=_DELTA_5D_REPORTS + _LOOKBACK_DELTA + 1,
+        )
+        if series is None:
+            return 0.0
+        result = _mode_delta_z(
+            series,
+            params.get("contract", "ice"),
+            delta_reports=_DELTA_5D_REPORTS,
+            lookback=_LOOKBACK_DELTA,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_20d_z":
+        series = _load_ice_metric_full_series(
+            store,
+            params,
+            n_obs=_DELTA_20D_REPORTS + _LOOKBACK_DELTA + 1,
+        )
+        if series is None:
+            return 0.0
+        result = _mode_delta_z(
+            series,
+            params.get("contract", "ice"),
+            delta_reports=_DELTA_20D_REPORTS,
+            lookback=_LOOKBACK_DELTA,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        series = _load_ice_metric_full_series(store, params, n_obs=_LOOKBACK_PCT_12M + 1)
+        if series is None:
+            return 0.0
+        pct = _mode_pct(series, params.get("contract", "ice"), _LOOKBACK_PCT_12M)
+        if pct is None:
+            return 0.0
+        return _extreme_flag(pct, hard=(mode == "extreme_flag_hard"))
+
+    # Ukjent mode: log + fall-back til default.
+    _log.warning(
+        "cot_ice.unknown_mode_falling_back_to_default",
+        contract=params.get("contract"),
+        mode=mode,
+    )
+    return _cot_ice_mm_pct_default(store, params)
+
+
+def _cot_ice_mm_pct_default(store: Any, params: dict) -> float:
+    """Pre-R4-default-bane for cot_ice_mm_pct, isolert for å garantere
+    bit-identisk output uavhengig av om mode-dispatcher rammer fall-back-
+    grenen eller ikke."""
     loaded = _load_ice_metric_series(store, params)
     if loaded is None:
         return 0.0
