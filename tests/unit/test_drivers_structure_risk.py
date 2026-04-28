@@ -130,6 +130,17 @@ def test_range_position_handles_store_error() -> None:
     assert score == 0.0
 
 
+def test_range_position_horizon_param_does_not_affect_output() -> None:
+    """R4 ADR-010: ``params["_horizon"]`` leses men endrer ikke output."""
+    fn = get("range_position")
+    closes = [100.0] * 19 + [120.0]
+    store = _DummyStore(_build_ohlc(closes, spread=0.0))
+    no_horizon = fn(store, "X", {"window": 20, "mode": "continuation"})
+    swing = fn(store, "X", {"window": 20, "mode": "continuation", "_horizon": "SWING"})
+    makro = fn(store, "X", {"window": 20, "mode": "continuation", "_horizon": "MAKRO"})
+    assert no_horizon == swing == makro
+
+
 # ---------------------------------------------------------------------------
 # vol_regime
 # ---------------------------------------------------------------------------

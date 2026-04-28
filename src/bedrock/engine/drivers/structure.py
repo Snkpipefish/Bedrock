@@ -18,6 +18,15 @@ Erstatter ``sma200_align``-placeholder i Gold structure-familien
     bullish (kjøpsignal nær bunn av range). Default er
     `mode=continuation` — høy score er bull.
 
+R4 (sub-fase 12.7): driveren leser ``params["_horizon"]`` per ADR-010
+(lest, ikke brukt). Driveren er **rank-basert per definisjon** (close
+posisjon i N-dagers range) og ``mode``-namespacet er allerede tatt
+av continuation/mean_revert-tolkningen — den får derfor IKKE pct_*/
+delta_*/extreme_flag_*-modes (samme presedens som
+``crop_progress_stage`` i R3, commit ``d543161``). Eventuelt rolling-
+percentile på range-position-serien er D-fase-territorium hvis det
+skulle være ønsket.
+
 Defensive: kort historikk eller flatt range (high == low) gir 0.0.
 """
 
@@ -48,6 +57,11 @@ def range_position(store: Any, instrument: str, params: dict) -> float:
     Returns:
         Score 0..1. 0.0 ved kort historikk eller flatt range.
     """
+    # ADR-010: les _horizon for fremtidig bruk. R4-kontrakt: ikke endre
+    # output basert på _horizon. Driveren er rank-basert; ingen pct_*/
+    # delta_*-modes er introdusert (mode-namespace tatt av continuation/
+    # mean_revert).
+    _horizon = params.get("_horizon")
     window = int(params.get("window", _DEFAULT_WINDOW))
     tf = params.get("tf", "D1")
     mode = str(params.get("mode", "continuation")).lower()
