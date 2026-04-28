@@ -123,7 +123,7 @@
 - **AsOfDateStore (session 116):** utvidet med 9 nye proxy-getters (econ_events/cot_ice/cot_euronext/eia_inventory/comex_inventory/seismic_events/conab_estimates/unica_reports/shipping_indices) + tilsvarende `has_*`-helpers. Kritisk fix — uten denne falt orchestrator-replay tilbake til defensive 0.0 for alle nye Phase A-C-drivere fordi underlying-getterne kastet `AttributeError`. 24 nye tester dekker hver getter + region/from_ts-filter + tom-clip-fallback.
 - **Phase D-output (session 116):** `data/_meta/backtest_phase_d_baseline.json` (68 rader, session 99-reprise), `data/_meta/backtest_phase_d_orchestrator.json` (48 rader, 86.4 min sweep), `data/_meta/backtest_phase_d_spike_{cot_ice_mm_pct,conab_yoy,unica_change}.json` (3 spikes). Rapport: `docs/backtest_phase_d_2026-04.md` med diff-tabeller + flagg-terskel ≥3pp Δhit_rate eller ≥2 grade-flips.
 - **Sub-fase 12.6-fundament (session 117):** 3 nye SQLite-tabeller (`driver_observations` long-format, `signal_setups`, `feature_snapshots`) + 5 nye scripts (`harvest_driver_observations.py`, `harvest_feature_snapshots.py`, `run_full_history_harvest.sh`, `analyze_driver_performance.py`, `analyze_cross_correlations.py`). Detached harvest startet 2026-04-27 21:58 — features ETA ~10 min, driver_observations ETA ~24-35 timer.
-- **Next task:** **Session 120 = R2** (M-fase per § 19.4). Feature-konvensjon (`pct_12m`/`pct_36m`/`delta_5d_z`/`delta_20d_z`/`extreme_flag`/`approaching_extreme`/`surprise_z`/`time_to_release_min`/`post_release_drift_3d`/`extreme_contrarian_score`) + per-horisont test-strategi (snapshot, monotonisitet, regime-shift) + sesong-driver-mønster + 2 ende-til-ende-eksempler (Brent SWING onsdag 10:30 ET post-EIA + Corn yield-familie i juli). Leveranse: `docs/driver_horizon_pattern.md`. Engine-patchen fra R1 er allerede på plass — R2 er pure dokumentasjon + design-låsing før R3 (refactor 3 referanse-drivere). Sub-fase 12.6 forblir PAUSET (detached harvest fortsetter); manuell ingest av COMEX/UNICA/Café-historikk fortsetter parallelt.
+- **Next task:** **Session 121 = R3** (M-fase per § 19.4). Refactor 3 referanse-drivere — `positioning_mm_pct`, `real_yield`, `crop_progress_stage` — slik at hver produserer flere horizon-features internt valgt via `params["_horizon"]` per ADR-010. Snapshot-tester må gi bit-identisk score for default-horizon (R3-kontrakt: YAML uendret; default-feature uendret). Tester per § 2 i `docs/driver_horizon_pattern.md`: snapshot grønn (alltid) + monotonisitet (for `pct_*`) + regime-shift (for `delta_*`). Leveranse: 3 refaktorerte drivere + nye logiske/monotonisitets-tester + grønn snapshot mot R1-baseline. Sub-fase 12.6 forblir PAUSET; detached harvest fortsetter parallelt.
 - **Git-modus:** Nivå 1 aktivt under sub-fase 12.5+ docs/cleanup-pass. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt valgfri.
 
 ## Data-gjeld (sub-fase 12.6)
@@ -266,6 +266,56 @@ URL-mønstre + CSV-format-krav: `docs/manual_download_shopping_list.md`.
 ---
 
 ## Session log (newest first)
+
+### 2026-04-28 — Session 120: sub-fase 12.7 R2 ferdig (driver-horisont-konvensjon låst)
+
+**Scope:** R2 per PLAN § 19.4 — M-fase, ren dokumentasjon. Konvensjons-doc
+for R3+R4+D driver-forfattere. Ingen kode-endringer; ingen score-endringer.
+
+**Leveranser:**
+- `docs/driver_horizon_pattern.md` (ny, 673 linjer). 5 seksjoner:
+  - § 1 — feature-typer: tids-serie (`pct_12m`, `pct_36m`, `delta_5d_z`,
+    `delta_20d_z`, `extreme_flag_hard`, `extreme_flag_soft`) + event-typer
+    (`surprise_z`, `time_to_release_min`, `post_release_drift_3d`)
+    eksplisitt merket "Plan-S — ikke i 12.7 D-fasen". § 1.3 dokumenterer
+    `_horizon`/`mode`-fallback-konvensjonen og bit-identisk-default-
+    garantien.
+  - § 2 — per-horisont test-strategi: Type A snapshot, Type B
+    monotonisitet, Type C regime-shift. Hver med eksempel-input +
+    assertion-mønster.
+  - § 3 — driver-intern logikk uten ny polarity. § 3.1 sesong-modulert
+    (`hdd_cdd_anomaly` for NaturalGas, presedens `seasonal_stage` med
+    `as_of`-override). § 3.2 mean-reversion (AAII
+    `extreme_contrarian_score` som driver-intern output-konvensjon, ikke
+    ny standard feature-type).
+  - § 4 — ende-til-ende-eksempler. § 4.1 Brent SWING onsdag 10:30 ET
+    post-EIA-release (positioning + macro-familier konkret beregnet).
+    § 4.2 Corn yield-familie i juli (additive_sum med caps konkret
+    beregnet, weather_stress + crop_progress_stage).
+  - § 5 — driver-forfatter-sjekkliste med tre snapshot-disipliner per
+    fase-type (R3 bit-identisk kontraktuelt; R4 PRE-refactor-snapshot
+    før YAML-endring; D nytt anker etter hver leveranse).
+
+**Verifikasjon (lås-respekt):**
+- PLAN § 19.3 trading-logikk: 12m + 36m vinduer dokumentert (§ 1.1).
+  2/98 hard + 5/95 soft tersklene dokumentert (§ 1.1). Cocoa GHS/XOF
+  + Cotton ENSO ikke berørt (out-of-scope for konvensjons-doc).
+- Driver-kontrakten `(store, instrument, params) -> float` bevart.
+  Alle eksempler følger ADR-010 Alt 1 (engine-injisert `_horizon`-key).
+- Polarity-systemet uendret. Sesong + AAII håndteres driver-internt
+  per § 19.3, ingen ny polarity-type.
+
+**Audit-flagg fra brukerens R2-prep-review (alle adressert):**
+1. Event-features Plan-S-prepared: § 1.2 eksplisitt merket "ikke i 12.7
+   D-fasen", med begrunnelse for hvorfor de listes nå (vokabular klar
+   før Plan-S).
+2. `extreme_contrarian_score`-plassering: § 3.2, ikke § 1.
+3. Snapshot-disipliner R3/R4/D: § 5.3-tabell + § 5.4 "rødt lys"-
+   formuleringer for hver fase-type.
+
+**Commits:** `74bdb51` (R2 doc).
+
+**Tag:** ingen (R2/R3 har ingen tag per § 19.4 — mellom-fase).
 
 ### 2026-04-28 — Session 119: sub-fase 12.7 R1 ferdig (Spor R åpning, horisont-pattern + backfill-policy låst)
 
