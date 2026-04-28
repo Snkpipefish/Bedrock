@@ -74,6 +74,16 @@ _DELTA_5D_DAYS = 5
 _DELTA_20D_DAYS = 20
 _LOOKBACK_DELTA_DAILY = 252  # historikk-obs av diff-serien
 
+# Ukentlige FRED/EIA-serier: 52 uker ≈ 12m, 156 uker ≈ 36m.
+# delta_5d_z på ukentlig data tolkes som "1-rapport-delta" (~7d natural,
+# samme presedens som positioning's COT-delta — se _mode_delta_z i
+# positioning.py). delta_20d_z = "4-rapport-delta" (~28d natural).
+_LOOKBACK_PCT_12M_WEEKLY = 52
+_LOOKBACK_PCT_36M_WEEKLY = 156
+_DELTA_5D_WEEKS = 1
+_DELTA_20D_WEEKS = 4
+_LOOKBACK_DELTA_WEEKLY = 52  # historikk-obs av diff-serien
+
 # Tersklene for extreme_flag-modes (PLAN § 19.3 låst, sammenfaller med
 # konstantene i positioning.py — lokal duplisering for å unngå
 # kryss-modul-import for to-linjer-helpers).
@@ -930,6 +940,57 @@ _DEFAULT_EIA_Z_THRESHOLDS: tuple[tuple[float, float], ...] = (
 )
 
 
+def _load_eia_inventory_series(
+    store: Any, instrument: str, series_id: str, *, n_obs: int
+) -> pd.Series | None:
+    """Hent EIA-inventory-serie (rå-verdier) som pd.Series.
+
+    Felles loader for default-bane og R4-modes. Returnerer
+    chronologisk sortert serie (siste obs sist) eller None ved feil.
+    """
+    try:
+        df = store.get_eia_inventory(series_id, last_n=n_obs)
+    except KeyError:
+        _log.debug(
+            "eia_stock_change.data_missing",
+            instrument=instrument,
+            series_id=series_id,
+        )
+        return None
+    except Exception as exc:
+        _log.warning(
+            "eia_stock_change.fetch_failed",
+            instrument=instrument,
+            error=str(exc),
+        )
+        return None
+
+    values = pd.Series(pd.to_numeric(df["value"], errors="coerce")).dropna()
+    if values.empty:
+        return None
+    return values
+
+
+def _load_eia_pct_change_series(
+    store: Any, instrument: str, series_id: str, *, n_obs: int
+) -> pd.Series | None:
+    """Hent WoW%-serien for EIA-inventory.
+
+    Bygges som ``values.pct_change().dropna() * 100``. R4-modes kan
+    deretter beregne pct-percentile / delta-z på pct-serien. Default-
+    bane bruker også denne serien direkte (siste obs = current WoW%).
+
+    Returnerer pd.Series med pct-change-verdier eller None ved feil/tom.
+    """
+    values = _load_eia_inventory_series(store, instrument, series_id, n_obs=n_obs + 1)
+    if values is None:
+        return None
+    wow_pct = values.pct_change().dropna() * 100.0
+    if wow_pct.empty:
+        return None
+    return wow_pct
+
+
 @register("eia_stock_change")
 def eia_stock_change(store: Any, instrument: str, params: dict) -> float:
     """Z-score av week-over-week % endring i EIA-inventories, mappet til 0..1.
@@ -941,14 +1002,37 @@ def eia_stock_change(store: Any, instrument: str, params: dict) -> float:
     Driver inverterer derfor z-score-fortegnet før step-mapping. Lookback
     52 uker = 1 år rolling baseline.
 
+    R4 (sub-fase 12.7): horisont-bevisst via ``params["mode"]`` per
+    ADR-010. Default-output (mode=None) er bit-identisk pre-R4 — kontraktuelt
+    krav per § 5.3 (R4 = disiplin B, YAML uendret, score uendret).
+
+    Mode-tabell (modes opererer på underliggende WoW%-serien — samme
+    rådata default bruker):
+    - ``None`` (default): z-score-trapp av siste WoW% vs 52-uke historikk,
+      med invert (høy build = bearish per default). Bit-identisk pre-R4.
+    - ``"pct_12m"``: rank-percentile av siste WoW% over 52-uke vindu,
+      bull_when-aware via invert-flagget (invert=True ⇒ helper "low"
+      siden lav WoW% = stock-draw = bullish).
+    - ``"pct_36m"``: 156-uke vindu, fall-back til pct_12m + log.
+    - ``"delta_5d_z"``: z-score av 1-rapport-delta i WoW%-serien
+      (~7d natural). NB: dette er "endring i WoW%-distribusjon",
+      ikke "endring i EIA-stock-nivå" — parallel aggregering, ikke
+      "delta av default-output". Bull_when-aware.
+    - ``"delta_20d_z"``: 4-rapport-delta (~28d natural).
+    - ``"extreme_flag_hard"``: 1.0 ved WoW% pct ≥ 0.98 eller ≤ 0.02.
+    - ``"extreme_flag_soft"``: 1.0 ved WoW% pct ≥ 0.95 eller ≤ 0.05.
+
     Params:
         series_id (REQUIRED): EIA-canonical (f.eks. ``"WCESTUS1"`` for crude,
             ``"WGTSTUS1"`` for gasoline, ``"NW2_EPG0_SWO_R48_BCF"`` for
             nat-gas). Kommer fra YAML-wiring.
-        lookback_weeks: rolling-vindu (default 52).
+        lookback_weeks: rolling-vindu for default (default 52). Modes
+            overstyrer dette med _LOOKBACK_PCT_*_WEEKLY-konstanter.
         invert: ``True`` (default) — høy stock-build = bearish. Sett
             ``False`` hvis brukt for kontrarian-tolkning.
-        z_thresholds: optional override av step-mapping.
+        z_thresholds: optional override av default-step-mapping.
+        mode: R4 feature-velger per ADR-010 (se mode-tabell over).
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt i R4.
 
     Returnerer:
     - 1.0 ved sterk uventet stock-draw (z ≥ +2 etter invertering)
@@ -957,34 +1041,127 @@ def eia_stock_change(store: Any, instrument: str, params: dict) -> float:
 
     Defensiv: alle feil → 0.0 + log.
     """
-    from bedrock.engine.drivers._stats import MIN_OBS_FOR_PCTILE, rolling_z
-
+    # ADR-010: les _horizon for fremtidig bruk.
+    _horizon = params.get("_horizon")
     series_id = params.get("series_id")
     if not series_id:
         _log.warning("eia_stock_change.no_series_id", instrument=instrument)
         return 0.0
 
-    lookback = int(params.get("lookback_weeks", 52))
     invert = bool(params.get("invert", True))
+    mode = params.get("mode")
 
-    try:
-        df = store.get_eia_inventory(series_id, last_n=lookback + 2)
-    except KeyError:
-        _log.debug(
-            "eia_stock_change.data_missing",
-            instrument=instrument,
-            series_id=series_id,
+    if mode is None:
+        return _eia_stock_change_default(store, instrument, series_id, invert, params)
+
+    # Mode-banen opererer på WoW%-serien.
+    # invert=True: høy WoW% (build) = bearish ⇒ helper bull_when="low"
+    # invert=False: høy WoW% = bullish ⇒ helper bull_when="high"
+    helper_bull_when = "low" if invert else "high"
+
+    if mode == "pct_12m":
+        wow_pct = _load_eia_pct_change_series(
+            store, instrument, str(series_id), n_obs=_LOOKBACK_PCT_12M_WEEKLY + 1
         )
-        return 0.0
-    except Exception as exc:
-        _log.warning(
-            "eia_stock_change.fetch_failed",
-            instrument=instrument,
-            error=str(exc),
+        if wow_pct is None:
+            return 0.0
+        result = _fundamentals_pct_score(
+            wow_pct, helper_bull_when, _LOOKBACK_PCT_12M_WEEKLY, instrument
         )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "pct_36m":
+        wow_pct = _load_eia_pct_change_series(
+            store, instrument, str(series_id), n_obs=_LOOKBACK_PCT_36M_WEEKLY + 1
+        )
+        if wow_pct is None:
+            return 0.0
+        result = _fundamentals_pct_score(
+            wow_pct, helper_bull_when, _LOOKBACK_PCT_36M_WEEKLY, instrument
+        )
+        if result is None:
+            _log.info(
+                "eia_stock_change.pct_36m_fallback_to_12m",
+                instrument=instrument,
+                available_obs=len(wow_pct),
+                required=_LOOKBACK_PCT_36M_WEEKLY + 1,
+            )
+            result = _fundamentals_pct_score(
+                wow_pct, helper_bull_when, _LOOKBACK_PCT_12M_WEEKLY, instrument
+            )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_5d_z":
+        wow_pct = _load_eia_pct_change_series(
+            store,
+            instrument,
+            str(series_id),
+            n_obs=_DELTA_5D_WEEKS + _LOOKBACK_DELTA_WEEKLY + 1,
+        )
+        if wow_pct is None:
+            return 0.0
+        result = _fundamentals_delta_score(
+            wow_pct,
+            helper_bull_when,
+            delta_days=_DELTA_5D_WEEKS,
+            lookback=_LOOKBACK_DELTA_WEEKLY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_20d_z":
+        wow_pct = _load_eia_pct_change_series(
+            store,
+            instrument,
+            str(series_id),
+            n_obs=_DELTA_20D_WEEKS + _LOOKBACK_DELTA_WEEKLY + 1,
+        )
+        if wow_pct is None:
+            return 0.0
+        result = _fundamentals_delta_score(
+            wow_pct,
+            helper_bull_when,
+            delta_days=_DELTA_20D_WEEKS,
+            lookback=_LOOKBACK_DELTA_WEEKLY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        wow_pct = _load_eia_pct_change_series(
+            store, instrument, str(series_id), n_obs=_LOOKBACK_PCT_12M_WEEKLY + 1
+        )
+        if wow_pct is None:
+            return 0.0
+        result = _fundamentals_extreme_flag(
+            wow_pct,
+            hard=(mode == "extreme_flag_hard"),
+            lookback=_LOOKBACK_PCT_12M_WEEKLY,
+            instrument=instrument,
+        )
+        return result if result is not None else 0.0
+
+    # Ukjent mode: log + fall-back til default.
+    _log.warning(
+        "eia_stock_change.unknown_mode_falling_back_to_default",
+        instrument=instrument,
+        mode=mode,
+    )
+    return _eia_stock_change_default(store, instrument, series_id, invert, params)
+
+
+def _eia_stock_change_default(
+    store: Any, instrument: str, series_id: str, invert: bool, params: dict
+) -> float:
+    """Pre-R4-default-bane: z-score-trapp av siste WoW% vs 52-uke historikk."""
+    from bedrock.engine.drivers._stats import MIN_OBS_FOR_PCTILE, rolling_z
+
+    lookback = int(params.get("lookback_weeks", 52))
+
+    values = _load_eia_inventory_series(store, instrument, str(series_id), n_obs=lookback + 2)
+    if values is None:
         return 0.0
 
-    values = pd.Series(pd.to_numeric(df["value"], errors="coerce")).dropna()
     if len(values) < MIN_OBS_FOR_PCTILE + 2:
         _log.debug(
             "eia_stock_change.short_history",
@@ -994,7 +1171,6 @@ def eia_stock_change(store: Any, instrument: str, params: dict) -> float:
         )
         return 0.0
 
-    # WoW % endring (første rad blir NaN → drop)
     wow_pct = values.pct_change().dropna() * 100.0
     if len(wow_pct) < MIN_OBS_FOR_PCTILE + 1:
         return 0.0
@@ -1051,6 +1227,12 @@ def comex_stress(store: Any, instrument: str, params: dict) -> float:
     (få oz klare til delivery vs futures-shorts → squeeze-risk).
     Low stress = supply rikelig = bearish.
 
+    **R4 (sub-fase 12.7):** ``params["_horizon"]`` LESES per ADR-010 men
+    brukes ikke til å endre output. Driveren er domene-spesifikk
+    (warehouse coverage + WoW-bonus); rolling-percentile på "stress-score"
+    ville ødelegge den fysiske tolkningen. Per crop_progress-presedens:
+    kun `_horizon`-lesing, ingen pct_*/delta_*-modes.
+
     Params:
         metal (REQUIRED): "gold" | "silver" | "copper" — bedrock-canonical.
             Kommer fra YAML-wiring.
@@ -1060,10 +1242,16 @@ def comex_stress(store: Any, instrument: str, params: dict) -> float:
             for kobber siden CME har fjernet reg/elig-skillet og
             coverage-baseberegningen ikke gir mening. ``"trend_only"``
             ignorerer base, bruker bare WoW-bonusene.
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt.
 
     Returnerer:
         float i [0, 1]. 0.5 ved tomt history. Defensive 0.0 ved feil.
     """
+    # ADR-010: les _horizon for å oppfylle horisont-bevisst-konvensjonen.
+    # Lest men ikke brukt — comex_stress er domene-spesifikk (warehouse
+    # coverage). Per § 5.3 (R4-kontrakt for rank-baserte/domene-spesifikke
+    # drivere): output uendret med eller uten _horizon.
+    _horizon = params.get("_horizon")
     metal = params.get("metal")
     if not metal:
         _log.warning("comex_stress.no_metal_param", instrument=instrument)
@@ -1182,6 +1370,11 @@ def mining_disruption(store: Any, instrument: str, params: dict) -> float:
     Tolkning: høyere score = supply-disruption-risk = bullish for prising
     av det metallet (gruver kan stenge i flere uker etter alvorlige skjelv).
 
+    **R4 (sub-fase 12.7):** ``params["_horizon"]`` LESES per ADR-010 men
+    brukes ikke til å endre output. Driveren er event-basert (seismic +
+    region-vekter), ikke en rolling tids-serie. Per event_distance-
+    presedens: kun `_horizon`-lesing, ingen pct_*/delta_*-modes.
+
     Params:
         metal (REQUIRED): "gold" | "silver" | "copper" | "platinum".
             Bestemmer region-vektene.
@@ -1189,9 +1382,13 @@ def mining_disruption(store: Any, instrument: str, params: dict) -> float:
         min_magnitude: filtrer events under denne (default 4.5 — matcher
             USGS-feed-grense).
         regions: optional override av default region-vekter for metallet.
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt.
 
     Returnerer 0..1. Defensive 0.0 ved manglende metal/data/exception.
     """
+    # ADR-010: les _horizon. Event-basert driver — output uendret med
+    # eller uten _horizon (event-distance-presedens for R4 disiplin B).
+    _horizon = params.get("_horizon")
     metal = params.get("metal")
     if not metal:
         _log.warning("mining_disruption.no_metal_param", instrument=instrument)
