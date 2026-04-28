@@ -624,7 +624,7 @@ disipliner per fase-type — les § 5.3 før du starter.**
 | Fase | Krav | Hva som er normalt | Hva som er rødt lys |
 |---|---|---|---|
 | **R3** | Bit-identisk score garantert kontraktuelt | Driver-refactor til å produsere flere features internt; YAML uendret; default-feature uendret; snapshot-diff = 0 | YAML-endring foreslås for å holde score uendret ⇒ stopp, du er ute av R3-scope |
-| **R4** | Bit-identisk per batch | YAML kan endres for å bytte primary-feature; **PRE-refactor snapshot tas FØR YAML-endring**; POST-batch snapshot-diff = 0 mot oppdatert baseline; én batch per familie-gruppe per commit | Score endres mellom commits innen samme batch ⇒ sannsynligvis YAML-feil eller scope-glidning |
+| **R4** | Bit-identisk score garantert kontraktuelt (samme som R3, batch-vis utvidelse) | Mode-infrastruktur (`_horizon`-lesing per ADR-010 + valgfri mode-dispatcher) legges til alle gjenstående drivere; YAML uendret; default-output uendret; snapshot-diff = 0 per batch. Mode-aktivering på eksisterende drivere er etter R4 (egen senere syklus eller D-fase). | YAML-endring foreslås innen R4 ⇒ stopp, du er ute av R4-scope (R3-rødt-lys-kriteriet gjelder fortsatt) |
 | **D** | Score endres forventet (nye drivere ⇒ ny score) | Snapshot-baseline regenereres som **nytt anker etter hver D-leveranse** (D0/D1/D2/D3 hver for seg). Diff dokumenteres per inst × horisont × retning i commit | Ingen score-endring etter D-leveranse ⇒ sannsynligvis driver returnerer 0.0 (defensive) eller er feilkonfigurert i YAML |
 
 **R1-presedens (commit `6c81a5b`):** baseline kan drifte fra DB-aktivitet
@@ -634,9 +634,9 @@ state. `tests/snapshot/README.md` (R1-leveranse) dokumenterer detaljer.
 
 ### 5.4 Når i tvil
 
-- Refactor som krever YAML-endring i R3 ⇒ **stopp, flagg, vent på
+- Refactor som krever YAML-endring i R3 eller R4 ⇒ **stopp, flagg, vent på
   beslutning**. Per CLAUDE.md "bestem og kjør" gjelder ikke når en
-  fase-kontrakt risikeres.
+  fase-kontrakt risikeres. YAML-aktivering av modes hører til etter R4.
 - Score-uendret-garantien brytes utilsiktet ⇒ **stopp, ikke commit**.
   Diagnostisér om det er DB-drift (ufarlig) eller faktisk algoritme-
   endring (kontrakts-brudd).
