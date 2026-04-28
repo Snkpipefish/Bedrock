@@ -123,7 +123,7 @@
 - **AsOfDateStore (session 116):** utvidet med 9 nye proxy-getters (econ_events/cot_ice/cot_euronext/eia_inventory/comex_inventory/seismic_events/conab_estimates/unica_reports/shipping_indices) + tilsvarende `has_*`-helpers. Kritisk fix — uten denne falt orchestrator-replay tilbake til defensive 0.0 for alle nye Phase A-C-drivere fordi underlying-getterne kastet `AttributeError`. 24 nye tester dekker hver getter + region/from_ts-filter + tom-clip-fallback.
 - **Phase D-output (session 116):** `data/_meta/backtest_phase_d_baseline.json` (68 rader, session 99-reprise), `data/_meta/backtest_phase_d_orchestrator.json` (48 rader, 86.4 min sweep), `data/_meta/backtest_phase_d_spike_{cot_ice_mm_pct,conab_yoy,unica_change}.json` (3 spikes). Rapport: `docs/backtest_phase_d_2026-04.md` med diff-tabeller + flagg-terskel ≥3pp Δhit_rate eller ≥2 grade-flips.
 - **Sub-fase 12.6-fundament (session 117):** 3 nye SQLite-tabeller (`driver_observations` long-format, `signal_setups`, `feature_snapshots`) + 5 nye scripts (`harvest_driver_observations.py`, `harvest_feature_snapshots.py`, `run_full_history_harvest.sh`, `analyze_driver_performance.py`, `analyze_cross_correlations.py`). Detached harvest startet 2026-04-27 21:58 — features ETA ~10 min, driver_observations ETA ~24-35 timer.
-- **Next task:** **Session 121 = R3** (M-fase per § 19.4). Refactor 3 referanse-drivere — `positioning_mm_pct`, `real_yield`, `crop_progress_stage` — slik at hver produserer flere horizon-features internt valgt via `params["_horizon"]` per ADR-010. Snapshot-tester må gi bit-identisk score for default-horizon (R3-kontrakt: YAML uendret; default-feature uendret). Tester per § 2 i `docs/driver_horizon_pattern.md`: snapshot grønn (alltid) + monotonisitet (for `pct_*`) + regime-shift (for `delta_*`). Leveranse: 3 refaktorerte drivere + nye logiske/monotonisitets-tester + grønn snapshot mot R1-baseline. Sub-fase 12.6 forblir PAUSET; detached harvest fortsetter parallelt.
+- **Next task:** **Session 122 = R4** (L-fase per § 19.4). Batch-vis migrering av alle drivere i 7 commits per familie-gruppe (rekkefølge per § 19.3: trend → structure → risk → positioning → macro → agri/agronomy → analog/seasonal). Hver batch må holde snapshot-tester grønne. Score-uendret-garanti låst på 22 inst × 3 horisonter × 2 retninger. R4-kontrakt per `docs/driver_horizon_pattern.md` § 5.3: YAML kan endres for å bytte primary-feature; PRE-refactor snapshot tas FØR YAML-endring; POST-batch diff = 0 mot oppdatert baseline. Sub-fase 12.6 forblir PAUSET; detached harvest fortsetter parallelt.
 - **Git-modus:** Nivå 1 aktivt under sub-fase 12.5+ docs/cleanup-pass. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt valgfri.
 
 ## Data-gjeld (sub-fase 12.6)
@@ -266,6 +266,102 @@ URL-mønstre + CSV-format-krav: `docs/manual_download_shopping_list.md`.
 ---
 
 ## Session log (newest first)
+
+### 2026-04-28 — Session 121: sub-fase 12.7 R3 ferdig (3 referanse-drivere horisont-bevisste)
+
+**Scope:** R3 per PLAN § 19.4 — M-fase, refactor 3 referanse-drivere
+til horisont-bevisst pattern per ADR-010 + driver_horizon_pattern.md.
+Score-uendret-garanti kontraktuelt: YAML uendret, default-feature
+uendret, snapshot-diff = 0.
+
+**Leveranser:**
+- `src/bedrock/engine/drivers/positioning.py` — `positioning_mm_pct`
+  utvidet med 6 modes via `params["mode"]`: pct_12m, pct_36m,
+  delta_5d_z, delta_20d_z, extreme_flag_hard, extreme_flag_soft.
+  pct_36m fall-back til pct_12m ved <156 ukentlig-obs. delta_*_z
+  på ukentlig COT tolket som N-rapport-delta (~7d/28d natural,
+  logget per call). Helpers `_z_to_score_positive`, `_extreme_flag`,
+  `_load_metric_full_series`, `_mode_pct`, `_mode_delta_z` lagt til.
+  Eksisterende `_load_metric_series` urørt — `cot_z_score`,
+  `cot_ice_mm_pct`, `cot_euronext_mm_pct` ikke berørt.
+- `src/bedrock/engine/drivers/macro.py` — `real_yield` utvidet med
+  samme 6 modes. bull_when respekteres på pct_*/delta_*-modes
+  (low ⇒ inverter), bull_when-agnostisk på extreme_flag_*. pct_36m
+  fall-back til pct_12m ved <756 trading-days. delta_*_z på daglig
+  FRED tolket som N-trading-day-delta (5d/20d natural, logget).
+  Helpers `_z_to_score_with_bull_when`, `_extreme_flag`,
+  `_real_yield_default_score`, `_compute_real_yield_series`,
+  `_real_yield_pct_score`, `_real_yield_delta_score` lagt til.
+- `src/bedrock/engine/drivers/agronomy.py` — `crop_progress_stage`
+  minimal endring per audit-flagg fra R2: leser `params["_horizon"]`
+  for ADR-010-konvensjon men endrer ikke output. Driveren er rank-
+  basert mot 10-års-historikk allerede; pct_*/delta_*-modes ikke
+  pålagt. Docstring oppdatert med eksplisitt note om at driverens
+  agronomi-`mode` (low_is_bull/high_is_bull) IKKE er R3-feature-modes.
+- `tests/unit/test_drivers_positioning_horizon_modes.py` (10 nye)
+  — Type A (default = pre-R3, _horizon endrer ikke output, ukjent
+  mode fall-backer), Type B (pct_12m monotonisk på syntetisk
+  strigende serie), Type C (delta_5d_z reagerer på 25σ-hopp),
+  pct_36m fall-back, extreme_flag-tersklene 2/98 og 5/95.
+- `tests/unit/test_drivers_macro_horizon_modes.py` (10 nye) —
+  Type A + B + C analoge for real_yield, pluss bull_when-inversjons-
+  relasjons-tester (low + high = 1.0 for både pct_12m og delta_5d_z),
+  pct_36m fall-back, extreme_flag bull_when-agnostisk.
+- `tests/unit/test_drivers_agronomy.py` (1 ny) —
+  `_horizon`-param endrer ikke output for crop_progress_stage.
+
+**Snapshot-arbeidsflyt (per R1-presedens):**
+- 9305704 — refresh baseline før R3 refactor (291/582 linjer DB-drift
+  siden R1).
+- c95d8fc — positioning_mm_pct: diff = 0 verifisert kl 16:24.
+- dc0a98c — real_yield: diff = 0 verifisert kl 16:37 mot baseline-
+  9305704 (USDJPY|SWING|sell macro-familien 0.425 i begge expected
+  og actual). DB-drift på trend/structure/risk-familier oppstod kl
+  16:54 — orthogonal til real_yield-refactor.
+- 93e75ae — refresh baseline mid-R3 (DB-drift håndtering, 247/494
+  linjer på orthogonal familier).
+- d543161 — crop_progress_stage + 12-linjers baseline-refresh
+  (FRED-data oppdatert mid-session, macro-familie-affekt ⇠
+  orthogonal til crop_progress_stage som er agri-driver).
+
+**Verifikasjon:**
+- Full pytest-suite: **2067/2067 grønt** (var 2046 før R3 + 21 nye
+  = 2067).
+- Pyright src/: **0 errors, 0 warnings, 0 informations**.
+- Hver refactor verifisert bit-identisk i default-mode ved diff = 0
+  i samme session som koden ble endret (R1-workflow per
+  `tests/snapshot/README.md`).
+
+**Audit-flagg fra brukerens R3-prep-review (alle adressert):**
+1. pct_36m fall-back til pct_12m: implementert + logget på info-nivå
+   for begge drivere (ikke 0.0, ikke krasj per § 1.1).
+2. delta_5d_z frekvens-translasjon: log.debug kalt per call med
+   eksplisitt natural_days-verdi for å gjøre frekvens-mapping
+   kjøretid-synlig.
+3. bull_when-konsistens på alle real_yield-modes: pct_12m/pct_36m
+   bruker `1 − rank/100` for low, `rank/100` for high.
+   delta_5d_z/delta_20d_z bruker `_z_to_score_with_bull_when` som
+   inverterer z først for low. extreme_flag_* er bull_when-agnostisk
+   (ekstrem er symmetrisk).
+
+**Funn underveis:**
+- DB-drift skjedde to ganger mid-session (~17 og ~10 min mellom
+  refactors) — håndtert per R1-presedens med eksplisitte refresh-
+  commits og dokumentasjon i hver refactor-commit-melding om hva
+  diff-en var i den øyeblikket refactoren ble verifisert.
+- pct_36m fall-back trigget IKKE på faktisk produksjons-data så
+  langt jeg testet; alle 22 instrumenter har enten <156 obs (Brent/
+  Copper med CFTC-data fra 2022 ⇒ fall-back ville trigge hvis
+  pct_36m-mode noensinne ble brukt på dem) eller utilstrekkelig
+  COT-historikk for pct_36m. Fall-back-banen er kun verifisert via
+  unit-tester — vil bli faktisk eksponert når R4 begynner å mappe
+  YAMLs til pct_36m-mode for instrumenter med rik historikk.
+- Ingen YAML-endringer i R3 (per kontrakt). R4 vil starte YAML-
+  migreringer batch-vis per familie-gruppe.
+
+**Commits:** `9305704`, `c95d8fc`, `dc0a98c`, `93e75ae`, `d543161`.
+
+**Tag:** ingen (R2/R3 har ingen tag per § 19.4 — mellom-fase).
 
 ### 2026-04-28 — Session 120: sub-fase 12.7 R2 ferdig (driver-horisont-konvensjon låst)
 
