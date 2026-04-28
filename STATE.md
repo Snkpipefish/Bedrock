@@ -244,6 +244,59 @@ URL-mønstre + CSV-format-krav: `docs/manual_download_shopping_list.md`.
 
 ## Session log (newest first)
 
+### 2026-04-28 — Ad-hoc: notify-send-varsling + bdi→shipping timer-cleanup (LUKKET)
+
+**Scope:** Bruker observerte at det er mange systemd-timere på bedrock-
+prosjektet og spurte om en måte å fange feil + verifisere downloads ved
+session-start, uten å sjekke kartrom-UI. Funn: `bedrock-fetch-bdi.service`
+hadde failet to dager på rad fordi fetcher 'bdi' ble omdøpt til 'shipping'
+i session 113, men service-fila ble aldri regenerert (session 113 noterte
+det som åpen follow-up). Monitor-rapport for i dag viste `overall_ok=false`,
+men ingen push-varsling fantes.
+
+**Beslutninger tatt selv:**
+- User-scope notify@-template istedenfor system-scope: notify-send krever
+  DBus-session, system-services kan ikke nå brukerens DBus uten sudo-
+  bryllup. loginctl linger=yes (alt på) sørger for at user-systemd kjører
+  ved boot uavhengig av login.
+- Monitor-alert som separat user-timer 06:40 (10 min etter system-monitor
+  06:30), istedenfor å rote i system-scope monitor-service. Mindre risiko,
+  ingen sudo-prompt.
+- session_health.sh som ren read-only skript, ikke ny CLI-kommando — får
+  kjørt fra Claude Code via Bash, slipper å regenerere bedrock-CLI.
+
+**Commits direkte til main (Nivå 1):**
+1. `34b595e feat(systemd): notify-send-varsling ved fetcher-fail + monitor-
+   alert + session-health` — generator legger `OnFailure=bedrock-notify@%N.
+   service` på alle bedrock-fetch-services. Ny user-template `bedrock-
+   notify@.service` kaller notify-send med urgency=critical. Ny user-timer
+   `bedrock-monitor-alert.timer` (06:40) som leser dagens monitor-JSON og
+   varsler hvis `overall_ok=false`. CLAUDE.md "Start av session" utvidet med
+   steg 4: kjør `scripts/session_health.sh`. 1 ny test
+   (`test_generate_service_unit_has_notify_on_failure`).
+
+**Filsystem-endringer utenfor repo (ikke commit-bare):**
+- `~/.config/systemd/user/bedrock-fetch-bdi.{service,timer}` slettet
+- `~/.config/systemd/user/bedrock-fetch-shipping.{service,timer}` lenket inn
+  + enabled (timer 23:30 hverdag)
+- `~/.config/systemd/user/bedrock-monitor-alert.{service,timer}` lenket inn
+  + enabled (timer 06:40 daglig)
+- `~/.config/systemd/user/bedrock-notify@.service` lenket inn
+- 6 fetch-services som var regular-files (comex, conab, cot_euronext,
+  eia_inventories, seismic, unica) konvertert til symlinks fra ./systemd/
+  så de plukker opp OnFailure-hooken
+
+**End-to-end-verifisert:** test-service med ExecStart=/bin/false trigget
+notify@-templaten som kjørte notify-send → desktop-popup synlig.
+
+**Følges opp:**
+- Nye fetchere `crypto_sentiment` + `news_intel` har systemd-filer i
+  ./systemd/ men er aldri lenket inn i user-systemd. Dette er kjent gjeld
+  per data-gjeld § 8 (lav prioritet, drivere ikke aktiverte enda).
+- shipping-timer kjører første gang 23:30 i kveld. Manuell trigger
+  verifiserte at fetcher henter BDRY OK.
+- Neste task uendret: **Session 119** (NASS-backfill-analyse).
+
 ### 2026-04-27 — Session 115: crypto_sentiment (alt.me F&G + CoinGecko) + Sentiment-fane utvidet (LUKKET)
 
 **Scope:** Ellevte og siste fetcher-port i sub-fase 12.5+. UI-only
