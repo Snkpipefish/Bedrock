@@ -123,7 +123,7 @@
 - **AsOfDateStore (session 116):** utvidet med 9 nye proxy-getters (econ_events/cot_ice/cot_euronext/eia_inventory/comex_inventory/seismic_events/conab_estimates/unica_reports/shipping_indices) + tilsvarende `has_*`-helpers. Kritisk fix — uten denne falt orchestrator-replay tilbake til defensive 0.0 for alle nye Phase A-C-drivere fordi underlying-getterne kastet `AttributeError`. 24 nye tester dekker hver getter + region/from_ts-filter + tom-clip-fallback.
 - **Phase D-output (session 116):** `data/_meta/backtest_phase_d_baseline.json` (68 rader, session 99-reprise), `data/_meta/backtest_phase_d_orchestrator.json` (48 rader, 86.4 min sweep), `data/_meta/backtest_phase_d_spike_{cot_ice_mm_pct,conab_yoy,unica_change}.json` (3 spikes). Rapport: `docs/backtest_phase_d_2026-04.md` med diff-tabeller + flagg-terskel ≥3pp Δhit_rate eller ≥2 grade-flips.
 - **Sub-fase 12.6-fundament (session 117):** 3 nye SQLite-tabeller (`driver_observations` long-format, `signal_setups`, `feature_snapshots`) + 5 nye scripts (`harvest_driver_observations.py`, `harvest_feature_snapshots.py`, `run_full_history_harvest.sh`, `analyze_driver_performance.py`, `analyze_cross_correlations.py`). Detached harvest startet 2026-04-27 21:58 — features ETA ~10 min, driver_observations ETA ~24-35 timer.
-- **Next task:** **Session 122 = R4** (L-fase per § 19.4). Batch-vis migrering av alle drivere i 7 commits per familie-gruppe (rekkefølge per § 19.3: trend → structure → risk → positioning → macro → agri/agronomy → analog/seasonal). Hver batch må holde snapshot-tester grønne. Score-uendret-garanti låst på 22 inst × 3 horisonter × 2 retninger. R4-kontrakt per `docs/driver_horizon_pattern.md` § 5.3: YAML kan endres for å bytte primary-feature; PRE-refactor snapshot tas FØR YAML-endring; POST-batch diff = 0 mot oppdatert baseline. Sub-fase 12.6 forblir PAUSET; detached harvest fortsetter parallelt.
+- **Next task:** **Session 123 = R4 fortsettelse** (L-fase per § 19.4). Session 122 lukket batch 1+2+3 (trend + structure + risk = 5 drivere). Gjenstår: batch 4 (positioning: cot_z_score + cot_ice_mm_pct + cot_euronext_mm_pct), batch 5 (macro: dxy_chg5d + brl_chg5d + vix_regime + eia_stock_change + comex_stress + mining_disruption), batch 6 (agri/agronomy: weather_stress + enso_regime + 7 agronomy-drivere = 9), batch 7 (analog/seasonal/currency: analog_hit_rate + analog_avg_return + seasonal_stage + currency_cross_trend = 4). Total ~22 drivere igjen over ~2-3 sessioner. **R4-kontrakt korrigert (commit `08ea08a`):** disiplin B = YAML uendret, score bit-identisk; mode-infrastruktur legges til drivere men aktiveres ikke. PLAN § 19.4 er autoritativ; pattern-doc § 5.3 R2-versjon var feil og er rettet. Sub-fase 12.6 forblir PAUSET; detached harvest fortsetter parallelt.
 - **Git-modus:** Nivå 1 aktivt under sub-fase 12.5+ docs/cleanup-pass. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt valgfri.
 
 ## Data-gjeld (sub-fase 12.6)
@@ -266,6 +266,105 @@ URL-mønstre + CSV-format-krav: `docs/manual_download_shopping_list.md`.
 ---
 
 ## Session log (newest first)
+
+### 2026-04-28 — Session 122: sub-fase 12.7 R4 batch 1+2+3 (trend + structure + risk)
+
+**Scope:** R4 første kvarts av L-fasen per PLAN § 19.4. Mål: batch-vis
+migrering av gjenstående ~27 drivere til horisont-bevisst pattern per
+ADR-010, lavest blast-radius først (§ 19.3-rekkefølge: trend → structure
+→ risk → positioning → macro → agri/agronomy → analog/seasonal). Denne
+sessionen tok de 3 første batchene (5 drivere total).
+
+**R4-kontrakt korrigert ved sessionsstart.** Pattern-doc § 5.3 R4-rad
+fra R2 sa "YAML kan endres for å bytte primary-feature" — det matchet
+ikke PLAN § 19.4 R4-rad ("Score-uendret-garanti låst"). Auditen ved R4-
+åpning konkluderte at PLAN er autoritativ: R4 er **disiplin B = YAML
+uendret, score bit-identisk, mode-infrastruktur legges til drivere uten
+å aktiveres**. Pattern-doc § 5.3 og § 5.4 oppdatert som første commit
+(`08ea08a`) før kode-arbeid startet.
+
+**Drift-håndtering (audit-flagg A fra R3-audit):** snapshot-baseline
+tatt IMMEDIATELY før hver batch. Drift oppdaget på USDJPY|SWING|sell
+risk + structure-familier mid-batch-1 (orthogonal til trend-driverne
+— trend-familien 0.25 = 0.25 i diff). Sammenslått refresh-commit per
+R3-presedens (`d543161`). Etter batch-1-baseline-refresh holdt
+baselinen seg stabil for batch 2 og 3.
+
+**Per-driver-arbeid:**
+
+- **Batch 1 — trend** (commit `c86d17a`): full mode-utbygging for
+  begge drivere.
+  - `sma200_align`: 6 modes på `(close - SMA200) / SMA200`-serien
+    (pct_12m / pct_36m m/ fall-back / delta_5d_z / delta_20d_z /
+    extreme_flag_hard / extreme_flag_soft). Default uendret.
+  - `momentum_z`: samme 6 modes på rolling-z-score-serien. Eksplisitt
+    docstring per audit-flagg B: `delta_*_z`-modes representerer
+    "akselerasjon av momentum" (z-score av delta av z-score-serien),
+    ikke endring i underliggende pris.
+  - 19 nye tester i `tests/unit/test_drivers_trend_horizon_modes.py`:
+    Type B (flat-then-rise/drop-fixturer for sma200_align,
+    komparativ for momentum_z), Type C (5d-jump → delta_5d_z), pct_36m
+    fall-back-aktivering, extreme_flag-binær-output, ukjent mode
+    fall-back, `_horizon`-lesing, defensive baner. Felles helpers
+    (`_z_to_score_positive`, `_extreme_flag`,
+    `_mode_pct_from_series`, `_mode_delta_z_from_series`) speiler
+    R3-presedensen i `positioning.py`.
+  - Sammenslått baseline-refresh; post-refresh diff = 0.
+
+- **Batch 2 — structure** (commit `5426fbf`): kun `range_position`,
+  rank-basert per definisjon + mode-namespace allerede tatt av
+  continuation/mean_revert. Per crop_progress_stage-presedens (R3
+  `d543161`): KUN `_horizon`-lesing + docstring. 1 ny test bekrefter
+  at SWING/MAKRO/None gir samme output. Snapshot-diff = 0.
+
+- **Batch 3 — risk** (commit `8d2f94f`): `vol_regime` (rank-basert
+  ATR-percentil + mode-namespace tatt av high_is_bull/low_is_bull) og
+  `event_distance` (event-basert h2e, domene-spesifikk retning-
+  nøytral risk-gate). Begge får KUN `_horizon`-lesing + docstring. 2
+  nye tester. Snapshot-diff = 0.
+
+**Verifikasjon:**
+- 4 commits (1 doc-korrigering + 3 batch-commits, alle auto-pushet).
+- Snapshot-diff = 0 dokumentert per batch-commit.
+- Type A (bit-identisk default) garantert kontraktuelt for alle 5
+  drivere.
+- Type B + C grønne for trend (2 drivere); kun Type A for structure +
+  risk (3 drivere) per design.
+- Full pytest-suite: **2089/2089 grønt** (var 2067, +22 nye).
+- Pyright src/: **0 errors, 0 warnings, 0 informations**.
+
+**Audit-flagg-respons:**
+- Flagg A (drift-vindu): IMMEDIATELY-baseline-mønster fungerte. 1
+  drift-runde i denne sessionen vs 2 i R3 — kortere drift-vindu
+  reduserer frekvens. Pytest-DB-isolasjon-bug forblir åpent for senere
+  task.
+- Flagg B (pct_36m fall-back): ikke trigget produksjonelt fordi YAML
+  ikke aktiverer pct_36m-modes i R4. Verifisering tilhører senere
+  mode-aktiverings-syklus.
+- Flagg C (z-akselerasjons-tolkning for momentum_z): eksplisitt
+  docstring + komparativ test-fixture (calm vs accelerating).
+
+**Arbeidsflyt-funn:**
+- IMMEDIATELY-baseline før hver batch + commit-batch-på-én-gang holdt
+  drift-vindu kort (~10-15 min mellom take og diff). Ingen 3-strikes-
+  failures.
+- Pre-commit ruff-format kjørte 2× (1 per batch som hadde format-
+  endringer); commit retried OK hver gang.
+- DB-drift på USDJPY|SWING|sell risk/structure er trolig FRED-DXY/T10YIE-
+  fetch som ble kjørt mellom 18:24 og 18:37; fortsatt ufarlig per
+  orthogonal-resonnement.
+
+**Commits:**
+- `08ea08a` docs(pattern): korrigere § 5.3 R4-rad til disiplin B
+- `c86d17a` feat(driver): trend horizon-aware modes + baseline-refresh (R4 batch 1)
+- `5426fbf` feat(driver): range_position horizon-aware-ready (R4 batch 2)
+- `8d2f94f` feat(driver): risk vol_regime + event_distance horizon-aware-ready (R4 batch 3)
+
+**Neste:** Session 123 = R4 fortsettelse — batch 4 (positioning, 3
+drivere), batch 5 (macro, 6 drivere). Hvis tid: batch 6 + 7. Total
+gjenstående ~22 drivere over ~2-3 sessioner.
+
+---
 
 ### 2026-04-28 — Session 121: sub-fase 12.7 R3 ferdig (3 referanse-drivere horisont-bevisste)
 
