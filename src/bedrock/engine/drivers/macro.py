@@ -785,6 +785,18 @@ def vix_regime(store: Any, instrument: str, params: dict) -> float:
             ``True`` for safe-haven-assets (Gold, US-bonds) som
             blomstrer når VIX er forhøyet.
         thresholds: optional override.
+        mode: R4 feature-velger per ADR-010. ``None``/utelatt (default) =
+            dagens regime-klassifikator basert på siste VIX-verdi
+            (bit-identisk pre-R4). Modes opererer på rolling VIX-serien:
+            ``"pct_12m"`` = "hvor høy VIX er relativt til 12m historikk",
+            ``"delta_5d_z"`` = "z-score av 5d VIX-endring", osv.
+            ``invert``-param oversettes til bull_when via
+            _normalize_invert_to_bull_when (invert=False ⇒ "low" siden
+            lav VIX = bull; invert=True ⇒ "high" siden høy VIX = bull
+            for safe-havens). delta_*_z-modes på en VIX-serie tolker
+            "økning i VIX-z-score" — typisk bearish for risk-on, bullish
+            for hedger.
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt i R4.
 
     Default-terskler:
         VIX ≤ 15 → 1.0 (rolig marked)
@@ -793,8 +805,11 @@ def vix_regime(store: Any, instrument: str, params: dict) -> float:
         VIX ≤ 35 → 0.25
         VIX > 35 → 0.0 (krise-regime)
     """
+    # ADR-010: les _horizon for fremtidig bruk.
+    _horizon = params.get("_horizon")
     series_id = params.get("series", "VIXCLS")
     invert = bool(params.get("invert", False))
+    mode = params.get("mode")
 
     try:
         series = store.get_fundamentals(series_id).dropna()
@@ -808,6 +823,75 @@ def vix_regime(store: Any, instrument: str, params: dict) -> float:
     if series.empty:
         return 0.0
 
+    if mode is None:
+        return _vix_regime_default(series, invert, params)
+
+    # invert=False: lav VIX = bull (risk-on default) ⇒ helper bull_when="low"
+    # invert=True: høy VIX = bull (safe-haven) ⇒ helper bull_when="high"
+    helper_bull_when = "high" if invert else "low"
+
+    if mode == "pct_12m":
+        result = _fundamentals_pct_score(
+            series, helper_bull_when, _LOOKBACK_PCT_12M_DAILY, instrument
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "pct_36m":
+        result = _fundamentals_pct_score(
+            series, helper_bull_when, _LOOKBACK_PCT_36M_DAILY, instrument
+        )
+        if result is None:
+            _log.info(
+                "vix_regime.pct_36m_fallback_to_12m",
+                instrument=instrument,
+                available_obs=len(series),
+                required=_LOOKBACK_PCT_36M_DAILY + 1,
+            )
+            result = _fundamentals_pct_score(
+                series, helper_bull_when, _LOOKBACK_PCT_12M_DAILY, instrument
+            )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_5d_z":
+        result = _fundamentals_delta_score(
+            series,
+            helper_bull_when,
+            delta_days=_DELTA_5D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_20d_z":
+        result = _fundamentals_delta_score(
+            series,
+            helper_bull_when,
+            delta_days=_DELTA_20D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        result = _fundamentals_extreme_flag(
+            series,
+            hard=(mode == "extreme_flag_hard"),
+            lookback=_LOOKBACK_PCT_12M_DAILY,
+            instrument=instrument,
+        )
+        return result if result is not None else 0.0
+
+    # Ukjent mode: log + fall-back til default.
+    _log.warning(
+        "vix_regime.unknown_mode_falling_back_to_default",
+        instrument=instrument,
+        mode=mode,
+    )
+    return _vix_regime_default(series, invert, params)
+
+
+def _vix_regime_default(series: pd.Series, invert: bool, params: dict) -> float:
+    """Pre-R4-default-bane for vix_regime: regime-klassifikator på siste VIX."""
     current = float(series.iloc[-1])
 
     user_thresholds = params.get("thresholds")
