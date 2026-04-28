@@ -1,4 +1,4 @@
-"""Positioning-familie drivere (Sub-fase 12.5 session 70).
+"""Positioning-familie drivere (Sub-fase 12.5 session 70 + 12.7 R3).
 
 Erstatter ``sma200_align``-placeholder i positioning-familien. Bruker
 COT-data fra ``DataStore.get_cot()`` til å beregne hvor ekstrem
@@ -7,9 +7,13 @@ managed-money-positioneringen er relativt til historikken.
 To drivere implementert:
 
 - ``positioning_mm_pct``: rank-percentile (0-100) av MM net positioning
-  over rolling window. Mappes til 0..1.
+  over rolling window. Mappes til 0..1. **R3 (sub-fase 12.7)**: utvidet
+  med horisont-bevisste modes via ``params["mode"]`` per ADR-010 og
+  ``docs/driver_horizon_pattern.md`` § 1.1. Default-output (mode=None)
+  er bit-identisk med pre-R3 — kontraktuelt krav per § 5.3.
 - ``cot_z_score``: robust z-score (median+MAD) av MM net positioning,
   mappet til 0..1 via terskel-trapp matching ``momentum_z``-konvensjonen.
+  Ikke endret i R3.
 
 Begge er **monotont bull**: høy MM long-posisjon → høy score (1.0).
 Lav/negativ MM net → lav score (0.0). Direction-spesifikk inversjon
@@ -24,10 +28,29 @@ Params (felles):
   hvilken COT-tabell som leses.
 - ``lookback_weeks``: rolling-vindu (default 52). MIN_OBS_FOR_PCTILE
   håndheves uansett (~26 uker). Større vindu = mer stabil percentile.
+  Når ``mode`` er satt på ``positioning_mm_pct`` overstyres
+  ``lookback_weeks`` av mode-spesifikt vindu (52 for pct_12m/delta_*_z,
+  156 for pct_36m).
 - ``metric``: ``"mm_net"`` (default), eller ``"mm_net_pct"`` for å
   normalisere mot open_interest. ``mm_net_pct`` reduserer scale-bias
   når OI vokser/krymper kraftig (anbefalt for instrumenter med stor
   OI-variasjon).
+
+positioning_mm_pct-spesifikk (R3):
+- ``mode``: feature-velger. ``None``/utelatt (default) = dagens output
+  (bit-identisk pre-R3). ``"pct_12m"`` = rank-percentile over 52-uke-
+  vindu (≡ default for samme lookback). ``"pct_36m"`` = rank-percentile
+  over 156-uke-vindu, fall-back til pct_12m ved utilstrekkelig
+  historikk + log. ``"delta_5d_z"`` = z-score av 1-rapport-delta
+  (~7d natural for ukentlig COT) over 52-rapport-vindu, mappet til
+  [0..1] via momentum-trapp. ``"delta_20d_z"`` = 4-rapport-delta
+  (~28d natural) over 52-rapport-vindu. ``"extreme_flag_hard"`` =
+  1.0 ved pct_12m ≥ 0.98 eller ≤ 0.02, ellers 0.0.
+  ``"extreme_flag_soft"`` = 1.0 ved pct_12m ≥ 0.95 eller ≤ 0.05,
+  ellers 0.0. Ukjent mode → log warning + fall-back til default.
+- ``_horizon``: engine-injisert kontekst-key per ADR-010. Lest av
+  driver men brukt ikke til å endre output i R3 (per § 5.3 R3-
+  kontrakt).
 
 cot_z_score-spesifikk:
 - ``z_thresholds``: optional override av step-mapping. Default matcher
@@ -55,6 +78,24 @@ _DEFAULT_LOOKBACK = 52
 _DEFAULT_REPORT = "disaggregated"
 _DEFAULT_METRIC = "mm_net"
 
+# R3 (sub-fase 12.7): mode-spesifikke historikk-vinduer.
+# Begrunnelse: 12m ≈ 52 ukentlig-obs (matcher dagens default),
+# 36m ≈ 156 ukentlig-obs (matcher § 1.1 i driver_horizon_pattern).
+_LOOKBACK_PCT_12M = 52
+_LOOKBACK_PCT_36M = 156
+# delta_5d_z og delta_20d_z på ukentlig COT tolkes som 1-rapport- og
+# 4-rapport-delta (≈7d og ≈28d natural). 52 historikk-obs av delta-
+# serien matcher pct_12m-vinduet for konsistens.
+_DELTA_5D_REPORTS = 1
+_DELTA_20D_REPORTS = 4
+_LOOKBACK_DELTA = 52  # antall historikk-obs av diff-serien for rolling-z
+
+# Tersklene for extreme_flag-modes (PLAN § 19.3 låst).
+_EXTREME_HARD_HI = 0.98
+_EXTREME_HARD_LO = 0.02
+_EXTREME_SOFT_HI = 0.95
+_EXTREME_SOFT_LO = 0.05
+
 
 # Default mapping for cot_z_score: matcher momentum_z-trappen i trend.py
 # slik at familier som blander z-baserte drivere får konsistent skalering.
@@ -65,6 +106,39 @@ _DEFAULT_Z_THRESHOLDS: tuple[tuple[float, float], ...] = (
     (0.0, 0.5),
     (-0.5, 0.3),
 )
+
+
+def _z_to_score_positive(z: float) -> float:
+    """Map z-score til [0..1] via momentum-trapp (positiv-bull-konvensjon).
+
+    Brukt av positioning delta_*_z-modes der positiv z = økt MM long =
+    bull-of-instrument. Speilet av _DEFAULT_Z_THRESHOLDS men inline
+    for å holde mode-koden lesbar.
+    """
+    if z >= 2.0:
+        return 1.0
+    if z >= 1.0:
+        return 0.75
+    if z >= 0.5:
+        return 0.6
+    if z >= 0.0:
+        return 0.5
+    if z >= -0.5:
+        return 0.3
+    return 0.0
+
+
+def _extreme_flag(pct_0_to_1: float, *, hard: bool) -> float:
+    """Returner 1.0 hvis pct er ekstrem, ellers 0.0.
+
+    hard=True: 0.98/0.02-tersklene (extreme_flag_hard, PLAN § 19.3).
+    hard=False: 0.95/0.05-tersklene (extreme_flag_soft).
+    """
+    hi = _EXTREME_HARD_HI if hard else _EXTREME_SOFT_HI
+    lo = _EXTREME_HARD_LO if hard else _EXTREME_SOFT_LO
+    if pct_0_to_1 >= hi or pct_0_to_1 <= lo:
+        return 1.0
+    return 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -211,27 +285,252 @@ def _load_metric_series(
 # ---------------------------------------------------------------------------
 
 
+def _load_metric_full_series(
+    store: Any,
+    instrument: str,
+    params: dict,
+    *,
+    n_obs: int,
+) -> pd.Series | None:
+    """Hent metric-serie med eksplisitt antall obs (inkl. current).
+
+    Felles loader for R3-modes som trenger full serie (delta-modes må
+    bygge diff-serien) eller utvidet historikk (pct_36m). Returnerer
+    pd.Series sortert chronologisk eller None ved feil.
+
+    Skiller seg fra ``_load_metric_series`` ved å returnere hele
+    serien som pd.Series, ikke ``(current, history)``-tuple. Behold den
+    eldre helperen urørt for å garantere bit-identisk output for
+    ``cot_z_score`` og ICE/Euronext-variantene som ikke er R3-scope.
+    """
+    contract_info = _resolve_contract(instrument)
+    if contract_info is None:
+        return None
+    contract, report = contract_info
+
+    metric = str(params.get("metric", _DEFAULT_METRIC))
+
+    try:
+        df = store.get_cot(contract, report=report, last_n=n_obs)
+    except KeyError:
+        _log.debug(
+            "positioning.cot_data_missing",
+            instrument=instrument,
+            contract=contract,
+            report=report,
+        )
+        return None
+    except Exception as exc:
+        _log.warning(
+            "positioning.cot_fetch_failed",
+            instrument=instrument,
+            error=str(exc),
+        )
+        return None
+
+    series = _compute_metric(df, metric)
+    if series is None:
+        _log.warning(
+            "positioning.unknown_metric",
+            instrument=instrument,
+            metric=metric,
+        )
+        return None
+
+    series = series.dropna()
+    if series.empty:
+        return None
+    return series
+
+
+def _mode_pct(series: pd.Series, instrument: str, lookback: int) -> float | None:
+    """Beregn rank-percentile / 100 over de siste `lookback` obs.
+
+    Returnerer None ved utilstrekkelig historikk slik at caller kan
+    fall-back eller returnere 0.0.
+    """
+    if len(series) < MIN_OBS_FOR_PCTILE + 1:
+        _log.debug(
+            "positioning.short_history_for_pct",
+            instrument=instrument,
+            n=len(series),
+            required=MIN_OBS_FOR_PCTILE + 1,
+        )
+        return None
+    window = series.iloc[-(lookback + 1) :] if len(series) > lookback else series
+    if len(window) < MIN_OBS_FOR_PCTILE + 1:
+        return None
+    current = float(window.iloc[-1])
+    history = [float(v) for v in window.iloc[:-1]]
+    pct = rank_percentile(current, history)
+    if pct is None:
+        return None
+    return pct / 100.0
+
+
+def _mode_delta_z(
+    series: pd.Series,
+    instrument: str,
+    *,
+    delta_reports: int,
+    lookback: int,
+) -> float | None:
+    """Beregn z-score av N-rapport-delta over `lookback` historikk-obs.
+
+    For ukentlig COT tolkes ``delta_reports=1`` som "delta_5d_z" (≈7d
+    natural) og ``delta_reports=4`` som "delta_20d_z" (≈28d natural).
+    Frekvens-translasjonen logges i debug per call slik at den ikke er
+    skjult i kildekoden — viktig når delta_*_z-output sammenlignes på
+    tvers av drivere med ulike datafrekvenser (real_yield er daglig).
+    """
+    # Trenger delta_reports + lookback + 1 obs for å bygge diff-serien
+    # med 1 current-diff og `lookback` historikk-diffs.
+    required = delta_reports + lookback + 1
+    if len(series) < required:
+        _log.debug(
+            "positioning.short_history_for_delta",
+            instrument=instrument,
+            delta_reports=delta_reports,
+            n=len(series),
+            required=required,
+        )
+        return None
+
+    diff_series = series.diff(periods=delta_reports).dropna()
+    if len(diff_series) < MIN_OBS_FOR_PCTILE + 1:
+        return None
+
+    _log.debug(
+        "positioning.delta_z_natural_translation",
+        instrument=instrument,
+        delta_reports=delta_reports,
+        natural_days=delta_reports * 7,
+        note="weekly COT data; delta interpreted as N-report-delta",
+    )
+
+    current_diff = float(diff_series.iloc[-1])
+    history_diff = [float(v) for v in diff_series.iloc[-(lookback + 1) : -1]]
+    z = rolling_z(current_diff, history_diff)
+    if z is None:
+        return None
+    return _z_to_score_positive(z)
+
+
 @register("positioning_mm_pct")
 def positioning_mm_pct(store: Any, instrument: str, params: dict) -> float:
     """Rank-percentile av MM net positioning, normalisert til 0..1.
 
-    Returnerer:
+    Default (mode=None) returnerer:
     - 1.0 ved ekstrem MM long (top-percentile)
     - 0.5 ved median posisjonering
     - 0.0 ved ekstrem MM short (bunn-percentile)
 
+    R3 (sub-fase 12.7): horisont-bevisst via ``params["mode"]``. Se
+    docstring øverst i modulen for full mode-tabell. Default-output
+    (mode=None) er bit-identisk med pre-R3.
+
     Defensiv 0.0-retur ved manglende COT-data, ukjent contract eller
     utilstrekkelig historikk.
     """
+    # ADR-010: les _horizon for fremtidig bruk. R3-kontrakt: ikke endre
+    # default-output basert på _horizon. Verdi logges via debug ved
+    # eksplisitt mode-valg under.
+    horizon = params.get("_horizon")  # noqa: F841 — bevisst lest for ADR-010
+    mode = params.get("mode")
+
+    if mode is None:
+        # Bit-identisk pre-R3: dagens flow uendret.
+        loaded = _load_metric_series(store, instrument, params)
+        if loaded is None:
+            return 0.0
+        current, history = loaded
+        pct = rank_percentile(current, history)
+        if pct is None:
+            return 0.0
+        return round(pct / 100.0, 4)
+
+    # Eksplisitt mode-håndtering (R3-utvidelse).
+    if mode == "pct_12m":
+        series = _load_metric_full_series(store, instrument, params, n_obs=_LOOKBACK_PCT_12M + 1)
+        if series is None:
+            return 0.0
+        result = _mode_pct(series, instrument, _LOOKBACK_PCT_12M)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "pct_36m":
+        series = _load_metric_full_series(store, instrument, params, n_obs=_LOOKBACK_PCT_36M + 1)
+        if series is None:
+            return 0.0
+        # Forsøk pct_36m først; fall-back til pct_12m hvis utilstrekkelig
+        # 36m-historikk. Per § 1.1 i driver_horizon_pattern.md: ikke 0.0,
+        # det ville maskere at instrumentet er yngre enn vinduet.
+        result = _mode_pct(series, instrument, _LOOKBACK_PCT_36M)
+        if result is None:
+            _log.info(
+                "positioning.pct_36m_fallback_to_12m",
+                instrument=instrument,
+                available_obs=len(series),
+                required=_LOOKBACK_PCT_36M + 1,
+            )
+            result = _mode_pct(series, instrument, _LOOKBACK_PCT_12M)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_5d_z":
+        series = _load_metric_full_series(
+            store,
+            instrument,
+            params,
+            n_obs=_DELTA_5D_REPORTS + _LOOKBACK_DELTA + 1,
+        )
+        if series is None:
+            return 0.0
+        result = _mode_delta_z(
+            series,
+            instrument,
+            delta_reports=_DELTA_5D_REPORTS,
+            lookback=_LOOKBACK_DELTA,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_20d_z":
+        series = _load_metric_full_series(
+            store,
+            instrument,
+            params,
+            n_obs=_DELTA_20D_REPORTS + _LOOKBACK_DELTA + 1,
+        )
+        if series is None:
+            return 0.0
+        result = _mode_delta_z(
+            series,
+            instrument,
+            delta_reports=_DELTA_20D_REPORTS,
+            lookback=_LOOKBACK_DELTA,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        series = _load_metric_full_series(store, instrument, params, n_obs=_LOOKBACK_PCT_12M + 1)
+        if series is None:
+            return 0.0
+        pct = _mode_pct(series, instrument, _LOOKBACK_PCT_12M)
+        if pct is None:
+            return 0.0
+        return _extreme_flag(pct, hard=(mode == "extreme_flag_hard"))
+
+    # Ukjent mode: log + fall-back til default.
+    _log.warning(
+        "positioning.unknown_mode_falling_back_to_default",
+        instrument=instrument,
+        mode=mode,
+    )
     loaded = _load_metric_series(store, instrument, params)
     if loaded is None:
         return 0.0
     current, history = loaded
-
     pct = rank_percentile(current, history)
     if pct is None:
         return 0.0
-
     return round(pct / 100.0, 4)
 
 
