@@ -60,6 +60,7 @@
   - **119+:** Sub-fase 12.6 fortsettelse — vente på NASS 2010-2021 (kjører detached med fix), sesong-bucketing-analyzer, setup-walker, YAML-rebalansering basert på empiri.
 - **Sub-fase 12.7 ÅPEN 2026-04-28** — horisont-refactor + data-utvidelse. Se PLAN § 19. **Alt γ LÅST**: bruker-policy "ingen backtest før all data er på plass" → 12.6 PAUSES (harvest fortsetter detached), Spor R (R1-R4) kjøres nå (bit-identisk score), Spor D (D0-D3) etter R, 12.6 gjenåpnes etter D3 over hele systemet. Trading-logikk-svar låst: 12m+36m percentil-vinduer, 2/98+5/95 ekstrem-terskler, drop GHS/XOF (Cocoa cross = dxy@0.85 + event_distance@0.15), Cotton ENSO uendret. Arkitektur låst: Alt 1 (YAML-styrt `_horizon`-param via engine-propagering analogt med `_direction`/ADR-006). ADR-012 (deprecation) + ADR-013 (failure-mode) UTSATT (Alt Z) — håndteres reaktivt per fetcher.
   - **119:** **R1 ferdig 2026-04-28**: audit (`docs/horizon_refactor_audit.md`) + **ADR-010** (horisont-bevisst driver-pattern, Alt 1: YAML-styrt `_horizon` via engine-propagering analogt med `_direction`) + **ADR-011** (backfill-policy: 2010-cutoff, sekvensiell pacing 1.5s, engangs-skripts i `scripts/backfill/<source>.py` separat fra `bedrock backfill`-CLI). Engine-patch: `_score_families` setter `_horizon` i `params_with_dir` (~5 linjer + ny `horizon: str | None`-parameter). 5 micro-tester for propagering + bit-identitet. Snapshot-baseline (104 rader: 15 financial × 3 × 2 + 7 agri × 1 × 2) tatt PRE-patch og verifisert **0 forskjeller POST-patch** — score-uendret-garantien (PLAN § 19.1) konkret bekreftet. Renumret fra opprinnelig "ADR-009/010" fordi ADR-009 var tatt av cutover-readiness 2026-04-27. **2046/2046 grønt, pyright src/ 0 errors. LUKKET 2026-04-28**.
+  - **129:** **D1 fortsettelse — A1 dropp + B1 FRED-utvidelse fullført 2026-04-29.** A1 Baker Hughes droppet fra 12.7-scope (commit `96a7022`) basert på V3-funn (ingen FRED-rute + endpoint-timeout); rig-count-vekten i Brent/CrudeOil/NaturalGas macro var liten og arkitektonisk friksjon overstiger signal-verdien. PLAN § 19.5 + § 19.4 + § 19.6 oppdatert med strikethrough-notat. **B1-leveransen** i 3 commit-isolerte trinn: (a) `000bcec` — 4 nye macro-drivere (yield_diff_10y / credit_spread_change / nfci_change / net_fed_liq_change) i macro.py med ADR-010 mode-dispatcher + 40 nye tester. V2-substitusjon dokumentert (HY/IG OAS → Moody's AAA10Y/BAA10Y pga 30+ år historikk vs 3 år). (b) `de3c5bb` — fred_series_ids utvidet i 8 instrument-YAMLs (4 FX + 2 indices + 2 crypto) + scripts/backfill/fred_b1.py (engangs-skript per ADR-011, 11 serier × ~30s = ~5 min). Live-backfill OK etter retry på 4 serier (FRED HTTP 500/502 transient): DGS2 4257 rader (2010+), foreign 10Y × 4 land 120 mnd hver, AAA10Y/BAA10Y/RRPONTSYD 2610 rader daglig, WALCL/WTREGEN/NFCI 522/521 ukentlig. (c) `904b378` — YAML-driver-wiring + ny baseline. FX macro: yield_diff_10y@0.35 lagt til; real_yield 0.4→0.25, dxy 0.5→0.30. Indices+crypto macro: net_fed_liq_change@0.25-0.30 + nfci_change@0.20 lagt til. Indices+crypto risk: credit_spread_change@0.25 lagt til. Pydantic familie-sum=1.0 verifisert for alle 8 × {macro, risk}. **Snapshot-diff vs pre-B1 baseline**: 90 score-endringer ≥1e-6 (alle 15 financial × 6 hor×dir; 7 agri uendret), **13 grade-flips** (B1-wired: AUDUSD MAKRO buy B→A, BTC MAKRO sell C→B, ETH SWING buy C→B, EURUSD SCALP buy C→B + sell A→B, GBPUSD MAKRO/SWING buy C→B, SP500 MAKRO sell C→B; drift-only: Gold SCALP buy, NaturalGas × 3). D-disiplin C oppfylt — ny baseline regenerert som anker. Live driver-sanity for Nasdaq 2026-04-29: credit_spread=1.00 (tight), nfci=0.50 (≈0), net_fed_liq=0.10 (QT regime), yield_diff EURUSD=0.50, USDJPY=0.75. **Total drivere registrert: 36** (var 32). Pyright src/: 0 errors. CI-flicker session 128 markert lukket (siste 3 commits grønne etter 9b86235). **LUKKET 2026-04-29**. **A2 AGSI + A3 FAS** forblir utsatt (token-kilder, venter på bruker-registrering).
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
   - **62:** scaffold + outcome-replay-CLI + rapport-format. **LUKKET 2026-04-25**
   - **63:** AsOfDateStore + run_orchestrator_replay + per-grade-breakdown. **LUKKET 2026-04-25**
@@ -101,7 +102,7 @@
 - **Blocked:** nei.
 - **Aktive systemd-timere:** 6 system-installerte (calendar_ff [session 105], cot_ice [session 106], signals-all, monitor, compare, server [service]) + 15 user-installerte (prices, cot_disaggregated/legacy, fundamentals, weather, enso, wasde, crop_progress, shipping [session 113], eia_inventories [session 107], comex [session 108], seismic [session 109], cot_euronext [session 110], conab [session 111], unica [session 112]). Sessions 114+115 timers (`news_intel` + `crypto_sentiment`) er ennå ikke generert/installert — kan tas i én batch nå når begge fetchere er på plass.
 - **Instrumenter:** 22 totalt (Gold/Silver/Copper/Platinum metals; CrudeOil/Brent/NaturalGas energy; Corn/Wheat/Soybean grains; Cotton/Sugar/Coffee/Cocoa softs; Nasdaq/SP500 indices; EURUSD/GBPUSD/USDJPY/AUDUSD fx; BTC/ETH crypto).
-- **Drivere:** 30 registrert (uendret — sessions 114+115 er UI-only, ingen nye drivere. Begge har scoring-ready schema slik at fremtidige `news_intel_pressure` + `crypto_sentiment_pressure`-drivere kan aktiveres etter ≥1 mnds data).
+- **Drivere:** **36 registrert** (session 129 D1 B1: +4 nye macro-drivere — yield_diff_10y, credit_spread_change, nfci_change, net_fed_liq_change. Session 128 D1 A4: +2 (positioning_lev_funds_pct, positioning_asset_mgr_pct). Sessions 114+115 var UI-only).
 - **Bedrock-fetchere:** 19 totalt (prices, cot_disaggregated, cot_legacy, fundamentals, weather, enso, wasde, crop_progress, shipping [session 113], calendar_ff [session 105], cot_ice [session 106], eia_inventories [session 107], comex [session 108], seismic [session 109], cot_euronext [session 110], conab [session 111], unica [session 112], news_intel [session 114, UI-only], **crypto_sentiment [session 115, UI-only]**). **Alle 11 fetchere fra § 7.5 er nå portet — Phase A-C ferdig.**
 - **PLAN § 7.3:** 6/8 live data (WASDE, BRL, ICE softs COT via cot_disaggregated, BDI/BDRY, NASS Crop Progress, ENSO). 2/8 manuell sample (eksport-events, disease-alerts). 1/8 betalt/manuell import (IGC).
 - **System-status:** `docs/system_status_2026-04-26.md` — full ende-til-ende rapport (sub-fase 12.5+ refresh i session 117).
@@ -123,7 +124,7 @@
 - **AsOfDateStore (session 116):** utvidet med 9 nye proxy-getters (econ_events/cot_ice/cot_euronext/eia_inventory/comex_inventory/seismic_events/conab_estimates/unica_reports/shipping_indices) + tilsvarende `has_*`-helpers. Kritisk fix — uten denne falt orchestrator-replay tilbake til defensive 0.0 for alle nye Phase A-C-drivere fordi underlying-getterne kastet `AttributeError`. 24 nye tester dekker hver getter + region/from_ts-filter + tom-clip-fallback.
 - **Phase D-output (session 116):** `data/_meta/backtest_phase_d_baseline.json` (68 rader, session 99-reprise), `data/_meta/backtest_phase_d_orchestrator.json` (48 rader, 86.4 min sweep), `data/_meta/backtest_phase_d_spike_{cot_ice_mm_pct,conab_yoy,unica_change}.json` (3 spikes). Rapport: `docs/backtest_phase_d_2026-04.md` med diff-tabeller + flagg-terskel ≥3pp Δhit_rate eller ≥2 grade-flips.
 - **Sub-fase 12.6-fundament (session 117):** 3 nye SQLite-tabeller (`driver_observations` long-format, `signal_setups`, `feature_snapshots`) + 5 nye scripts (`harvest_driver_observations.py`, `harvest_feature_snapshots.py`, `run_full_history_harvest.sh`, `analyze_driver_performance.py`, `analyze_cross_correlations.py`). Detached harvest startet 2026-04-27 21:58 — features ETA ~10 min, driver_observations ETA ~24-35 timer.
-- **Next task:** **Session 129 = D1 fortsettelse — B1 FRED-utvidelse** (L-fase per § 19.4). Session 128 leverte B3 (DXY Yahoo) + A4 (CFTC TFF fetcher + 2 nye drivere) + C1 (YAML for 8 finansielle). 6 commits: ef62a17 (B3), 67df28e (A4 fetcher), 6676ce0 (A4 drivere), ed20057 (C1 YAML + ny baseline), 9b86235 (test-fixture fix). Pyright 0/0/0; pytest 2219 passed (etter test-fixture fix). **B1 deferred til 129:** 11 FRED-serier (9 GO + OAS-paret erstattes med Moody's AAA10Y/BAA10Y per V2-funn). 4 yield-diff-drivere + credit_spread_change + nfci_change + net_fed_liq_change. YAML for FX/indekser/krypto macro-familien. **A1 Baker Hughes:** ingen FRED-rute funnet. Bruker må bekrefte (a) drop fra 12.7-scope, (b) utsett til Plan-S, eller (c) manuell CSV-fallback. **Token-kilder (A2 AGSI, A3 FAS):** krever bruker-registrering før implementasjon. **Sub-fase 12.6 PAUSER fortsatt**, gjenåpnes etter D3.
+- **Next task:** **Session 130 = D1 avslutning eller D2 åpning.** Session 129 lukket A1-dropp + B1 FRED-utvidelse (4 nye drivere wired i 8 inst). Gjenstående D1 ifølge § 19.4: ingenting kritisk — A1 droppet, A2/A3 utsatt (token), A4+C1+B3+B1 levert. **Session 130 kandidater:** (a) D1-tag `v0.X.0-fase-D1` + sluttrapport (raskt, gir tag-anker for D2-arbeid); eller (b) D2 åpning — D0-resultater viser GO på A9 USDM, A12 AAII, B2 VIX-term, B5 cal-spreads M1 (energi BZ/CL/NG); A8 NOPA + C2 Eskom dropped (paywall); A5/A6/A7 ETF + A11 ICE krever ekstra research. Session 130 commits: `96a7022` A1-drop PLAN, `000bcec` B1 drivere+tester, `de3c5bb` B1 fetcher+backfill, `904b378` B1 YAML+baseline. Total 4 commits + STATE-commit. **Token-kilder (A2 AGSI, A3 FAS):** krever bruker-registrering før implementasjon. **Sub-fase 12.6 PAUSER fortsatt**, gjenåpnes etter D3.
 - **Git-modus:** Nivå 1 aktivt under sub-fase 12.5+ docs/cleanup-pass. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt valgfri.
 
 ## Data-gjeld (sub-fase 12.6)
@@ -266,6 +267,145 @@ URL-mønstre + CSV-format-krav: `docs/manual_download_shopping_list.md`.
 ---
 
 ## Session log (newest first)
+
+### 2026-04-29 — Session 129: sub-fase 12.7 D1 avslutning (A1 drop + B1 FRED-utvidelse)
+
+**Scope:** D1 fortsettelse. Mål: CI-verifisering (post session 128
+test-fix), A1 Baker Hughes-beslutning, B1 FRED-utvidelse (hovedleveranse).
+Stop-criterion: B1 ferdig + A1 dokumentert, eller >5 timer arbeid.
+
+**Levert:** A1 droppet fra 12.7-scope + full B1-implementasjon (4
+nye drivere + fetcher-utvidelse + YAML-omlegging). 4 commits + STATE.
+
+**CI-verifisering (oppstart):**
+Siste 3 commits før session 129 grønne (`5e116e5` state, `9b86235`
+test-fixture fix, `ed20057` C1 YAML). Test-fixture-failures fra
+session 128 morgen-commits løst av `9b86235` — CI-flicker markert
+lukket.
+
+**A1 Baker Hughes drop (commit `96a7022`):**
+
+V3-funn (session 127): FRED har ingen Baker Hughes rig-count-serie
+(`series/search?text=baker+hughes+rig` = 0 treff); direkte-endpoint
+`rigcount.bakerhughes.com` timer ut fra arbeidsmiljøet. Direkte-port
+ville krevd manuell CSV-fallback fra dag 1 per ADR-007.
+
+Beslutning: drop fra 12.7-scope (Standard-anbefaling per session 129-
+prompt). Begrunnelse: rig-count-vekten i Brent/CrudeOil/NaturalGas
+macro er liten (co-driver, ikke primær), og arkitektonisk friksjon
+overstiger signal-verdien i 12.7. Vurderes på nytt i Plan-S hvis ny
+rute åpner.
+
+PLAN § 19.5 Del A header oppdatert med "A1 DROPPED 2026-04-29 (D1
+V3)". A1-rad strikethrough med begrunnelse + Plan-S-pointer. § 19.4
+D1-rad oppdatert (5 nye fetchere/utvidelser, ~7 nye drivere; A1
+fjernet, A2/A3 markert utsatt-pga-token). § 19.6 mapping
+strikethrough.
+
+**B1 FRED-utvidelse — commit chain (`000bcec` + `de3c5bb` + `904b378`):**
+
+V2-substitusjon dokumentert: HY/IG OAS-paret (BAMLH0A0HYM2 +
+BAMLC0A0CM) ga kun 3 års gratis FRED-API-historikk (smoke_test_
+results.md V2). Erstattet med Moody's AAA10Y + BAA10Y som har 30+
+år historikk (1996+) — drop-in proxy for kreditt-stress.
+
+- **`000bcec` (drivere + tester):** 4 nye macro-drivere i `macro.py`
+  med ADR-010 mode-dispatcher:
+  - `yield_diff_10y(foreign_series, bull_when, ...)` — US 10Y minus
+    foreign 10Y. Foreign 10Y er månedlig (FRED-OECD-feed); diff-
+    serien er effektivt månedlig etter dropna. Modes: pct_36m +
+    extreme_*. pct_12m faller til pct_36m (12 obs < MIN_OBS=20);
+    delta_*_z støttes ikke. EURUSD/GBPUSD/AUDUSD: bull_when=low
+    (lav diff = foreign>=US = bull foreign); USDJPY: bull_when=high
+    (US>JP = bull pair).
+  - `credit_spread_change(baa_series, aaa_series, ...)` — BAA10Y −
+    AAA10Y. Daglige inputs → full mode-suite. Risk-on (Nasdaq/SP500/
+    BTC/ETH): bull_when=low (lav spread = bull). Safe-haven (Gold):
+    bull_when=high.
+  - `nfci_change` — Chicago Fed NFCI ukentlig (fre). WEEKLY-vinduer
+    (LOOKBACK_PCT_12M_WEEKLY=52). Lav NFCI = løsere conditions =
+    bull risk-on (default bull_when=low).
+  - `net_fed_liq_change(walcl_series, rrp_series, tga_series, ...)`
+    — WALCL − RRPONTSYD − WTREGEN, 4-uke pct-endring som default.
+    Tre ukentlige serier sammenslått på felles datoer (inner join).
+    Vekst = liquidity-injeksjon = bull risk-on (bull_when=high).
+
+  **40 nye tester** (10 + 10 + 9 + 11 fordelt). Default-modes,
+  bull_when-konfigurasjoner, alle modes (pct/delta/extreme/unknown),
+  edge-cases (missing series, short history, oscillerende vs flat
+  data for delta_z stdev=0-håndtering). Pyright src/macro.py: 0
+  errors. Total drivere registrert: 32 → 36.
+
+- **`de3c5bb` (fetcher-utvidelse + backfill-script):**
+  - `fred_series_ids` utvidet i 8 instrument-YAMLs:
+    - 4 FX: + foreign 10Y per land (IRLTLT01<XX>M156N).
+    - Nasdaq + SP500 + BTC + ETH: + AAA10Y, BAA10Y, NFCI, WALCL,
+      RRPONTSYD, WTREGEN.
+  - `scripts/backfill/fred_b1.py` — engangs-skript per ADR-011
+    (10-år rolling cutoff, sekvensiell HTTP med 1.5s pacing,
+    --series-retry-flagg, lov til å være "shitty"). Backfiller
+    11 serier (10 nye + DGS2 ekstra for fremtidig bruk).
+  - **Live-backfill 2026-04-29:** første kjøring 7/11 OK (4 FRED
+    HTTP 500/502 transient: IRLTLT01DEM156N, IRLTLT01GBM156N,
+    AAA10Y, RRPONTSYD); retry-kjøring 4/4 OK. Verifisert i DB:
+    DGS2 4257 rader 2010-01..2026-04, IRLTLT01<XX> 120 mnd hver
+    2016-04..2026-03, AAA10Y/BAA10Y/RRPONTSYD 2610-2611 daglig
+    2016-04..2026-04, WALCL/WTREGEN 522 ukentlig ons, NFCI 521
+    ukentlig fre.
+
+- **`904b378` (YAML-driver-wiring + ny baseline):**
+  - **FX (4 inst) macro-familie:** real_yield 0.4→0.25, dxy 0.5→0.30,
+    vix 0.1→0.10, + yield_diff_10y@0.35 (per § 19.8-eksempel).
+    AUDUSD-justert: vix 0.20 (commodity-correlated), yield_diff 0.30.
+  - **Nasdaq/SP500 macro:** real_yield 0.25/0.20, dxy 0.20/0.20,
+    vix 0.10/0.15, + net_fed_liq_change@0.25, + nfci_change@0.20.
+  - **Nasdaq/SP500 risk:** vol_regime 0.7→0.55, event_distance
+    0.3→0.20, + credit_spread_change@0.25.
+  - **BTC/ETH macro:** real_yield 0.20, dxy 0.20, vix 0.10,
+    + net_fed_liq_change@0.30 (tyngst pga liquidity-sensitivitet),
+    + nfci_change@0.20.
+  - **BTC/ETH risk:** samme som Nasdaq risk (credit-stress empirisk
+    korrelert med crypto i 2022).
+
+  **Pydantic familie-sum=1.0** verifisert for alle 8 × {macro, risk}.
+
+  **Snapshot-diff vs pre-B1 baseline (commit ed20057):**
+  - 90 score-endringer ≥1e-6 (15 financial × 6 hor×dir = alle).
+    Inkl. naturlig drift fra fetch-timere siden session 128.
+  - **13 grade-flips:**
+    - B1-wired: AUDUSD MAKRO buy B→A, BTC MAKRO sell C→B,
+      ETH SWING buy C→B, EURUSD SCALP buy C→B + sell A→B,
+      GBPUSD MAKRO/SWING buy C→B, SP500 MAKRO sell C→B.
+    - Drift-only: Gold SCALP buy, NaturalGas (3 flips: SCALP buy
+      B→C, SCALP sell B→A, MAKRO sell B→A, SWING sell B→A).
+  - 7 agri-instrumenter uendret (B1 påvirker ikke agri).
+
+  **D-disiplin C oppfylt:** ny baseline (104 rader) regenerert som
+  anker for D2/D3.
+
+  **Live driver-sanity 2026-04-29:**
+  - credit_spread_change = 1.00 (BAA-AAA tight = bull risk-on)
+  - nfci_change = 0.50 (NFCI ≈ 0 = average conditions)
+  - net_fed_liq_change = 0.10 (NetLiq shrinking = QT regime)
+  - yield_diff_10y EURUSD = 0.50 (US-DE diff ≈ 1.0pp = nøytral)
+  - yield_diff_10y USDJPY = 0.75 (US-JP diff ≈ 3.0pp = bull pair)
+
+**Stats:**
+- 4 commits: `96a7022` (PLAN A1-drop), `000bcec` (B1 drivere +
+  tester), `de3c5bb` (B1 fetcher + backfill), `904b378` (B1 YAML +
+  baseline).
+- Pyright src/: 0 errors, 0 warnings.
+- B1 driver-tester: 40/40 grønt. **Full pytest 2263/2263 grønt
+  (15:51 wall-time)** — verifisert post-commit at YAML-wiring +
+  baseline-rebase ikke brakk eksisterende test-suite.
+- Total drivere registrert: 36 (var 32 ved session 128-slutt).
+
+**Status etter session 129:**
+- D1-tabellen i § 19.4: 5 nye fetchere/utvidelser + ~7 nye drivere
+  totalt levert. A1 droppet, A2/A3 utsatt (token). D1 effektivt
+  ferdig — gjenstår tag (`v0.X.0-fase-D1`) og evt. ferskhets-rapport.
+- Sub-fase 12.6 fortsatt PAUSET (Alt γ uendret).
+- A2/A3 venter på bruker-registrering av tokens.
 
 ### 2026-04-29 — Session 128: sub-fase 12.7 D1 fortsettelse (B3 DXY + A4 CFTC TFF + C1)
 
