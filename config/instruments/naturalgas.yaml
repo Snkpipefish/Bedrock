@@ -58,30 +58,32 @@ families:
         params: {contract: ice ttf gas, metric: mm_net_pct, lookback_weeks: 52}
   macro:
     # Sub-fase 12.5+ session 107: US Working Natural Gas Storage Lower 48
-    # er primær fundamental for Henry Hub-prising. Lavt lager før vinter =
-    # bullish, høyt overflødig lager = bearish. Tyngst vekt i familien.
+    # er primær fundamental for Henry Hub-prising.
     #
-    # Sub-fase 12.7 D1 A2 (session 130): agsi_storage_pct@0.10 lagt til
-    # for EU-storage-cross-validering. real_yield@0.10 (renter påvirker
-    # alle commodities marginalt). MIDLERTIDIG VEKT — endelig § 19.5-spec
-    # inkluderer hdd_cdd_anomaly@0.20 (B4) som lander i D2; eia justeres
-    # da fra 0.40 → 0.30. Dokumentert i commit-meldingen.
+    # D1 A2 (session 130): agsi_storage_pct@0.10 lagt til (EU-storage).
+    # D2 B4 (session 131): hdd_cdd_anomaly@0.20 lagt til (driver-intern
+    # sesong-switch per pattern-doc § 3.1). NaturalGas macro nå § 19.5
+    # ENDELIG VEKT: real_yield@0.10 + dxy@0.20 + vix@0.10 + eia@0.30
+    # + agsi@0.10 + hdd_cdd@0.20 = 1.00. Dxy 0.30→0.20, eia 0.40→0.30.
     drivers:
       - name: real_yield
         weight: 0.10
         params: {bull_when: low}  # Lav real-yield støtter commodities
       - name: dxy_chg5d
-        weight: 0.30
+        weight: 0.20  # B4 D2: 0.30→0.20 for å gi plass til hdd_cdd
         params: {bull_when: negative, window: 5}
       - name: vix_regime
         weight: 0.10
         params: {invert: true}
       - name: eia_stock_change
-        weight: 0.40  # midlertidig 0.50→0.40; oppdateres til 0.30 ved B4 D2
+        weight: 0.30  # B4 D2: 0.40→0.30 for å gi plass til hdd_cdd
         params: {series_id: NW2_EPG0_SWO_R48_BCF}  # US NG Storage Lower 48
       - name: agsi_storage_pct
         weight: 0.10
         params: {country: eu, bull_when: low}  # Lav fyllingsgrad = bull NG
+      - name: hdd_cdd_anomaly
+        weight: 0.20
+        params: {lookback_days: 30}  # 30d rolling = MAKRO-vindu
   structure:
     drivers:
       - name: range_position

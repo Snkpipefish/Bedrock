@@ -77,16 +77,22 @@ families:
     # legacy noncomm_net_pct. Indekser har TFF-rapport via
     # 'NASDAQ-100 Consolidated' (samme cot_contract). cot_z_score
     # beholdt på legacy noncomm som cross-validering.
+    # D2 A12 (session 131): aaii_extreme@0.25 lagt til som mean-
+    # reversion-input (kontra-indikator). Andre vekter justert per
+    # § 19.5 Del C+ målmiks: 0.30 / 0.15 / 0.30 / 0.25.
     drivers:
       - name: positioning_lev_funds_pct
-        weight: 0.40
+        weight: 0.30
         params: {metric: lev_funds_net_pct, lookback_weeks: 52}
       - name: positioning_asset_mgr_pct
-        weight: 0.20
+        weight: 0.15
         params: {metric: asset_mgr_net_pct, lookback_weeks: 52}
       - name: cot_z_score
-        weight: 0.40
+        weight: 0.30
         params: {metric: noncomm_net_pct, lookback_weeks: 52}
+      - name: aaii_extreme
+        weight: 0.25
+        params: {metric: bullish_pct, lookback_weeks: 52}
   macro:
     # Equity-tolkning: Nasdaq er rente-sensitiv (lange durations i tech),
     # USD-svakhet svakt bull (global liquidity), VIX lavt = risk-on bull.
@@ -123,25 +129,30 @@ families:
           mode: continuation
   risk:
     polarity: neutral  # ADR-006: vol_regime trend-friendly begge retninger
-    # B1 D1 (sub-fase 12.7, session 129): credit_spread_change@0.25 lagt
-    # til. Lav BAA-AAA-spread = lav credit-stress = bull risk-on.
-    # vol_regime + event_distance redusert proporsjonalt. Sum = 1.00.
+    # B1 D1 (session 129): credit_spread_change@0.25 lagt til.
+    # B2 D2 (session 131): vix_term_ratio@0.20 lagt til som regime-/sizing-
+    # driver. Andre vekter trimmet proporsjonalt fra B1-tilstanden:
+    # vol_regime 0.55→0.45, event_distance 0.20→0.15, credit 0.25→0.20.
+    # Sum = 1.00.
     drivers:
       - name: vol_regime
-        weight: 0.55
+        weight: 0.45
         params:
           period: 14
           lookback: 252
           mode: high_is_bull
       - name: event_distance
-        weight: 0.20
+        weight: 0.15
         params:
           countries: [USD]
           impact_levels: [High]
           min_hours: 4
       - name: credit_spread_change
-        weight: 0.25
-        params: {bull_when: low}  # Lav spread = lav stress = bull risk-on
+        weight: 0.20
+        params: {bull_when: low}
+      - name: vix_term_ratio
+        weight: 0.20
+        params: {numerator_series: VIX3M, denominator_series: VIXCLS}
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     drivers:
