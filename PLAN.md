@@ -1782,8 +1782,8 @@ etterpå, må alle nye drivere skrives om.
 | **R4** | Batch-vis migrering i 7 commits (én per familie-gruppe per rekkefølge over). Snapshot-tester må være grønne for hver batch. Score-uendret-garanti låst på 22 inst × 3 horisonter × 2 retninger. | L | Alle drivere migrert, snapshot grønt |
 | **D0** | Smoke-tests for 12 nye + 5 utvidelser. Engangs-skripts i `scripts/smoke/`. **A14 DROPPED ved D0-start (paywall).** Inkluderer eksplisitt: (a) **B5 Yahoo `@F`-curve-feasibility** for calendar spreads (høyrisiko), (b) **A11 ICE TTF-status** (NaturalGas TFF-spørsmål). ADR-011 brukes som mal for backfill-skripts. | M | `docs/smoke_test_results.md` med per-kilde GO/RISK/SKIP/BLOCK |
 | **D1** | **Tier 1.** ~~A1 Baker Hughes~~ (DROPPED 2026-04-29, ingen FRED-rute + endpoint-timeout). A2 AGSI (session 130, levert), A3 FAS Export Sales (LEVERT session 133 — api.fas.usda.gov-domain), A4 CFTC TFF + C1 (cot_legacy→cot_tff for finansielle, session 128), B1 yield-diff + kreditt/NFCI/NetFedLiq (session 129), B3 DXY-bytte Yahoo `DX-Y.NYB` (session 128). Hver kilde commit-isolert. YAML-diff per instrument med Pydantic-validering at familie-sum=1.0. | L | 5 nye fetchere/utvidelser + 8 nye drivere + YAML-diff |
-| **D2** | **Tier 2.** A5-A7 ETF-holdings, A8 NOPA, A9 Drought Monitor, A11 ICE certified stocks, A12 AAII (mean-reversion driver-intern). B2 VIX-termstruktur, B4 HDD/CDD→NG (sesong-modulert), B5 calendar spreads (kun energi, kun hvis D0 grønn). **C2 DROPPED — Eskom paywall, Platinum beholder seismic uendret.** C3 drop shipping (Cotton/Cocoa). | L | 5-7 nye fetchere + ~8 nye drivere + YAML-diff |
-| **D3** | **Tier 3.** A10 Cecafé. B5 calendar spreads metaller/korn (hvis D0 viste Yahoo-curve). Backtest-validering av grade-distribusjon × 12mnd × 22 instrumenter; flagg drift > 25 pp i A+/A/B-andel for senere terskel-rekalibrering (ikke i scope). | M | 1-2 nye fetchere + grade-distribusjons-rapport |
+| **D2** | **Tier 2.** A5-A7 ETF-holdings, A8 NOPA, A9 Drought Monitor, A11 ICE certified stocks, A12 AAII (mean-reversion driver-intern). B2 VIX-termstruktur, B4 HDD/CDD→NG (sesong-modulert), ~~B5 calendar spreads~~ **DEFERRED til Plan-S 2026-04-30 (session 134)** — kontrakts-rolling-infra hører hjemme i scalp-rammeverket. **C2 DROPPED — Eskom paywall, Platinum beholder seismic uendret.** C3 drop shipping (Cotton/Cocoa). | L | 5-7 nye fetchere + ~8 nye drivere + YAML-diff |
+| **D3** | **Tier 3.** A10 Cecafé. ~~B5 calendar spreads metaller/korn~~ **DEFERRED til Plan-S 2026-04-30** (sammen med energi-B5). Backtest-validering av grade-distribusjon × 12mnd × 22 instrumenter; flagg drift > 25 pp i A+/A/B-andel for senere terskel-rekalibrering (ikke i scope). | M | 1-2 nye fetchere + grade-distribusjons-rapport |
 
 **Estimat:** R1+R2 = 1-2 sessioner. R3 = 1 session. R4 = 3-4 sessioner.
 D0 = 1-2 sessioner. D1 = 4-6. D2 = 4-6. D3 = 2-3. Totalt **16-24 sessioner**.
@@ -1876,11 +1876,21 @@ B2 `prices` med VIX-termstruktur (^VIX3M, ^VIX6M, ^VIX9D) ·
 B3 DXY-bytte FRED→Yahoo `DX-Y.NYB` (sekundær FRED beholdes) ·
 B4 `weather` til NaturalGas (HDD/CDD i NE-USA, TX/LA, Midwest) ·
 B5 Calendar spreads beregnet fra eksisterende `prices` (Brent/CrudeOil/NG først).
-**STATUS 2026-04-29 (session 133):** D0 GO-klassifisert (16.3y M1
-historikk for energi). Implementasjon krever spesifikke kontraktsmåneder
-(CLM26.NYM-stil, ~8.4y RISK), ikke continuous `=F`-tickere.
-Deferred til session 134 (innen-D2-scope) eller Plan-S basert på
-brukervurdering. Ingen YAML-endring i 133.
+**STATUS 2026-04-30 (session 134) — DEFERRED til Plan-S:** D0 GO-klassifisert
+M1-continuous-tickere (BZ=F/CL=F/NG=F, 16.3y). Implementasjon krever
+spesifikke kontraktsmåneder (CLM26.NYM-stil, ~8.4y RISK). Session
+134 smoke-test viste at just-expired front-måned (K = mai) returnerer
+0 rows fra Yahoo for Brent + WTI (NG fortsatt 21 rows), mens forward-
+måneder M/N/Q/Z/M27 alle har 22 rows. Robust kontrakts-rolling-logikk
+(velg ny front N dager før expiry, expiry-spec varierer per kontrakt)
+er ny infrastruktur som passer naturlig med Plan-S real-time scalp-
+rammeverk — calendar-spread regime-detection (back/contango) er
+primært swing/scalp-feature. Kombinert med 8.4y under ADR-011 10-y
+rolling-preferanse: defer beslutning. § 19.5 Del C+ structure for
+Brent/CrudeOil/NaturalGas forblir `range_position@1.00` (uendret).
+B5 re-vurderes i Plan-S sammen med scalp-arkitektur (release-clock,
+surprise-z, cross-asset-ledere). Tier 2 (metaller/korn cal-spreads)
+forblir også Plan-S-scope.
 
 **6 mapping-refaktorer (Del C) — C2 DROPPED 2026-04-29 (D0):**
 C1 cot_legacy→cot_tff for finansielle (følger A4) ·
@@ -1916,7 +1926,7 @@ produserer features som dekker relevante horisonter:
 Per-kilde × horisont-mapping (full tabell i pre-plan-dokument; bevart der):
 A3 FAS (●●/●●●/●●●) **RE-AKTIVERT 2026-04-29**, A4 TFF (●●●/●●●/◐),
 A12 AAII (●●●/●●●/–), B2 VIX-term (●●●/●●●/●●●),
-B4 HDD/CDD (●●●/●●●/◐), B5 cal-spreads (●●●/●●●/●●).
+B4 HDD/CDD (●●●/●●●/◐), ~~B5 cal-spreads~~ **DEFERRED til Plan-S 2026-04-30**.
 ~~A1 Baker Hughes~~ DROPPED 2026-04-29 (V3),
 ~~A7 PPLT~~ DROPPED 2026-04-29 (D2-prep, ingen daglig holdings),
 ~~A8 NOPA~~ DROPPED 2026-04-29 (D2-prep, LSEG-paywall),
@@ -2015,6 +2025,11 @@ plass:
 - Trigger-driver-konseptet (event-trigget vs kontinuerlig) — påvirker om
   scoring-pipeline må splittes i batch (macro/swing) + real-time (scalp)
 - Vol-regime-sizing-multiplier (ikke direksjon — sizing-input)
+- **B5 calendar spreads (energi + Tier 2 metaller/korn)** — DEFERRED hit
+  fra D2/D3 i session 134. Krever robust kontrakts-rolling-logikk
+  (front-month select N dager før expiry, varierer per kontrakt-spec
+  per commodity), passer naturlig med real-time scalp-rammeverket der
+  back/contango-regime-detection er primært swing/scalp-feature.
 
 Plan-S er ikke designet ferdig her. Reservert som own-track når Tier 1/2-
 data har akkumulert tilstrekkelig.
