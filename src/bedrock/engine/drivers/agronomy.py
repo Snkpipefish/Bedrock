@@ -276,12 +276,20 @@ def disease_pressure(store: Any, instrument: str, params: dict) -> float:
     supply). Score 0.5 (nøytral) hvis ingen alerts; >0.5 ved aktive
     disease-events.
 
+    **R4 (sub-fase 12.7):** ``params["_horizon"]`` LESES per ADR-010 men
+    brukes ikke til å endre output. Driveren er event-basert (severity
+    + yield_impact fra DB-tabell), ikke en rolling tids-serie. Per
+    event_distance-presedens: kun `_horizon`-lesing.
+
     Params:
         lookback_days: 90 default (epidemier varer typisk 1-3 mnd).
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt.
 
     Returns:
         Score 0..1.
     """
+    # ADR-010: les _horizon. Event-basert driver — output uendret.
+    _horizon = params.get("_horizon")
     from datetime import date, timedelta
 
     lookback_days = int(params.get("lookback_days", 90))
@@ -328,24 +336,135 @@ def shipping_pressure(store: Any, instrument: str, params: dict) -> float:
 
     - ``BDI`` (default for bakoverkompatibilitet): composite tørrbulk
     - ``BCI``: Capesize (kull/jernmalm)
-    - ``BPI``: Panamax — primær for grain-eksport (mest vanlig
-      skipsstørrelse for korn)
+    - ``BPI``: Panamax — primær for grain-eksport
     - ``BSI``: Supramax (korn/stål/fosfat)
 
     Tolkning: høy shipping-rate = dyr eksport = bear for eksportør-priser.
     Default ``bull_when=negative`` (rate ned = bull eksport-flyt).
 
+    **R4 (sub-fase 12.7):** horisont-bevisst via ``params["mode"]`` per
+    ADR-010. Default-output (mode=None) er bit-identisk pre-R4. Modes
+    opererer på underliggende Baltic-rå-serien (ikke pct-change) —
+    parallel til dxy_chg5d/brl_chg5d-pattern. Gjenbruker
+    ``_fundamentals_*``-helpers fra macro.py.
+
     Params:
         index: 'BDI' (default) | 'BCI' | 'BPI' | 'BSI'.
-        window_days: lookback (default 30).
-        bull_when: "negative" (default) — rate ned = bull.
+        window_days: lookback for default (default 30). Modes overstyrer
+            med _LOOKBACK_PCT_*_DAILY-konstanter (252/756).
+        bull_when: "negative" (default — rate ned = bull). Oversettes til
+            helper bull_when ("negative"→"low"; "positive"→"high").
+        mode: R4 feature-velger per ADR-010 (None/pct_12m/pct_36m/
+            delta_5d_z/delta_20d_z/extreme_flag_*).
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt i R4.
 
     Returns:
-        Score 0..1. 0.5 (nøytral) hvis utilstrekkelig data.
+        Score 0..1. 0.5 (nøytral) i default ved utilstrekkelig data;
+        0.0 i mode-banen ved utilstrekkelig historikk.
     """
+    # ADR-010: les _horizon for fremtidig bruk.
+    _horizon = params.get("_horizon")
     index_code = str(params.get("index", "BDI")).upper()
-    window_days = int(params.get("window_days", 30))
     bull_when = str(params.get("bull_when", "negative")).lower()
+    mode = params.get("mode")
+
+    if mode is None:
+        return _shipping_pressure_default(store, instrument, index_code, bull_when, params)
+
+    # Mode-banen: hent rå-serien og deleger til _fundamentals_*-helpers.
+    # Lazy-import for å unngå sirkulær: macro → ... → agronomy.
+    from bedrock.engine.drivers.macro import (
+        _DELTA_5D_DAYS,
+        _DELTA_20D_DAYS,
+        _LOOKBACK_DELTA_DAILY,
+        _LOOKBACK_PCT_12M_DAILY,
+        _LOOKBACK_PCT_36M_DAILY,
+        _fundamentals_delta_score,
+        _fundamentals_extreme_flag,
+        _fundamentals_pct_score,
+    )
+
+    helper_bull_when = "low" if bull_when == "negative" else "high"
+
+    try:
+        series = store.get_shipping_index(index_code, last_n=_LOOKBACK_PCT_36M_DAILY + 10)
+    except KeyError:
+        return 0.0
+    except Exception as exc:
+        _log.warning(
+            "shipping.fetch_failed",
+            instrument=instrument,
+            index=index_code,
+            error=str(exc),
+        )
+        return 0.0
+
+    if mode == "pct_12m":
+        result = _fundamentals_pct_score(
+            series, helper_bull_when, _LOOKBACK_PCT_12M_DAILY, instrument
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "pct_36m":
+        result = _fundamentals_pct_score(
+            series, helper_bull_when, _LOOKBACK_PCT_36M_DAILY, instrument
+        )
+        if result is None:
+            _log.info(
+                "shipping.pct_36m_fallback_to_12m",
+                instrument=instrument,
+                index=index_code,
+                available_obs=len(series),
+                required=_LOOKBACK_PCT_36M_DAILY + 1,
+            )
+            result = _fundamentals_pct_score(
+                series, helper_bull_when, _LOOKBACK_PCT_12M_DAILY, instrument
+            )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_5d_z":
+        result = _fundamentals_delta_score(
+            series,
+            helper_bull_when,
+            delta_days=_DELTA_5D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_20d_z":
+        result = _fundamentals_delta_score(
+            series,
+            helper_bull_when,
+            delta_days=_DELTA_20D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        result = _fundamentals_extreme_flag(
+            series,
+            hard=(mode == "extreme_flag_hard"),
+            lookback=_LOOKBACK_PCT_12M_DAILY,
+            instrument=instrument,
+        )
+        return result if result is not None else 0.0
+
+    # Ukjent mode: log + fall-back til default.
+    _log.warning(
+        "shipping.unknown_mode_falling_back_to_default",
+        instrument=instrument,
+        mode=mode,
+    )
+    return _shipping_pressure_default(store, instrument, index_code, bull_when, params)
+
+
+def _shipping_pressure_default(
+    store: Any, instrument: str, index_code: str, bull_when: str, params: dict
+) -> float:
+    """Pre-R4-default-bane: pct-change-trapp på Baltic-indeks."""
+    window_days = int(params.get("window_days", 30))
 
     try:
         series = store.get_shipping_index(index_code, last_n=window_days + 5)
@@ -405,9 +524,16 @@ def igc_stocks_change(store: Any, instrument: str, params: dict) -> float:
     Lavere ending-stocks = tighter global supply = bull. Driveren leser
     ``TABLE_IGC`` for relevant grain (Corn=MAIZE, Wheat=WHEAT).
 
+    **R4 (sub-fase 12.7):** ``params["_horizon"]`` LESES per ADR-010 men
+    brukes ikke til å endre output. Driveren er rapport-til-rapport
+    pct-change i månedlig IGC-data, samme presedens som wasde_s2u_change.
+    Kun `_horizon`-lesing.
+
     Returns:
         Score 0..1. 0.5 (nøytral) ved utilstrekkelig data.
     """
+    # ADR-010: les _horizon. Månedlig rapport-til-rapport endring.
+    _horizon = params.get("_horizon")
     igc_grain_map = {
         "Corn": "MAIZE",
         "Wheat": "WHEAT",
@@ -471,13 +597,21 @@ def conab_yoy(store: Any, instrument: str, params: dict) -> float:
         yoy ≤  +5% → 0.35
         yoy >  +5% → 0.15
 
+    **R4 (sub-fase 12.7):** ``params["_horizon"]`` LESES per ADR-010 men
+    brukes ikke til å endre output. Driveren bruker årlig YoY-metric
+    fra månedlig CONAB-rapport — pct_12m/delta_*_z gir lite mening på
+    årlig-frekvens-output. Kun `_horizon`-lesing.
+
     Params:
         commodity (REQUIRED): bedrock-canonical Conab-id ('soja',
             'milho', 'cafe_total', etc.).
         thresholds: optional override.
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt.
 
     Returnerer 0..1. Defensiv 0.0 ved manglende commodity/data/feil.
     """
+    # ADR-010: les _horizon. Månedlig CONAB-rapport med årlig YoY-metric.
+    _horizon = params.get("_horizon")
     import pandas as pd
 
     commodity = params.get("commodity")
@@ -563,9 +697,15 @@ def unica_change(store: Any, instrument: str, params: dict) -> float:
         ≤ 53% → 0.35
         >  53% → 0.15 (sterk sukker-tilt)
 
+    **R4 (sub-fase 12.7):** ``params["_horizon"]`` LESES per ADR-010 men
+    brukes ikke til å endre output. Multi-metric driver med step-mapping
+    på siste rapport — kun `_horizon`-lesing.
+
     Returnerer 0..1. Defensiv 0.0 ved manglende data/feil. NULL-felter
     → 0.5 (nøytral).
     """
+    # ADR-010: les _horizon. ~Halv-månedlig multi-metric driver.
+    _horizon = params.get("_horizon")
     import pandas as pd
 
     metric = str(params.get("metric", "sugar_production_yoy"))

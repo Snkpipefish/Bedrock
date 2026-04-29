@@ -5,14 +5,14 @@
       "analog": 0.35,
       "macro": 0.475,
       "positioning": 0.931,
-      "risk": 0.214752996733,
+      "risk": 0.105901636087,
       "structure": 0.713043478261,
       "trend": 0.8
     },
     "gates_triggered": [],
     "grade": "A",
     "max_score": 5.8,
-    "score": 3.37507353717
+    "score": 3.309762720782
   },
   "AUDUSD|MAKRO|sell": {
     "active_families": 5,
@@ -20,14 +20,14 @@
       "analog": 0.0,
       "macro": 0.525,
       "positioning": 0.069,
-      "risk": 0.214630565649,
+      "risk": 0.105795200128,
       "structure": 0.286956521739,
       "trend": 0.2
     },
     "gates_triggered": [],
     "grade": "C",
     "max_score": 5.8,
-    "score": 1.302556600259
+    "score": 1.237255380947
   },
   "AUDUSD|SCALP|buy": {
     "active_families": 6,
@@ -35,14 +35,14 @@
       "analog": 0.35,
       "macro": 0.475,
       "positioning": 0.931,
-      "risk": 0.214501971191,
+      "risk": 0.105688752899,
       "structure": 0.713043478261,
       "trend": 0.8
     },
     "gates_triggered": [],
     "grade": "A",
     "max_score": 4.9,
-    "score": 3.061157704454
+    "score": 2.995869773479
   },
   "AUDUSD|SCALP|sell": {
     "active_families": 5,
@@ -50,14 +50,14 @@
       "analog": 0.0,
       "macro": 0.525,
       "positioning": 0.069,
-      "risk": 0.214381393045,
+      "risk": 0.105582417545,
       "structure": 0.286956521739,
       "trend": 0.2
     },
     "gates_triggered": [],
     "grade": "C",
     "max_score": 4.9,
-    "score": 1.301172314088
+    "score": 1.235892928788
   },
   "AUDUSD|SWING|buy": {
     "active_families": 6,
@@ -65,14 +65,14 @@
       "analog": 0.35,
       "macro": 0.475,
       "positioning": 0.931,
-      "risk": 0.214261132816,
+      "risk": 0.105475946712,
       "structure": 0.713043478261,
       "trend": 0.8
     },
     "gates_triggered": [],
     "grade": "A",
     "max_score": 5.8,
-    "score": 3.465452384514
+    "score": 3.37842423563
   },
   "AUDUSD|SWING|sell": {
     "active_families": 5,
@@ -80,14 +80,14 @@
       "analog": 0.0,
       "macro": 0.525,
       "positioning": 0.069,
-      "risk": 0.214135319587,
+      "risk": 0.105367749045,
       "structure": 0.286956521739,
       "trend": 0.2
     },
     "gates_triggered": [],
     "grade": "C",
     "max_score": 5.8,
-    "score": 1.357264777409
+    "score": 1.270250720975
   },
   "BTC|MAKRO|buy": {
     "active_families": 5,
