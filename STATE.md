@@ -128,7 +128,7 @@
 - **AsOfDateStore (session 116):** utvidet med 9 nye proxy-getters (econ_events/cot_ice/cot_euronext/eia_inventory/comex_inventory/seismic_events/conab_estimates/unica_reports/shipping_indices) + tilsvarende `has_*`-helpers. Kritisk fix — uten denne falt orchestrator-replay tilbake til defensive 0.0 for alle nye Phase A-C-drivere fordi underlying-getterne kastet `AttributeError`. 24 nye tester dekker hver getter + region/from_ts-filter + tom-clip-fallback.
 - **Phase D-output (session 116):** `data/_meta/backtest_phase_d_baseline.json` (68 rader, session 99-reprise), `data/_meta/backtest_phase_d_orchestrator.json` (48 rader, 86.4 min sweep), `data/_meta/backtest_phase_d_spike_{cot_ice_mm_pct,conab_yoy,unica_change}.json` (3 spikes). Rapport: `docs/backtest_phase_d_2026-04.md` med diff-tabeller + flagg-terskel ≥3pp Δhit_rate eller ≥2 grade-flips.
 - **Sub-fase 12.6-fundament (session 117):** 3 nye SQLite-tabeller (`driver_observations` long-format, `signal_setups`, `feature_snapshots`) + 5 nye scripts (`harvest_driver_observations.py`, `harvest_feature_snapshots.py`, `run_full_history_harvest.sh`, `analyze_driver_performance.py`, `analyze_cross_correlations.py`). Detached harvest startet 2026-04-27 21:58 — features ETA ~10 min, driver_observations ETA ~24-35 timer.
-- **Next task:** **Session 134 = D2 finalisering + B5 + tech-gjeld.** Etter session 133 har D2 levert 8/9: B2/A12/B4 (131) + A5/A6 (132) + A3/A9/C3 (133). **Eneste gjenstående D2-leveranse: B5 calendar spreads M1** — D0 GO-klassifisert for energi (16.3y M1 historikk), men spesifikke kontraktsmåneder (CLM26.NYM-stil for M1-M2-spread) har kun ~8.4y RISK. Defer-til-134-beslutning ble tatt i 133 pga tids-allokering på A3 domain-korrigering. Session 134 må enten (a) implementere B5 med 8.4y caveat per ADR-011 RISK-klassifisering, eller (b) flytte B5 til Plan-S med PLAN-commit. Tech-gjeld for 134: CI cache-restore-feil, Node.js 20 deprecation (actions/checkout@v4 + setup-uv@v3 må til v5/v4 før september 2026), pre-commit i worktrees (hvis isolasjon brukes igjen). DROPPED: A7/A8/A11/C2/A14. **Sub-fase 12.6 PAUSER fortsatt**, gjenåpnes etter D3 (dvs. etter B5 lander eller defer-bekreftet).
+- **Next task:** **Session 135 = D3 åpning** eller tech-gjeld-cleanup-runde. D2 LUKKET 2026-04-30 (session 134) med tag `v0.12.7-d2`. D2 endelig: 8 implementert + 1 deferred (B5→Plan-S) + 5 dropped (A7/A8/A11/C2/A14). § 19.4 D3-rad: A10 Cecafé Brasil kaffe-eksport (Tier 3, månedlig PDF, 2002+) + grade-distribusjons-rapport × 12mnd × 22 instrumenter (per § 19.6). Etter D3 → sub-fase 12.6 GJENÅPNES (Alt γ-spec). Open tech-gjeld: PPLT SEC EDGAR Plan-S-vurdering, NOPA WASDE-utvidelse-vurdering, CONAB Café-PDF-historikk-backfill (sub-fase 12.6 KRITISK 3). **Sub-fase 12.6 PAUSER fortsatt**, gjenåpnes etter D3.
 - **Git-modus:** Nivå 1 aktivt under sub-fase 12.5+ docs/cleanup-pass. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt valgfri.
 
 ## Data-gjeld (sub-fase 12.6)
@@ -305,6 +305,93 @@ D2-implementasjon må:
 ---
 
 ## Session log (newest first)
+
+### 2026-04-30 — Session 134: sub-fase 12.7 D2 LUKKET (B5 defer + tech-gjeld + grade-rapport + tag)
+
+**Scope:** D2 finalisering. Sessions 131-133 leverte 8/9; session
+134 lukker D2 med B5-beslutning + tech-gjeld + grade-rapport + tag.
+
+**Levert:** alle 4 mål oppnådd.
+
+1. **B5 calendar spreads — DEFERRED til Plan-S** (`62ed150`).
+   Smoke-test av kontraktsmåneder: 2/6 (BZK26 + CLK26, just-expired
+   energy front-måned) returnerer 0 rows fra Yahoo, mens forward-
+   måneder (M/N/Q/Z/M27) alle 22 rows. Kontrakts-rolling-logikk
+   (velg ny front N dager før expiry, expiry-spec varierer per
+   commodity) er ny infrastruktur som passer naturlig med Plan-S
+   real-time scalp-rammeverk — calendar-spread regime-detection
+   (back/contango) er primært swing/scalp-feature. Kombinert med
+   8.4y per kontrakt under ADR-011 10-y rolling-preferanse: defer
+   hele B5 til Plan-S. PLAN-endringer: § 19.5 Del B B5-status,
+   § 19.4 D2/D3-rad B5 strikt-out, § 19.6 horisont-mapping
+   strikt-out, § 19.10 Plan-S B5 lagt til som scope. Ingen
+   kode-endring, structure-vekt for Brent/CrudeOil/NaturalGas
+   forblir `range_position@1.00`.
+
+2. **TG1 CI cache-fix** (`2a1e98e`). CI har vist "Failed to
+   restore: Cache service responded with 400" siden GitHub
+   deprekerte legacy-cache-API i 2026. setup-uv@v3 (publisert
+   2024) bruker den gamle API-en. Bumpet til:
+   - `actions/checkout@v4` → `@v5` (latest stable, ingen API-break)
+   - `astral-sh/setup-uv@v3` → `@v6` (latest med standard major-tag;
+     v8 krever immutable git-hash-pinning, unødvendig friksjon)
+   Forventet effekt: cache-hits gjenopptas, dependencies installeres
+   ikke på nytt hver run.
+
+3. **TG2 pre-commit-worktree-script** (`c8a7a53`).
+   `scripts/install_precommit_in_worktree.sh` for fremtidig
+   worktree-bruk. Verifiserer worktree-path + .pre-commit-config.yaml,
+   foretrekker `.venv/bin/pre-commit`, faller tilbake til globalt
+   pre-commit, hard-feiler hvis ingen funnet. Script-header
+   dokumenterer rasjonalet (session 132 hadde format-fix-commit
+   pga manglende worktree-hooks). Ikke i bruk i nåværende
+   session-flyt (vi commit-er direkte på main per 133-presedens),
+   men klart hvis worktree-modus aktiveres senere.
+
+4. **D2 grade-distribusjons-rapport** (`863f85d`). Per § 19.6
+   kvalitetskrav. Sammenligning: pre-D2 (tag `v0.12.7-d1`,
+   commit `f7d3072`) vs post-D2 (current). 1 instrument flagget
+   (≥50% relativ A+-endring): **Brent A+ 0→2**. Brent ble ikke
+   direkte berørt av D2-YAML; flippet forklares av DB-state-drift
+   gjennom multi-session baseline-regenereringer (D1's macro-
+   utvidelse fra session 129 har akkumulert 3-4 uker mer data
+   siden anker-baseline). Energy aggregert A+ 1→3. Agri-
+   instrumenter (Corn/Wheat/Soybean/Cotton/Cocoa/Coffee/Sugar)
+   uendret tross A3+A9+C3 — FAS/USDM-data har bare noen få
+   observasjoner per instrument enn så lenge, driverne fyller
+   verdier men produserer ikke ekstrem-percentiler. fx/crypto/
+   indices/metals stabilt eller modest B-konvergens (analog til
+   D1-funn). Distribusjons-skiftet er innenfor det forventede for
+   en D-fase med 8 deliverables; tag-blocker = ingen.
+   Verktøy: `scripts/analysis/grade_distribution_d2.py` (kopiert
+   D1-mønster fra `ce6253a`).
+
+**D2 endelig oversikt (etter session 134):**
+- ✓ A2 AGSI (session 130, D1-leveranse — pre-D2-anker)
+- ✓ A3 FAS Export Sales (session 133, re-aktivert etter D1-defer)
+- ✓ A5 GLD ETF holdings (session 132)
+- ✓ A6 SLV ETF holdings (session 132, shares-outstanding-proxy)
+- ✗ A7 PPLT — DROPPED (session 132 D2-prep, ingen daglig holdings)
+- ✗ A8 NOPA — DROPPED (session 132 D2-prep, LSEG-paywall)
+- ✓ A9 USDM Drought Monitor (session 133)
+- ✗ A11 ICE certified stocks — DROPPED (session 132 D2-prep, JS-SPA)
+- ✓ A12 AAII Sentiment (session 131)
+- ✓ B2 VIX-termstruktur (session 131)
+- ✓ B4 HDD/CDD → NaturalGas (session 131)
+- ✗ B5 Calendar spreads — DEFERRED til Plan-S (session 134)
+- ✗ C2 Eskom — DROPPED (D0, paywall)
+- ✓ C3 Drop shipping Cotton/Cocoa (session 133)
+
+**Total drivere registrert: 43** (uendret fra 133).
+
+**Status etter session 134:**
+- D2 LUKKET med tag `v0.12.7-d2`.
+- 8 implementert + 1 deferred + 5 dropped totalt.
+- Sub-fase 12.7 D3 neste (A10 Cecafé + grade-validering ×12mnd).
+- Alt γ uendret (12.6 PAUSET, R ferdig, D2 ferdig, D3 neste,
+  12.6 GJENÅPNES etter D3).
+
+**LUKKET 2026-04-30 med tag `v0.12.7-d2`.**
 
 ### 2026-04-30 — Session 133: sub-fase 12.7 D2 fortsettelse (A3 FAS + A9 USDM + C3 drop shipping)
 
