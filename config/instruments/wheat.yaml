@@ -64,12 +64,22 @@ families:
         params:
           lookback_days: 60
   weather:
+    # Sub-fase 12.7 D2 session 133 (A9): drought_monitor lagt til @ 0.45.
+    # USDM ukentlig D2+ andel co-driver med weather_stress. Sum=1.00 per
+    # § 19.5 Del C+ måltilstand. (NB: us_great_plains-region, men USDM-
+    # CONUS-aggregat er proxy — per-state IL/KS-utvidelse i Plan-S.)
     weight: 2
     drivers:
       - name: weather_stress
-        weight: 1.0
+        weight: 0.55
         params:
           lookback_months: 1
+      - name: drought_monitor
+        weight: 0.45
+        params:
+          aoi: us
+          metric: d2_pct
+          bull_when: high
   enso:
     # Wheat US-plains: La Niña gir tørrere = bull (lavere yield).
     weight: 2
@@ -88,12 +98,12 @@ families:
     weight: 2
     drivers:
       - name: dxy_chg5d
-        weight: 0.5
+        weight: 0.4
         params:
           bull_when: negative
           window: 5
       - name: shipping_pressure
-        weight: 0.2
+        weight: 0.15
         params:
           index: BDI
           window_days: 30
@@ -110,6 +120,13 @@ families:
           contract: euronext milling wheat
           metric: mm_net_pct
           lookback_weeks: 52
+      - name: fas_exports
+        weight: 0.15
+        params:
+          bull_when: high
+          # Sub-fase 12.7 D2 session 133 (A3): All Wheat (cc=107)
+          # FAS ESR demand-signal. dxy 0.50 → 0.40, shipping 0.20 →
+          # 0.15. Sum=1.00 per § 19.5 Del C+ måltilstand.
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     weight: 2

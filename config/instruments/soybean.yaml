@@ -51,12 +51,21 @@ families:
         params:
           region: US
   weather:
+    # Sub-fase 12.7 D2 session 133 (A9): drought_monitor lagt til @ 0.45.
+    # USDM ukentlig D2+ andel co-driver med weather_stress. Sum=1.00 per
+    # § 19.5 Del C+ måltilstand.
     weight: 2
     drivers:
       - name: weather_stress
-        weight: 1.0
+        weight: 0.55
         params:
           lookback_months: 1
+      - name: drought_monitor
+        weight: 0.45
+        params:
+          aoi: us
+          metric: d2_pct
+          bull_when: high
   enso:
     weight: 2
     drivers:
@@ -77,15 +86,19 @@ families:
   cross:
     # Sub-fase 12.5+ session 113: bdi_chg30d → shipping_pressure med
     # eksplisitt index=BDI (Baltic-suite-rebrand).
+    # Sub-fase 12.7 D2 session 133 (A3): fas_exports lagt til @ 0.20.
+    # Soybean er US' nest-største ag-eksport (etter Corn) — FAS ESR
+    # demand-signal er primær cross-input. dxy 0.70 → 0.55, shipping
+    # 0.20 → 0.15. Sum=1.00 per § 19.5 Del C+ måltilstand.
     weight: 2
     drivers:
       - name: dxy_chg5d
-        weight: 0.7
+        weight: 0.55
         params:
           bull_when: negative
           window: 5
       - name: shipping_pressure
-        weight: 0.2
+        weight: 0.15
         params:
           index: BDI
           window_days: 30
@@ -96,6 +109,10 @@ families:
           countries: [USD]
           impact_levels: [High]
           min_hours: 4
+      - name: fas_exports
+        weight: 0.2
+        params:
+          bull_when: high
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     weight: 2

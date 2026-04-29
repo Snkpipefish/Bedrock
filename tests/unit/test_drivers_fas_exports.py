@@ -108,16 +108,16 @@ def test_single_observation_returns_neutral() -> None:
 
 
 def test_instrument_to_commodity_code_mapping() -> None:
-    """Soybean → 801, Wheat → 107, Cotton → 501."""
+    """Soybean → 801, Wheat → 107, Cotton → 1404 (All Upland)."""
     fn = get("fas_exports")
     df_soy = _make_df([1000.0, 1300.0])
     df_soy["commodity_code"] = 801
     df_wht = _make_df([2000.0, 2600.0])
     df_wht["commodity_code"] = 107
     df_ctn = _make_df([300.0, 390.0])
-    df_ctn["commodity_code"] = 501
+    df_ctn["commodity_code"] = 1404
 
-    store = _MockStore({801: df_soy, 107: df_wht, 501: df_ctn})
+    store = _MockStore({801: df_soy, 107: df_wht, 1404: df_ctn})
     assert fn(store, "Soybean", {}) == 1.0
     assert fn(store, "Wheat", {}) == 1.0
     assert fn(store, "Cotton", {}) == 1.0

@@ -55,21 +55,22 @@ families:
   cross:
     # Sub-fase 12.5+ session 113: bdi_chg30d → shipping_pressure med
     # eksplisitt index=BDI (Baltic-suite-rebrand).
+    # Sub-fase 12.7 D2 session 133 (C3): shipping_pressure droppet for
+    # Cocoa cross. West Africa-eksport (Côte d'Ivoire/Ghana ~60% global)
+    # er mindre BDI-sensitiv enn grains (kakao-pris i container/break-bulk-
+    # cargo, ikke dry-bulk-Baltic-indekser). dxy 0.70 → 0.85, event 0.10
+    # → 0.15. Sum=1.00 per § 19.5 Del C+ måltilstand.
+    # NB: Cocoa får IKKE fas_exports (USDA FAS rapporterer ikke kakao —
+    # USA er marginal cocoa-importør, ikke produsent/eksportør).
     weight: 2
     drivers:
       - name: dxy_chg5d
-        weight: 0.7
+        weight: 0.85
         params:
           bull_when: positive  # USD-styrke = lokal-valuta-svakhet = bull cocoa-eksport
           window: 5
-      - name: shipping_pressure
-        weight: 0.2
-        params:
-          index: BDI
-          window_days: 30
-          bull_when: negative
       - name: event_distance
-        weight: 0.1
+        weight: 0.15
         params:
           countries: [USD]
           impact_levels: [High]

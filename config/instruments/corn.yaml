@@ -48,12 +48,22 @@ families:
     # Sub-fase 12.5 session 72: ekte vær-stress-driver fra weather_monthly.
     # Høy stress (varmt + tørt + vann-underskudd) er bull for Corn (lavere
     # yield-forventning → høyere pris).
+    # Sub-fase 12.7 D2 session 133 (A9): drought_monitor lagt til @ 0.45.
+    # USDM ukentlig D2+ andel — fungerer som co-driver med weather_stress
+    # (månedlig) for å fange ukentlig drought-utvikling. weather_stress
+    # 1.00 → 0.55 per § 19.5 Del C+ måltilstand. Sum=1.00.
     weight: 2
     drivers:
       - name: weather_stress
-        weight: 1.0
+        weight: 0.55
         params:
           lookback_months: 1
+      - name: drought_monitor
+        weight: 0.45
+        params:
+          aoi: us
+          metric: d2_pct
+          bull_when: high
   enso:
     # ENSO-regime fra NOAA ONI. La Niña gir typisk US-drought-risk
     # for us_cornbelt → bull for Corn (default-mapping).
@@ -87,15 +97,19 @@ families:
     # spec-signal, ikke primær.
     # Sub-fase 12.5+ session 113: bdi_chg30d → shipping_pressure med
     # eksplisitt index=BDI (Baltic-suite-rebrand).
+    # Sub-fase 12.7 D2 session 133 (A3): fas_exports lagt til @ 0.15.
+    # USDA FAS ESR ukentlig us-eksport-demand-signal (USA = marginal
+    # tilbud globalt). dxy 0.55 → 0.45, shipping 0.20 → 0.15. Sum=1.00
+    # per § 19.5 Del C+ måltilstand.
     weight: 2
     drivers:
       - name: dxy_chg5d
-        weight: 0.55
+        weight: 0.45
         params:
           bull_when: negative
           window: 5
       - name: shipping_pressure
-        weight: 0.2
+        weight: 0.15
         params:
           index: BDI
           window_days: 30
@@ -112,6 +126,10 @@ families:
           contract: euronext corn
           metric: mm_net_pct
           lookback_weeks: 52
+      - name: fas_exports
+        weight: 0.15
+        params:
+          bull_when: high
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     weight: 2

@@ -54,12 +54,22 @@ families:
         params:
           region: US
   weather:
+    # Sub-fase 12.7 D2 session 133 (A9): drought_monitor lagt til @ 0.45.
+    # USDM ukentlig D2+ andel co-driver med weather_stress. Sum=1.00 per
+    # § 19.5 Del C+ måltilstand. (us_delta_cotton-region; CONUS-aggregat
+    # som proxy. Per-state MS/AR/LA-utvidelse i Plan-S.)
     weight: 2
     drivers:
       - name: weather_stress
-        weight: 1.0
+        weight: 0.55
         params:
           lookback_months: 1
+      - name: drought_monitor
+        weight: 0.45
+        params:
+          aoi: us
+          metric: d2_pct
+          bull_when: high
   enso:
     # Cotton i US-delta er ENSO-sensitiv: La Niña gir typisk varmere/
     # tørrere — ulik effekt enn Corn (drought-bull). For Cotton kan
@@ -74,25 +84,29 @@ families:
     # Cotton-eksport. Session 90: utvidet med bdi_chg30d.
     # Sub-fase 12.5+ session 113: bdi_chg30d → shipping_pressure med
     # eksplisitt index=BDI (Baltic-suite-rebrand).
+    # Sub-fase 12.7 D2 session 133:
+    #   - C3: shipping_pressure droppet (Cotton-eksport mindre BDI-sensitiv
+    #     enn grains; reallokerer til dxy + event_distance).
+    #   - A3: fas_exports lagt til @ 0.20 — All Upland Cotton (cc=1404)
+    #     FAS ESR demand-signal. dxy 0.70 → 0.65, event_distance 0.10 →
+    #     0.15. Sum=1.00 per § 19.5 Del C+ måltilstand.
     weight: 2
     drivers:
       - name: dxy_chg5d
-        weight: 0.7
+        weight: 0.65
         params:
           bull_when: negative
           window: 5
-      - name: shipping_pressure
-        weight: 0.2
-        params:
-          index: BDI
-          window_days: 30
-          bull_when: negative
       - name: event_distance
-        weight: 0.1
+        weight: 0.15
         params:
           countries: [USD]
           impact_levels: [High]
           min_hours: 4
+      - name: fas_exports
+        weight: 0.2
+        params:
+          bull_when: high
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     weight: 2
