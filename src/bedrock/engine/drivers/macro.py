@@ -1408,6 +1408,162 @@ def _net_fed_liq_change_default(net_liq: pd.Series, bull_when: str, params: dict
 
 
 # ---------------------------------------------------------------------------
+# agsi_storage_pct (sub-fase 12.7 D1 A2, session 130)
+# ---------------------------------------------------------------------------
+#
+# AGSI EU gas storage fyllingsgrad (% av working volume) som NaturalGas-
+# fundamental. EU er verdens største LNG-importør; lav fyllingsgrad =
+# bull NG-pris (gas-priser drar opp ved fare for storage-shortage).
+#
+# Default-tolkning bull_when=low: lav fyllingsgrad = bull. high inverterer
+# for kontrære posisjoner.
+
+# Storage er sterkt sesongmessig (lav om vinteren, høy om sommeren). Default-
+# trapp på rå-fyllingsgrad er derfor mindre meningsfull enn season-of-year-
+# justert percentile. Vi bruker likevel en enkel level-trapp som default
+# (samme mønster som nfci_change), og lar pct_*-modes håndtere sesong-
+# sammenligning via rolling-percentile.
+_DEFAULT_AGSI_PCT_THRESHOLDS_LOW: tuple[tuple[float, float], ...] = (
+    # bull_when="low": lav fyllingsgrad = bull NG
+    (20.0, 1.0),  # < 20% full = sterk bull (energy crisis-territorium)
+    (40.0, 0.75),  # 20-40% = bull
+    (60.0, 0.5),  # 40-60% = nøytral
+    (80.0, 0.25),  # 60-80% = bear (overflow towards summer-peak)
+    (100.0, 0.1),  # >80% = sterk bear
+)
+
+
+@register("agsi_storage_pct")
+def agsi_storage_pct(store: Any, instrument: str, params: dict) -> float:
+    """AGSI EU gas-storage fyllingsgrad mappet til 0..1.
+
+    Sub-fase 12.7 D1 A2 (session 130). NaturalGas macro-fundamental.
+
+    Default (mode=None): terskel-trapp på rå consumption_full_pct (0..100)
+    fra siste AGSI-observasjon. R4-modes: pct_12m/pct_36m via rolling-
+    percentile (sesong-naive — fanger likevel multi-år-dynamikk),
+    delta_5d_z/delta_20d_z via daglig z-score, extreme_flag_*.
+
+    Frekvens: AGSI publiserer daglig D+1 (gass-dag i går rapporteres ~16:30
+    Brussels-tid). Bruker DAILY-vinduer (LOOKBACK_PCT_12M_DAILY=252).
+
+    Tolkning:
+        bull_when="low" (default): lav fyllingsgrad = bull NG-pris
+            (mindre buffer = mer prising-stress).
+        bull_when="high": invertert for kontrære posisjoner.
+
+    Params:
+        country: AGSI-country-key. Default ``"eu"`` (EU-aggregat). Per-land
+            tilgjengelig: "de", "nl", "fr", "it", etc.
+        bull_when: ``"low"`` (default) eller ``"high"``.
+        thresholds: optional override for default-trapp.
+        mode: feature-velger per ADR-010. Modes: ``"pct_12m"``, ``"pct_36m"``,
+            ``"delta_5d_z"``, ``"delta_20d_z"``, ``"extreme_flag_hard"``,
+            ``"extreme_flag_soft"``.
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt i R4.
+
+    Defensive 0.0 ved manglende data eller utilstrekkelig historikk.
+    """
+    _horizon = params.get("_horizon")
+    country = params.get("country", "eu")
+    bull_when = params.get("bull_when", "low")
+    mode = params.get("mode")
+
+    try:
+        df = store.get_agsi_storage(country)
+    except KeyError:
+        _log.debug("agsi_storage_pct.no_data", instrument=instrument, country=country)
+        return 0.0
+    except Exception as exc:
+        _log.warning("agsi_storage_pct.fetch_failed", instrument=instrument, error=str(exc))
+        return 0.0
+
+    if df.empty or "consumption_full_pct" not in df.columns:
+        return 0.0
+
+    # Bygg pd.Series indeksert på gas_day_start, sortert ASC.
+    series = pd.Series(
+        df["consumption_full_pct"].values,
+        index=pd.to_datetime(df["gas_day_start"]),
+    ).dropna()
+
+    if series.empty:
+        return 0.0
+
+    current = float(series.iloc[-1])
+
+    if mode is None:
+        return _agsi_storage_pct_default(current, bull_when, params)
+
+    if mode == "pct_12m":
+        result = _fundamentals_pct_score(series, bull_when, _LOOKBACK_PCT_12M_DAILY, instrument)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "pct_36m":
+        result = _fundamentals_pct_score(series, bull_when, _LOOKBACK_PCT_36M_DAILY, instrument)
+        if result is None:
+            result = _fundamentals_pct_score(series, bull_when, _LOOKBACK_PCT_12M_DAILY, instrument)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_5d_z":
+        result = _fundamentals_delta_score(
+            series,
+            bull_when,
+            delta_days=_DELTA_5D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_20d_z":
+        result = _fundamentals_delta_score(
+            series,
+            bull_when,
+            delta_days=_DELTA_20D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        result = _fundamentals_extreme_flag(
+            series,
+            hard=(mode == "extreme_flag_hard"),
+            lookback=_LOOKBACK_PCT_12M_DAILY,
+            instrument=instrument,
+        )
+        return result if result is not None else 0.0
+
+    _log.warning(
+        "agsi_storage_pct.unknown_mode_falling_back_to_default",
+        instrument=instrument,
+        mode=mode,
+    )
+    return _agsi_storage_pct_default(current, bull_when, params)
+
+
+def _agsi_storage_pct_default(current: float, bull_when: str, params: dict) -> float:
+    """Default-trapp på rå consumption_full_pct (0..100)."""
+    user_thresholds = params.get("thresholds")
+    if user_thresholds is None:
+        steps = _DEFAULT_AGSI_PCT_THRESHOLDS_LOW
+    else:
+        steps = tuple((float(t), float(s)) for t, s in user_thresholds)
+
+    score = 0.0
+    for threshold, s in sorted(steps, key=lambda t: t[0]):
+        if current <= threshold:
+            score = float(s)
+            break
+    else:
+        score = 0.0
+
+    if bull_when == "high":
+        return round(1.0 - score, 4)
+    return score
+
+
+# ---------------------------------------------------------------------------
 # eia_stock_change (sub-fase 12.5+ session 107)
 # ---------------------------------------------------------------------------
 
@@ -1923,6 +2079,7 @@ def mining_disruption(store: Any, instrument: str, params: dict) -> float:
 
 
 __all__ = [
+    "agsi_storage_pct",
     "comex_stress",
     "credit_spread_change",
     "dxy_chg5d",
