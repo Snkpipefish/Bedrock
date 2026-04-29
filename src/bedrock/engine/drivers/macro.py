@@ -316,10 +316,21 @@ _DEFAULT_DXY_THRESHOLDS_POSITIVE: tuple[tuple[float, float], ...] = (
 
 @register("dxy_chg5d")
 def dxy_chg5d(store: Any, instrument: str, params: dict) -> float:
-    """5-dager % endring i broad dollar index (DTWEXBGS), mappet til 0..1.
+    """5-dager % endring i ICE Dollar Index (`DX-Y.NYB`), mappet til 0..1.
+
+    **D1 B3 (sub-fase 12.7, session 128):** kilde byttet fra FRED
+    ``DTWEXBGS`` (Federal Reserve broad dollar, 26 valutaer) til Yahoo
+    ``DX-Y.NYB`` (ICE Dollar Index, 6-valuta basket: EUR/JPY/GBP/CAD/SEK/CHF).
+    ICE-DXY er markedsstandard og det handlere faktisk handler på.
+    Fundamentals-tabellen lagrer Yahoo-close som pseudo-FRED-serie med
+    series_id=``DX-Y.NYB``. Backfill-script:
+    ``scripts/backfill/dxy_yahoo.py``. ``DTWEXBGS`` beholdes i fundamentals
+    som sekundær (eksisterende FRED-fetcher henter den fortsatt) — bruk
+    ``params={"series": "DTWEXBGS"}`` for å bytte tilbake.
 
     Params:
-        series: FRED-serie (default ``DTWEXBGS``)
+        series: kilde-serie i fundamentals-tabellen. Default ``DX-Y.NYB``
+            (Yahoo ICE-DXY). Sekundær: ``DTWEXBGS`` (FRED broad dollar).
         window: rolling-vindu i dager (default 5). Signalvinduer >5
             gir mer stabilt signal men reagerer saktere.
         bull_when: ``"negative"`` (default — USD-svakhet er bull for
@@ -343,7 +354,10 @@ def dxy_chg5d(store: Any, instrument: str, params: dict) -> float:
     # ADR-010: les _horizon for fremtidig bruk. R4-kontrakt: ikke endre
     # default-output basert på _horizon.
     _horizon = params.get("_horizon")
-    series_id = params.get("series", "DTWEXBGS")
+    # D1 B3 (session 128): default byttet fra FRED DTWEXBGS til Yahoo
+    # ICE Dollar Index (DX-Y.NYB). Lagret i fundamentals via
+    # scripts/backfill/dxy_yahoo.py.
+    series_id = params.get("series", "DX-Y.NYB")
     bull_when = params.get("bull_when", "negative")
     mode = params.get("mode")
 
