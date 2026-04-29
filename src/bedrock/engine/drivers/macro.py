@@ -60,72 +60,56 @@ from bedrock.engine.drivers._stats import (
     rolling_z,
 )
 
+# R3 mode-helpers — konsolidert til horizon_helpers.py i D1 (session 127).
+# Re-eksporteres under gamle navn (med _-prefiks) for bakoverkompatibilitet
+# med eksisterende lazy-import-referanser fra agronomy.py + currency.py.
+from bedrock.engine.drivers.horizon_helpers import (
+    DELTA_5D_DAYS as _DELTA_5D_DAYS,
+)
+from bedrock.engine.drivers.horizon_helpers import (
+    DELTA_5D_WEEKS as _DELTA_5D_WEEKS,
+)
+from bedrock.engine.drivers.horizon_helpers import (
+    DELTA_20D_DAYS as _DELTA_20D_DAYS,
+)
+from bedrock.engine.drivers.horizon_helpers import (
+    DELTA_20D_WEEKS as _DELTA_20D_WEEKS,
+)
+from bedrock.engine.drivers.horizon_helpers import (
+    LOOKBACK_DELTA_DAILY as _LOOKBACK_DELTA_DAILY,
+)
+from bedrock.engine.drivers.horizon_helpers import (
+    LOOKBACK_DELTA_WEEKLY as _LOOKBACK_DELTA_WEEKLY,
+)
+from bedrock.engine.drivers.horizon_helpers import (
+    LOOKBACK_PCT_12M_DAILY as _LOOKBACK_PCT_12M_DAILY,
+)
+from bedrock.engine.drivers.horizon_helpers import (
+    LOOKBACK_PCT_12M_WEEKLY as _LOOKBACK_PCT_12M_WEEKLY,
+)
+from bedrock.engine.drivers.horizon_helpers import (
+    LOOKBACK_PCT_36M_DAILY as _LOOKBACK_PCT_36M_DAILY,
+)
+from bedrock.engine.drivers.horizon_helpers import (
+    LOOKBACK_PCT_36M_WEEKLY as _LOOKBACK_PCT_36M_WEEKLY,
+)
+from bedrock.engine.drivers.horizon_helpers import (
+    extreme_flag as _extreme_flag,
+)
+from bedrock.engine.drivers.horizon_helpers import (
+    fundamentals_delta_score as _fundamentals_delta_score,
+)
+from bedrock.engine.drivers.horizon_helpers import (
+    fundamentals_extreme_flag as _fundamentals_extreme_flag,
+)
+from bedrock.engine.drivers.horizon_helpers import (
+    fundamentals_pct_score as _fundamentals_pct_score,
+)
+from bedrock.engine.drivers.horizon_helpers import (
+    normalize_bull_when_for_chg as _normalize_bull_when_for_chg,
+)
+
 _log = structlog.get_logger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# R3 mode-helpers (real_yield)
-# ---------------------------------------------------------------------------
-
-# Daglige FRED-serier: 252 trading-days ≈ 12m, 756 ≈ 36m.
-_LOOKBACK_PCT_12M_DAILY = 252
-_LOOKBACK_PCT_36M_DAILY = 756
-_DELTA_5D_DAYS = 5
-_DELTA_20D_DAYS = 20
-_LOOKBACK_DELTA_DAILY = 252  # historikk-obs av diff-serien
-
-# Ukentlige FRED/EIA-serier: 52 uker ≈ 12m, 156 uker ≈ 36m.
-# delta_5d_z på ukentlig data tolkes som "1-rapport-delta" (~7d natural,
-# samme presedens som positioning's COT-delta — se _mode_delta_z i
-# positioning.py). delta_20d_z = "4-rapport-delta" (~28d natural).
-_LOOKBACK_PCT_12M_WEEKLY = 52
-_LOOKBACK_PCT_36M_WEEKLY = 156
-_DELTA_5D_WEEKS = 1
-_DELTA_20D_WEEKS = 4
-_LOOKBACK_DELTA_WEEKLY = 52  # historikk-obs av diff-serien
-
-# Tersklene for extreme_flag-modes (PLAN § 19.3 låst, sammenfaller med
-# konstantene i positioning.py — lokal duplisering for å unngå
-# kryss-modul-import for to-linjer-helpers).
-_EXTREME_HARD_HI = 0.98
-_EXTREME_HARD_LO = 0.02
-_EXTREME_SOFT_HI = 0.95
-_EXTREME_SOFT_LO = 0.05
-
-
-def _z_to_score_with_bull_when(z: float, bull_when: str) -> float:
-    """Map z-score til [0..1] via momentum-trapp, bull_when-aware.
-
-    bull_when="high": positiv z = bull-of-instrument ⇒ standard trapp.
-    bull_when="low":  negativ z = bull-of-instrument ⇒ inverter z først.
-
-    Trappen følger _DEFAULT_Z_THRESHOLDS-konvensjonen i
-    positioning.py (z≥2→1.0, ...) for konsistens på tvers av drivere.
-    """
-    z_oriented = -z if bull_when == "low" else z
-    if z_oriented >= 2.0:
-        return 1.0
-    if z_oriented >= 1.0:
-        return 0.75
-    if z_oriented >= 0.5:
-        return 0.6
-    if z_oriented >= 0.0:
-        return 0.5
-    if z_oriented >= -0.5:
-        return 0.3
-    return 0.0
-
-
-def _extreme_flag(pct_0_to_1: float, *, hard: bool) -> float:
-    """Returner 1.0 hvis pct er ekstrem, ellers 0.0.
-
-    Symmetrisk i begge ender — bull_when-agnostisk per § 1.1.
-    """
-    hi = _EXTREME_HARD_HI if hard else _EXTREME_SOFT_HI
-    lo = _EXTREME_HARD_LO if hard else _EXTREME_SOFT_LO
-    if pct_0_to_1 >= hi or pct_0_to_1 <= lo:
-        return 1.0
-    return 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -202,114 +186,6 @@ def _real_yield_default_score(current: float, bull_when: str, params: dict) -> f
             if current <= threshold:
                 return float(score)
     return 0.0
-
-
-def _fundamentals_pct_score(
-    series: pd.Series, bull_when: str, lookback: int, instrument: str
-) -> float | None:
-    """Rank-percentile av current mot siste `lookback` obs, bull_when-aware.
-
-    Generisk helper for daglig FRED-baserte drivere (real_yield, dxy_chg5d,
-    brl_chg5d, vix_regime). Argument-navnet ``series`` er nøytralt; tidligere
-    var helperen knyttet til real_yield (R3) og argumentet het ``real``.
-
-    bull_when="low":  score = 1 - rank/100 (lav rank ⇒ høy score)
-    bull_when="high"/"positive"/"negative": delegert via caller — denne
-        helperen kjenner kun "low" som inversjons-trigger; andre verdier
-        får standard rank/100. Caller normaliserer bull_when-konvensjonen
-        før kallet (f.eks. dxy_chg5d's "negative" tolkes som "low" av
-        caller-side).
-    """
-    if len(series) < MIN_OBS_FOR_PCTILE + 1:
-        _log.debug(
-            "fundamentals.short_history_for_pct",
-            instrument=instrument,
-            n=len(series),
-            required=MIN_OBS_FOR_PCTILE + 1,
-        )
-        return None
-    window = series.iloc[-(lookback + 1) :] if len(series) > lookback else series
-    if len(window) < MIN_OBS_FOR_PCTILE + 1:
-        return None
-    current = float(window.iloc[-1])
-    history = [float(v) for v in window.iloc[:-1]]
-    pct = rank_percentile(current, history)
-    if pct is None:
-        return None
-    pct_0_1 = pct / 100.0
-    return 1.0 - pct_0_1 if bull_when == "low" else pct_0_1
-
-
-def _fundamentals_delta_score(
-    series: pd.Series,
-    bull_when: str,
-    *,
-    delta_days: int,
-    lookback: int,
-    instrument: str,
-) -> float | None:
-    """Z-score av N-trading-days-delta, bull_when-aware.
-
-    Generisk helper for daglig FRED-baserte drivere. delta_days=5 ⇒
-    "delta_5d_z", delta_days=20 ⇒ "delta_20d_z".
-
-    Frekvens-translasjonen (5d/20d på daglig FRED ≈ 5d/20d natural)
-    logges via debug per call slik at den ikke er skjult — viktig når
-    output sammenlignes på tvers av drivere med ulike datafrekvenser
-    (positioning på ukentlig COT bruker N-rapport-delta).
-    """
-    required = delta_days + lookback + 1
-    if len(series) < required:
-        _log.debug(
-            "fundamentals.short_history_for_delta",
-            instrument=instrument,
-            delta_days=delta_days,
-            n=len(series),
-            required=required,
-        )
-        return None
-
-    diff_series = series.diff(periods=delta_days).dropna()
-    if len(diff_series) < MIN_OBS_FOR_PCTILE + 1:
-        return None
-
-    _log.debug(
-        "fundamentals.delta_z_natural_translation",
-        instrument=instrument,
-        delta_days=delta_days,
-        natural_days=delta_days,
-        note="daily FRED data; delta interpreted as N-trading-day-delta",
-    )
-
-    current_diff = float(diff_series.iloc[-1])
-    history_diff = [float(v) for v in diff_series.iloc[-(lookback + 1) : -1]]
-    z = rolling_z(current_diff, history_diff)
-    if z is None:
-        return None
-    return _z_to_score_with_bull_when(z, bull_when)
-
-
-def _fundamentals_extreme_flag(
-    series: pd.Series, *, hard: bool, lookback: int, instrument: str
-) -> float | None:
-    """Beregn extreme_flag på rank-percentile av current vs `lookback`-obs.
-
-    Symmetrisk i begge ender — bull_when-agnostisk per § 1.1.
-    Returnerer None hvis utilstrekkelig historikk slik at caller kan
-    rapportere 0.0.
-    """
-    if len(series) < MIN_OBS_FOR_PCTILE + 1:
-        return None
-    window = series.iloc[-(lookback + 1) :] if len(series) > lookback else series
-    if len(window) < MIN_OBS_FOR_PCTILE + 1:
-        return None
-    current = float(window.iloc[-1])
-    history = [float(v) for v in window.iloc[:-1]]
-    pct = rank_percentile(current, history)
-    if pct is None:
-        _log.debug("fundamentals.short_history_for_extreme", instrument=instrument)
-        return None
-    return _extreme_flag(pct / 100.0, hard=hard)
 
 
 @register("real_yield")
@@ -433,29 +309,9 @@ _DEFAULT_DXY_THRESHOLDS_POSITIVE: tuple[tuple[float, float], ...] = (
 )
 
 
-def _normalize_bull_when_for_chg(bull_when: str) -> str:
-    """Oversett dxy/brl chg-driver-konvensjon til generic helper-konvensjon.
-
-    chg-drivere bruker ``bull_when="negative"`` (negativ endring = bull) og
-    ``"positive"`` (positiv endring = bull). Helper-konvensjonen er
-    ``"low"`` (lav verdi = bull) / ``"high"`` (høy verdi = bull). Når
-    helperen jobber på rå-serien (DTWEXBGS-nivåer, ikke pct-change) er
-    semantikken den samme: "negative bull_when" på chg-driver = "high
-    bull_when" på rå-serien (hvis DTWEXBGS-NIVÅ stiger over tid er det
-    USD-styrkelse, motsatt av "negative chg = bull"). Men for rå-nivåer
-    er det ikke meningsfylt å snakke om "high vs low DXY-nivå" som
-    bull-trigger — modes er per-driver-tolket.
-
-    R4-konvensjon for chg-drivere: pct_*-modes ranker **rå-serien**;
-    bull_when="negative" tolkes som "lav rå-nivå = bull" (siden lav
-    DXY-nivå korresponderer med USD-svakhet generelt). bull_when=
-    "positive" tolkes som "høy rå-nivå = bull".
-    """
-    if bull_when == "negative":
-        return "low"
-    if bull_when == "positive":
-        return "high"
-    return bull_when
+# _normalize_bull_when_for_chg konsolidert til horizon_helpers.py i D1
+# (session 127). Re-eksportert fra macro-modulen via top-level import for
+# bakoverkompatibilitet.
 
 
 @register("dxy_chg5d")
@@ -1154,7 +1010,7 @@ def _eia_stock_change_default(
     store: Any, instrument: str, series_id: str, invert: bool, params: dict
 ) -> float:
     """Pre-R4-default-bane: z-score-trapp av siste WoW% vs 52-uke historikk."""
-    from bedrock.engine.drivers._stats import MIN_OBS_FOR_PCTILE, rolling_z
+    from bedrock.engine.drivers._stats import MIN_OBS_FOR_PCTILE
 
     lookback = int(params.get("lookback_weeks", 52))
 

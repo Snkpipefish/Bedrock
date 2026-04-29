@@ -94,17 +94,31 @@ def currency_cross_trend(store: Any, instrument: str, params: dict) -> float:
         )
         return 0.0
 
-    # Mode-banen: hent rå-serien og deleger til _fundamentals_*-helpers.
-    # Lazy-import for å unngå sirkulær.
-    from bedrock.engine.drivers.macro import (
-        _DELTA_5D_DAYS,
-        _DELTA_20D_DAYS,
-        _LOOKBACK_DELTA_DAILY,
-        _LOOKBACK_PCT_12M_DAILY,
-        _LOOKBACK_PCT_36M_DAILY,
-        _fundamentals_delta_score,
-        _fundamentals_extreme_flag,
-        _fundamentals_pct_score,
+    # D1 (session 127): direkte top-level import fra horizon_helpers
+    # (tidligere lazy-import fra macro for å unngå sirkulær).
+    from bedrock.engine.drivers.horizon_helpers import (
+        DELTA_5D_DAYS as _DELTA_5D_DAYS,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        DELTA_20D_DAYS as _DELTA_20D_DAYS,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        LOOKBACK_DELTA_DAILY as _LOOKBACK_DELTA_DAILY,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        LOOKBACK_PCT_12M_DAILY as _LOOKBACK_PCT_12M_DAILY,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        LOOKBACK_PCT_36M_DAILY as _LOOKBACK_PCT_36M_DAILY,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        fundamentals_delta_score as _fundamentals_delta_score,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        fundamentals_extreme_flag as _fundamentals_extreme_flag,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        fundamentals_pct_score as _fundamentals_pct_score,
     )
 
     helper_bull_when = "low" if direction == "invert" else "high"
