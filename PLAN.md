@@ -13,10 +13,11 @@ Referanser: `NYTT_PROSJEKT_UTKAST.md` (i cot-explorer), `AGRI_KARTLEGGING.md` (i
 - **Spor R (R1-R4):** horisont-bevisst driver-arkitektur (Alt 1 — YAML-
   styrt `horizon`-param via engine-propagering av `_horizon` analogt med
   `_direction`). Score-uendret-garanti via snapshot-tester.
-- **Spor D (D0-D3):** 13 nye fetchere + 5 utvidelser + 7 mapping-
-  refaktorer organisert i tiers. Eskom som egen fetcher (A14, ikke
-  kilde-bytte). GHS/XOF droppet helt — Cocoa cross blir
-  `dxy@0.85 + event_distance@0.15`.
+- **Spor D (D0-D3):** 12 nye fetchere + 5 utvidelser + 6 mapping-
+  refaktorer organisert i tiers. **A14 Eskom DROPPED 2026-04-29 (D0):**
+  bekreftet bak betalingsmur. **C2 Platinum mining_disruption→Eskom
+  DROPPED:** Platinum beholder seismic uendret. GHS/XOF droppet helt —
+  Cocoa cross blir `dxy@0.85 + event_distance@0.15`.
 - **ADR-er:** ADR-009 (horisont-pattern, Alt 1) + ADR-010 (backfill-
   policy: 2010-cutoff, sekvensiell pacing 1.5s, engangs-skripts i
   `scripts/backfill/`, lov til å være "shitty"). ADR-011 (deprecation)
@@ -1779,9 +1780,9 @@ etterpå, må alle nye drivere skrives om.
 | **R2** | Feature-konvensjon: standard typer (`pct_12m`, `pct_36m`, `delta_5d_z`, `delta_20d_z`, `extreme_flag`, `approaching_extreme`, `surprise_z`, `time_to_release_min`, `post_release_drift_3d`, `extreme_contrarian_score`). Per-horisont test-strategi (3 typer: snapshot score-uendret, monotonisitet ved gradvis data-tilkomst, regime-shift fanger delta). Sesong-driver-mønster (driver-intern kalender-aware, ingen ny polarity). 2 ende-til-ende-eksempler: "Brent SWING onsdag 10:30 ET (post-EIA)" + "Corn yield-familie i juli". | M | `docs/driver_horizon_pattern.md` |
 | **R3** | Refactor 3 referanse-drivere: `positioning_mm_pct`, `real_yield`, `crop_progress_stage`. Hver produserer flere horizon-features via samme funksjon, valgt via `params["_horizon"]`. Snapshot-tester må gi bit-identisk output for default-horizon. | M | 3 refactored drivere + snapshot/logiske/monotonisitet-tester |
 | **R4** | Batch-vis migrering i 7 commits (én per familie-gruppe per rekkefølge over). Snapshot-tester må være grønne for hver batch. Score-uendret-garanti låst på 22 inst × 3 horisonter × 2 retninger. | L | Alle drivere migrert, snapshot grønt |
-| **D0** | Smoke-tests for 13 nye + 5 utvidelser. Engangs-skripts i `scripts/smoke/`. Inkluderer eksplisitt: (a) **A14 Eskom-historikk** (≥2010? hvis <2014, behold seismic for Platinum), (b) **B5 Yahoo `@F`-curve-feasibility** for calendar spreads (høyrisiko), (c) **A11 ICE TTF-status** (NaturalGas TFF-spørsmål). ADR-010 brukes som mal for backfill-skripts. | M | `docs/smoke_test_results.md` med per-kilde GO/NO-GO/UTSATT |
+| **D0** | Smoke-tests for 12 nye + 5 utvidelser. Engangs-skripts i `scripts/smoke/`. **A14 DROPPED ved D0-start (paywall).** Inkluderer eksplisitt: (a) **B5 Yahoo `@F`-curve-feasibility** for calendar spreads (høyrisiko), (b) **A11 ICE TTF-status** (NaturalGas TFF-spørsmål). ADR-011 brukes som mal for backfill-skripts. | M | `docs/smoke_test_results.md` med per-kilde GO/RISK/SKIP/BLOCK |
 | **D1** | **Tier 1.** A1 Baker Hughes, A2 AGSI, A3 FAS Export Sales, A4 CFTC TFF + C1 (cot_legacy→cot_tff for finansielle), B1 yield-diff + kreditt/NFCI/NetFedLiq, B3 DXY-bytte (Yahoo `DX-Y.NYB`). Hver kilde commit-isolert. YAML-diff per instrument med Pydantic-validering at familie-sum=1.0. | L | 6 nye fetchere/utvidelser + ~10 nye drivere + YAML-diff |
-| **D2** | **Tier 2.** A5-A7 ETF-holdings, A8 NOPA, A9 Drought Monitor, A11 ICE certified stocks, A12 AAII (mean-reversion driver-intern). B2 VIX-termstruktur, B4 HDD/CDD→NG (sesong-modulert), B5 calendar spreads (kun energi, kun hvis D0 grønn). C2 Eskom→Platinum (kun hvis D0 grønn). C3 drop shipping (Cotton/Cocoa). | L | 5-7 nye fetchere + ~8 nye drivere + YAML-diff |
+| **D2** | **Tier 2.** A5-A7 ETF-holdings, A8 NOPA, A9 Drought Monitor, A11 ICE certified stocks, A12 AAII (mean-reversion driver-intern). B2 VIX-termstruktur, B4 HDD/CDD→NG (sesong-modulert), B5 calendar spreads (kun energi, kun hvis D0 grønn). **C2 DROPPED — Eskom paywall, Platinum beholder seismic uendret.** C3 drop shipping (Cotton/Cocoa). | L | 5-7 nye fetchere + ~8 nye drivere + YAML-diff |
 | **D3** | **Tier 3.** A10 Cecafé. B5 calendar spreads metaller/korn (hvis D0 viste Yahoo-curve). Backtest-validering av grade-distribusjon × 12mnd × 22 instrumenter; flagg drift > 25 pp i A+/A/B-andel for senere terskel-rekalibrering (ikke i scope). | M | 1-2 nye fetchere + grade-distribusjons-rapport |
 
 **Estimat:** R1+R2 = 1-2 sessioner. R3 = 1 session. R4 = 3-4 sessioner.
@@ -1792,7 +1793,7 @@ R2/R3 commits men ingen tag (mellom-fase).
 
 ### 19.5 Ny data — oversikt
 
-**13 nye fetchere (Del A):**
+**12 nye fetchere (Del A) — A14 DROPPED 2026-04-29 (D0, paywall):**
 A1 Baker Hughes Rig Count (CSV, 1944+, ukentlig fre, macro low_bull) ·
 A2 AGSI EU gas storage (API, 2011+, daglig, macro low_bull) ·
 A3 FAS Export Sales (ESR API, 1990+, ukentlig tor 8:30 ET, cross high_bull) ·
@@ -1806,7 +1807,8 @@ A10 Cecafé Brasil kaffe-eksport (PDF, 2002+, månedlig — Tier 3) ·
 A11 ICE certified stocks (CSV, 2008+, daglig) ·
 A12 AAII Sentiment (CSV, 1987+, ukentlig tor) ·
 A13 BRL=X (kun ny ticker i eksisterende `prices`-fetcher) ·
-A14 Eskom load-shedding (API, ≥2014?, real-time — egen fetcher, ikke kilde-bytte i seismic).
+~~A14 Eskom load-shedding~~ — **DROPPED**: bekreftet bak betalingsmur.
+Platinum beholder seismic uendret (C2 også dropped).
 
 **5 utvidelser av eksisterende fetchere (Del B):**
 B1 `fundamentals` med yield-diff + kreditt-spreads + NFCI + NetFedLiq ·
@@ -1815,9 +1817,10 @@ B3 DXY-bytte FRED→Yahoo `DX-Y.NYB` (sekundær FRED beholdes) ·
 B4 `weather` til NaturalGas (HDD/CDD i NE-USA, TX/LA, Midwest) ·
 B5 Calendar spreads beregnet fra eksisterende `prices` (Brent/CrudeOil/NG først).
 
-**7 mapping-refaktorer (Del C):**
+**6 mapping-refaktorer (Del C) — C2 DROPPED 2026-04-29 (D0):**
 C1 cot_legacy→cot_tff for finansielle (følger A4) ·
-C2 Platinum mining_disruption seismic→Eskom ·
+~~C2 Platinum mining_disruption seismic→Eskom~~ — **DROPPED**: Eskom
+paywall (jf. A14), Platinum beholder seismic uendret ·
 C3 Drop shipping for Cotton/Cocoa ·
 C4 news_intel/F&G UI-only→scoring (UTE av scope, egen syklus) ·
 C5 BRL→Coffee/Sugar (dekket i A13) ·
@@ -1844,8 +1847,9 @@ produserer features som dekker relevante horisonter:
 Per-kilde × horisont-mapping (full tabell i pre-plan-dokument; bevart der):
 A1 Baker Hughes (●●●/●●●/◐), A3 FAS (●●/●●●/●●●), A4 TFF (●●●/●●●/◐),
 A8 NOPA (●●●/●●●/●●●), A12 AAII (●●●/●●●/–), B2 VIX-term (●●●/●●●/●●●),
-B4 HDD/CDD (●●●/●●●/◐), B5 cal-spreads (●●●/●●●/●●), A14 Eskom
-(●●●/●●●/◐). `●●●`=primær, `●●`=sekundær, `◐`=marginal, `–`=ikke relevant.
+B4 HDD/CDD (●●●/●●●/◐), B5 cal-spreads (●●●/●●●/●●). ~~A14 Eskom~~
+**DROPPED** (paywall). `●●●`=primær, `●●`=sekundær, `◐`=marginal,
+`–`=ikke relevant.
 
 ### 19.7 Koordinering med sub-fase 12.6
 
@@ -1912,12 +1916,13 @@ Eksempler på reduksjoner ved D-fasene (ikke-uttømmende):
   `horizon`-param via engine-propagering). Driver-kontrakt uendret;
   `_horizon`-key analog til `_direction` (ADR-006). (Nummerert 010 fordi
   ADR-009 er allerede tatt av cutover-readiness 2026-04-27.)
-- **ADR-011 — Backfill-policy.** 2010-01-01 cutoff for alle nye fetchere.
-  Engangs-skripts i `scripts/backfill/<source>.py` (separat fra
-  produksjons-`bedrock backfill <source>`-CLI). Sekvensiell HTTP med ≥1.5s
-  pacing. Lov til å være "shitty": manuell kjøring, sleep mellom
-  requests, ingen retry-policy beyond exponential backoff. Skal IKKE
-  forurense produksjons-fetcher-koden.
+- **ADR-011 — Backfill-policy.** **10-år-rolling-cutoff** (myket opp
+  fra 2010-01-01 i session 126 D0). Engangs-skripts i
+  `scripts/backfill/<source>.py` (separat fra produksjons-`bedrock
+  backfill <source>`-CLI). Sekvensiell HTTP med ≥1.5s pacing. Lov til
+  å være "shitty": manuell kjøring, sleep mellom requests, ingen
+  retry-policy beyond exponential backoff. Skal IKKE forurense
+  produksjons-fetcher-koden.
 
 ADR-012 (deprecation) + ADR-013 (failure-mode): **ikke i denne sub-
 fasen**. "Sekundær" = vekt 0 i YAML + kommentar `# DEPRECATED-<session>`.
