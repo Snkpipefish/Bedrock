@@ -134,14 +134,14 @@ def test_real_yield_custom_thresholds() -> None:
 def test_dxy_chg5d_strong_negative_returns_max_for_negative_bull() -> None:
     """USD-svakhet (-2%) → 1.0 (default Gold)."""
     # 100 → 100 → 100 → 100 → 100 → 98 (5d windows: -2%)
-    store = _MockStore({"DTWEXBGS": _series([100, 100, 100, 100, 100, 98])})
+    store = _MockStore({"DX-Y.NYB": _series([100, 100, 100, 100, 100, 98])})
     fn = get("dxy_chg5d")
     assert fn(store, "Gold", {}) == 1.0
 
 
 def test_dxy_chg5d_strong_positive_returns_zero_for_negative_bull() -> None:
     """USD-styrke (+2%) → ingen match i ascending-pass → 0.0 (default Gold)."""
-    store = _MockStore({"DTWEXBGS": _series([100, 100, 100, 100, 100, 102])})
+    store = _MockStore({"DX-Y.NYB": _series([100, 100, 100, 100, 100, 102])})
     fn = get("dxy_chg5d")
     # +2 > +1.5 default-terskel; ingen flere → 0.0
     assert fn(store, "Gold", {}) == 0.0
@@ -149,14 +149,14 @@ def test_dxy_chg5d_strong_positive_returns_zero_for_negative_bull() -> None:
 
 def test_dxy_chg5d_positive_bull_inverts() -> None:
     """``bull_when="positive"`` skal gi 1.0 ved USD-styrke."""
-    store = _MockStore({"DTWEXBGS": _series([100, 100, 100, 100, 100, 102])})
+    store = _MockStore({"DX-Y.NYB": _series([100, 100, 100, 100, 100, 102])})
     fn = get("dxy_chg5d")
     assert fn(store, "USD", {"bull_when": "positive"}) == 1.0
 
 
 def test_dxy_chg5d_neutral_returns_mid() -> None:
     """Liten endring (±0.5%) → 0.5."""
-    store = _MockStore({"DTWEXBGS": _series([100, 100, 100, 100, 100, 100.2])})
+    store = _MockStore({"DX-Y.NYB": _series([100, 100, 100, 100, 100, 100.2])})
     fn = get("dxy_chg5d")
     assert fn(store, "Gold", {}) == 0.5
 
@@ -168,7 +168,7 @@ def test_dxy_chg5d_missing_series_returns_zero() -> None:
 
 
 def test_dxy_chg5d_short_history_returns_zero() -> None:
-    store = _MockStore({"DTWEXBGS": _series([100, 100, 100])})  # 3 obs < window+1
+    store = _MockStore({"DX-Y.NYB": _series([100, 100, 100])})  # 3 obs < window+1
     fn = get("dxy_chg5d")
     assert fn(store, "Gold", {"window": 5}) == 0.0
 
@@ -176,7 +176,7 @@ def test_dxy_chg5d_short_history_returns_zero() -> None:
 def test_dxy_chg5d_custom_window() -> None:
     """Window=2 skal regne 2-dager pct change."""
     # 100 → 102 → 95 over 3 dager (ikke nok for 5d, men fungerer for window=2)
-    store = _MockStore({"DTWEXBGS": _series([100, 102, 95])})
+    store = _MockStore({"DX-Y.NYB": _series([100, 102, 95])})
     fn = get("dxy_chg5d")
     # 2d-endring: (95-100)/100 = -5%, sterk USD-svakhet → 1.0
     assert fn(store, "Gold", {"window": 2}) == 1.0
