@@ -4,6 +4,8 @@ Kilder:
 - forex   — Forex Factory CSV (2007-2025, ~83k events)
 - conab   — CONAB Excel-filer (per-safra-mappe med levantamentos)
 - bdi     — Investing.com BDI PDF (2014-2018 daglig)
+- gld     — SPDR Gold (GLD) holdings CSV (2004-11+, daglig)
+- slv     — iShares Silver (SLV) holdings CSV (2006-04+, daglig, proxy)
 
 Hver kilde mapper manuell fil til schema i `bedrock/data/schemas.py`
 og bruker `DataStore.append_*` for idempotent insert.
@@ -12,6 +14,8 @@ Kjør:
     PYTHONPATH=src .venv/bin/python scripts/ingest_manual_data.py forex --file path/to/forex.csv
     PYTHONPATH=src .venv/bin/python scripts/ingest_manual_data.py conab --dir path/to/conab_boletins
     PYTHONPATH=src .venv/bin/python scripts/ingest_manual_data.py bdi --file path/to/bdi.pdf
+    PYTHONPATH=src .venv/bin/python scripts/ingest_manual_data.py gld --file 'bedrock manuell data/gld_holdings/gld_holdings.csv'
+    PYTHONPATH=src .venv/bin/python scripts/ingest_manual_data.py slv --file 'bedrock manuell data/slv_holdings/slv_holdings.csv'
 """
 # pyright: reportArgumentType=false, reportMissingImports=false
 
@@ -366,6 +370,55 @@ def ingest_bdi_pdf(pdf_path: Path, store: DataStore) -> int:
 
 
 # ===========================================================================
+# ETF holdings — GLD (SPDR Gold) + SLV (iShares Silver)
+# ===========================================================================
+
+
+def ingest_etf_holdings_csv(csv_path: Path, ticker: str, store: DataStore) -> int:
+    """Ingest manuell physical-ETF-holdings-CSV til etf_holdings-tabellen.
+
+    Forventet schema for GLD: ``date, tonnes_in_trust, ounces_in_trust,
+    nav_per_share, closing_price, shares_volume, nav_total``.
+    Forventet schema for SLV: ``date, nav_per_share, shares_outstanding``.
+
+    Manglende kolonner = NULL i DB (Pydantic-schema tolererer dette).
+    """
+    print(f"ETF holdings ({ticker.upper()}): {csv_path}")
+    df_raw = pd.read_csv(csv_path)
+    print(f"  Rader rå: {len(df_raw)}")
+
+    out = pd.DataFrame()
+    out["ticker"] = [ticker.lower()] * len(df_raw)
+    out["date"] = pd.to_datetime(df_raw["date"]).dt.strftime("%Y-%m-%d")
+    out["tonnes_in_trust"] = (
+        pd.to_numeric(df_raw["tonnes_in_trust"], errors="coerce")
+        if "tonnes_in_trust" in df_raw.columns
+        else None
+    )
+    out["ounces_in_trust"] = (
+        pd.to_numeric(df_raw["ounces_in_trust"], errors="coerce")
+        if "ounces_in_trust" in df_raw.columns
+        else None
+    )
+    out["shares_outstanding"] = (
+        pd.to_numeric(df_raw["shares_outstanding"], errors="coerce")
+        if "shares_outstanding" in df_raw.columns
+        else None
+    )
+    out["nav_per_share"] = (
+        pd.to_numeric(df_raw["nav_per_share"], errors="coerce")
+        if "nav_per_share" in df_raw.columns
+        else None
+    )
+
+    out = out.drop_duplicates(subset=["ticker", "date"], keep="last")
+    print(f"  Etter dedupe: {len(out)} (range {out['date'].min()} → {out['date'].max()})")
+    inserted = store.append_etf_holdings(out)
+    print(f"  Inserted/replaced: {inserted}")
+    return inserted
+
+
+# ===========================================================================
 # CLI
 # ===========================================================================
 
@@ -383,6 +436,12 @@ def main() -> int:
     p_bdi = sub.add_parser("bdi", help="BDI Investing.com PDF ingest")
     p_bdi.add_argument("--file", type=Path, required=True)
 
+    p_gld = sub.add_parser("gld", help="SPDR Gold (GLD) holdings CSV ingest")
+    p_gld.add_argument("--file", type=Path, required=True)
+
+    p_slv = sub.add_parser("slv", help="iShares Silver (SLV) holdings CSV ingest (proxy)")
+    p_slv.add_argument("--file", type=Path, required=True)
+
     args = parser.parse_args()
     cfg = load_from_env()
     store = DataStore(cfg.db_path)
@@ -393,6 +452,10 @@ def main() -> int:
         n = ingest_conab_dir(args.dir, store)
     elif args.source == "bdi":
         n = ingest_bdi_pdf(args.file, store)
+    elif args.source == "gld":
+        n = ingest_etf_holdings_csv(args.file, "gld", store)
+    elif args.source == "slv":
+        n = ingest_etf_holdings_csv(args.file, "slv", store)
     else:
         parser.error(f"unknown source: {args.source}")
 
