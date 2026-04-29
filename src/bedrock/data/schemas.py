@@ -1716,3 +1716,76 @@ class FasEsrRow(BaseModel):
     unit_id: int | None = None
 
     model_config = ConfigDict(extra="forbid")
+
+
+# ---------------------------------------------------------------------------
+# US Drought Monitor (sub-fase 12.7 D2 A9, session 133)
+# ---------------------------------------------------------------------------
+# USDM publiserer ukentlig (tirsdag, gjeldende fra torsdag) drought-statistikk
+# for CONUS + states + counties. Vi lagrer cumulative-versjonen
+# (statisticsType=1) for CONUS — d0_pct = % i D0+, d1_pct = % i D1+, etc.
+# Brukes av ``drought_monitor``-driver i grain/softs weather-familier —
+# høy drought-andel = bull for grain price (yield-risk).
+#
+# API: https://usdmdataservices.unl.edu/api/USStatistics/GetDroughtSeverity
+#      StatisticsByAreaPercent?aoi={aoi}&startdate={M/D/Y}&enddate={M/D/Y}&
+#      statisticsType=1
+# Format: CSV uten BOM (header + rader).
+# Tidligste data: 2000-01-04 (USDM lansert jan-2000).
+
+TABLE_DROUGHT_MONITOR = "drought_monitor"
+
+DDL_DROUGHT_MONITOR = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_DROUGHT_MONITOR} (
+    map_date    TEXT NOT NULL,           -- ISO YYYY-MM-DD (rapportdato)
+    aoi         TEXT NOT NULL,           -- "us" (CONUS) eller state-kode
+    none_pct    REAL,                    -- % uten drought (D0-)
+    d0_pct      REAL,                    -- % i D0+ (cumulative)
+    d1_pct      REAL,                    -- % i D1+
+    d2_pct      REAL,                    -- % i D2+ (severe+) — driver-default
+    d3_pct      REAL,                    -- % i D3+
+    d4_pct      REAL,                    -- % i D4 (exceptional)
+    valid_start TEXT,                    -- ISO YYYY-MM-DD (uke-start)
+    valid_end   TEXT,                    -- ISO YYYY-MM-DD (uke-slutt)
+    PRIMARY KEY (map_date, aoi)
+)
+"""
+
+DROUGHT_MONITOR_COLS: tuple[str, ...] = (
+    "map_date",
+    "aoi",
+    "none_pct",
+    "d0_pct",
+    "d1_pct",
+    "d2_pct",
+    "d3_pct",
+    "d4_pct",
+    "valid_start",
+    "valid_end",
+)
+
+
+class DroughtMonitorRow(BaseModel):
+    """Én ukentlig USDM-observasjon (cumulative-format).
+
+    Verdier i prosent (0..100). dN_pct er cumulative — d2_pct = % under
+    D2 ELLER D3 ELLER D4 (severe+). aoi="us" for CONUS-aggregat.
+    """
+
+    map_date: date
+    aoi: str = Field(min_length=2, max_length=8)
+    none_pct: float | None = None
+    d0_pct: float | None = None
+    d1_pct: float | None = None
+    d2_pct: float | None = None
+    d3_pct: float | None = None
+    d4_pct: float | None = None
+    valid_start: date | None = None
+    valid_end: date | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("aoi")
+    @classmethod
+    def _normalize_aoi(cls, v: str) -> str:
+        return v.lower().strip()

@@ -56,6 +56,7 @@ from bedrock.data.schemas import (
     DDL_CROP_PROGRESS,
     DDL_CRYPTO_SENTIMENT,
     DDL_DISEASE_ALERTS,
+    DDL_DROUGHT_MONITOR,
     DDL_ECON_EVENTS,
     DDL_EIA_INVENTORY,
     DDL_ETF_HOLDINGS,
@@ -72,6 +73,7 @@ from bedrock.data.schemas import (
     DDL_WEATHER,
     DDL_WEATHER_MONTHLY,
     DISEASE_ALERTS_COLS,
+    DROUGHT_MONITOR_COLS,
     ECON_EVENTS_COLS,
     EIA_INVENTORY_COLS,
     ETF_HOLDINGS_COLS,
@@ -96,6 +98,7 @@ from bedrock.data.schemas import (
     TABLE_CROP_PROGRESS,
     TABLE_CRYPTO_SENTIMENT,
     TABLE_DISEASE_ALERTS,
+    TABLE_DROUGHT_MONITOR,
     TABLE_ECON_EVENTS,
     TABLE_EIA_INVENTORY,
     TABLE_ETF_HOLDINGS,
@@ -208,6 +211,8 @@ class DataStore:
             conn.execute(DDL_ETF_HOLDINGS)
             # Sub-fase 12.7 D2 A3 (session 133): FAS Export Sales (ESR).
             conn.execute(DDL_FAS_ESR)
+            # Sub-fase 12.7 D2 A9 (session 133): US Drought Monitor.
+            conn.execute(DDL_DROUGHT_MONITOR)
             conn.commit()
 
     def _migrate_bdi_to_shipping_indices(self, conn: sqlite3.Connection) -> None:
@@ -2278,6 +2283,85 @@ class DataStore:
             cursor = conn.execute(
                 f"SELECT 1 FROM {TABLE_FAS_ESR} WHERE commodity_code = ? LIMIT 1",
                 (int(commodity_code),),
+            )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # US Drought Monitor (sub-fase 12.7 D2 A9, session 133)
+    # ------------------------------------------------------------------
+
+    def append_drought_monitor(self, df: pd.DataFrame) -> int:
+        """Skriv USDM-rader. Idempotent på (map_date, aoi)."""
+        missing = [c for c in DROUGHT_MONITOR_COLS if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_drought_monitor: missing columns {missing}. "
+                f"Required: {list(DROUGHT_MONITOR_COLS)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df[list(DROUGHT_MONITOR_COLS)].copy()
+        prepared["map_date"] = pd.to_datetime(prepared["map_date"]).dt.strftime("%Y-%m-%d")
+        for col in ("valid_start", "valid_end"):
+            prepared[col] = prepared[col].apply(
+                lambda v: pd.to_datetime(v).strftime("%Y-%m-%d") if pd.notna(v) else None
+            )
+
+        def _opt(v: object) -> float | None:
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return None
+            return float(v)  # type: ignore[arg-type]
+
+        rows: Sequence[tuple] = [
+            (
+                row.map_date,
+                str(row.aoi).lower(),
+                _opt(row.none_pct),
+                _opt(row.d0_pct),
+                _opt(row.d1_pct),
+                _opt(row.d2_pct),
+                _opt(row.d3_pct),
+                _opt(row.d4_pct),
+                row.valid_start,
+                row.valid_end,
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_DROUGHT_MONITOR} "
+                f"(map_date, aoi, none_pct, d0_pct, d1_pct, d2_pct, d3_pct, d4_pct, "
+                f"valid_start, valid_end) "
+                f"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_drought_monitor(self, aoi: str = "us") -> pd.DataFrame:
+        """Returner USDM-rader for `aoi`, sortert ASC på map_date.
+
+        Kaster `KeyError` hvis ingen rader.
+        """
+        aoi_norm = aoi.lower().strip()
+        with self._connect() as conn:
+            df = pd.read_sql(
+                f"SELECT * FROM {TABLE_DROUGHT_MONITOR} WHERE aoi = ? ORDER BY map_date ASC",
+                conn,
+                params=(aoi_norm,),
+            )
+        if df.empty:
+            raise KeyError(f"No drought_monitor data for aoi={aoi_norm!r}")
+        df["map_date"] = pd.to_datetime(df["map_date"])
+        return df
+
+    def has_drought_monitor(self, aoi: str = "us") -> bool:
+        """Test-hjelper: sjekk om `aoi` har minst én rad."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"SELECT 1 FROM {TABLE_DROUGHT_MONITOR} WHERE aoi = ? LIMIT 1",
+                (aoi.lower().strip(),),
             )
             return cursor.fetchone() is not None
 
