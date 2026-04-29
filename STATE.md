@@ -123,7 +123,7 @@
 - **AsOfDateStore (session 116):** utvidet med 9 nye proxy-getters (econ_events/cot_ice/cot_euronext/eia_inventory/comex_inventory/seismic_events/conab_estimates/unica_reports/shipping_indices) + tilsvarende `has_*`-helpers. Kritisk fix — uten denne falt orchestrator-replay tilbake til defensive 0.0 for alle nye Phase A-C-drivere fordi underlying-getterne kastet `AttributeError`. 24 nye tester dekker hver getter + region/from_ts-filter + tom-clip-fallback.
 - **Phase D-output (session 116):** `data/_meta/backtest_phase_d_baseline.json` (68 rader, session 99-reprise), `data/_meta/backtest_phase_d_orchestrator.json` (48 rader, 86.4 min sweep), `data/_meta/backtest_phase_d_spike_{cot_ice_mm_pct,conab_yoy,unica_change}.json` (3 spikes). Rapport: `docs/backtest_phase_d_2026-04.md` med diff-tabeller + flagg-terskel ≥3pp Δhit_rate eller ≥2 grade-flips.
 - **Sub-fase 12.6-fundament (session 117):** 3 nye SQLite-tabeller (`driver_observations` long-format, `signal_setups`, `feature_snapshots`) + 5 nye scripts (`harvest_driver_observations.py`, `harvest_feature_snapshots.py`, `run_full_history_harvest.sh`, `analyze_driver_performance.py`, `analyze_cross_correlations.py`). Detached harvest startet 2026-04-27 21:58 — features ETA ~10 min, driver_observations ETA ~24-35 timer.
-- **Next task:** **Session 127 = D1 Tier 1 implementasjon** (L-fase per § 19.4). **D0 FERDIG (session 126):** 14 datakilder smoke-testet, klassifisert per ADR-011 oppmykning (10-år rolling cutoff). Tag: `v0.12.7-d0` (følger). **D0-resultat:** 8 GO (B3 DXY, B2 VIX-term, B1 FRED 9/11, A12 AAII, A4 CFTC TFF, A9 USDM, A10 Cecafé, B5 M1-tickers) + 5 RISK (A1 Baker Hughes endpoint-timeout, A5/A6/A7 ETF JS-rendret, A11 ICE inkonsistente IDer, A3 FAS HTTP 403/token, A2 AGSI token-registrering, B5 specific contracts 8.4y) + 2 SKIP (B1 BAMLH0A0HYM2 + BAMLC0A0CM kun 3y fra FRED) + 1 BLOCK (A8 NOPA via LSEG paywall). **A14 + C2 DROPPED** ved D0-start (commit `2cd54d5`). **D1-scope:** A4 CFTC TFF + C1 (cot_legacy→cot_tff) + B3 DXY Yahoo + 9 av 11 B1 FRED-serier (drop OAS-paret, undersøk alternativ). A2/A3 token-håndtering før implementasjon. A1 separat verifisering. **Sub-fase 12.6 PAUSER fortsatt**, gjenåpnes etter D3.
+- **Next task:** **Session 128 = D1 fortsettelse — B3 DXY Yahoo + A4 CFTC TFF + C1** (L-fase per § 19.4). Session 127 leverte verifiserings-runde (5 D0-flagg) + TG2 helper-konsolidering. TG1 (event_distance._now) var allerede implementert (risk.py:201) — fantom-task. B3 + A4 + C1 ble vurdert for stort for session 127's resterende tid og deferredes til 128. **D1-scope (sessions 128-129):** B3 DXY Yahoo (krever Yahoo→fundamentals-adapter ELLER endre dxy_chg5d til prices-source ELLER multi-YAML-bytte til ny serie-ID), A4 CFTC TFF + C1 (cot_legacy→cot_tff for 8 finansielle: EURUSD/GBPUSD/USDJPY/AUDUSD/BTC/ETH/Nasdaq/SP500), B1 FRED-serier (9 av 11; OAS-paret erstattes med Moody's AAA10Y/BAA10Y per V2-funn). Token-kilder (A2 AGSI, A3 FAS) krever bruker-registrering før implementasjon. **Sub-fase 12.6 PAUSER fortsatt**, gjenåpnes etter D3.
 - **Git-modus:** Nivå 1 aktivt under sub-fase 12.5+ docs/cleanup-pass. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt valgfri.
 
 ## Data-gjeld (sub-fase 12.6)
@@ -266,6 +266,90 @@ URL-mønstre + CSV-format-krav: `docs/manual_download_shopping_list.md`.
 ---
 
 ## Session log (newest first)
+
+### 2026-04-29 — Session 127: sub-fase 12.7 D1 åpning (verifiserings-runde + helper-konsolidering)
+
+**Scope:** D1 Tier 1 åpning. Mål: verifiserings-runde (5 D0-flagg) +
+tech-gjeld (event_distance._now-injeksjon + helper-konsolidering) +
+B3 DXY Yahoo + A4 CFTC TFF + C1. Stop-criterion: >5 timer eller
+første blocker.
+
+**Levert:** Verifiserings-runde + TG2. **B3 + A4 + C1 deferred til
+session 128** etter pragmatisk vurdering (for store for én session
+uten å risikere halv-ferdige implementasjoner).
+
+**Verifiserings-runde (commit `55efb47`):**
+
+5 D0-flagg re-testet:
+
+- **V1 NOPA alternativ:** Soybean yield-familien er allerede 0.25/0.25/
+  0.50 — NOPA-justering ble aldri implementert i YAML. Ingen
+  revertering kreves. A8 forblir BLOCK.
+- **V2 OAS-pair:** Re-test med `observation_start=1996-01-01` ga samme
+  3y. Ekte begrensning. **D1 anbefaling:** Bytt OAS-paret til Moody's
+  `AAA10Y` + `BAA10Y` (begge 30 år) som kreditt-spread-proxier.
+- **V3 A1 via FRED:** FRED `series/search?baker+hughes+rig` = 0 treff.
+  A1 forblir RISK; D1 må bruke manuell CSV-fallback eller separat
+  verifisering på annen maskin.
+- **V4 A4 TFF metadata:** Pre-2010 er ekte data (non-zero OI +
+  dealer-positioning på alle 5 viste kontrakter — Eurodollars, Russell
+  2000, Nikkei). Historikk **bedre enn forventet:** 19.9 år (juni
+  2006+) vs spec-anslag 2010+.
+- **V5 A5/A6/A7 ETF:** GLD `*.csv`-URL er faktisk PDF-arkiv (697KB).
+  SLV empty JSON. PPLT 500. **Forblir RISK.** D2 må PDF-parse GLD
+  eller reverse-engineer JSON-API-er.
+
+**TG1 (event_distance._now-injeksjon):** ALLEREDE IMPLEMENTERT i
+`risk.py` linje 201 via `params.get("_now")`. Fantom-task — ingen
+endring nødvendig. Snapshot-pipeline-deterministikk er separat task.
+
+**TG2 (Helper-konsolidering, commit `b67fc86`):**
+
+Ny modul `src/bedrock/engine/drivers/horizon_helpers.py` med publiske
+funksjoner uten underscore-prefiks:
+
+- `fundamentals_pct_score`, `fundamentals_delta_score`,
+  `fundamentals_extreme_flag`
+- `z_to_score_with_bull_when`, `extreme_flag`,
+  `normalize_bull_when_for_chg`
+- Konstanter: `LOOKBACK_PCT_*_DAILY/WEEKLY`, `DELTA_*_DAYS/WEEKS`,
+  `EXTREME_*` etc.
+
+Endringer:
+- `macro.py` re-eksporterer fra `horizon_helpers` under gamle navn (med
+  `_`-prefiks) for bakoverkompatibilitet.
+- `agronomy.py` (shipping_pressure) + `currency.py` (currency_cross_trend):
+  lazy-import erstattet med direkte top-level import fra
+  horizon_helpers.
+
+83 horisont-mode-tester grønne. Pyright `src/`: 0/0/0. Snapshot-baseline
+regenerert pga prices-timer-drift orthogonal til denne refaktoren
+(default-bane bit-identisk per design — re-eksport gir samme
+funksjons-objekter).
+
+**Deferred til session 128 (D1 fortsettelse):**
+
+- **B3 DXY Yahoo:** Krever enten Yahoo→fundamentals-adapter (`scripts/
+  backfill/dxy_yahoo.py`) eller endring av dxy_chg5d til prices-
+  source eller multi-YAML-bytte. Ikke triviell.
+- **A4 CFTC TFF + C1:** Ny `cot_tff` tabell-variant + 2 nye drivere
+  (`positioning_lev_funds_pct` + `positioning_asset_mgr_pct`) + 8
+  YAML-bytteoperasjoner (EURUSD/GBPUSD/USDJPY/AUDUSD/BTC/ETH/Nasdaq/
+  SP500). Hovedfokus for session 128.
+
+**Ingen blockers.**
+
+**Tech-gjeld åpne:**
+
+1. ~~R4: event_distance._now-injeksjon~~ — **lukket** (allerede
+   implementert).
+2. ~~R4: Cross-module helper-import~~ — **lukket** (b67fc86).
+3. **B1 OAS-pair:** Bytt til Moody's AAA10Y/BAA10Y i D1 (V2-funn).
+4. **A1 Baker Hughes:** Verifiseres på annen maskin eller manuell
+   CSV-fallback.
+5. **Snapshot-pipeline-deterministikk** (event_distance.now()-drift):
+   ny tech-gjeld. Snapshot-script bør injisere fast `_now` via params
+   for deterministisk baseline.
 
 ### 2026-04-29 — Session 126: sub-fase 12.7 D0 (smoke-tests, Spor D åpning)
 
