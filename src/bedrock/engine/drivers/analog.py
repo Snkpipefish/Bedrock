@@ -152,7 +152,13 @@ def analog_hit_rate(store: Any, instrument: str, params: dict) -> float:
     håndterer asymmetrien selv (ikke 1-x-flip på engine-siden).
 
     Per ADR-005 B5: terskel er driver-config, ikke lagret i data.
+
+    **R4 (sub-fase 12.7):** ``params["_horizon"]`` LESES per ADR-010 men
+    brukes ikke til å endre output. K-NN-output (hits/n-rate), ikke
+    rolling tids-serie — kun `_horizon`-lesing.
     """
+    # ADR-010: les _horizon. K-NN-output, ikke tids-serie.
+    _horizon = params.get("_horizon")
     threshold = float(params.get("outcome_threshold_pct", 3.0))
     direction = str(params.get("_direction", "buy")).lower()
 
@@ -207,7 +213,13 @@ def analog_avg_return(store: Any, instrument: str, params: dict) -> float:
     - avg ≥ +1%  → 0.5
     - avg ≥ 0%   → 0.4 (marginalt positiv)
     - avg < 0%   → 0.0 (negativ historikk)
+
+    **R4 (sub-fase 12.7):** ``params["_horizon"]`` LESES per ADR-010 men
+    brukes ikke til å endre output. K-NN-output (avg-return → terskel-
+    trapp), ikke rolling tids-serie — kun `_horizon`-lesing.
     """
+    # ADR-010: les _horizon. K-NN-output, ikke tids-serie.
+    _horizon = params.get("_horizon")
     explicit = params.get("direction")  # eldre param, hvis satt overstyrer
     if explicit is not None and explicit not in ("direct", "invert"):
         _log.warning(

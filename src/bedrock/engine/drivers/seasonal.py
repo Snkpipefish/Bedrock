@@ -67,10 +67,17 @@ def seasonal_stage(store: Any, instrument: str, params: dict) -> float:
         as_of: optional ``date`` eller ISO-streng for testbarhet
             (default: ``date.today()``).
 
+    **R4 (sub-fase 12.7):** ``params["_horizon"]`` LESES per ADR-010 men
+    brukes ikke til å endre output. Driveren er kalender-aware (måned-
+    basert mapping), ikke rolling tids-serie. Per pattern-doc § 3.1
+    sesong-driver-presedens (hdd_cdd_anomaly): kun `_horizon`-lesing.
+
     Returns:
         Score 0..1 for nåværende måned. Returnerer 0.0 ved ugyldig
         params.
     """
+    # ADR-010: les _horizon. Kalender-aware måneds-mapping.
+    _horizon = params.get("_horizon")
     scores = params.get("monthly_scores")
     if scores is None:
         scores = _DEFAULT_MONTHLY_SCORES_NH_GRAIN
