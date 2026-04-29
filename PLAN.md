@@ -1793,9 +1793,12 @@ R2/R3 commits men ingen tag (mellom-fase).
 
 ### 19.5 Ny data — oversikt
 
-**12 nye fetchere (Del A) — A14 DROPPED 2026-04-29 (D0, paywall);
-A1 DROPPED 2026-04-29 (D1 V3, ingen FRED-rute + endpoint-timeout);
-A3 DEFERRED-PLAN-S 2026-04-29 (D1 session 130, key ikke registrert):**
+**12 nye fetchere (Del A) — drop/defer-status etter D0+D1+D2-prep:**
+DROPPED: A1 (D1 V3, ingen FRED-rute), A7 (D2-prep, ingen daglig holdings),
+A8 (D2-prep, LSEG-paywall), A11 (D2-prep, ICE er JS-SPA), A14 (D0, paywall).
+RE-AKTIVERT: A3 (D2-prep, FAS_API_KEY/USDA_API_KEY nå SET i secrets.env).
+PARTIAL: A6 (D2-prep, kun shares_outstanding-proxy, ikke direkte tonnes).
+
 ~~A1 Baker Hughes Rig Count~~ — **DROPPED 12.7**: V3-funn (session 127)
 viste ingen FRED-rute (`baker+hughes+rig` = 0 treff i FRED) og direkte-
 endpoint på `rigcount.bakerhughes.com` timer ut fra arbeidsmiljøet.
@@ -1803,21 +1806,47 @@ Vekten i Brent/CrudeOil/NaturalGas macro er liten (co-driver) og
 arkitektonisk friksjon (manuell CSV-fallback fra dag 1) rettferdiggjør
 ikke 12.7-scope. Vurderes på nytt i Plan-S hvis ny rute åpner. ·
 A2 AGSI EU gas storage (API, 2011+, daglig, macro low_bull) ·
-~~A3 FAS Export Sales~~ — **DEFERRED-PLAN-S 2026-04-29**: USDA FAS
-Open Data API krever bruker-registrert key (gratis, men friksjon).
-Bruker har ikke registrert key innen D1-vinduet; defer til Plan-S
-hvor scalp-arkitektur uansett tar opp surprise-vs-consensus-mønsteret.
-Cross-familie YAML-vekter for Corn/Soybean/Wheat/Cotton uendret
-(ingen pre-A3-revertering nødvendig). Reaktivér i Plan-S hvis bruker
-registrerer key. ·
+**A3 FAS Export Sales — RE-AKTIVERT 2026-04-29 (D2-prep)**: USDA FAS
+Open Data API. Bruker har registrert api.data.gov-key (gratis,
+universell mot ESR/GATS/PSD og andre USDA/føderale endpoints).
+Lagret som `FAS_API_KEY` + `USDA_API_KEY` + `API_DATA_GOV_KEY` i
+`~/.bedrock/secrets.env`. Klar for D2-implementasjon. ·
 A4 CFTC TFF (ny tabell-variant i eksisterende COT-Socrata-modul, 2010+) ·
-A5 GLD ETF holdings (CSV, 2004+, daglig) ·
-A6 SLV ETF holdings (CSV, 2006+) ·
-A7 PPLT ETF holdings (CSV, 2010+) ·
-A8 NOPA Crush (PDF, 1990+, månedlig ~15.) ·
+**A5 GLD ETF holdings — GO 2026-04-29 (D2-prep)**: full historikk via
+SPDR `api.spdrgoldshares.com/api/v1/historical-archive`-endpoint
+(Excel/xlsx, 2004-11-18→2026-04-28, 5593 rader). Manuell data klar i
+`bedrock manuell data/gld_holdings/` med både `.xlsx` og normalisert
+CSV. Schema: `date, tonnes_in_trust, ounces_in_trust, nav_per_share,
+closing_price, shares_volume, nav_total`. ·
+**A6 SLV ETF holdings — PARTIAL 2026-04-29 (D2-prep)**: iShares xls-
+endpoint gir kun `nav_per_share` + `shares_outstanding` (5039 rader,
+2006-04-21→2026-04-28). **Ingen direkte tonnes/ounces** —
+`etf_holdings_change`-driver må bruke `shares_outstanding`-change som
+proxy (silver-per-share-endring er ~0.5%/år expense ratio,
+neglisjerbar på WoW/MoM-skala). Manuell data i
+`bedrock manuell data/slv_holdings/` med xls-original + CSV. ·
+~~A7 PPLT ETF holdings~~ — **DROPPED 2026-04-29 (D2-prep)**: abrdn
+har lukket alle public APIer for PPLT (etter migrering fra Aberdeen
+Standard). SEC EDGAR har kun kvartalsvise 10-K/10-Q (CIK 0001460235)
+— ikke tilstrekkelig for daglig holdings. Yahoo OHLCV kan brukes som
+prisreferanse men er ikke holdings-data. Reallokér 0.15-vekt i
+Platinum macro (real_yield + dxy + vix + mining_disruption). Per
+A1-presedens. ·
+~~A8 NOPA Crush~~ — **DROPPED 2026-04-29 (D2-prep)**: NOPA distribuerer
+månedlig crush-data via LSEG/Refinitiv-subscription, ikke offentlig.
+Eneste public PDFs i NOPA WordPress media library er to compilation-
+filer (CY2015 + CY2016) som dekker 11 måneder totalt — ikke nok for
+10-år-rolling scoring. Soybean yield-familie var aldri NOPA-justert
+(verifisert session 127 V1), så ingen YAML-revertering nødvendig.
+Vekter forblir weather@0.25 + crop_progress@0.25 + wasde@0.50 = 1.0. ·
 A9 US Drought Monitor (CSV API, 2000+, ukentlig tor) ·
 A10 Cecafé Brasil kaffe-eksport (PDF, 2002+, månedlig — Tier 3) ·
-A11 ICE certified stocks (CSV, 2008+, daglig) ·
+~~A11 ICE certified stocks~~ — **DROPPED 2026-04-29 (D2-prep)**: ICE
+report-center er migrert til JS-rendert SPA. Alle `report/N`-URLer
+returnerer SPA-skall, statiske PDF-URL-er gir 404. Krever Playwright-
+scraping eller ICE Connect-subscription. Reallokér 0.25-vekt i
+Coffee/Cocoa/Sugar outlook-familien til `seasonal_stage@1.00`. Per
+A14-presedens. ·
 A12 AAII Sentiment (CSV, 1987+, ukentlig tor) ·
 A13 BRL=X (kun ny ticker i eksisterende `prices`-fetcher) ·
 ~~A14 Eskom load-shedding~~ — **DROPPED**: bekreftet bak betalingsmur.
@@ -1858,11 +1887,15 @@ produserer features som dekker relevante horisonter:
   wasde/eia hvis schema gir consensus).
 
 Per-kilde × horisont-mapping (full tabell i pre-plan-dokument; bevart der):
-~~A1 Baker Hughes~~ DROPPED 2026-04-29, ~~A3 FAS~~ DEFERRED-PLAN-S 2026-04-29, A4 TFF (●●●/●●●/◐),
-A8 NOPA (●●●/●●●/●●●), A12 AAII (●●●/●●●/–), B2 VIX-term (●●●/●●●/●●●),
-B4 HDD/CDD (●●●/●●●/◐), B5 cal-spreads (●●●/●●●/●●). ~~A14 Eskom~~
-**DROPPED** (paywall). `●●●`=primær, `●●`=sekundær, `◐`=marginal,
-`–`=ikke relevant.
+A3 FAS (●●/●●●/●●●) **RE-AKTIVERT 2026-04-29**, A4 TFF (●●●/●●●/◐),
+A12 AAII (●●●/●●●/–), B2 VIX-term (●●●/●●●/●●●),
+B4 HDD/CDD (●●●/●●●/◐), B5 cal-spreads (●●●/●●●/●●).
+~~A1 Baker Hughes~~ DROPPED 2026-04-29 (V3),
+~~A7 PPLT~~ DROPPED 2026-04-29 (D2-prep, ingen daglig holdings),
+~~A8 NOPA~~ DROPPED 2026-04-29 (D2-prep, LSEG-paywall),
+~~A11 ICE~~ DROPPED 2026-04-29 (D2-prep, JS-SPA),
+~~A14 Eskom~~ DROPPED (paywall).
+`●●●`=primær, `●●`=sekundær, `◐`=marginal, `–`=ikke relevant.
 
 ### 19.7 Koordinering med sub-fase 12.6
 
