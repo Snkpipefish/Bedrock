@@ -1637,3 +1637,82 @@ class EtfHoldingsRow(BaseModel):
     @classmethod
     def _normalize_ticker(cls, v: str) -> str:
         return v.lower().strip()
+
+
+# ---------------------------------------------------------------------------
+# FAS Export Sales (sub-fase 12.7 D2 A3, session 133)
+# ---------------------------------------------------------------------------
+# USDA FAS (Foreign Agricultural Service) Export Sales Reporting (ESR)
+# publiserer ukentlig (tor) US-eksport-sales-status per commodity × destination
+# country × marketing year. Brukes av ``fas_exports``-driver i grain/softs
+# cross-familier — høy export demand = bull for grain price.
+#
+# API: https://api.fas.usda.gov/api/esr/exports/...
+# Header: X-Api-Key: $FAS_API_KEY (api.data.gov-konvensjon).
+# Tidligste data: 2010 marketing year (verifisert via /datareleasedates).
+# Marketing year-konvensjon varierer per commodity (Corn/Soybean/Cotton MY =
+# Sept-Aug, Wheat MY = June-May).
+
+TABLE_FAS_ESR = "fas_esr"
+
+DDL_FAS_ESR = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_FAS_ESR} (
+    commodity_code               INTEGER NOT NULL,  -- FAS commodityCode
+    country_code                 INTEGER NOT NULL,  -- FAS countryCode (0 = "all countries"-aggregat)
+    market_year                  INTEGER NOT NULL,  -- marketing year (start-year)
+    week_ending_date             TEXT    NOT NULL,  -- ISO YYYY-MM-DD
+    weekly_exports               REAL,
+    accumulated_exports          REAL,
+    outstanding_sales            REAL,
+    gross_new_sales              REAL,
+    current_my_net_sales         REAL,
+    current_my_total_commitment  REAL,
+    next_my_outstanding_sales    REAL,
+    next_my_net_sales            REAL,
+    unit_id                      INTEGER,
+    PRIMARY KEY (commodity_code, country_code, market_year, week_ending_date)
+)
+"""
+
+FAS_ESR_COLS: tuple[str, ...] = (
+    "commodity_code",
+    "country_code",
+    "market_year",
+    "week_ending_date",
+    "weekly_exports",
+    "accumulated_exports",
+    "outstanding_sales",
+    "gross_new_sales",
+    "current_my_net_sales",
+    "current_my_total_commitment",
+    "next_my_outstanding_sales",
+    "next_my_net_sales",
+    "unit_id",
+)
+
+
+class FasEsrRow(BaseModel):
+    """Én ukentlig FAS Export Sales-rad per commodity × country × MY.
+
+    Verdier i FAS-konvensjon (typisk metric tonnes; unit_id refererer til
+    /unitsOfMeasure). Numeriske felt nullable for å tåle delvis API-respons.
+    country_code=0 brukes for "all countries"-aggregat-rader vi avleder selv
+    (FAS returnerer per-land; aggregatet er sum over alle countryCodes for
+    samme commodity × MY × week).
+    """
+
+    commodity_code: int
+    country_code: int
+    market_year: int
+    week_ending_date: date
+    weekly_exports: float | None = None
+    accumulated_exports: float | None = None
+    outstanding_sales: float | None = None
+    gross_new_sales: float | None = None
+    current_my_net_sales: float | None = None
+    current_my_total_commitment: float | None = None
+    next_my_outstanding_sales: float | None = None
+    next_my_net_sales: float | None = None
+    unit_id: int | None = None
+
+    model_config = ConfigDict(extra="forbid")

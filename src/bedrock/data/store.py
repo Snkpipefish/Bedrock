@@ -60,6 +60,7 @@ from bedrock.data.schemas import (
     DDL_EIA_INVENTORY,
     DDL_ETF_HOLDINGS,
     DDL_EXPORT_EVENTS,
+    DDL_FAS_ESR,
     DDL_FUNDAMENTALS,
     DDL_IGC,
     DDL_NEWS_INTEL,
@@ -75,6 +76,7 @@ from bedrock.data.schemas import (
     EIA_INVENTORY_COLS,
     ETF_HOLDINGS_COLS,
     EXPORT_EVENTS_COLS,
+    FAS_ESR_COLS,
     FUNDAMENTALS_COLS,
     IGC_COLS,
     NEWS_INTEL_COLS,
@@ -98,6 +100,7 @@ from bedrock.data.schemas import (
     TABLE_EIA_INVENTORY,
     TABLE_ETF_HOLDINGS,
     TABLE_EXPORT_EVENTS,
+    TABLE_FAS_ESR,
     TABLE_FUNDAMENTALS,
     TABLE_IGC,
     TABLE_NEWS_INTEL,
@@ -203,6 +206,8 @@ class DataStore:
             # Sub-fase 12.7 D2 A5/A6 (session 132): physical-ETF holdings
             # (GLD/SLV; future-extensible).
             conn.execute(DDL_ETF_HOLDINGS)
+            # Sub-fase 12.7 D2 A3 (session 133): FAS Export Sales (ESR).
+            conn.execute(DDL_FAS_ESR)
             conn.commit()
 
     def _migrate_bdi_to_shipping_indices(self, conn: sqlite3.Connection) -> None:
@@ -2139,6 +2144,140 @@ class DataStore:
             cursor = conn.execute(
                 f"SELECT 1 FROM {TABLE_ETF_HOLDINGS} WHERE ticker = ? LIMIT 1",
                 (ticker.lower().strip(),),
+            )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # FAS Export Sales (sub-fase 12.7 D2 A3, session 133)
+    # ------------------------------------------------------------------
+
+    def append_fas_esr(self, df: pd.DataFrame) -> int:
+        """Skriv FAS ESR-rader. Idempotent på (commodity_code, country_code,
+        market_year, week_ending_date) via INSERT OR REPLACE."""
+        missing = [c for c in FAS_ESR_COLS if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_fas_esr: missing columns {missing}. "
+                f"Required: {list(FAS_ESR_COLS)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df[list(FAS_ESR_COLS)].copy()
+        prepared["week_ending_date"] = pd.to_datetime(prepared["week_ending_date"]).dt.strftime(
+            "%Y-%m-%d"
+        )
+
+        def _opt_float(v: object) -> float | None:
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return None
+            return float(v)  # type: ignore[arg-type]
+
+        def _opt_int(v: object) -> int | None:
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return None
+            return int(v)  # type: ignore[arg-type]
+
+        rows: Sequence[tuple] = [
+            (
+                int(row.commodity_code),
+                int(row.country_code),
+                int(row.market_year),
+                row.week_ending_date,
+                _opt_float(row.weekly_exports),
+                _opt_float(row.accumulated_exports),
+                _opt_float(row.outstanding_sales),
+                _opt_float(row.gross_new_sales),
+                _opt_float(row.current_my_net_sales),
+                _opt_float(row.current_my_total_commitment),
+                _opt_float(row.next_my_outstanding_sales),
+                _opt_float(row.next_my_net_sales),
+                _opt_int(row.unit_id),
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_FAS_ESR} "
+                f"(commodity_code, country_code, market_year, week_ending_date, "
+                f"weekly_exports, accumulated_exports, outstanding_sales, "
+                f"gross_new_sales, current_my_net_sales, current_my_total_commitment, "
+                f"next_my_outstanding_sales, next_my_net_sales, unit_id) "
+                f"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_fas_esr(
+        self,
+        commodity_code: int,
+        *,
+        country_code: int | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> pd.DataFrame:
+        """Returner FAS ESR-rader for `commodity_code`, sortert ASC på
+        week_ending_date. Aggregerer på tvers av countries (sum) hvis
+        `country_code` er None.
+
+        Bruker SQL-aggregat når aggregating — driver-laget får én rad per
+        (market_year, week_ending_date) med summen av weekly_exports +
+        accumulated_exports + outstanding_sales på tvers av alle countries.
+        """
+        params: list[object] = [commodity_code]
+        clauses = ["commodity_code = ?"]
+        if country_code is not None:
+            clauses.append("country_code = ?")
+            params.append(country_code)
+        if from_date is not None:
+            clauses.append("week_ending_date >= ?")
+            params.append(from_date)
+        if to_date is not None:
+            clauses.append("week_ending_date <= ?")
+            params.append(to_date)
+        where = " AND ".join(clauses)
+
+        if country_code is None:
+            query = f"""
+                SELECT
+                    commodity_code,
+                    market_year,
+                    week_ending_date,
+                    SUM(weekly_exports)              AS weekly_exports,
+                    SUM(accumulated_exports)         AS accumulated_exports,
+                    SUM(outstanding_sales)           AS outstanding_sales,
+                    SUM(gross_new_sales)             AS gross_new_sales,
+                    SUM(current_my_net_sales)        AS current_my_net_sales,
+                    SUM(current_my_total_commitment) AS current_my_total_commitment,
+                    SUM(next_my_outstanding_sales)   AS next_my_outstanding_sales,
+                    SUM(next_my_net_sales)           AS next_my_net_sales
+                FROM {TABLE_FAS_ESR}
+                WHERE {where}
+                GROUP BY commodity_code, market_year, week_ending_date
+                ORDER BY week_ending_date ASC
+            """
+        else:
+            query = f"SELECT * FROM {TABLE_FAS_ESR} WHERE {where} ORDER BY week_ending_date ASC"
+
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=params)
+
+        if df.empty:
+            raise KeyError(
+                f"No FAS ESR data for commodity_code={commodity_code}"
+                + (f", country_code={country_code}" if country_code is not None else "")
+            )
+
+        df["week_ending_date"] = pd.to_datetime(df["week_ending_date"])
+        return df
+
+    def has_fas_esr(self, commodity_code: int) -> bool:
+        """Test-hjelper: sjekk om `commodity_code` har minst én rad."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"SELECT 1 FROM {TABLE_FAS_ESR} WHERE commodity_code = ? LIMIT 1",
+                (int(commodity_code),),
             )
             return cursor.fetchone() is not None
 
