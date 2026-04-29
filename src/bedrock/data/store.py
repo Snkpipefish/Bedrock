@@ -38,6 +38,7 @@ from bedrock.data.schemas import (
     COT_EURONEXT_COLS,
     COT_ICE_COLS,
     COT_LEGACY_COLS,
+    COT_TFF_COLS,
     CROP_PROGRESS_COLS,
     CRYPTO_SENTIMENT_COLS,
     DDL_ANALOG_OUTCOMES,
@@ -47,6 +48,7 @@ from bedrock.data.schemas import (
     DDL_COT_EURONEXT,
     DDL_COT_ICE,
     DDL_COT_LEGACY,
+    DDL_COT_TFF,
     DDL_CROP_PROGRESS,
     DDL_CRYPTO_SENTIMENT,
     DDL_DISEASE_ALERTS,
@@ -80,6 +82,7 @@ from bedrock.data.schemas import (
     TABLE_COT_EURONEXT,
     TABLE_COT_ICE,
     TABLE_COT_LEGACY,
+    TABLE_COT_TFF,
     TABLE_CROP_PROGRESS,
     TABLE_CRYPTO_SENTIMENT,
     TABLE_DISEASE_ALERTS,
@@ -144,6 +147,7 @@ class DataStore:
             conn.execute(DDL_PRICES)
             conn.execute(DDL_COT_DISAGGREGATED)
             conn.execute(DDL_COT_LEGACY)
+            conn.execute(DDL_COT_TFF)
             conn.execute(DDL_FUNDAMENTALS)
             conn.execute(DDL_WEATHER)
             conn.execute(DDL_WEATHER_MONTHLY)
@@ -384,6 +388,57 @@ class DataStore:
     def append_cot_legacy(self, df: pd.DataFrame) -> int:
         """Skriv rader til `cot_legacy`. Returnerer antall rader."""
         return self._append_cot(df, TABLE_COT_LEGACY, COT_LEGACY_COLS)
+
+    def append_cot_tff(self, df: pd.DataFrame) -> int:
+        """Skriv rader til `cot_tff` (Traders in Financial Futures).
+
+        D1 A4 (sub-fase 12.7, session 128). TFF-rapporten dekker
+        finansielle futures med trader-typene Dealer/Asset Manager/
+        Leveraged Funds/Other Reportables/Non-Reportables.
+
+        Returnerer antall rader. Duplicates på (report_date, contract)
+        overskrives via INSERT OR REPLACE.
+        """
+        return self._append_cot(df, TABLE_COT_TFF, COT_TFF_COLS)
+
+    def get_cot_tff(
+        self,
+        contract: str,
+        last_n: int | None = None,
+    ) -> pd.DataFrame:
+        """Returner TFF-COT-rader for `contract`, sortert på report_date ASC.
+
+        Parallell til `get_cot` men for TFF-tabellen. Kaster `KeyError`
+        hvis ingen rader finnes for `contract`.
+        """
+        query = f"""
+            SELECT * FROM {TABLE_COT_TFF}
+            WHERE contract = ?
+            ORDER BY report_date ASC
+        """
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=(contract,))
+
+        if df.empty:
+            raise KeyError(f"No COT-TFF data for contract={contract!r}")
+
+        df["report_date"] = pd.to_datetime(df["report_date"])
+
+        if last_n is None:
+            return df
+        return df.tail(last_n).reset_index(drop=True)
+
+    def has_cot_tff(self, contract: str | None = None) -> bool:
+        """Test-hjelper: sjekk om (contract) har minst én rad i cot_tff."""
+        with self._connect() as conn:
+            if contract is None:
+                cursor = conn.execute(f"SELECT 1 FROM {TABLE_COT_TFF} LIMIT 1")
+            else:
+                cursor = conn.execute(
+                    f"SELECT 1 FROM {TABLE_COT_TFF} WHERE contract = ? LIMIT 1",
+                    (contract,),
+                )
+            return cursor.fetchone() is not None
 
     def _append_cot(
         self,

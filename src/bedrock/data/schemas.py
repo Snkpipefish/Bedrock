@@ -212,6 +212,93 @@ COT_LEGACY_COLS: tuple[str, ...] = (
 
 
 # ---------------------------------------------------------------------------
+# COT TFF — Traders in Financial Futures (CFTC, juni 2006-present)
+# ---------------------------------------------------------------------------
+# D1 A4 (sub-fase 12.7, session 128). TFF-rapporten dekker FINANSIELLE
+# futures (S&P 500, Treasury, Eurodollar, DXY, FX-cross) og deler
+# trader-typene som er relevante for institutional positioning:
+#   - Dealer/Intermediary: market-makers, prime brokers
+#   - Asset Manager/Institutional: pension funds, insurance, real money
+#   - Leveraged Funds: hedge funds, CTAs (primær spec-mål)
+#   - Other Reportables: ikke-klassifiserte stor-tradere
+#   - Non-Reportable: små tradere
+# Per V4-funn (smoke-test): historikk fra juni 2006 (ekte data, ikke
+# backfilled). Bedre enn spec-forventet 2010+.
+
+
+class CotTffRow(BaseModel):
+    """En rad fra CFTCs Traders in Financial Futures (TFF) rapport.
+
+    Kolonner:
+    - `dealer_*`: Dealer/Intermediary (market-makers, prime brokers)
+    - `asset_mgr_*`: Asset Manager/Institutional (real money)
+    - `lev_funds_*`: Leveraged Funds (hedge funds, CTAs — primær spec-mål)
+    - `other_long`/`other_short`: Other Reportables
+    - `nonrep_long`/`nonrep_short`: Non-Reportable
+
+    `_spread`-felter (markedsneutrale spreader) lagres ikke — vi bruker
+    kun net-positioning (long − short) per ADR-005-konvensjon.
+    """
+
+    report_date: date
+    contract: str
+
+    dealer_long: int = Field(ge=0)
+    dealer_short: int = Field(ge=0)
+    asset_mgr_long: int = Field(ge=0)
+    asset_mgr_short: int = Field(ge=0)
+    lev_funds_long: int = Field(ge=0)
+    lev_funds_short: int = Field(ge=0)
+    other_long: int = Field(ge=0)
+    other_short: int = Field(ge=0)
+    nonrep_long: int = Field(ge=0)
+    nonrep_short: int = Field(ge=0)
+    open_interest: int = Field(ge=0)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+TABLE_COT_TFF = "cot_tff"
+
+DDL_COT_TFF = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_COT_TFF} (
+    report_date     TEXT    NOT NULL,
+    contract        TEXT    NOT NULL,
+    dealer_long     INTEGER NOT NULL,
+    dealer_short    INTEGER NOT NULL,
+    asset_mgr_long  INTEGER NOT NULL,
+    asset_mgr_short INTEGER NOT NULL,
+    lev_funds_long  INTEGER NOT NULL,
+    lev_funds_short INTEGER NOT NULL,
+    other_long      INTEGER NOT NULL,
+    other_short     INTEGER NOT NULL,
+    nonrep_long     INTEGER NOT NULL,
+    nonrep_short    INTEGER NOT NULL,
+    open_interest   INTEGER NOT NULL,
+    PRIMARY KEY (report_date, contract)
+)
+"""
+
+
+COT_TFF_COLS: tuple[str, ...] = (
+    "report_date",
+    "contract",
+    "dealer_long",
+    "dealer_short",
+    "asset_mgr_long",
+    "asset_mgr_short",
+    "lev_funds_long",
+    "lev_funds_short",
+    "other_long",
+    "other_short",
+    "nonrep_long",
+    "nonrep_short",
+    "open_interest",
+)
+"""Forventet kolonne-rekkefølge for append_cot_tff."""
+
+
+# ---------------------------------------------------------------------------
 # Fundamentals (FRED-stil: series_id × date × value)
 # ---------------------------------------------------------------------------
 

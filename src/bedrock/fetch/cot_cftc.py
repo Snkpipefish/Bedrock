@@ -44,6 +44,14 @@ CFTC_DISAGGREGATED_URL = "https://publicreporting.cftc.gov/resource/72hh-3qpy.js
 CFTC_LEGACY_URL = "https://publicreporting.cftc.gov/resource/6dca-aqww.json"
 """Futures Only — Legacy (2006-present)."""
 
+CFTC_TFF_URL = "https://publicreporting.cftc.gov/resource/gpe5-46if.json"
+"""Futures Only — Traders in Financial Futures (juni 2006-present).
+
+D1 A4 (sub-fase 12.7, session 128). Per V4-funn (D0-smoke-test):
+historikk fra juni 2006, ekte data (non-zero OI + dealer-positioning).
+Bedre enn spec-forventet 2010+.
+"""
+
 
 # ---------------------------------------------------------------------------
 # Field-mapping Socrata → Bedrock-schema
@@ -74,6 +82,24 @@ _LEGACY_FIELD_MAP: dict[str, str] = {
     "noncomm_positions_short_all": "noncomm_short",
     "comm_positions_long_all": "comm_long",
     "comm_positions_short_all": "comm_short",
+    "nonrept_positions_long_all": "nonrep_long",
+    "nonrept_positions_short_all": "nonrep_short",
+    "open_interest_all": "open_interest",
+}
+
+# TFF Socrata-feltnavn (verifisert fra A4 smoke-test, session 126).
+# 73 felter totalt; vi tar kun net-positioning-typer (dropper _spread).
+_TFF_FIELD_MAP: dict[str, str] = {
+    "report_date_as_yyyy_mm_dd": "report_date",
+    "market_and_exchange_names": "contract",
+    "dealer_positions_long_all": "dealer_long",
+    "dealer_positions_short_all": "dealer_short",
+    "asset_mgr_positions_long": "asset_mgr_long",
+    "asset_mgr_positions_short": "asset_mgr_short",
+    "lev_money_positions_long": "lev_funds_long",
+    "lev_money_positions_short": "lev_funds_short",
+    "other_rept_positions_long": "other_long",
+    "other_rept_positions_short": "other_short",
     "nonrept_positions_long_all": "nonrep_long",
     "nonrept_positions_short_all": "nonrep_short",
     "open_interest_all": "open_interest",
@@ -159,6 +185,30 @@ def fetch_cot_legacy(
         from_date=from_date,
         to_date=to_date,
         report_label="legacy",
+    )
+
+
+def fetch_cot_tff(
+    contract: str,
+    from_date: date,
+    to_date: date,
+) -> pd.DataFrame:
+    """Hent Traders in Financial Futures-rapporter for ett kontrakt.
+
+    D1 A4 (sub-fase 12.7, session 128). Returnerer DataFrame som matcher
+    `DataStore.append_cot_tff` (kolonner i `schemas.COT_TFF_COLS`).
+    Bruker samme HTTP-klient og rate-limit som disaggregated/legacy —
+    ingen parallell pipeline.
+
+    Kaster `CotFetchError` ved HTTP-feil eller malformert JSON.
+    """
+    return _fetch_cot_socrata(
+        url=CFTC_TFF_URL,
+        field_map=_TFF_FIELD_MAP,
+        contract=contract,
+        from_date=from_date,
+        to_date=to_date,
+        report_label="tff",
     )
 
 
