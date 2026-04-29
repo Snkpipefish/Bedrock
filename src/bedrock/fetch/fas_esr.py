@@ -51,11 +51,14 @@ DEFAULT_TIMEOUT = 30.0
 REQUEST_PACING_SEC = 1.5
 
 # Bedrock-relevante FAS commodity codes (verifisert mot /esr/commodities).
+# Cotton er fragmentert i FAS — 1404 ("All Upland Cotton") er aggregat-koden
+# (1401-1403 er bredde-grader; 1301 = American Pima er separat). Det vi ser i
+# CBOT/CFD som "Cotton" er typisk Upland → 1404.
 COMMODITY_CODES: dict[str, int] = {
     "corn": 401,
     "soybean": 801,
     "wheat": 107,  # All Wheat (aggregat)
-    "cotton": 501,
+    "cotton": 1404,  # All Upland Cotton (aggregat); 1301 = Pima er separat
 }
 
 

@@ -789,11 +789,238 @@ def unica_change(store: Any, instrument: str, params: dict) -> float:
     return 0.15
 
 
+# ---------------------------------------------------------------------------
+# fas_exports (sub-fase 12.7 D2 A3, session 133)
+# ---------------------------------------------------------------------------
+#
+# USDA FAS Export Sales Reporting (ESR) — ukentlig us-eksport-status per
+# commodity × destination country × marketing year. Driver-laget
+# aggregerer på tvers av countries (sum) og scorer WoW-endring i
+# weekly_exports som primær cross-familie-input.
+#
+# Tolkning: høy export demand (positivt WoW) = bull for grain price
+# (USA er den marginal-tilbudet for verden; sterk demand fra utlandet
+# trekker domestic-S2U ned). bull_when=high (default).
+#
+# WoW-skjær ignorerer country-mix-endringer (sum-aggregat). Mode-banen
+# (pct_12m/pct_36m/delta_5d_z osv.) bruker ukentlig sum-tids-serie
+# direkte via fundamentals_*-helpers. ESR er ukentlig, ikke daglig:
+# bruker DAILY-konstantene som approximation (252 ≈ 1y med ukentlig
+# data trumfer 1y kalenderis kontekst, men gir et
+# rolling-rangeringsvindu på 252 rader = ~5 år ukentlig data).
+
+# FAS commodity codes — speil mot bedrock instrument-id. Cotton 1404 =
+# "All Upland Cotton" (aggregat; 1301 = American Pima er separat).
+_INSTRUMENT_TO_FAS: dict[str, int] = {
+    "Corn": 401,
+    "Soybean": 801,
+    "Wheat": 107,  # All Wheat (aggregat)
+    "Cotton": 1404,  # All Upland Cotton
+}
+
+_DEFAULT_FAS_WOW_THRESHOLDS_HIGH: tuple[tuple[float, float], ...] = (
+    # bull_when="high": positiv WoW = bull (sterk export demand).
+    # Steps på WoW %-endring i sum(weekly_exports) på tvers av countries.
+    (-25.0, 0.0),  # ≤ -25% WoW = sterk outflow = bear
+    (-10.0, 0.25),
+    (0.0, 0.5),  # flat WoW = nøytral
+    (10.0, 0.75),
+    (25.0, 1.0),  # ≥ +25% WoW = sterk inflow = bull
+)
+
+
+@register("fas_exports")
+def fas_exports(store: Any, instrument: str, params: dict) -> float:
+    """USDA FAS ukentlig us-eksport WoW-endring mappet til 0..1.
+
+    Sub-fase 12.7 D2 A3 (session 133). Grain/softs cross-familie-input.
+
+    Default (mode=None): WoW (uke-til-uke) %-endring i sum(weekly_exports)
+    på tvers av alle destination-countries for primary commodity. Steps
+    via terskel-trapp (-25 → 0; +25 → 1.0).
+
+    Modes per ADR-010 (pct_12m/pct_36m/delta_5d_z/delta_20d_z/
+    extreme_flag_*) opererer på ukentlig sum-tids-serie. Ukentlig data
+    + DAILY-lookback-konstanter gir rolling-vindu på 252 rader = ~5 år
+    ukentlig (godt nok for percentile-rangering); pct_36m faller tilbake
+    til pct_12m hvis utilstrekkelig historikk.
+
+    Tolkning:
+        bull_when="high" (default): økte exports = bull for grain price
+            (USA er marginal-tilbud for verden).
+        bull_when="low": invertert.
+
+    Params:
+        commodity_code: optional override — default mappes via instrument.
+        bull_when: "high" (default) eller "low".
+        thresholds: optional override for default-trapp.
+        mode: feature-velger per ADR-010.
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt i R4.
+
+    NB: Aggregat over alle countries — country-mix-endringer fanges ikke.
+    Dette er per design (sum-WoW er en bredere demand-indikator enn
+    enkelt-country-shift). Bruk per-country-driver i fremtiden hvis
+    nødvendig.
+
+    Defensive 0.0 ved manglende data eller ukjent instrument.
+    """
+    _horizon = params.get("_horizon")
+    bull_when = str(params.get("bull_when", "high")).lower()
+    mode = params.get("mode")
+
+    # Bestem commodity_code: explicit param trumfer instrument-mapping.
+    commodity_code_param = params.get("commodity_code")
+    if commodity_code_param is not None:
+        commodity_code = int(commodity_code_param)
+    else:
+        commodity_code = _INSTRUMENT_TO_FAS.get(instrument, 0)
+        if commodity_code == 0:
+            return 0.0
+
+    try:
+        df = store.get_fas_esr(commodity_code)
+    except KeyError:
+        _log.debug("fas_exports.no_data", instrument=instrument, commodity_code=commodity_code)
+        return 0.0
+    except Exception as exc:
+        _log.warning(
+            "fas_exports.fetch_failed",
+            instrument=instrument,
+            commodity_code=commodity_code,
+            error=str(exc),
+        )
+        return 0.0
+
+    if df.empty or "weekly_exports" not in df.columns:
+        return 0.0
+
+    # Bygg pd.Series indeksert på week_ending_date (sortert ASC, allerede
+    # aggregat-summert SQL-side hvis country_code=None i get_fas_esr).
+    import pandas as pd
+
+    series = pd.Series(
+        df["weekly_exports"].values,
+        index=pd.to_datetime(df["week_ending_date"]),
+    ).dropna()
+
+    if series.empty:
+        return 0.0
+
+    if mode is None:
+        return _fas_exports_default(series, bull_when, params)
+
+    # Mode-banen — gjenbruker fundamentals_*-helpere fra horizon_helpers.
+    from bedrock.engine.drivers.horizon_helpers import (
+        DELTA_5D_DAYS as _DELTA_5D_DAYS,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        DELTA_20D_DAYS as _DELTA_20D_DAYS,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        LOOKBACK_DELTA_DAILY as _LOOKBACK_DELTA_DAILY,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        LOOKBACK_PCT_12M_DAILY as _LOOKBACK_PCT_12M_DAILY,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        LOOKBACK_PCT_36M_DAILY as _LOOKBACK_PCT_36M_DAILY,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        fundamentals_delta_score as _fundamentals_delta_score,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        fundamentals_extreme_flag as _fundamentals_extreme_flag,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        fundamentals_pct_score as _fundamentals_pct_score,
+    )
+
+    if mode == "pct_12m":
+        result = _fundamentals_pct_score(series, bull_when, _LOOKBACK_PCT_12M_DAILY, instrument)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "pct_36m":
+        result = _fundamentals_pct_score(series, bull_when, _LOOKBACK_PCT_36M_DAILY, instrument)
+        if result is None:
+            result = _fundamentals_pct_score(series, bull_when, _LOOKBACK_PCT_12M_DAILY, instrument)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_5d_z":
+        result = _fundamentals_delta_score(
+            series,
+            bull_when,
+            delta_days=_DELTA_5D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_20d_z":
+        result = _fundamentals_delta_score(
+            series,
+            bull_when,
+            delta_days=_DELTA_20D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        result = _fundamentals_extreme_flag(
+            series,
+            hard=(mode == "extreme_flag_hard"),
+            lookback=_LOOKBACK_PCT_12M_DAILY,
+            instrument=instrument,
+        )
+        return result if result is not None else 0.0
+
+    _log.warning(
+        "fas_exports.unknown_mode_falling_back_to_default",
+        instrument=instrument,
+        mode=mode,
+    )
+    return _fas_exports_default(series, bull_when, params)
+
+
+def _fas_exports_default(series: Any, bull_when: str, params: dict) -> float:
+    """Default-trapp på WoW %-endring i sum(weekly_exports)."""
+    if len(series) < 2:
+        return 0.5
+
+    current = float(series.iloc[-1])
+    prev = float(series.iloc[-2])
+
+    if prev == 0:
+        # Edge: forrige uke 0 export — ingen meningsfull WoW. Returnér
+        # nøytral. Skjer typisk i MY-overgang når historikken ennå ikke
+        # har bygd opp.
+        return 0.5
+
+    pct_change = (current - prev) / abs(prev) * 100.0
+
+    user_thresholds = params.get("thresholds")
+    if user_thresholds is None:
+        steps = _DEFAULT_FAS_WOW_THRESHOLDS_HIGH
+    else:
+        steps = tuple((float(t), float(s)) for t, s in user_thresholds)
+
+    score = 1.0
+    for threshold, s in sorted(steps, key=lambda t: t[0]):
+        if pct_change <= threshold:
+            score = float(s)
+            break
+
+    if bull_when == "low":
+        return round(1.0 - score, 4)
+    return round(score, 4)
+
+
 __all__ = [
     "conab_yoy",
     "crop_progress_stage",
     "disease_pressure",
     "export_event_active",
+    "fas_exports",
     "igc_stocks_change",
     "shipping_pressure",
     "unica_change",
