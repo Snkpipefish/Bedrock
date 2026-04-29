@@ -41,9 +41,28 @@ disse retningslinjene:
 
 ### 1. Cutoff
 
-Alle nye fetchere fyller historikk fra **2010-01-01** og framover (til
-nåtid). Eldre data hentes ikke automatisk; instrumenter med kortere
-data-historikk (typisk CFTC pre-2022 for visse kontrakter, jf. PLAN
+Alle nye fetchere fyller historikk fra **minst 10 år tilbake fra
+dagens dato** og framover (til nåtid). Cutoffen er **rolling**, ikke
+fast — i 2026 betyr det ≥ ~2016, i 2030 betyr det ≥ ~2020.
+
+**Begrunnelse for 10 år (myket opp 2026-04-29, session 126 D0):**
+10 år dekker minst 1 fed-syklus + 2 commodity-mini-sykluser, hvilket
+er tilstrekkelig for 12m+36m percentil-vinduer (PLAN § 19.3) og
+typisk backtest-horisont. Den tidligere 2010-01-01-låsen var et
+arbitrært punkt valgt før D0-smoke-testene; rolling-10-år-policy gir
+en mer pragmatisk grense som holder seg gjennom hele systemets
+levetid uten å invitere uendelig arkiv-arbeid for marginal nytte.
+
+**Konsekvens for D0:** Smoke-test-klassifikasjonen i `docs/smoke_test_
+results.md` bruker:
+- **GO:** ≥10 år historikk + stabilt endpoint + gratis
+- **RISK:** 5-10 år historikk ELLER ustabilt endpoint (token-friksjon,
+  fragil parsing) — implementeres med eksplisitt risiko-notat
+- **SKIP:** <5 år historikk — utsett til kilde modnes
+- **BLOCK:** Paywall / login / utilgjengelig
+
+Eldre data hentes ikke automatisk; instrumenter med kortere data-
+historikk (typisk CFTC pre-2022 for visse kontrakter, jf. PLAN
 § 19.5 og STATE Data-gjeld) flagges som fundamental gap som må
 aksepteres.
 
@@ -118,9 +137,10 @@ enkel og test-bar.
   til produksjons-koden.
 - Sekvensiell pacing matcher gratis-API-virkeligheten — vi unngår
   bans og mystiske 403-er som ville gjøre data-fyll uforutsigbar.
-- 2010-cutoff er tilstrekkelig for 12m+36m percentil-vinduer
+- 10-år-rolling-cutoff er tilstrekkelig for 12m+36m percentil-vinduer
   (PLAN § 19.3) over flere fed-sykluser uten å invitere uendelig
-  arkiv-arbeid for marginal nytte.
+  arkiv-arbeid for marginal nytte. Rolling-policy holder seg gjennom
+  hele systemets levetid uten å trenge ny ADR per år.
 
 ### Negative
 
