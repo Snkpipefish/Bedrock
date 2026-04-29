@@ -15,15 +15,15 @@ jobs:
     name: lint, type-check, test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
           # Repoet har ikke uv.lock committed (reproducerbare builds via
           # pyproject.toml + resolver er akseptabelt her). Uten denne
-          # setup-uv@v3 feiler hardt ved cache-søk på default **/uv.lock.
+          # setup-uv feiler hardt ved cache-søk på default **/uv.lock.
           cache-dependency-glob: "pyproject.toml"
 
       - name: Set up Python 3.10
