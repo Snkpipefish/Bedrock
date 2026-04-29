@@ -2122,8 +2122,7 @@ class DataStore:
             params.append(str(to_date))
 
         query = (
-            f"SELECT * FROM {TABLE_ETF_HOLDINGS} "
-            f"WHERE {' AND '.join(clauses)} ORDER BY date ASC"
+            f"SELECT * FROM {TABLE_ETF_HOLDINGS} WHERE {' AND '.join(clauses)} ORDER BY date ASC"
         )
         with self._connect() as conn:
             df = pd.read_sql(query, conn, params=params)

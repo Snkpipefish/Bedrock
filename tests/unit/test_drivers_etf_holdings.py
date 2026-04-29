@@ -94,9 +94,7 @@ def test_default_bull_when_low_inverts() -> None:
     """+2 % WoW, bull_when=low → 0.0 (invertert)."""
     df = _make_gld_df([*[900.0] * 5, 918.0])
     store = _MockStore({"gld": df})
-    score = get("etf_holdings_change")(
-        store, "Gold", {"ticker": "gld", "bull_when": "low"}
-    )
+    score = get("etf_holdings_change")(store, "Gold", {"ticker": "gld", "bull_when": "low"})
     assert score == 0.0
 
 
@@ -169,9 +167,7 @@ def test_mode_pct_12m_monotonic_high_at_top() -> None:
     n = 280
     df = _make_gld_df([900.0 + i for i in range(n)])
     store = _MockStore({"gld": df})
-    score = get("etf_holdings_change")(
-        store, "Gold", {"ticker": "gld", "mode": "pct_12m"}
-    )
+    score = get("etf_holdings_change")(store, "Gold", {"ticker": "gld", "mode": "pct_12m"})
     # bull_when=high default; toppen er bull → score ≈ 1.0
     assert score >= 0.95
 
@@ -193,7 +189,5 @@ def test_mode_unknown_falls_back_to_default() -> None:
     """Ukjent mode → default-trapp."""
     df = _make_gld_df([*[900.0] * 5, 918.0])
     store = _MockStore({"gld": df})
-    score = get("etf_holdings_change")(
-        store, "Gold", {"ticker": "gld", "mode": "frobnicate"}
-    )
+    score = get("etf_holdings_change")(store, "Gold", {"ticker": "gld", "mode": "frobnicate"})
     assert score == 1.0  # default-trapp +2 % → 1.0
