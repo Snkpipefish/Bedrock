@@ -18,6 +18,14 @@ instrument:
     - T10YIE
     - DTWEXBGS
     - VIXCLS
+    # B1 D1 (sub-fase 12.7, session 129) — credit_spread_change + nfci_change
+    # + net_fed_liq_change-input. Erstatter HY/IG OAS som ga 3y-historikk.
+    - AAA10Y       # Moody's AAA Corporate spread vs 10Y Treasury
+    - BAA10Y       # Moody's BAA Corporate spread vs 10Y Treasury
+    - NFCI         # Chicago Fed National Financial Conditions Index
+    - WALCL        # Fed Total Assets (NetFedLiq input 1)
+    - RRPONTSYD    # Reverse Repo outstanding (NetFedLiq input 2)
+    - WTREGEN      # Treasury General Account (NetFedLiq input 3)
 
 aggregation: weighted_horizon
 

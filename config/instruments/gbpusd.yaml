@@ -16,6 +16,8 @@ instrument:
     - T10YIE
     - DTWEXBGS
     - VIXCLS
+    # B1 D1 (sub-fase 12.7, session 129) — yield_diff_10y-input
+    - IRLTLT01GBM156N  # Storbritannia 10Y (månedlig OECD-feed)
 
 aggregation: weighted_horizon
 
