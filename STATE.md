@@ -125,7 +125,7 @@
 - **AsOfDateStore (session 116):** utvidet med 9 nye proxy-getters (econ_events/cot_ice/cot_euronext/eia_inventory/comex_inventory/seismic_events/conab_estimates/unica_reports/shipping_indices) + tilsvarende `has_*`-helpers. Kritisk fix — uten denne falt orchestrator-replay tilbake til defensive 0.0 for alle nye Phase A-C-drivere fordi underlying-getterne kastet `AttributeError`. 24 nye tester dekker hver getter + region/from_ts-filter + tom-clip-fallback.
 - **Phase D-output (session 116):** `data/_meta/backtest_phase_d_baseline.json` (68 rader, session 99-reprise), `data/_meta/backtest_phase_d_orchestrator.json` (48 rader, 86.4 min sweep), `data/_meta/backtest_phase_d_spike_{cot_ice_mm_pct,conab_yoy,unica_change}.json` (3 spikes). Rapport: `docs/backtest_phase_d_2026-04.md` med diff-tabeller + flagg-terskel ≥3pp Δhit_rate eller ≥2 grade-flips.
 - **Sub-fase 12.6-fundament (session 117):** 3 nye SQLite-tabeller (`driver_observations` long-format, `signal_setups`, `feature_snapshots`) + 5 nye scripts (`harvest_driver_observations.py`, `harvest_feature_snapshots.py`, `run_full_history_harvest.sh`, `analyze_driver_performance.py`, `analyze_cross_correlations.py`). Detached harvest startet 2026-04-27 21:58 — features ETA ~10 min, driver_observations ETA ~24-35 timer.
-- **Next task:** **Session 131 = D2 åpning.** D1 LUKKET 2026-04-29 av session 130 med tag `v0.12.7-d1`. **D2 scope per § 19.4** (Tier 2): A9 USDM, A12 AAII, B2 VIX-term, B5 cal-spreads M1 (energi BZ/CL/NG), B4 HDD/CDD→NaturalGas (vil oppdatere agsi-vekt fra midlertidig til endelig). C2 Eskom og A8 NOPA er dropped (paywall). A5/A6/A7 ETF + A11 ICE krever ekstra research (smoke-test-funn). Session 130 commits: `124c3fa` A2 fetcher+schema+backfill, `adf0a52` A2 driver+tester, `9a57c09` A3 defer-til-Plan-S, `ed38c5d` A2 YAML+ny baseline, `ce6253a` D1 grade-distribusjons-rapport. Total 5 commits + STATE-commit + tag. **Sub-fase 12.6 PAUSER fortsatt**, gjenåpnes etter D3.
+- **Next task:** **Session 131 = D2 åpning.** D1 LUKKET 2026-04-29 av session 130 med tag `v0.12.7-d1`. **D2-prep manuell-data-runde gjennomført 2026-04-29** (etter session 130, før 131): 5 kilder smoke-testet via direkte fetch + acquisition i `bedrock manuell data/`. Resultat: A5 GLD GO (5593 rader), A6 SLV PARTIAL (proxy), A7/A8/A11 DROP-anbefalt per A1/A14-presedens, A3 RE-AKTIVERT etter at bruker registrerte api.data.gov-key. PLAN § 19.5 oppdatert med drop/defer-status (commit etter denne housekeeping-runden). **D2 scope per § 19.4** (Tier 2): A9 USDM, A12 AAII, A3 FAS (re-aktivert), A5 GLD, A6 SLV (proxy), B2 VIX-term, B5 cal-spreads M1 (energi BZ/CL/NG), B4 HDD/CDD→NaturalGas (vil oppdatere agsi-vekt fra midlertidig til endelig), C3 drop shipping (Cotton/Cocoa). DROPPED: A7/A8/A11/C2/A14. Session 130 commits: `124c3fa` A2 fetcher+schema+backfill, `adf0a52` A2 driver+tester, `9a57c09` A3 defer-til-Plan-S (overstyres av D2-prep re-aktivering), `ed38c5d` A2 YAML+ny baseline, `ce6253a` D1 grade-distribusjons-rapport. **Sub-fase 12.6 PAUSER fortsatt**, gjenåpnes etter D3.
 - **Git-modus:** Nivå 1 aktivt under sub-fase 12.5+ docs/cleanup-pass. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt valgfri.
 
 ## Data-gjeld (sub-fase 12.6)
@@ -136,9 +136,9 @@ URL-mønstre + CSV-format-krav: `docs/manual_download_shopping_list.md`.
 
 **KRITISK — påvirker scoring for spesifikke instrumenter:**
 
-1. **COMEX inventory historikk** (Gold/Silver/Copper 2010+): kun 1 rad i DB. Påvirker `comex_stress`-driver (vekt 0.20-0.30 i macro for 3 metaller). **Fix:** manuell nedlastning fra Quandl/Kitco/CME DataMine.
-2. **UNICA full historikk** (2010+): kun 1 rapport. Påvirker `unica_change`-driver (vekt 1.0 i unica-familie for Sugar — KRITISK). **Fix:** manuell anuário-Excel-import per safra-år (UNICA har ingen public archive-API).
-3. **CONAB Café/Coffee boletim**: kun 3 rader fra 2026-04-27 (session 111 fetcher mot gov.br PDF). De 41 Excel-filene i `bedrock manuell data/conab_boletins/` er grains-only (algodao/milho/soja/trigo), ikke kaffe — Café er en separat CONAB-boletim-serie. Påvirker `conab_yoy`-driver for Coffee (vekt 1.0 i conab-familie). **Fix:** manuell Café-boletim-nedlastning fra `conab.gov.br/info-agro/safras/cafe` (separat fra grains-nedlastningen) + utvide `ingest_manual_data.py conab` til å håndtere Café-boletim-format.
+1. **COMEX inventory historikk** (Gold/Silver/Copper 2010+) **PARTIALLY RESOLVED 2026-04-29**: bruker har lagt inn manuell COMEX-data i `bedrock manuell data/comex data/`: `harvey_organ_comex_inventory_daily.csv` (732KB daglig), `comex_inventory_unified_monthly.csv` (138KB månedlig), `comex_silver_inventory_monthly_1988_2022.csv`, `comex_copper_stocks_monthly.csv`, samt revisions_audit + scrape_logs. Påvirker `comex_stress`-driver (vekt 0.20-0.30 i macro for 3 metaller). **Gjenstår:** ingest til DB via `scripts/ingest_manual_data.py` (kan kreve ny `comex`-subkommando hvis ikke allerede støttet).
+2. **UNICA full historikk** (2010+): kun 1 rapport i DB + 1 manuell PDF (`bedrock manuell data/unica_quinzenal_latest.pdf`). Påvirker `unica_change`-driver (vekt 1.0 i unica-familie for Sugar — KRITISK). **Fix:** manuell anuário-Excel-import per safra-år (UNICA har ingen public archive-API). Status: kun siste rapport tilgjengelig manuelt; full historikk fortsatt mangler.
+3. **CONAB Café/Coffee boletim** **PARTIAL 2026-04-29**: 3 rader i DB fra 2026-04-27 (session 111 fetcher mot gov.br PDF). Bruker har lagt 1 PDF i `bedrock manuell data/cafe_boletins/` (`safra-2026_1o_boletim-de-safras-cafe-fevereiro-26.pdf`). Påvirker `conab_yoy`-driver for Coffee (vekt 1.0 i conab-familie). **Gjenstår:** ingest av eksisterende boletim + nedlastning av historiske Café-boletins fra `conab.gov.br/info-agro/safras/cafe` + utvide `ingest_manual_data.py conab` til å håndtere Café-format.
 4. **CFTC Brent + Copper pre-2022**: kun 220 rader/contract fra 2022-02. Ikke navn-drift — CFTC publiserte ikke før 2022. Påvirker `positioning_mm_pct` for Brent + Copper. **Fix:** ingen — fundamental gap, må aksepteres.
 
 **MEDIUM — utvidbar via kode-fix:**
@@ -152,6 +152,36 @@ URL-mønstre + CSV-format-krav: `docs/manual_download_shopping_list.md`.
 **LAV — driver-aktivering avhenger av data-akkumulering:**
 
 8. **News_intel + crypto_sentiment**: tomt på commit-tidspunkt. Drivere ikke-aktiverte enda. Akkumulerer naturlig via daglig fetcher.
+
+## Manuelle datasett (D2-prep, 2026-04-29)
+
+Bruker har levert manuelle data-filer i `bedrock manuell data/` som
+forberedelse til D2. Full per-kilde-status + schema-detaljer i
+`bedrock manuell data/MANIFEST.md`. Rapport per kilde:
+
+**Bruker-levert (pre-12.7):**
+- `comex data/` — Gold/Silver/Copper inventory (daily + monthly), løser KRITISK 1
+- `conab_boletins/` — 41 Excel-filer for grains-safra 2021/22-2025/26
+- `cafe_boletins/` — 1 PDF for Café-safra 2026 1o
+- `forex_factory_2007_2025.csv` — Forex Factory econ events 2007-2025
+- `unica_quinzenal_latest.pdf` — UNICA siste rapport
+- `Baltic Dry Index Historical Data (BADI) - Investing.com.pdf` — BDI 2014-2018 historikk
+
+**Hentet i D2-prep-runde (2026-04-29):**
+- `gld_holdings/` — **GO**: SPDR Excel API, 5593 rader 2004-11→2026-04, full schema (tonnes/ounces/NAV)
+- `slv_holdings/` — **PARTIAL**: iShares xls, 5039 rader 2006-04→2026-04, kun NAV + shares_outstanding (proxy for tonnes)
+- `pplt_holdings/` — **DROP-anbefalt**: kun Yahoo OHLCV-fallback (4101 rader), ingen daglig holdings tilgjengelig
+- `ice_certified_stocks/` — **BLOCKED**: ICE er JS-SPA, ingen åpne endpoints
+- `nopa_crush/` — **DROP-anbefalt**: kun 11 mnd public PDFs (2014-10 til 2016-03), resten LSEG-paywalled
+
+D2-implementasjon må:
+1. Utvide `scripts/ingest_manual_data.py` med subkommandoer for `gld`, `slv`,
+   eventuelt `comex` (sjekk om eksisterende støtte finnes), og `nopa` hvis
+   beholdt for backtest-bruk.
+2. Designe driver-mønster for SLV som bruker shares_outstanding-change som
+   proxy for holdings-change (silver-per-share-decay neglisjerbar på
+   WoW/MoM-skala).
+3. Følge DROP-anbefalingene for A7 PPLT, A8 NOPA, A11 ICE per A1/A14-presedens.
 
 ## Workflow-notes (2026-04-26)
 
@@ -172,18 +202,22 @@ URL-mønstre + CSV-format-krav: `docs/manual_download_shopping_list.md`.
   all data er på plass". 12.6 PAUSES (harvest fortsetter detached); Spor R
   kjøres nå (bit-identisk, trygt); Spor D etter R; 12.6 GJENÅPNES etter D3
   med ett rebalanserings-pass over hele systemet.
-- **R3 referanse-driver-bekreftelse** (sannsynlig auto-bestem):
-  `positioning_mm_pct` + `real_yield` + `crop_progress_stage`. Bekreft eller
-  bytt ut når R3 åpnes.
-- **D0 smoke-test-utfall som påvirker D-fasene:**
-  - A14 Eskom-historikk ≥2010? Hvis <2014, behold seismic for Platinum (C2
-    droppes eller utsettes).
-  - B5 Yahoo `@F`-curve-feasibility for calendar spreads (høyrisiko —
-    Yahoo `GC=F` etc. er continuous front-month, ikke M1/M2/M12-curve).
-    Hvis ikke fungerer: B5 utsettes eller ny kilde (CME settlement-CSV).
-  - A11 ICE certified stocks for TTF Natural Gas: ifølge session 106 er
-    TTF fjernet fra public ICE feed. Bekreft i smoke-test, evt. fall
-    tilbake på CFTC-only for NaturalGas TFF.
+- ~~**R3 referanse-driver-bekreftelse**~~ — LUKKET sessions 121+ (R3+R4
+  ferdig 2026-04-29 med tag `v0.12.7-r4-finish`).
+- ~~**D0 smoke-test-utfall**~~ — LUKKET 2026-04-29: A14 paywall (DROPPED),
+  B5 Yahoo M1 GO + spesifikke kontraktsmåneder RISK (8.4y), A11 ICE
+  blocked (DROPPED i D2-prep).
+- **D2 implementasjons-spørsmål (D2-prep-funn 2026-04-29):**
+  - **SLV proxy-driver-design:** A6 har kun shares_outstanding, ikke
+    direkte tonnes. Driver må bruke shares-change som proxy + dokumentere
+    expense-ratio-decay-caveat (~0.5%/år, neglisjerbar WoW/MoM).
+  - **DROP-bekreftelse for A7/A8/A11:** D2 implementerer ikke disse;
+    YAML-vekter reallokeres per § 19.5-anbefalinger (PPLT 0.15 → andre
+    Platinum macro-drivere; ICE 0.25 → seasonal_stage@1.00 i Coffee/
+    Cocoa/Sugar outlook).
+  - **`ingest_manual_data.py`-utvidelser:** trenger nye subkommandoer
+    `gld`, `slv`, eventuelt `comex` (sjekk eksisterende støtte) for å
+    laste D2-prep-CSV-er til DB.
 
 ### Eldre, fortsatt åpne
 
