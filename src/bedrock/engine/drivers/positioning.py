@@ -1487,7 +1487,134 @@ def positioning_asset_mgr_pct(store: Any, instrument: str, params: dict) -> floa
     )
 
 
+# ---------------------------------------------------------------------------
+# aaii_extreme (sub-fase 12.7 D2 A12, session 131)
+# ---------------------------------------------------------------------------
+#
+# AAII Sentiment Survey (ukentlig bull/bear/neutral-prosenter) er en kontra-
+# indikator for SP500/Nasdaq positioning-familien. Driver-intern mean-
+# reversion-logikk per pattern-doc § 3.2: "extreme_contrarian_score".
+#
+# Beregning (default):
+#   1. Hent siste bullish_pct fra aaii_sentiment-tabellen.
+#   2. Beregn rank-percentile mot lookback-vindu (default 52 uker).
+#   3. Returnér 1 − percentile (invertert) — slik at høy bullish-sentiment
+#      i 12m-historikken gir LAV score (mean-reversion-bear).
+#
+# YAML-polarity = `directional` per § 19.3 (ingen ny polarity-type).
+# Engine flipper for SELL-direksjon som vanlig.
+
+
+@register("aaii_extreme")
+def aaii_extreme(store: Any, instrument: str, params: dict) -> float:
+    """AAII mean-reversion-driver (extreme_contrarian_score), 0..1.
+
+    Sub-fase 12.7 D2 A12 (session 131). Brukes i Nasdaq/SP500 positioning-
+    familie. Pattern-doc § 3.2 "extreme_contrarian_score": driver-intern
+    invertert-percentil-mønster. Returnerer ``1 − rank_percentile``-skalar
+    der 1.0 = bull-of-instrument fordi AAII er kontra-indikator (ekstrem
+    bullish-sentiment historisk → bearish for SP500/Nasdaq).
+
+    Default-mode: rank-percentile av siste bullish_pct mot siste 52 ukers
+    obs, deretter inversjon.
+
+    Params:
+        metric: hvilken AAII-kolonne å bruke som feature.
+            ``"bullish_pct"`` (default) = bull-share kontra-indikator.
+            ``"bearish_pct"`` = bear-share (returner percentile rett, ikke
+            invertert — høy bearish historisk → bullish for SP500
+            mean-reversion). ``"bull_bear_spread"`` = spread.
+        lookback_weeks: rolling-vindu (default 52).
+        mode: R4 feature-velger per ADR-010. Default uten mode = invertert
+            12m-percentile (extreme_contrarian-spec). Modes støtter
+            pct_12m / pct_36m / extreme_flag_*. delta_*_z er meningsfullt
+            for ukentlig data men AAII har ikke egendynamikk som krever
+            differensiering — utelatt for å holde mean-reversion-tolkningen
+            ren.
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt i R4.
+
+    Defensive 0.0 ved manglende AAII-data eller utilstrekkelig historikk.
+    """
+    _horizon = params.get("_horizon")
+    metric = params.get("metric", "bullish_pct")
+    lookback_weeks = int(params.get("lookback_weeks", 52))
+    mode = params.get("mode")
+
+    if metric not in ("bullish_pct", "neutral_pct", "bearish_pct", "bull_bear_spread"):
+        _log.warning("aaii_extreme.invalid_metric", instrument=instrument, metric=metric)
+        return 0.0
+
+    try:
+        df = store.get_aaii_sentiment()
+    except KeyError:
+        _log.debug("aaii_extreme.no_data", instrument=instrument)
+        return 0.0
+    except Exception as exc:
+        _log.warning("aaii_extreme.fetch_failed", instrument=instrument, error=str(exc))
+        return 0.0
+
+    if df.empty or metric not in df.columns:
+        return 0.0
+
+    series = pd.Series(df[metric].values, index=pd.to_datetime(df["date"])).dropna()
+    if series.empty:
+        return 0.0
+
+    # Truncate to lookback_weeks + 1 (current + history)
+    if len(series) > lookback_weeks + 1:
+        series = series.tail(lookback_weeks + 1)
+
+    if len(series) < MIN_OBS_FOR_PCTILE + 1:
+        _log.debug("aaii_extreme.short_history", instrument=instrument, n=len(series))
+        return 0.0
+
+    current = float(series.iloc[-1])
+    history = [float(v) for v in series.iloc[:-1]]
+    pct = rank_percentile(current, history)
+    if pct is None:
+        return 0.0
+    pct_0_1 = pct / 100.0
+
+    # Mean-reversion-inversjon for bullish_pct + bull_bear_spread.
+    # bearish_pct og neutral_pct returneres ikke-invertert.
+    invert_for_metric = metric in ("bullish_pct", "bull_bear_spread")
+
+    if mode is None:
+        score = 1.0 - pct_0_1 if invert_for_metric else pct_0_1
+        return round(score, 4)
+
+    if mode == "pct_12m":
+        score = 1.0 - pct_0_1 if invert_for_metric else pct_0_1
+        return round(score, 4)
+
+    if mode == "pct_36m":
+        # 36m = 156 uker. Re-eksekver med større vindu.
+        full_series = pd.Series(df[metric].values, index=pd.to_datetime(df["date"])).dropna()
+        if len(full_series) > 156 + 1:
+            full_series = full_series.tail(156 + 1)
+        if len(full_series) < MIN_OBS_FOR_PCTILE + 1:
+            # Fall back to pct_12m result
+            score = 1.0 - pct_0_1 if invert_for_metric else pct_0_1
+            return round(score, 4)
+        cur_full = float(full_series.iloc[-1])
+        hist_full = [float(v) for v in full_series.iloc[:-1]]
+        pct_full = rank_percentile(cur_full, hist_full)
+        if pct_full is None:
+            return 0.0
+        pct_full_0_1 = pct_full / 100.0
+        score = 1.0 - pct_full_0_1 if invert_for_metric else pct_full_0_1
+        return round(score, 4)
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        return _extreme_flag(pct_0_1, hard=(mode == "extreme_flag_hard"))
+
+    _log.warning("aaii_extreme.unknown_mode", instrument=instrument, mode=mode)
+    score = 1.0 - pct_0_1 if invert_for_metric else pct_0_1
+    return round(score, 4)
+
+
 __all__ = [
+    "aaii_extreme",
     "cot_euronext_mm_pct",
     "cot_ice_mm_pct",
     "cot_z_score",

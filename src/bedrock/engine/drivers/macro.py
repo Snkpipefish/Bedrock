@@ -1,3 +1,6 @@
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportCallIssue=false
+# pandas-stubs har dårlig dekning for Series/Index attribute access (.month,
+# .date, .dropna på pd.concat-resultater). Konsistent med data/store.py.
 """Macro-familie drivere (Sub-fase 12.5 session 71 + 12.7 R3).
 
 Erstatter ``sma200_align``-placeholder i macro-familien for finansielle
@@ -789,6 +792,399 @@ def _vix_regime_default(series: pd.Series, invert: bool, params: dict) -> float:
 
     if invert:
         # Safe-haven-tolkning: 1.0 ↔ 0.0, 0.75 ↔ 0.25, 0.5 stays.
+        return round(1.0 - score, 4)
+    return score
+
+
+# ---------------------------------------------------------------------------
+# hdd_cdd_anomaly (sub-fase 12.7 D2 B4, session 131)
+# ---------------------------------------------------------------------------
+#
+# Driver-intern sesong-switch per pattern-doc § 3.1: vinter (Nov-Mar) bruker
+# HDD-anomaly; sommer (Jun-Aug) bruker CDD-anomaly; skuldermåneder (Apr-May,
+# Sep-Oct) returnerer 0.5 (nøytral). Returnerer alltid skalar [0..1] der
+# 1.0 = bull-of-NG (høy demand-pressure).
+#
+# Default-regioner (populasjons-veid for US gas-residential-konsumpsjon):
+# NE-USA (40%), Midwest (35%), TX/LA (25%). Vekt-tilt mot heating-tunge
+# regioner.
+#
+# YAML-polarity = `directional` per § 19.3 (engine flipper for SELL).
+
+# Default region-vekter per pattern-doc § 3.1.
+_DEFAULT_NG_WEATHER_REGIONS: tuple[tuple[str, float], ...] = (
+    ("us_ng_ne", 0.40),
+    ("us_ng_midwest", 0.35),
+    ("us_ng_tx_la", 0.25),
+)
+
+# Måneds-grupper for sesong-switch. Pattern-doc § 3.1.
+_WINTER_MONTHS = frozenset({11, 12, 1, 2, 3})
+_SUMMER_MONTHS = frozenset({6, 7, 8})
+
+# HDD/CDD base = 65°F (US-konvensjon). Open-Meteo gir °C → konverter til °F.
+_BASE_TEMP_F = 65.0
+
+
+def _c_to_f(c: float) -> float:
+    return c * 9.0 / 5.0 + 32.0
+
+
+def _daily_hdd_cdd(df: pd.DataFrame) -> pd.DataFrame:
+    """Beregn daglig HDD og CDD fra weather-DataFrame.
+
+    df må ha kolonner ``date``, ``tmax``, ``tmin`` (°C). Returnerer DataFrame
+    med kolonner ``date``, ``hdd``, ``cdd`` (°F-degree-days).
+    """
+    mean_c = (df["tmax"] + df["tmin"]) / 2.0
+    mean_f = mean_c.apply(_c_to_f)
+    hdd = (_BASE_TEMP_F - mean_f).clip(lower=0)
+    cdd = (mean_f - _BASE_TEMP_F).clip(lower=0)
+    return pd.DataFrame({"date": pd.to_datetime(df["date"]), "hdd": hdd, "cdd": cdd})
+
+
+def _aggregate_regions(
+    store: Any,
+    regions_with_weights: tuple[tuple[str, float], ...],
+    instrument: str,
+) -> pd.DataFrame | None:
+    """Hent weather for hver region, beregn HDD/CDD, vekt-aggreger.
+
+    Returnerer DataFrame med kolonner ``date``, ``hdd``, ``cdd`` der HDD/CDD
+    er populasjons-veid sum over regionene. None hvis ingen data.
+    """
+    frames: list[pd.DataFrame] = []
+    total_weight = 0.0
+    for region, weight in regions_with_weights:
+        try:
+            wdf = store.get_weather(region)
+        except KeyError:
+            _log.debug(
+                "hdd_cdd_anomaly.region_missing",
+                instrument=instrument,
+                region=region,
+            )
+            continue
+        except Exception as exc:
+            _log.warning(
+                "hdd_cdd_anomaly.region_fetch_failed",
+                instrument=instrument,
+                region=region,
+                error=str(exc),
+            )
+            continue
+        hc = _daily_hdd_cdd(wdf)
+        hc["hdd"] = hc["hdd"] * weight
+        hc["cdd"] = hc["cdd"] * weight
+        frames.append(hc.set_index("date"))
+        total_weight += weight
+
+    if not frames or total_weight == 0:
+        return None
+
+    combined = pd.concat(frames, axis=1, join="inner")
+    # Etter weight × per region — sum kolonnene som heter "hdd" eller "cdd"
+    hdd_cols = [c for c in combined.columns if c == "hdd"]
+    cdd_cols = [c for c in combined.columns if c == "cdd"]
+    out = pd.DataFrame(
+        {
+            "hdd": combined[hdd_cols].sum(axis=1) / total_weight,
+            "cdd": combined[cdd_cols].sum(axis=1) / total_weight,
+        }
+    )
+    out = out.reset_index().rename(columns={"index": "date"})
+    return out
+
+
+def _anomaly_score(series: pd.Series, current_date: pd.Timestamp, lookback_days: int) -> float:
+    """Beregn anomaly-score: rolling ${lookback_days}-dagers gjennomsnitt
+    vs samme måneds historiske median.
+
+    Returnerer 0..1 der 1.0 = sterk positiv anomaly (høy demand-pressure).
+    """
+    if series.empty:
+        return 0.5
+    # Siste lookback_days observasjoner
+    recent = series.iloc[-lookback_days:]
+    if recent.empty:
+        return 0.5
+    current_avg = float(recent.mean())
+
+    # Historikk: samme kalender-måned-spann fra tidligere år
+    target_month = current_date.month
+    same_month_history = series[series.index.month == target_month]
+    same_month_history = same_month_history[same_month_history.index < current_date]
+
+    if len(same_month_history) < 30:  # ikke nok historikk
+        return 0.5
+
+    median_norm = float(same_month_history.median())
+    if median_norm <= 0:
+        # I skuldermåneder kan median være 0 (ingen HDD/CDD) → anvend
+        # absoluttverdi som anomaly
+        if current_avg > 0:
+            return 0.75
+        return 0.5
+
+    pct_anomaly = (current_avg - median_norm) / median_norm
+
+    # Map pct_anomaly til [0..1]:
+    #   ≥ +0.30 (30% over normal): 1.0 — sterk demand-pressure
+    #   ≥ +0.15: 0.85
+    #   ≥ 0:     0.6
+    #   ≥ -0.15: 0.4
+    #   ≥ -0.30: 0.25
+    #   <  -0.30: 0.0
+    if pct_anomaly >= 0.30:
+        return 1.0
+    if pct_anomaly >= 0.15:
+        return 0.85
+    if pct_anomaly >= 0.0:
+        return 0.6
+    if pct_anomaly >= -0.15:
+        return 0.4
+    if pct_anomaly >= -0.30:
+        return 0.25
+    return 0.0
+
+
+@register("hdd_cdd_anomaly")
+def hdd_cdd_anomaly(store: Any, instrument: str, params: dict) -> float:
+    """HDD/CDD-anomaly mot sesong-norm, mappet til 0..1 (bull-of-NG).
+
+    Sub-fase 12.7 D2 B4 (session 131). Brukes i NaturalGas macro-familie.
+
+    Driver-intern sesong-switch per pattern-doc § 3.1:
+    - Vinter (Nov-Mar): HDD-anomaly mot 30-dager rolling vs samme-måneds
+      historiske median ⇒ score [0..1], 1.0 = sterk heating-demand = bull NG.
+    - Sommer (Jun-Aug): CDD-anomaly tilsvarende.
+    - Skuldermåneder (Apr-May, Sep-Oct): returnerer 0.5 (nøytral demand-
+      pressure).
+
+    Returnerer alltid skalar 1.0 = bull-of-NG uavhengig av sesong. YAML-
+    polarity = directional; engine flipper for SELL som vanlig.
+
+    Params:
+        regions: optional override av default region-vekter. Format:
+            ``[(region_name, weight), ...]``. Default:
+            us_ng_ne@0.40, us_ng_midwest@0.35, us_ng_tx_la@0.25.
+        as_of: optional ISO-dato for testing (default = dagens dato).
+        lookback_days: rolling-vindu for current-anomaly (default 30 for
+            MAKRO, kunne vært 5-7 for SWING).
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt i R4.
+        invert: hvis True, returnerer 1 − score (kontrære posisjoner).
+
+    Defensive 0.5 (nøytral) ved manglende data eller skuldermåneder.
+    """
+    from datetime import date as date_cls
+
+    _horizon = params.get("_horizon")
+    as_of_param = params.get("as_of")
+    if as_of_param is None:
+        as_of = date_cls.today()
+    elif isinstance(as_of_param, str):
+        as_of = date_cls.fromisoformat(as_of_param)
+    elif isinstance(as_of_param, date_cls):
+        as_of = as_of_param
+    else:
+        as_of = date_cls.today()
+
+    lookback_days = int(params.get("lookback_days", 30))
+    invert = bool(params.get("invert", False))
+
+    user_regions = params.get("regions")
+    if isinstance(user_regions, list) and user_regions:
+        regions_with_weights = tuple((str(r), float(w)) for r, w in user_regions)
+    else:
+        regions_with_weights = _DEFAULT_NG_WEATHER_REGIONS
+
+    # Sesong-switch
+    month = as_of.month
+    if month not in _WINTER_MONTHS and month not in _SUMMER_MONTHS:
+        return 0.5  # skuldermåneder
+
+    aggregated = _aggregate_regions(store, regions_with_weights, instrument)
+    if aggregated is None or aggregated.empty:
+        return 0.0  # data mangler
+
+    aggregated = aggregated.set_index(pd.to_datetime(aggregated["date"]))
+    # Filtrer til dato ≤ as_of
+    aggregated = aggregated[aggregated.index.date <= as_of]
+    if aggregated.empty:
+        return 0.0
+
+    if month in _WINTER_MONTHS:
+        score = _anomaly_score(aggregated["hdd"], pd.Timestamp(as_of), lookback_days)
+    else:  # sommer
+        score = _anomaly_score(aggregated["cdd"], pd.Timestamp(as_of), lookback_days)
+
+    if invert:
+        return round(1.0 - score, 4)
+    return round(score, 4)
+
+
+# ---------------------------------------------------------------------------
+# vix_term_ratio (sub-fase 12.7 D2 B2, session 131)
+# ---------------------------------------------------------------------------
+#
+# VIX-termstruktur-ratio: (VIX3M / VIX) − 1.
+#   - Positiv (contango): VIX3M > VIX, normal markedsregime, forventer
+#     "mean-reversion" oppover på vol. Trend-friendly for risk-on.
+#   - Negativ (backwardation): VIX3M < VIX, krise-regime (current vol
+#     er høyere enn 3m forward), redusert sizing-anbefaling.
+#
+# Brukes i Nasdaq/SP500 risk-familien som regime-/sizing-driver.
+# Familie-polarity = `neutral` (verdien justerer størrelse uavhengig av
+# direksjon, ikke direkte direksjonalt signal). Default-output 1.0 =
+# "rolig regime, sizing-OK"; 0.0 = "krise-regime, redusert sizing".
+
+# Default-trapp på rå ratio. Historiske observasjoner (2016+):
+# normal contango +5% til +10%; krise-backwardation -10% til -20%.
+_DEFAULT_VIX_TERM_RATIO_THRESHOLDS: tuple[tuple[float, float], ...] = (
+    # Sortert etter ratio-verdi; first match wins (descending).
+    (0.10, 1.0),  # ≥ +10% contango → rolig regime
+    (0.05, 0.75),  # +5..+10%
+    (0.0, 0.5),  # 0..+5% — nøytral
+    (-0.05, 0.25),  # mild backwardation
+    (-1.0, 0.0),  # < -5% — krise-regime
+)
+
+
+@register("vix_term_ratio")
+def vix_term_ratio(store: Any, instrument: str, params: dict) -> float:
+    """VIX-termstruktur-ratio (VIX3M / VIX − 1), mappet til 0..1.
+
+    Sub-fase 12.7 D2 B2 (session 131). Brukes i risk-familien som
+    sizing-/regime-driver. Familie-polarity = `neutral` per § 19.5.
+
+    Tolkning: positiv ratio = contango (rolig regime, sizing-OK);
+    negativ ratio = backwardation (krise-regime, redusert sizing).
+
+    Frekvens: daglig (Yahoo). VIX3M og VIXCLS skal begge være
+    tilgjengelige i fundamentals-tabellen (etter scripts/backfill/
+    vix_term.py for VIX3M og eksisterende VIXCLS-fetcher).
+
+    Params:
+        numerator_series: ticker for 3m VIX (default ``VIX3M``).
+            Alternativer: ``VIX6M`` (6-month, gir glattere signal),
+            ``VIX9D`` (9-day, gir kortsiktig vol-skew).
+        denominator_series: spot VIX (default ``VIXCLS``).
+        thresholds: optional override.
+        invert: default False (ratio høy = sizing-OK = bull-of-sizing).
+            invert=True kan brukes for kontrære posisjoner (sjelden).
+        mode: feature-velger per ADR-010. Modes: ``"pct_12m"``,
+            ``"pct_36m"``, ``"delta_5d_z"``, ``"delta_20d_z"``,
+            ``"extreme_flag_hard"``, ``"extreme_flag_soft"``. Modes
+            opererer på ratio-serien (rolling-percentile/delta).
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt i R4.
+
+    Defensive 0.0 ved manglende serier eller ingen overlapp.
+    """
+    _horizon = params.get("_horizon")
+    num_id = params.get("numerator_series", "VIX3M")
+    den_id = params.get("denominator_series", "VIXCLS")
+    invert = bool(params.get("invert", False))
+    mode = params.get("mode")
+
+    try:
+        num = store.get_fundamentals(num_id).dropna()
+        den = store.get_fundamentals(den_id).dropna()
+    except KeyError as exc:
+        _log.debug("vix_term_ratio.series_missing", instrument=instrument, error=str(exc))
+        return 0.0
+    except Exception as exc:
+        _log.warning("vix_term_ratio.fetch_failed", instrument=instrument, error=str(exc))
+        return 0.0
+
+    # Inner-join på datoer; beregn ratio (numerator / denominator − 1).
+    aligned = pd.concat([num, den], axis=1, join="inner")
+    if aligned.empty:
+        _log.debug("vix_term_ratio.no_overlap", instrument=instrument)
+        return 0.0
+    aligned.columns = ["num", "den"]
+    aligned = aligned[aligned["den"] > 0]  # unngå div-by-0
+    if aligned.empty:
+        return 0.0
+
+    ratio = (aligned["num"] / aligned["den"] - 1.0).dropna()
+    if ratio.empty:
+        return 0.0
+
+    current = float(ratio.iloc[-1])
+    helper_bull_when = "high" if not invert else "low"
+
+    if mode is None:
+        return _vix_term_ratio_default(current, invert, params)
+
+    if mode == "pct_12m":
+        result = _fundamentals_pct_score(
+            ratio, helper_bull_when, _LOOKBACK_PCT_12M_DAILY, instrument
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "pct_36m":
+        result = _fundamentals_pct_score(
+            ratio, helper_bull_when, _LOOKBACK_PCT_36M_DAILY, instrument
+        )
+        if result is None:
+            result = _fundamentals_pct_score(
+                ratio, helper_bull_when, _LOOKBACK_PCT_12M_DAILY, instrument
+            )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_5d_z":
+        result = _fundamentals_delta_score(
+            ratio,
+            helper_bull_when,
+            delta_days=_DELTA_5D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_20d_z":
+        result = _fundamentals_delta_score(
+            ratio,
+            helper_bull_when,
+            delta_days=_DELTA_20D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        result = _fundamentals_extreme_flag(
+            ratio,
+            hard=(mode == "extreme_flag_hard"),
+            lookback=_LOOKBACK_PCT_12M_DAILY,
+            instrument=instrument,
+        )
+        return result if result is not None else 0.0
+
+    _log.warning(
+        "vix_term_ratio.unknown_mode_falling_back_to_default",
+        instrument=instrument,
+        mode=mode,
+    )
+    return _vix_term_ratio_default(current, invert, params)
+
+
+def _vix_term_ratio_default(current: float, invert: bool, params: dict) -> float:
+    """Default-trapp på rå ratio-verdi. invert=True flipper output."""
+    user_thresholds = params.get("thresholds")
+    if user_thresholds is None:
+        steps = _DEFAULT_VIX_TERM_RATIO_THRESHOLDS
+    else:
+        steps = tuple((float(t), float(s)) for t, s in user_thresholds)
+
+    # Sortert descending — first ratio ≥ threshold wins.
+    score = 0.0
+    for threshold, s in sorted(steps, key=lambda t: -t[0]):
+        if current >= threshold:
+            score = float(s)
+            break
+
+    if invert:
         return round(1.0 - score, 4)
     return score
 
@@ -2084,10 +2480,12 @@ __all__ = [
     "credit_spread_change",
     "dxy_chg5d",
     "eia_stock_change",
+    "hdd_cdd_anomaly",
     "mining_disruption",
     "net_fed_liq_change",
     "nfci_change",
     "real_yield",
     "vix_regime",
+    "vix_term_ratio",
     "yield_diff_10y",
 ]

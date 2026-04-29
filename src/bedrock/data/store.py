@@ -31,6 +31,7 @@ from typing import Any, Literal, Protocol
 import pandas as pd
 
 from bedrock.data.schemas import (
+    AAII_SENTIMENT_COLS,
     AGSI_STORAGE_COLS,
     ANALOG_OUTCOMES_COLS,
     COMEX_INVENTORY_COLS,
@@ -42,6 +43,7 @@ from bedrock.data.schemas import (
     COT_TFF_COLS,
     CROP_PROGRESS_COLS,
     CRYPTO_SENTIMENT_COLS,
+    DDL_AAII_SENTIMENT,
     DDL_AGSI_STORAGE,
     DDL_ANALOG_OUTCOMES,
     DDL_COMEX_INVENTORY,
@@ -76,6 +78,7 @@ from bedrock.data.schemas import (
     NEWS_INTEL_COLS,
     SEISMIC_EVENTS_COLS,
     SHIPPING_INDICES_COLS,
+    TABLE_AAII_SENTIMENT,
     TABLE_AGSI_STORAGE,
     TABLE_ANALOG_OUTCOMES,
     TABLE_BDI,
@@ -192,6 +195,8 @@ class DataStore:
             conn.execute(DDL_CRYPTO_SENTIMENT)
             # Sub-fase 12.7 D1 A2 (session 130): AGSI EU gas storage.
             conn.execute(DDL_AGSI_STORAGE)
+            # Sub-fase 12.7 D2 A12 (session 131): AAII Sentiment Survey.
+            conn.execute(DDL_AAII_SENTIMENT)
             conn.commit()
 
     def _migrate_bdi_to_shipping_indices(self, conn: sqlite3.Connection) -> None:
@@ -1973,6 +1978,72 @@ class DataStore:
                 f"SELECT 1 FROM {TABLE_AGSI_STORAGE} WHERE country = ? LIMIT 1",
                 (country.lower(),),
             )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # AAII Sentiment Survey (sub-fase 12.7 D2 A12, session 131)
+    # ------------------------------------------------------------------
+
+    def append_aaii_sentiment(self, df: pd.DataFrame) -> int:
+        """Skriv AAII-rader til ``aaii_sentiment``. Idempotent på date."""
+        missing = [c for c in AAII_SENTIMENT_COLS if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_aaii_sentiment: missing columns {missing}. "
+                f"Required: {list(AAII_SENTIMENT_COLS)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df[list(AAII_SENTIMENT_COLS)].copy()
+        prepared["date"] = pd.to_datetime(prepared["date"]).dt.strftime("%Y-%m-%d")
+
+        def _opt(v: object) -> float | None:
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return None
+            return float(v)  # type: ignore[arg-type]
+
+        rows: Sequence[tuple] = [
+            (
+                row.date,
+                _opt(row.bullish_pct),
+                _opt(row.neutral_pct),
+                _opt(row.bearish_pct),
+                _opt(row.bull_bear_spread),
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_AAII_SENTIMENT} "
+                f"(date, bullish_pct, neutral_pct, bearish_pct, bull_bear_spread) "
+                f"VALUES (?, ?, ?, ?, ?)",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_aaii_sentiment(self, last_n: int | None = None) -> pd.DataFrame:
+        """Returner AAII-rader sortert ASC på date.
+
+        Kaster ``KeyError`` hvis tabellen er tom.
+        """
+        query = f"SELECT * FROM {TABLE_AAII_SENTIMENT} ORDER BY date ASC"
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn)
+
+        if df.empty:
+            raise KeyError("No AAII sentiment data")
+
+        df["date"] = pd.to_datetime(df["date"])
+        if last_n is None:
+            return df
+        return df.tail(last_n).reset_index(drop=True)
+
+    def has_aaii_sentiment(self) -> bool:
+        """Test-hjelper: sjekk om tabellen har minst én rad."""
+        with self._connect() as conn:
+            cursor = conn.execute(f"SELECT 1 FROM {TABLE_AAII_SENTIMENT} LIMIT 1")
             return cursor.fetchone() is not None
 
     # ------------------------------------------------------------------

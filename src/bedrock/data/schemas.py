@@ -1531,3 +1531,48 @@ class AgsiStorageRow(BaseModel):
     @classmethod
     def _validate_country(cls, v: str) -> str:
         return v.lower().strip()
+
+
+# ---------------------------------------------------------------------------
+# AAII Sentiment Survey (sub-fase 12.7 D2 A12, session 131)
+# ---------------------------------------------------------------------------
+# AAII publiserer ukentlig (tor) investor-sentiment-survey som .xls.
+# Schema: rapportdato + bullish/neutral/bearish-prosenter + bull-bear-spread.
+# Brukes av `aaii_extreme`-driver som mean-reversion-input til Nasdaq/SP500
+# positioning-familie (driver-intern contrarian-logikk per pattern-doc § 3.2).
+
+TABLE_AAII_SENTIMENT = "aaii_sentiment"
+
+DDL_AAII_SENTIMENT = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_AAII_SENTIMENT} (
+    date              TEXT    NOT NULL PRIMARY KEY,  -- ISO YYYY-MM-DD (rapport-tor)
+    bullish_pct       REAL,
+    neutral_pct       REAL,
+    bearish_pct       REAL,
+    bull_bear_spread  REAL
+)
+"""
+
+AAII_SENTIMENT_COLS: tuple[str, ...] = (
+    "date",
+    "bullish_pct",
+    "neutral_pct",
+    "bearish_pct",
+    "bull_bear_spread",
+)
+
+
+class AaiiSentimentRow(BaseModel):
+    """Én ukentlig observasjon fra AAII Sentiment Survey.
+
+    Verdier i prosent (0..100). bullish + neutral + bearish ≈ 100;
+    bull_bear_spread = bullish - bearish.
+    """
+
+    date: date
+    bullish_pct: float | None = None
+    neutral_pct: float | None = None
+    bearish_pct: float | None = None
+    bull_bear_spread: float | None = None
+
+    model_config = ConfigDict(extra="forbid")
