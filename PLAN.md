@@ -1781,7 +1781,7 @@ etterpå, må alle nye drivere skrives om.
 | **R3** | Refactor 3 referanse-drivere: `positioning_mm_pct`, `real_yield`, `crop_progress_stage`. Hver produserer flere horizon-features via samme funksjon, valgt via `params["_horizon"]`. Snapshot-tester må gi bit-identisk output for default-horizon. | M | 3 refactored drivere + snapshot/logiske/monotonisitet-tester |
 | **R4** | Batch-vis migrering i 7 commits (én per familie-gruppe per rekkefølge over). Snapshot-tester må være grønne for hver batch. Score-uendret-garanti låst på 22 inst × 3 horisonter × 2 retninger. | L | Alle drivere migrert, snapshot grønt |
 | **D0** | Smoke-tests for 12 nye + 5 utvidelser. Engangs-skripts i `scripts/smoke/`. **A14 DROPPED ved D0-start (paywall).** Inkluderer eksplisitt: (a) **B5 Yahoo `@F`-curve-feasibility** for calendar spreads (høyrisiko), (b) **A11 ICE TTF-status** (NaturalGas TFF-spørsmål). ADR-011 brukes som mal for backfill-skripts. | M | `docs/smoke_test_results.md` med per-kilde GO/RISK/SKIP/BLOCK |
-| **D1** | **Tier 1.** ~~A1 Baker Hughes~~ (DROPPED 2026-04-29, ingen FRED-rute + endpoint-timeout). A2 AGSI (sessions 130, levert), ~~A3 FAS Export Sales~~ (DEFERRED-PLAN-S 2026-04-29, key ikke registrert), A4 CFTC TFF + C1 (cot_legacy→cot_tff for finansielle, session 128), B1 yield-diff + kreditt/NFCI/NetFedLiq (session 129), B3 DXY-bytte Yahoo `DX-Y.NYB` (session 128). Hver kilde commit-isolert. YAML-diff per instrument med Pydantic-validering at familie-sum=1.0. | L | 5 nye fetchere/utvidelser + 8 nye drivere + YAML-diff |
+| **D1** | **Tier 1.** ~~A1 Baker Hughes~~ (DROPPED 2026-04-29, ingen FRED-rute + endpoint-timeout). A2 AGSI (session 130, levert), A3 FAS Export Sales (LEVERT session 133 — api.fas.usda.gov-domain), A4 CFTC TFF + C1 (cot_legacy→cot_tff for finansielle, session 128), B1 yield-diff + kreditt/NFCI/NetFedLiq (session 129), B3 DXY-bytte Yahoo `DX-Y.NYB` (session 128). Hver kilde commit-isolert. YAML-diff per instrument med Pydantic-validering at familie-sum=1.0. | L | 5 nye fetchere/utvidelser + 8 nye drivere + YAML-diff |
 | **D2** | **Tier 2.** A5-A7 ETF-holdings, A8 NOPA, A9 Drought Monitor, A11 ICE certified stocks, A12 AAII (mean-reversion driver-intern). B2 VIX-termstruktur, B4 HDD/CDD→NG (sesong-modulert), B5 calendar spreads (kun energi, kun hvis D0 grønn). **C2 DROPPED — Eskom paywall, Platinum beholder seismic uendret.** C3 drop shipping (Cotton/Cocoa). | L | 5-7 nye fetchere + ~8 nye drivere + YAML-diff |
 | **D3** | **Tier 3.** A10 Cecafé. B5 calendar spreads metaller/korn (hvis D0 viste Yahoo-curve). Backtest-validering av grade-distribusjon × 12mnd × 22 instrumenter; flagg drift > 25 pp i A+/A/B-andel for senere terskel-rekalibrering (ikke i scope). | M | 1-2 nye fetchere + grade-distribusjons-rapport |
 
@@ -1793,11 +1793,13 @@ R2/R3 commits men ingen tag (mellom-fase).
 
 ### 19.5 Ny data — oversikt
 
-**12 nye fetchere (Del A) — drop/defer-status etter D0+D1+D2-prep:**
+**12 nye fetchere (Del A) — drop/defer-status etter D0+D1+D2:**
 DROPPED: A1 (D1 V3, ingen FRED-rute), A7 (D2-prep, ingen daglig holdings),
 A8 (D2-prep, LSEG-paywall), A11 (D2-prep, ICE er JS-SPA), A14 (D0, paywall).
-RE-AKTIVERT: A3 (D2-prep, FAS_API_KEY/USDA_API_KEY nå SET i secrets.env).
-PARTIAL: A6 (D2-prep, kun shares_outstanding-proxy, ikke direkte tonnes).
+LEVERT: A2 (130), A3 (133 — domain-korrigering), A5 (132), A6 (132 PARTIAL),
+A9 (133), A12 (131). PARTIAL: A6 (D2, kun shares_outstanding-proxy).
+GJENSTÅR: A4 (TFF, levert tidligere session 128), A10 (Cecafé Tier 3 — ikke
+kritisk), A13 (BRL-ticker — levert session 128 D1 V3).
 
 ~~A1 Baker Hughes Rig Count~~ — **DROPPED 12.7**: V3-funn (session 127)
 viste ingen FRED-rute (`baker+hughes+rig` = 0 treff i FRED) og direkte-
@@ -1806,17 +1808,18 @@ Vekten i Brent/CrudeOil/NaturalGas macro er liten (co-driver) og
 arkitektonisk friksjon (manuell CSV-fallback fra dag 1) rettferdiggjør
 ikke 12.7-scope. Vurderes på nytt i Plan-S hvis ny rute åpner. ·
 A2 AGSI EU gas storage (API, 2011+, daglig, macro low_bull) ·
-**A3 FAS Export Sales — DEFERRED 2026-04-29 (D2-prep)**: USDA FAS
-Open Data API. Bruker har registrert api.data.gov-key (gratis,
-universell mot ESR/GATS/PSD og andre USDA/føderale endpoints).
-Lagret som `FAS_API_KEY` + `USDA_API_KEY` + `API_DATA_GOV_KEY` i
-`~/.bedrock/secrets.env`. **Session 132 smoke-test feilet** mot
-`apps.fas.usda.gov/OpenData/api/esr/commodities` med både
-`X-Api-Key`-header, `?api_key=`-query-param og `API_KEY`-header
-("Bad API Key" / "An error has occurred"). FAS Open Data ser ut til
-å kreve egen Azure API-Management-subscription-format, ikke api.data.
-gov-stil-key. Defer til session 133 — krever bruker-undersøkelse av
-korrekt subscription-flyt på `apps.fas.usda.gov/opendataweb`. ·
+**A3 FAS Export Sales — LEVERT 2026-04-29 (session 133)**: USDA FAS
+ESR via `api.fas.usda.gov/api/esr/...` (api.data.gov-konvensjon med
+`X-Api-Key`-header). Session 132 prøvde feil domain
+(`apps.fas.usda.gov/OpenData/...` — egen Azure-subscription kreves);
+session 133 verifiserte at api.fas.usda.gov-domenet aksepterer
+api.data.gov-key. Backfill: ~91500 rader (Corn/Soybean/Wheat/Cotton
+× 11 MYs × ~40 land × ~52 uker, 2015-08 → 2026-04). Cotton-kode
+korrigert fra 501 (CFD-symbol) til 1404 (FAS' "All Upland Cotton"
+aggregat-kode). Driver `fas_exports` med default-trapp på WoW
+%-endring i sum(weekly_exports) + R4 mode-utbygging. Wired i
+Corn/Soybean/Wheat/Cotton cross-familier per § 19.5 Del C+
+måltilstand. ·
 A4 CFTC TFF (ny tabell-variant i eksisterende COT-Socrata-modul, 2010+) ·
 **A5 GLD ETF holdings — LEVERT 2026-04-29 (session 132)**: full
 historikk via SPDR `api.spdrgoldshares.com/api/v1/historical-archive`-
@@ -1847,7 +1850,14 @@ filer (CY2015 + CY2016) som dekker 11 måneder totalt — ikke nok for
 10-år-rolling scoring. Soybean yield-familie var aldri NOPA-justert
 (verifisert session 127 V1), så ingen YAML-revertering nødvendig.
 Vekter forblir weather@0.25 + crop_progress@0.25 + wasde@0.50 = 1.0. ·
-A9 US Drought Monitor (CSV API, 2000+, ukentlig tor) ·
+**A9 US Drought Monitor — LEVERT 2026-04-29 (session 133)**: USDM
+ukentlig CONUS-aggregat fra `usdmdataservices.unl.edu/api/USStatistics/
+GetDroughtSeverityStatisticsByAreaPercent` (gratis, ingen auth).
+Backfill: 1096 rader (2015-12 → 2026-04). Default-input: ``d2_pct``
+(% i D2+ severe+, cumulative). Driver `drought_monitor` med terskel-
+trapp (5/15/25/40 → 0/0.25/0.5/0.75/1.0) + R4 mode-utbygging. Wired i
+Corn/Soybean/Wheat/Cotton weather-familie @ 0.45 (weather_stress
+1.00 → 0.55) per § 19.5 Del C+ måltilstand. ·
 A10 Cecafé Brasil kaffe-eksport (PDF, 2002+, månedlig — Tier 3) ·
 ~~A11 ICE certified stocks~~ — **DROPPED 2026-04-29 (D2-prep)**: ICE
 report-center er migrert til JS-rendert SPA. Alle `report/N`-URLer
@@ -1866,12 +1876,21 @@ B2 `prices` med VIX-termstruktur (^VIX3M, ^VIX6M, ^VIX9D) ·
 B3 DXY-bytte FRED→Yahoo `DX-Y.NYB` (sekundær FRED beholdes) ·
 B4 `weather` til NaturalGas (HDD/CDD i NE-USA, TX/LA, Midwest) ·
 B5 Calendar spreads beregnet fra eksisterende `prices` (Brent/CrudeOil/NG først).
+**STATUS 2026-04-29 (session 133):** D0 GO-klassifisert (16.3y M1
+historikk for energi). Implementasjon krever spesifikke kontraktsmåneder
+(CLM26.NYM-stil, ~8.4y RISK), ikke continuous `=F`-tickere.
+Deferred til session 134 (innen-D2-scope) eller Plan-S basert på
+brukervurdering. Ingen YAML-endring i 133.
 
 **6 mapping-refaktorer (Del C) — C2 DROPPED 2026-04-29 (D0):**
 C1 cot_legacy→cot_tff for finansielle (følger A4) ·
 ~~C2 Platinum mining_disruption seismic→Eskom~~ — **DROPPED**: Eskom
 paywall (jf. A14), Platinum beholder seismic uendret ·
-C3 Drop shipping for Cotton/Cocoa ·
+**C3 Drop shipping for Cotton/Cocoa — LEVERT 2026-04-29 (session 133)**:
+Cotton dekket via A3-commit-rekken (shipping 0.20 → 0; reallokerer til
+dxy 0.65 + event 0.15 + fas_exports 0.20 = 1.00). Cocoa dekket
+separat (shipping 0.20 → 0; reallokerer til dxy 0.85 + event 0.15 =
+1.00; ingen fas_exports siden USDA FAS ikke rapporterer kakao). ·
 C4 news_intel/F&G UI-only→scoring (UTE av scope, egen syklus) ·
 C5 BRL→Coffee/Sugar (dekket i A13) ·
 C6 Weather→NaturalGas (dekket i B4) ·
