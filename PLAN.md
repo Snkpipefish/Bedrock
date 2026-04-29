@@ -1781,7 +1781,7 @@ etterpå, må alle nye drivere skrives om.
 | **R3** | Refactor 3 referanse-drivere: `positioning_mm_pct`, `real_yield`, `crop_progress_stage`. Hver produserer flere horizon-features via samme funksjon, valgt via `params["_horizon"]`. Snapshot-tester må gi bit-identisk output for default-horizon. | M | 3 refactored drivere + snapshot/logiske/monotonisitet-tester |
 | **R4** | Batch-vis migrering i 7 commits (én per familie-gruppe per rekkefølge over). Snapshot-tester må være grønne for hver batch. Score-uendret-garanti låst på 22 inst × 3 horisonter × 2 retninger. | L | Alle drivere migrert, snapshot grønt |
 | **D0** | Smoke-tests for 12 nye + 5 utvidelser. Engangs-skripts i `scripts/smoke/`. **A14 DROPPED ved D0-start (paywall).** Inkluderer eksplisitt: (a) **B5 Yahoo `@F`-curve-feasibility** for calendar spreads (høyrisiko), (b) **A11 ICE TTF-status** (NaturalGas TFF-spørsmål). ADR-011 brukes som mal for backfill-skripts. | M | `docs/smoke_test_results.md` med per-kilde GO/RISK/SKIP/BLOCK |
-| **D1** | **Tier 1.** ~~A1 Baker Hughes~~ (DROPPED 2026-04-29, ingen FRED-rute + endpoint-timeout). A2 AGSI (utsatt — venter på token), A3 FAS Export Sales (utsatt — venter på token), A4 CFTC TFF + C1 (cot_legacy→cot_tff for finansielle), B1 yield-diff + kreditt/NFCI/NetFedLiq, B3 DXY-bytte (Yahoo `DX-Y.NYB`). Hver kilde commit-isolert. YAML-diff per instrument med Pydantic-validering at familie-sum=1.0. | L | 5 nye fetchere/utvidelser + ~7 nye drivere + YAML-diff |
+| **D1** | **Tier 1.** ~~A1 Baker Hughes~~ (DROPPED 2026-04-29, ingen FRED-rute + endpoint-timeout). A2 AGSI (sessions 130, levert), ~~A3 FAS Export Sales~~ (DEFERRED-PLAN-S 2026-04-29, key ikke registrert), A4 CFTC TFF + C1 (cot_legacy→cot_tff for finansielle, session 128), B1 yield-diff + kreditt/NFCI/NetFedLiq (session 129), B3 DXY-bytte Yahoo `DX-Y.NYB` (session 128). Hver kilde commit-isolert. YAML-diff per instrument med Pydantic-validering at familie-sum=1.0. | L | 5 nye fetchere/utvidelser + 8 nye drivere + YAML-diff |
 | **D2** | **Tier 2.** A5-A7 ETF-holdings, A8 NOPA, A9 Drought Monitor, A11 ICE certified stocks, A12 AAII (mean-reversion driver-intern). B2 VIX-termstruktur, B4 HDD/CDD→NG (sesong-modulert), B5 calendar spreads (kun energi, kun hvis D0 grønn). **C2 DROPPED — Eskom paywall, Platinum beholder seismic uendret.** C3 drop shipping (Cotton/Cocoa). | L | 5-7 nye fetchere + ~8 nye drivere + YAML-diff |
 | **D3** | **Tier 3.** A10 Cecafé. B5 calendar spreads metaller/korn (hvis D0 viste Yahoo-curve). Backtest-validering av grade-distribusjon × 12mnd × 22 instrumenter; flagg drift > 25 pp i A+/A/B-andel for senere terskel-rekalibrering (ikke i scope). | M | 1-2 nye fetchere + grade-distribusjons-rapport |
 
@@ -1794,7 +1794,8 @@ R2/R3 commits men ingen tag (mellom-fase).
 ### 19.5 Ny data — oversikt
 
 **12 nye fetchere (Del A) — A14 DROPPED 2026-04-29 (D0, paywall);
-A1 DROPPED 2026-04-29 (D1 V3, ingen FRED-rute + endpoint-timeout):**
+A1 DROPPED 2026-04-29 (D1 V3, ingen FRED-rute + endpoint-timeout);
+A3 DEFERRED-PLAN-S 2026-04-29 (D1 session 130, key ikke registrert):**
 ~~A1 Baker Hughes Rig Count~~ — **DROPPED 12.7**: V3-funn (session 127)
 viste ingen FRED-rute (`baker+hughes+rig` = 0 treff i FRED) og direkte-
 endpoint på `rigcount.bakerhughes.com` timer ut fra arbeidsmiljøet.
@@ -1802,7 +1803,13 @@ Vekten i Brent/CrudeOil/NaturalGas macro er liten (co-driver) og
 arkitektonisk friksjon (manuell CSV-fallback fra dag 1) rettferdiggjør
 ikke 12.7-scope. Vurderes på nytt i Plan-S hvis ny rute åpner. ·
 A2 AGSI EU gas storage (API, 2011+, daglig, macro low_bull) ·
-A3 FAS Export Sales (ESR API, 1990+, ukentlig tor 8:30 ET, cross high_bull) ·
+~~A3 FAS Export Sales~~ — **DEFERRED-PLAN-S 2026-04-29**: USDA FAS
+Open Data API krever bruker-registrert key (gratis, men friksjon).
+Bruker har ikke registrert key innen D1-vinduet; defer til Plan-S
+hvor scalp-arkitektur uansett tar opp surprise-vs-consensus-mønsteret.
+Cross-familie YAML-vekter for Corn/Soybean/Wheat/Cotton uendret
+(ingen pre-A3-revertering nødvendig). Reaktivér i Plan-S hvis bruker
+registrerer key. ·
 A4 CFTC TFF (ny tabell-variant i eksisterende COT-Socrata-modul, 2010+) ·
 A5 GLD ETF holdings (CSV, 2004+, daglig) ·
 A6 SLV ETF holdings (CSV, 2006+) ·
@@ -1851,7 +1858,7 @@ produserer features som dekker relevante horisonter:
   wasde/eia hvis schema gir consensus).
 
 Per-kilde × horisont-mapping (full tabell i pre-plan-dokument; bevart der):
-~~A1 Baker Hughes~~ DROPPED 2026-04-29, A3 FAS (●●/●●●/●●●), A4 TFF (●●●/●●●/◐),
+~~A1 Baker Hughes~~ DROPPED 2026-04-29, ~~A3 FAS~~ DEFERRED-PLAN-S 2026-04-29, A4 TFF (●●●/●●●/◐),
 A8 NOPA (●●●/●●●/●●●), A12 AAII (●●●/●●●/–), B2 VIX-term (●●●/●●●/●●●),
 B4 HDD/CDD (●●●/●●●/◐), B5 cal-spreads (●●●/●●●/●●). ~~A14 Eskom~~
 **DROPPED** (paywall). `●●●`=primær, `●●`=sekundær, `◐`=marginal,
