@@ -123,7 +123,7 @@
 - **AsOfDateStore (session 116):** utvidet med 9 nye proxy-getters (econ_events/cot_ice/cot_euronext/eia_inventory/comex_inventory/seismic_events/conab_estimates/unica_reports/shipping_indices) + tilsvarende `has_*`-helpers. Kritisk fix — uten denne falt orchestrator-replay tilbake til defensive 0.0 for alle nye Phase A-C-drivere fordi underlying-getterne kastet `AttributeError`. 24 nye tester dekker hver getter + region/from_ts-filter + tom-clip-fallback.
 - **Phase D-output (session 116):** `data/_meta/backtest_phase_d_baseline.json` (68 rader, session 99-reprise), `data/_meta/backtest_phase_d_orchestrator.json` (48 rader, 86.4 min sweep), `data/_meta/backtest_phase_d_spike_{cot_ice_mm_pct,conab_yoy,unica_change}.json` (3 spikes). Rapport: `docs/backtest_phase_d_2026-04.md` med diff-tabeller + flagg-terskel ≥3pp Δhit_rate eller ≥2 grade-flips.
 - **Sub-fase 12.6-fundament (session 117):** 3 nye SQLite-tabeller (`driver_observations` long-format, `signal_setups`, `feature_snapshots`) + 5 nye scripts (`harvest_driver_observations.py`, `harvest_feature_snapshots.py`, `run_full_history_harvest.sh`, `analyze_driver_performance.py`, `analyze_cross_correlations.py`). Detached harvest startet 2026-04-27 21:58 — features ETA ~10 min, driver_observations ETA ~24-35 timer.
-- **Next task:** **Session 126 = Spor D åpning (D0 smoke-tests)** per PLAN § 19.4 og Alt γ-koordinering. **R4 FERDIG (session 125): 30 av 30 drivere refactored over 5 sessioner (R3 + 122/123/124/125). Score bit-identisk per kontrakt på 22 inst × 3 horisonter × 2 retninger.** Tag: `v0.12.7-r4-finish` på commit `b3e52d5`. R4-totalsumm: 5 full mode-utbygging-drivere (positioning_mm_pct, real_yield, cot_z_score, cot_ice_mm_pct, cot_euronext_mm_pct, dxy_chg5d, brl_chg5d, vix_regime, eia_stock_change, sma200_align, momentum_z, shipping_pressure, currency_cross_trend = 13) + 17 horizon-only-drivere. **Mode-infrastruktur er nå i alle drivere men aktiveres ikke før Spor D**. **Sub-fase 12.6 PAUSER fortsatt** per Alt γ — gjenåpnes etter D3. **Neste:** Spor D åpning — D0 smoke-tests for å verifisere at YAML-aktivering av modes på enkelt-driver fungerer end-to-end (snapshot-baseline regenereres som nytt anker etter hver D-leveranse per § 5.3 D-rad).
+- **Next task:** **Session 127 = D1 Tier 1 implementasjon** (L-fase per § 19.4). **D0 FERDIG (session 126):** 14 datakilder smoke-testet, klassifisert per ADR-011 oppmykning (10-år rolling cutoff). Tag: `v0.12.7-d0` (følger). **D0-resultat:** 8 GO (B3 DXY, B2 VIX-term, B1 FRED 9/11, A12 AAII, A4 CFTC TFF, A9 USDM, A10 Cecafé, B5 M1-tickers) + 5 RISK (A1 Baker Hughes endpoint-timeout, A5/A6/A7 ETF JS-rendret, A11 ICE inkonsistente IDer, A3 FAS HTTP 403/token, A2 AGSI token-registrering, B5 specific contracts 8.4y) + 2 SKIP (B1 BAMLH0A0HYM2 + BAMLC0A0CM kun 3y fra FRED) + 1 BLOCK (A8 NOPA via LSEG paywall). **A14 + C2 DROPPED** ved D0-start (commit `2cd54d5`). **D1-scope:** A4 CFTC TFF + C1 (cot_legacy→cot_tff) + B3 DXY Yahoo + 9 av 11 B1 FRED-serier (drop OAS-paret, undersøk alternativ). A2/A3 token-håndtering før implementasjon. A1 separat verifisering. **Sub-fase 12.6 PAUSER fortsatt**, gjenåpnes etter D3.
 - **Git-modus:** Nivå 1 aktivt under sub-fase 12.5+ docs/cleanup-pass. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt valgfri.
 
 ## Data-gjeld (sub-fase 12.6)
@@ -266,6 +266,75 @@ URL-mønstre + CSV-format-krav: `docs/manual_download_shopping_list.md`.
 ---
 
 ## Session log (newest first)
+
+### 2026-04-29 — Session 126: sub-fase 12.7 D0 (smoke-tests, Spor D åpning)
+
+**Scope:** D0 smoke-tests per PLAN § 19.4 og Alt γ. R-fasen ferdig
+(session 125), Spor D åpnet. Mål: verifisere 14 nye datakilder
+(opprinnelig 16 minus A13 BRL=X eksisterende + A14 DROPPED).
+
+**Tre policy-commits først:**
+
+- **`1a5f450` (ADR-011 oppmykning):** Cutoff endret fra fast
+  2010-01-01 til "10 år rolling minimum fra dagens dato". Begrunnelse:
+  10 år dekker minst 1 fed-syklus + 2 commodity-mini-sykluser; rolling-
+  policy holder seg gjennom hele systemets levetid uten ny ADR per år.
+- **`2cd54d5` (PLAN drop A14 + C2):** Eskom load-shedding bekreftet
+  bak betalingsmur. C2 (Platinum mining_disruption seismic→Eskom) faller
+  også; Platinum beholder seismic uendret. Total Spor D-leveranser
+  oppdatert: 12 fetchere + 5 utvidelser + 6 mapping-refaktorer (var
+  13+5+7).
+- Session 126-entry inkluderes i STATE-commit (denne).
+
+**Hovedleveranse:** `docs/smoke_test_results.md` med per-kilde GO/RISK/
+SKIP/BLOCK-klassifikasjon for alle 14 kilder + 5 ekstra (B1 har 11
+serier).
+
+**Smoke-test-resultat (commit `5e61e7d`):**
+
+| Klassifikasjon | Antall | Kilder |
+|---|---|---|
+| **GO** | 8 | B3 DXY Yahoo (55.3y), B2 VIX-term (15-20y), A12 AAII (Excel 1.1MB), A4 CFTC TFF (19.9y, 2006+ — bedre enn forventet), A9 USDM (26.3y), A10 Cecafé (PDF + pypdf parses), B5 M1-tickers (16.3y for både Tier 1 energi + Tier 2 metaller/korn), B1 FRED 9 av 11 serier (23-56y) |
+| **RISK** | 5+ | A1 Baker Hughes (subdomain-timeout fra arbeids-shell), A5/A6/A7 ETF holdings (JS-rendret, ingen direkte CSV), A11 ICE (rapport-IDer 178/180 = 404), A3 FAS (HTTP 403, krever subscription-key), A2 AGSI (token-registrering kreves), B5 spesifikke kontraktsmåneder (8.4y < 10y) |
+| **SKIP** | 2 | B1 BAMLH0A0HYM2 (HY OAS) + BAMLC0A0CM (IG OAS) — kun 3 år historikk fra FRED gratis-API. Forventet ~1996+. D1 må undersøke alternativ kilde. |
+| **BLOCK** | 1 | A8 NOPA Crush — kun release-kalender PDF tilgjengelig, selve crush-data via LSEG/Refinitiv subscription. |
+
+**Sekundær leveranse:** 11 engangs-skripts i `scripts/smoke/` per
+ADR-011 (lov til å være "shitty"):
+`b1_fred_extension.py`, `b2_vix_term.py`, `b3_dxy_yahoo.py`,
+`b5_calendar_spreads.py`, `a1_baker_hughes.py`, `a2_agsi_eu_gas.py`,
+`a3_fas_export_sales.py`, `a4_cftc_tff.py`, `a5_a7_etf_holdings.py`,
+`a8_nopa_crush.py`, `a9_drought_monitor.py`, `a10_cecafe.py`,
+`a11_ice_certified_stocks.py`, `a12_aaii_sentiment.py`.
+
+**D-fase-konsekvenser dokumentert i `docs/smoke_test_results.md`:**
+
+- **D1 (Tier 1):** A4 CFTC TFF + C1 + B3 DXY Yahoo + 9 av 11 B1 FRED-
+  serier GO. A2/A3 krever token-registrering. A1 separat verifisering.
+  Drop B1 OAS-paret eller undersøk alternativ kilde.
+- **D2 (Tier 2):** A9/A12/B2/B5-energi GO. A8 NOPA DROPPED. C2 DROPPED.
+  A5/A6/A7/A11 manuell CSV-fallback fra dag 1 (ADR-007).
+- **D3 (Tier 3):** A10 Cecafé GO med URL-pattern-research for backfill.
+  B5 metaller/korn M1 GO.
+
+**Tech-gjeld åpne:**
+
+1. R4: `event_distance._now`-injeksjon for testbarhet — utsatt til D1.
+2. R4: Cross-module helper-import — lazy-import-løsning fungerer; utsatt.
+3. **D0 (NYTT):** B1 BAMLH0A0HYM2 + BAMLC0A0CM 3-års-historikk fra FRED
+   — D1 må undersøke om dette er API-bug eller ekte begrensning.
+4. **D0 (NYTT):** A1 Baker Hughes endpoint-timeout fra arbeids-shell —
+   verifiseres på annen maskin før D1-implementasjon.
+
+**Tag:** `v0.12.7-d0` på commit `5e61e7d` (smoke-tests-leveranse).
+
+**Next task:** **Session 127 = D1 Tier 1 implementasjon** (L-fase).
+A4 CFTC TFF + C1 + B3 DXY + B1 FRED 9 av 11 serier. Hver kilde commit-
+isolert med YAML-diff per instrument og Pydantic-validering at familie-
+sum=1.0 (PLAN § 19.4 D1-rad). Spor R + D oppretter ny snapshot-baseline
+per D-leveranse (pattern-doc § 5.3 D-rad).
+
+**Ingen blockers.**
 
 ### 2026-04-29 — Session 125: sub-fase 12.7 R4 finish (9 drivere, R4 FERDIG)
 
