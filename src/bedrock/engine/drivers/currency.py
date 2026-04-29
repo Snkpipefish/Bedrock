@@ -42,28 +42,36 @@ def currency_cross_trend(store: Any, instrument: str, params: dict) -> float:
     Signatur følger standard driver-kontrakten. `instrument`-argumentet
     ignoreres — caller spesifiserer kilden via `params["source"]`.
 
+    **R4 (sub-fase 12.7):** horisont-bevisst via ``params["mode"]`` per
+    ADR-010. Default-output (mode=None) er bit-identisk pre-R4. Modes
+    opererer på underliggende cross-rå-serien (ikke pct-change) —
+    parallel til dxy_chg5d/brl_chg5d-pattern. Gjenbruker
+    ``_fundamentals_*``-helpers fra macro.py.
+
     Params:
         source: instrument-ID for cross-serien (påkrevd)
-        lookback: antall bars tilbake for pct-beregning (default 30)
+        lookback: antall bars tilbake for default pct-beregning (default
+            30). Modes overstyrer med _LOOKBACK_PCT_*_DAILY-konstanter.
         tf: timeframe (default "D1")
         direction: "direct" (default) eller "invert". "invert" flipper
-            fortegn — bruk når cross-retningen er motsatt av det
-            instrumentet som scores trenger.
+            fortegn i default-banen. Oversettes til helper bull_when i
+            mode-banen ("direct"→"high" siden høy cross = bull;
+            "invert"→"low").
+        mode: R4 feature-velger per ADR-010 (None/pct_12m/pct_36m/
+            delta_5d_z/delta_20d_z/extreme_flag_*).
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt i R4.
 
-    Beregning: pct = (close_now - close_lookback_ago) / close_lookback_ago.
+    Beregning (default): pct = (close_now - close_lookback_ago) / close_lookback_ago.
     Hvis `direction=invert`, bruk -pct i mapping.
 
-    Mapping (unidirectional bull — høyere er bedre for scored instrument):
-    - pct >= +10%  -> 1.0
-    - pct >= +5%   -> 0.8
-    - pct >= +2%   -> 0.65
-    - pct >= 0%    -> 0.5   (flat)
-    - pct >= -2%   -> 0.35
-    - pct >= -5%   -> 0.2
-    - pct < -5%    -> 0.0
+    Default-mapping (unidirectional bull):
+    - pct >= +10% → 1.0; +5% → 0.8; +2% → 0.65; 0 → 0.5;
+      -2% → 0.35; -5% → 0.2; < -5% → 0.0
 
-    For kort historikk (< lookback + 1 bars) eller null pris gir 0.0.
+    For kort historikk eller null pris gir 0.0.
     """
+    # ADR-010: les _horizon for fremtidig bruk.
+    _horizon = params.get("_horizon")
     source = params.get("source")
     if not source:
         _log.warning(
@@ -72,9 +80,113 @@ def currency_cross_trend(store: Any, instrument: str, params: dict) -> float:
         )
         return 0.0
 
+    direction = params.get("direction", "direct")
+    mode = params.get("mode")
+
+    if mode is None:
+        return _currency_cross_trend_default(store, instrument, str(source), direction, params)
+
+    if direction not in ("direct", "invert"):
+        _log.warning(
+            "currency_cross_trend.unknown_direction",
+            direction=direction,
+            source=source,
+        )
+        return 0.0
+
+    # Mode-banen: hent rå-serien og deleger til _fundamentals_*-helpers.
+    # Lazy-import for å unngå sirkulær.
+    from bedrock.engine.drivers.macro import (
+        _DELTA_5D_DAYS,
+        _DELTA_20D_DAYS,
+        _LOOKBACK_DELTA_DAILY,
+        _LOOKBACK_PCT_12M_DAILY,
+        _LOOKBACK_PCT_36M_DAILY,
+        _fundamentals_delta_score,
+        _fundamentals_extreme_flag,
+        _fundamentals_pct_score,
+    )
+
+    helper_bull_when = "low" if direction == "invert" else "high"
+    tf = params.get("tf", "D1")
+
+    try:
+        prices = store.get_prices(source, tf=tf, lookback=_LOOKBACK_PCT_36M_DAILY + 10)
+    except Exception as exc:
+        _log.warning(
+            "currency_cross_trend.prices_unavailable",
+            source=source,
+            tf=tf,
+            error=str(exc),
+        )
+        return 0.0
+
+    if mode == "pct_12m":
+        result = _fundamentals_pct_score(
+            prices, helper_bull_when, _LOOKBACK_PCT_12M_DAILY, str(source)
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "pct_36m":
+        result = _fundamentals_pct_score(
+            prices, helper_bull_when, _LOOKBACK_PCT_36M_DAILY, str(source)
+        )
+        if result is None:
+            _log.info(
+                "currency_cross_trend.pct_36m_fallback_to_12m",
+                source=source,
+                available_obs=len(prices),
+                required=_LOOKBACK_PCT_36M_DAILY + 1,
+            )
+            result = _fundamentals_pct_score(
+                prices, helper_bull_when, _LOOKBACK_PCT_12M_DAILY, str(source)
+            )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_5d_z":
+        result = _fundamentals_delta_score(
+            prices,
+            helper_bull_when,
+            delta_days=_DELTA_5D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=str(source),
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_20d_z":
+        result = _fundamentals_delta_score(
+            prices,
+            helper_bull_when,
+            delta_days=_DELTA_20D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=str(source),
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        result = _fundamentals_extreme_flag(
+            prices,
+            hard=(mode == "extreme_flag_hard"),
+            lookback=_LOOKBACK_PCT_12M_DAILY,
+            instrument=str(source),
+        )
+        return result if result is not None else 0.0
+
+    # Ukjent mode: log + fall-back til default.
+    _log.warning(
+        "currency_cross_trend.unknown_mode_falling_back_to_default",
+        source=source,
+        mode=mode,
+    )
+    return _currency_cross_trend_default(store, instrument, str(source), direction, params)
+
+
+def _currency_cross_trend_default(
+    store: Any, instrument: str, source: str, direction: str, params: dict
+) -> float:
+    """Pre-R4-default-bane: pct-change-trapp på cross-prices."""
     lookback = int(params.get("lookback", _DEFAULT_LOOKBACK))
     tf = params.get("tf", "D1")
-    direction = params.get("direction", "direct")
 
     try:
         prices = store.get_prices(source, tf=tf, lookback=lookback + 50)
