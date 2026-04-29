@@ -43,15 +43,18 @@ families:
       - {name: momentum_z, weight: 0.5, params: {window: 20}}
   positioning:
     # JPY COT-positioning er motsatt-tegn på USDJPY-pris (long JPY = bear USDJPY).
-    # Bruker noncomm_net_pct uten invert; YAML scoring antar standard
-    # bull-tolkning av positiv positioning (JPY-long). Calleren av
-    # signal må huske at "bull" her er JPY-bull = USDJPY-bear.
+    # Calleren av signal må huske at "bull" her er JPY-bull = USDJPY-bear.
+    # D1 A4+C1 (session 128): TFF (Lev Funds + Asset Mgr) erstatter legacy
+    # noncomm_net_pct. cot_z_score beholdt som cross-validering.
     drivers:
-      - name: positioning_mm_pct
-        weight: 0.6
-        params: {metric: noncomm_net_pct, lookback_weeks: 52}
+      - name: positioning_lev_funds_pct
+        weight: 0.40
+        params: {metric: lev_funds_net_pct, lookback_weeks: 52}
+      - name: positioning_asset_mgr_pct
+        weight: 0.20
+        params: {metric: asset_mgr_net_pct, lookback_weeks: 52}
       - name: cot_z_score
-        weight: 0.4
+        weight: 0.40
         params: {metric: noncomm_net_pct, lookback_weeks: 52}
   macro:
     # USDJPY: lav real-yield = bear USDJPY (USD-svak). Høy VIX = risk-off

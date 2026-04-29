@@ -42,15 +42,19 @@ families:
       - {name: sma200_align, weight: 0.5, params: {tf: D1}}
       - {name: momentum_z, weight: 0.5, params: {window: 20}}
   positioning:
-    # CME BTC har short COT-historikk (2017-12-onward, n=420). Bruker
-    # noncomm_net_pct som spec-metric. Med kort historikk bruker vi
-    # kortere lookback (26 ukes minimum, ikke 52).
+    # CME BTC TFF-historikk fra 2018-04 (kortere enn FX). 52-uke lookback
+    # holder for begge typer (lev_funds + asset_mgr).
+    # D1 A4+C1 (session 128): TFF (Lev Funds + Asset Mgr) erstatter
+    # legacy noncomm_net_pct. Se eurusd.yaml for full kontekst.
     drivers:
-      - name: positioning_mm_pct
-        weight: 0.6
-        params: {metric: noncomm_net_pct, lookback_weeks: 52}
+      - name: positioning_lev_funds_pct
+        weight: 0.40
+        params: {metric: lev_funds_net_pct, lookback_weeks: 52}
+      - name: positioning_asset_mgr_pct
+        weight: 0.20
+        params: {metric: asset_mgr_net_pct, lookback_weeks: 52}
       - name: cot_z_score
-        weight: 0.4
+        weight: 0.40
         params: {metric: noncomm_net_pct, lookback_weeks: 52}
   macro:
     # BTC-tolkning: lav real yield = bull (alt-asset i lav-rente-miljø);

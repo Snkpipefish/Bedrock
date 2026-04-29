@@ -39,13 +39,19 @@ families:
       - {name: sma200_align, weight: 0.5, params: {tf: D1}}
       - {name: momentum_z, weight: 0.5, params: {window: 20}}
   positioning:
-    # EUR FX-COT: large speculators (noncomm) er primær spec-metric.
+    # D1 A4+C1 (sub-fase 12.7, session 128): byttet fra legacy-COT
+    # noncomm_net_pct til TFF (Traders in Financial Futures) — Leveraged
+    # Funds + Asset Manager net%. cot_z_score beholdt på legacy noncomm
+    # som cross-validering. § 19.5 Del C+ vekt-fordeling: 0.40/0.20/0.40.
     drivers:
-      - name: positioning_mm_pct
-        weight: 0.6
-        params: {metric: noncomm_net_pct, lookback_weeks: 52}
+      - name: positioning_lev_funds_pct
+        weight: 0.40
+        params: {metric: lev_funds_net_pct, lookback_weeks: 52}
+      - name: positioning_asset_mgr_pct
+        weight: 0.20
+        params: {metric: asset_mgr_net_pct, lookback_weeks: 52}
       - name: cot_z_score
-        weight: 0.4
+        weight: 0.40
         params: {metric: noncomm_net_pct, lookback_weeks: 52}
   macro:
     # EURUSD-tolkning: EUR styrker når USD svekkes (negativ DXY = bull EURUSD).
