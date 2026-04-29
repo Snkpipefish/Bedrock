@@ -31,6 +31,7 @@ from typing import Any, Literal, Protocol
 import pandas as pd
 
 from bedrock.data.schemas import (
+    AGSI_STORAGE_COLS,
     ANALOG_OUTCOMES_COLS,
     COMEX_INVENTORY_COLS,
     CONAB_ESTIMATES_COLS,
@@ -41,6 +42,7 @@ from bedrock.data.schemas import (
     COT_TFF_COLS,
     CROP_PROGRESS_COLS,
     CRYPTO_SENTIMENT_COLS,
+    DDL_AGSI_STORAGE,
     DDL_ANALOG_OUTCOMES,
     DDL_COMEX_INVENTORY,
     DDL_CONAB_ESTIMATES,
@@ -74,6 +76,7 @@ from bedrock.data.schemas import (
     NEWS_INTEL_COLS,
     SEISMIC_EVENTS_COLS,
     SHIPPING_INDICES_COLS,
+    TABLE_AGSI_STORAGE,
     TABLE_ANALOG_OUTCOMES,
     TABLE_BDI,
     TABLE_COMEX_INVENTORY,
@@ -187,6 +190,8 @@ class DataStore:
             # (F&G + CoinGecko dominance/mcap). UI-only; scoring-driver
             # vurderes etter ≥1 mnds data.
             conn.execute(DDL_CRYPTO_SENTIMENT)
+            # Sub-fase 12.7 D1 A2 (session 130): AGSI EU gas storage.
+            conn.execute(DDL_AGSI_STORAGE)
             conn.commit()
 
     def _migrate_bdi_to_shipping_indices(self, conn: sqlite3.Connection) -> None:
@@ -1873,6 +1878,102 @@ class DataStore:
             df["event_ts"] = pd.to_datetime(df["event_ts"], utc=True)
             df["fetched_at"] = pd.to_datetime(df["fetched_at"], utc=True)
         return df
+
+    # ------------------------------------------------------------------
+    # AGSI EU gas storage (sub-fase 12.7 D1 A2, session 130)
+    # ------------------------------------------------------------------
+
+    def append_agsi_storage(self, df: pd.DataFrame) -> int:
+        """Skriv AGSI-rader til ``agsi_storage``. Returnerer antall rader.
+
+        `df` må ha kolonnene i ``AGSI_STORAGE_COLS`` (country, gas_day_start,
+        gas_in_storage_twh, working_gas_volume_twh, consumption_full_pct,
+        injection_twh, withdrawal_twh, net_withdrawal_twh). Idempotent på
+        (country, gas_day_start) via INSERT OR REPLACE.
+        """
+        missing = [c for c in AGSI_STORAGE_COLS if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_agsi_storage: missing columns {missing}. "
+                f"Required: {list(AGSI_STORAGE_COLS)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df[list(AGSI_STORAGE_COLS)].copy()
+        prepared["gas_day_start"] = pd.to_datetime(prepared["gas_day_start"]).dt.strftime(
+            "%Y-%m-%d"
+        )
+
+        def _opt(v: object) -> float | None:
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return None
+            return float(v)  # type: ignore[arg-type]
+
+        rows: Sequence[tuple] = [
+            (
+                str(row.country).lower(),
+                row.gas_day_start,
+                _opt(row.gas_in_storage_twh),
+                _opt(row.working_gas_volume_twh),
+                _opt(row.consumption_full_pct),
+                _opt(row.injection_twh),
+                _opt(row.withdrawal_twh),
+                _opt(row.net_withdrawal_twh),
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_AGSI_STORAGE} "
+                f"(country, gas_day_start, gas_in_storage_twh, working_gas_volume_twh, "
+                f"consumption_full_pct, injection_twh, withdrawal_twh, net_withdrawal_twh) "
+                f"VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_agsi_storage(
+        self,
+        country: str,
+        last_n: int | None = None,
+    ) -> pd.DataFrame:
+        """Returner AGSI-rader for `country`, sortert ASC på gas_day_start.
+
+        `country` er ISO-2 lowercase (``"de"``, ``"nl"``, ...) eller ``"eu"``
+        for aggregat. Returnerer pd.DataFrame med `gas_day_start` som
+        pd.Timestamp i en kolonne (ikke index) — daglig-kadens, samme
+        konvensjon som get_eia_inventory.
+
+        Kaster `KeyError` hvis ingen rader finnes for `country`.
+        """
+        country_norm = country.lower()
+        query = f"""
+            SELECT * FROM {TABLE_AGSI_STORAGE}
+            WHERE country = ?
+            ORDER BY gas_day_start ASC
+        """
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=(country_norm,))
+
+        if df.empty:
+            raise KeyError(f"No AGSI storage data for country={country_norm!r}")
+
+        df["gas_day_start"] = pd.to_datetime(df["gas_day_start"])
+
+        if last_n is None:
+            return df
+        return df.tail(last_n).reset_index(drop=True)
+
+    def has_agsi_storage(self, country: str) -> bool:
+        """Test-hjelper: sjekk om `country` har minst én rad."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"SELECT 1 FROM {TABLE_AGSI_STORAGE} WHERE country = ? LIMIT 1",
+                (country.lower(),),
+            )
+            return cursor.fetchone() is not None
 
     # ------------------------------------------------------------------
     # Generisk staleness-accessor (fase 6 session 28)

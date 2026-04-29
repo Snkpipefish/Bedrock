@@ -1462,3 +1462,72 @@ class CryptoSentimentRow(BaseModel):
     @classmethod
     def _validate_indicator(cls, v: str) -> str:
         return v.lower().strip()
+
+
+# ---------------------------------------------------------------------------
+# AGSI EU gas storage (sub-fase 12.7 D1 A2, session 130)
+# ---------------------------------------------------------------------------
+# Aggregated Gas Storage Inventory (AGSI+) er GIE's API for daglige EU gas-
+# storage-tall — én rad per (country, gas_day_start). country='eu' er
+# EU-aggregat; per-land koder ('de', 'nl', 'fr', etc.) er også tilgjengelige.
+#
+# Tolkning: lavt fyllingsgrad (consumption_full_pct) = bull NG-pris (EU er
+# verdens største LNG-importør). agsi_storage_pct-driver leser denne
+# tabellen for NaturalGas macro-familie.
+#
+# API: https://agsi.gie.eu/api?country={code}&date={YYYY-MM-DD}
+# Header: x-key: $AGSI_API_KEY (gratis-registrering på agsi.gie.eu/account).
+# Tidligste data: 2011-01-01 (de). EU-aggregat fra ~2014.
+
+TABLE_AGSI_STORAGE = "agsi_storage"
+
+DDL_AGSI_STORAGE = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_AGSI_STORAGE} (
+    country                TEXT    NOT NULL,    -- ISO-2 lowercase eller "eu"
+    gas_day_start          TEXT    NOT NULL,    -- ISO YYYY-MM-DD
+    gas_in_storage_twh     REAL,                -- Total gas i lager (TWh)
+    working_gas_volume_twh REAL,                -- Maks-kapasitet (TWh)
+    consumption_full_pct   REAL,                -- % full vs working volume (0..100)
+    injection_twh          REAL,                -- Daglig injection (TWh)
+    withdrawal_twh         REAL,                -- Daglig withdrawal (TWh)
+    net_withdrawal_twh     REAL,                -- withdrawal - injection (TWh)
+    PRIMARY KEY (country, gas_day_start)
+)
+"""
+
+AGSI_STORAGE_COLS: tuple[str, ...] = (
+    "country",
+    "gas_day_start",
+    "gas_in_storage_twh",
+    "working_gas_volume_twh",
+    "consumption_full_pct",
+    "injection_twh",
+    "withdrawal_twh",
+    "net_withdrawal_twh",
+)
+
+
+class AgsiStorageRow(BaseModel):
+    """Én daglig observasjon fra AGSI+ EU gas storage API.
+
+    `country` er ISO-2 lowercase (``"de"``, ``"nl"``, ``"fr"``, etc.) eller
+    ``"eu"`` for aggregat. `consumption_full_pct` er 0..100 (% av
+    working_gas_volume_twh). Alle numeriske felt unntatt PK er nullable for
+    å tåle delvis API-respons.
+    """
+
+    country: str = Field(min_length=2, max_length=3)
+    gas_day_start: date
+    gas_in_storage_twh: float | None = None
+    working_gas_volume_twh: float | None = None
+    consumption_full_pct: float | None = None
+    injection_twh: float | None = None
+    withdrawal_twh: float | None = None
+    net_withdrawal_twh: float | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("country")
+    @classmethod
+    def _validate_country(cls, v: str) -> str:
+        return v.lower().strip()
