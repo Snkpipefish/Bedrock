@@ -1960,6 +1960,191 @@ def _agsi_storage_pct_default(current: float, bull_when: str, params: dict) -> f
 
 
 # ---------------------------------------------------------------------------
+# etf_holdings_change (sub-fase 12.7 D2 A5/A6, session 132)
+# ---------------------------------------------------------------------------
+#
+# Daglig physical-ETF holdings-endring som metals macro-fundamental. ETF-
+# inflows = økt physical investment demand = bull-of-metal. Driver
+# dispatcher på ticker-param og leser primær-metric per ticker:
+#
+#   - ``gld``: ``tonnes_in_trust`` (direkte tonnes — preferred).
+#   - ``slv``: ``shares_outstanding`` (proxy — SLV-feed mangler tonnes;
+#     silver-per-share-decay via expense ratio er ~0.5 %/år, neglisjerbar
+#     på WoW/MoM-skala. Se SLV README og MANIFEST for full diskusjon).
+#
+# Default-trapp på WoW (5d) %-endring i primær-metric. Modes per ADR-010
+# bruker primær-metric som tids-serie via fundamentals_*-helpere.
+#
+# bull_when=high (default): økte holdings = bullish for underliggende.
+
+_ETF_PRIMARY_METRIC_BY_TICKER: dict[str, str] = {
+    "gld": "tonnes_in_trust",
+    "slv": "shares_outstanding",
+    "pplt": "tonnes_in_trust",
+    "iau": "tonnes_in_trust",
+}
+
+_DEFAULT_ETF_HOLDINGS_PCT_THRESHOLDS_HIGH: tuple[tuple[float, float], ...] = (
+    # bull_when="high": økt holdings = bull. Steps på WoW %-endring.
+    (1.5, 1.0),  # ≥+1.5 % WoW = sterk inflow = sterk bull
+    (0.5, 0.75),
+    (0.0, 0.5),  # flat WoW = nøytral
+    (-0.5, 0.25),
+    (-1.5, 0.0),  # ≤-1.5 % WoW = sterk outflow = bear
+)
+
+
+@register("etf_holdings_change")
+def etf_holdings_change(store: Any, instrument: str, params: dict) -> float:
+    """Physical-ETF holdings-endring mappet til 0..1 for metals macro.
+
+    Sub-fase 12.7 D2 A5/A6 (session 132). Driver-dispatch på ticker:
+    ``gld`` bruker tonnes_in_trust; ``slv`` bruker shares_outstanding
+    (proxy — se SLV README for expense-ratio-caveat).
+
+    Default (mode=None): terskel-trapp på WoW (5d) %-endring i primær-
+    metric. R4-modes: pct_12m/pct_36m via rolling-percentile,
+    delta_5d_z/delta_20d_z via daglig z-score, extreme_flag_*.
+    Frekvens: holdings publiseres daglig (T+1 typisk). DAILY-vinduer.
+
+    Tolkning:
+        bull_when="high" (default): økte holdings = bullish.
+        bull_when="low": invertert (kontrært).
+
+    Params:
+        ticker: ETF-ticker (lowercase) — ``"gld"``, ``"slv"``, ev. ``"pplt"``.
+        bull_when: ``"high"`` (default) eller ``"low"``.
+        wow_window: dager bak for WoW-baseline (default 5).
+        thresholds: optional override.
+        mode: ``"pct_12m"``, ``"pct_36m"``, ``"delta_5d_z"``, ``"delta_20d_z"``,
+            ``"extreme_flag_hard"``, ``"extreme_flag_soft"``.
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt i R4.
+
+    Defensive 0.0 ved manglende data eller utilstrekkelig historikk.
+    """
+    _horizon = params.get("_horizon")
+    ticker = str(params.get("ticker", "")).lower().strip()
+    bull_when = params.get("bull_when", "high")
+    mode = params.get("mode")
+    wow_window = int(params.get("wow_window", 5))
+
+    if not ticker:
+        _log.warning("etf_holdings_change.missing_ticker", instrument=instrument)
+        return 0.0
+
+    metric = _ETF_PRIMARY_METRIC_BY_TICKER.get(ticker)
+    if metric is None:
+        _log.warning(
+            "etf_holdings_change.unknown_ticker",
+            instrument=instrument,
+            ticker=ticker,
+        )
+        return 0.0
+
+    try:
+        df = store.get_etf_holdings(ticker)
+    except KeyError:
+        _log.debug("etf_holdings_change.no_data", instrument=instrument, ticker=ticker)
+        return 0.0
+    except Exception as exc:
+        _log.warning(
+            "etf_holdings_change.fetch_failed",
+            instrument=instrument,
+            ticker=ticker,
+            error=str(exc),
+        )
+        return 0.0
+
+    if df.empty or metric not in df.columns:
+        return 0.0
+
+    series = pd.Series(df[metric].values, index=pd.to_datetime(df["date"])).dropna()
+    if series.empty:
+        return 0.0
+
+    if mode is None:
+        return _etf_holdings_change_default(series, bull_when, wow_window, params)
+
+    if mode == "pct_12m":
+        result = _fundamentals_pct_score(series, bull_when, _LOOKBACK_PCT_12M_DAILY, instrument)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "pct_36m":
+        result = _fundamentals_pct_score(series, bull_when, _LOOKBACK_PCT_36M_DAILY, instrument)
+        if result is None:
+            result = _fundamentals_pct_score(series, bull_when, _LOOKBACK_PCT_12M_DAILY, instrument)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_5d_z":
+        result = _fundamentals_delta_score(
+            series,
+            bull_when,
+            delta_days=_DELTA_5D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_20d_z":
+        result = _fundamentals_delta_score(
+            series,
+            bull_when,
+            delta_days=_DELTA_20D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        result = _fundamentals_extreme_flag(
+            series,
+            hard=(mode == "extreme_flag_hard"),
+            lookback=_LOOKBACK_PCT_12M_DAILY,
+            instrument=instrument,
+        )
+        return result if result is not None else 0.0
+
+    _log.warning(
+        "etf_holdings_change.unknown_mode_falling_back_to_default",
+        instrument=instrument,
+        mode=mode,
+    )
+    return _etf_holdings_change_default(series, bull_when, wow_window, params)
+
+
+def _etf_holdings_change_default(
+    series: pd.Series, bull_when: str, wow_window: int, params: dict
+) -> float:
+    """WoW %-endring → terskel-trapp."""
+    if len(series) <= wow_window:
+        return 0.0
+
+    current = float(series.iloc[-1])
+    baseline = float(series.iloc[-wow_window - 1])
+    if baseline == 0.0:
+        return 0.0
+    pct_chg = (current - baseline) / abs(baseline) * 100.0
+
+    user_thresholds = params.get("thresholds")
+    if user_thresholds is None:
+        steps = _DEFAULT_ETF_HOLDINGS_PCT_THRESHOLDS_HIGH
+    else:
+        steps = tuple((float(t), float(s)) for t, s in user_thresholds)
+
+    # Steps er sortert høy→lav (positiv betydning bull). Finn første terskel
+    # current overgår; siste = floor.
+    score = 0.0
+    for threshold, s in sorted(steps, key=lambda t: -t[0]):
+        if pct_chg >= threshold:
+            score = float(s)
+            break
+
+    if bull_when == "low":
+        return round(1.0 - score, 4)
+    return round(score, 4)
+
+
+# ---------------------------------------------------------------------------
 # eia_stock_change (sub-fase 12.5+ session 107)
 # ---------------------------------------------------------------------------
 
@@ -2480,6 +2665,7 @@ __all__ = [
     "credit_spread_change",
     "dxy_chg5d",
     "eia_stock_change",
+    "etf_holdings_change",
     "hdd_cdd_anomaly",
     "mining_disruption",
     "net_fed_liq_change",
