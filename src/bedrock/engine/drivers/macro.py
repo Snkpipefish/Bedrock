@@ -794,6 +794,620 @@ def _vix_regime_default(series: pd.Series, invert: bool, params: dict) -> float:
 
 
 # ---------------------------------------------------------------------------
+# B1 D1 (sub-fase 12.7, session 129)
+#
+# Fire macro-drivere som leser FRED-fundamentals utvidet med 10 nye serier:
+#   - foreign 10Y (DE/GB/JP/AU) for yield-diff
+#   - AAA10Y / BAA10Y for credit-spread (V2-substitusjon for HY/IG OAS som
+#     kun ga 3 år gratis-API-historikk; AAA10Y/BAA10Y har 30+ år)
+#   - WALCL / RRPONTSYD / WTREGEN for NetFedLiq
+#   - NFCI for Chicago Fed Financial Conditions Index
+#
+# Frekvens-noter:
+#   - DGS10/AAA10Y/BAA10Y: daglig
+#   - IRLTLT01<XX>M156N: månedlig — yield-diff-serien (DGS10 - foreign)
+#     blir effektivt månedlig etter dropna
+#   - WALCL/RRPONTSYD/WTREGEN: ukentlig (ons)
+#   - NFCI: ukentlig (fre)
+#
+# Per ADR-010: alle fire eksponerer R4-modes (pct_*/delta_*_z/extreme_*)
+# men yield_diff_10y har færre obs → kun pct_36m + extreme støttes.
+# ---------------------------------------------------------------------------
+
+# yield_diff_10y default-trapper. bull_when="low" = lav diff (foreign yield
+# nær eller over US) er bull for foreign-currency. EURUSD/GBPUSD/AUDUSD er
+# default; USDJPY bruker "high".
+_DEFAULT_YIELD_DIFF_10Y_THRESHOLDS_LOW: tuple[tuple[float, float], ...] = (
+    (-0.5, 1.0),  # foreign yield > US +0.5 = sterk bull foreign-CCY
+    (0.5, 0.75),  # nær paritet = mild bull
+    (1.5, 0.5),  # ±1.5 = nøytral
+    (2.5, 0.25),  # US tydelig høyere = bear foreign
+)
+
+_DEFAULT_YIELD_DIFF_10Y_THRESHOLDS_HIGH: tuple[tuple[float, float], ...] = (
+    # Speilet for USDJPY-style: høy diff = USD strong = bull pair
+    (2.5, 1.0),
+    (1.5, 0.75),
+    (0.5, 0.5),
+    (-0.5, 0.25),
+)
+
+# Yield-diff-serien er månedlig; 36-obs tilsvarer 3 år.
+_LOOKBACK_PCT_36M_MONTHLY = 36
+_LOOKBACK_PCT_12M_MONTHLY = 12  # kun 12 obs — under MIN_OBS_FOR_PCTILE; brukes ikke i pct_12m.
+
+
+@register("yield_diff_10y")
+def yield_diff_10y(store: Any, instrument: str, params: dict) -> float:
+    """US 10Y minus foreign 10Y yield-differensial, mappet til 0..1.
+
+    B1 D1 (sub-fase 12.7, session 129). Påvirker FX-instrumenter (EURUSD,
+    GBPUSD, USDJPY, AUDUSD) i macro-familien. Yield-diff er primær FX-
+    fundamental: høy US-yield-diff trekker kapital til USD, lav diff
+    presser USD ned vs foreign.
+
+    Frekvens-noter:
+        - DGS10 er daglig, IRLTLT01<XX>M156N er månedlig (FRED-OECD-feed).
+        - Etter (us - foreign).dropna() blir serien effektivt månedlig.
+        - pct_12m gir for få obs (12 < MIN_OBS_FOR_PCTILE=20) → faller
+          tilbake til pct_36m.
+        - delta_*_z støttes ikke (månedlig data); fall-back til default.
+
+    Params:
+        foreign_series (REQUIRED): FRED-serie for foreign 10Y. F.eks.
+            ``IRLTLT01DEM156N`` (Tyskland), ``IRLTLT01GBM156N`` (UK),
+            ``IRLTLT01JPM156N`` (Japan), ``IRLTLT01AUM156N`` (Australia).
+        us_series: US 10Y (default ``DGS10``).
+        bull_when: ``"low"`` (default — lav diff = bull foreign vs USD;
+            EURUSD/GBPUSD/AUDUSD-tolkning) eller ``"high"`` (USDJPY:
+            høy diff = USD strong = bull pair).
+        thresholds: optional liste av (terskel, score)-par.
+        mode: R4 feature-velger. ``None`` (default) = terskel-trapp.
+            Støttede modes: ``"pct_36m"``, ``"extreme_flag_hard"``,
+            ``"extreme_flag_soft"``. ``"pct_12m"`` faller til pct_36m.
+            ``"delta_5d_z"``/``"delta_20d_z"`` fall-back til default.
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt i R4.
+
+    Defensive 0.0 ved manglende serier eller ingen overlapp.
+    """
+    _horizon = params.get("_horizon")
+    foreign_series = params.get("foreign_series")
+    if not foreign_series:
+        _log.warning("yield_diff_10y.no_foreign_series", instrument=instrument)
+        return 0.0
+    us_series = params.get("us_series", "DGS10")
+    bull_when = params.get("bull_when", "low")
+    mode = params.get("mode")
+
+    try:
+        us = store.get_fundamentals(us_series).dropna()
+        foreign = store.get_fundamentals(foreign_series).dropna()
+    except KeyError as exc:
+        _log.debug("yield_diff_10y.series_missing", instrument=instrument, error=str(exc))
+        return 0.0
+    except Exception as exc:
+        _log.warning("yield_diff_10y.fetch_failed", instrument=instrument, error=str(exc))
+        return 0.0
+
+    diff = (us - foreign).dropna()
+    if diff.empty:
+        _log.debug("yield_diff_10y.no_overlap", instrument=instrument)
+        return 0.0
+
+    current = float(diff.iloc[-1])
+
+    if mode is None:
+        return _yield_diff_10y_default_score(current, bull_when, params)
+
+    if mode in ("pct_12m", "pct_36m"):
+        # Begge bruker 36-obs-vindu for å sikre nok obs (12 obs er under
+        # MIN_OBS_FOR_PCTILE). pct_12m logges som fall-back.
+        if mode == "pct_12m":
+            _log.info(
+                "yield_diff_10y.pct_12m_fallback_to_36m",
+                instrument=instrument,
+                reason="monthly_data_insufficient_for_12m_window",
+            )
+        result = _fundamentals_pct_score(diff, bull_when, _LOOKBACK_PCT_36M_MONTHLY, instrument)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        result = _fundamentals_extreme_flag(
+            diff,
+            hard=(mode == "extreme_flag_hard"),
+            lookback=_LOOKBACK_PCT_36M_MONTHLY,
+            instrument=instrument,
+        )
+        return result if result is not None else 0.0
+
+    # delta_*_z er ikke meningsfullt for månedlig data; fall-back.
+    _log.warning(
+        "yield_diff_10y.unsupported_mode_falling_back_to_default",
+        instrument=instrument,
+        mode=mode,
+    )
+    return _yield_diff_10y_default_score(current, bull_when, params)
+
+
+def _yield_diff_10y_default_score(current: float, bull_when: str, params: dict) -> float:
+    """Default-trapp på diff-verdi i prosentpoeng."""
+    user_thresholds = params.get("thresholds")
+    if user_thresholds is None:
+        steps = (
+            _DEFAULT_YIELD_DIFF_10Y_THRESHOLDS_HIGH
+            if bull_when == "high"
+            else _DEFAULT_YIELD_DIFF_10Y_THRESHOLDS_LOW
+        )
+    else:
+        steps = tuple((float(t), float(s)) for t, s in user_thresholds)
+
+    if bull_when == "high":
+        for threshold, score in sorted(steps, key=lambda t: -t[0]):
+            if current >= threshold:
+                return float(score)
+    else:
+        for threshold, score in sorted(steps, key=lambda t: t[0]):
+            if current <= threshold:
+                return float(score)
+    return 0.0
+
+
+# ---------------------------------------------------------------------------
+# credit_spread_change (B1 D1)
+# ---------------------------------------------------------------------------
+
+# Step-mapping for spread-delta z-score. Sterk negativ delta (spreads
+# komprimerer) = risk-on = bull risk-on-assets. Tilsvarer positioning-
+# trappen i andre delta-baserte drivere.
+_DEFAULT_CREDIT_DELTA_THRESHOLDS_LOW: tuple[tuple[float, float], ...] = (
+    # bull_when="low": lav spread-delta (komprimering) = bull
+    (-2.0, 1.0),  # sterk komprimering = sterk bull
+    (-1.0, 0.75),
+    (-0.5, 0.6),
+    (0.0, 0.5),
+    (0.5, 0.3),
+)
+
+# Default-trapp på SPREAD-NIVÅ (BAA10Y - AAA10Y) i prosentpoeng.
+# Lav spread = lav credit-stress = bull risk-on. Historisk normalrange
+# 0.6-1.2 pp; kriser 2.5-4.0 pp.
+_DEFAULT_CREDIT_LEVEL_THRESHOLDS_LOW: tuple[tuple[float, float], ...] = (
+    (0.6, 1.0),  # svært komprimert = sterk risk-on
+    (0.9, 0.75),
+    (1.2, 0.5),  # normal-range = nøytral
+    (1.8, 0.25),
+)
+
+
+@register("credit_spread_change")
+def credit_spread_change(store: Any, instrument: str, params: dict) -> float:
+    """BAA10Y − AAA10Y kreditt-spread, mappet til 0..1.
+
+    B1 D1 (sub-fase 12.7, session 129). V2-substitusjon for HY/IG OAS
+    (BAMLH0A0HYM2/BAMLC0A0CM ga kun 3 år gratis FRED-API-historikk;
+    Moody's AAA10Y/BAA10Y har 30+ år).
+
+    Spread = BAA10Y − AAA10Y representerer credit-stress (BAA-IG-junior
+    over AAA-IG-senior). Komprimerer i risk-on-regimer, ekspanderer i
+    risk-off / kreditt-kriser.
+
+    Default-tolkning (bull_when="low"): lav spread = lav credit-stress =
+    bull for risk-on-aktiva (Nasdaq, SP500, BTC, ETH). bull_when="high"
+    for safe-haven (Gold) der bredere spread = flight-to-quality.
+
+    Begge serier er daglige, så delta_5d_z/delta_20d_z er meningsfulle
+    her (motsetning yield_diff_10y som er månedlig).
+
+    Params:
+        baa_series: BAA-serie (default ``BAA10Y``).
+        aaa_series: AAA-serie (default ``AAA10Y``).
+        bull_when: ``"low"`` (default — risk-on) eller ``"high"`` (safe-
+            haven). Hard-coded ``"low"`` om mode er delta_*_z og bruker
+            ikke spesifiserer (default delta-mapping er negativ-delta-
+            bull).
+        thresholds: override default-trapp (kun for default mode).
+        mode: feature-velger per ADR-010. Modes: ``"pct_12m"``,
+            ``"pct_36m"``, ``"delta_5d_z"``, ``"delta_20d_z"``,
+            ``"extreme_flag_hard"``, ``"extreme_flag_soft"``.
+        _horizon: engine-injisert. Lest, ikke brukt i R4.
+
+    Defensive 0.0 ved manglende serier eller ingen overlapp.
+    """
+    _horizon = params.get("_horizon")
+    baa_id = params.get("baa_series", "BAA10Y")
+    aaa_id = params.get("aaa_series", "AAA10Y")
+    bull_when = params.get("bull_when", "low")
+    mode = params.get("mode")
+
+    try:
+        baa = store.get_fundamentals(baa_id).dropna()
+        aaa = store.get_fundamentals(aaa_id).dropna()
+    except KeyError as exc:
+        _log.debug("credit_spread_change.series_missing", instrument=instrument, error=str(exc))
+        return 0.0
+    except Exception as exc:
+        _log.warning("credit_spread_change.fetch_failed", instrument=instrument, error=str(exc))
+        return 0.0
+
+    spread = (baa - aaa).dropna()
+    if spread.empty:
+        _log.debug("credit_spread_change.no_overlap", instrument=instrument)
+        return 0.0
+
+    current = float(spread.iloc[-1])
+
+    if mode is None:
+        return _credit_spread_change_default(current, bull_when, params)
+
+    if mode == "pct_12m":
+        result = _fundamentals_pct_score(spread, bull_when, _LOOKBACK_PCT_12M_DAILY, instrument)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "pct_36m":
+        result = _fundamentals_pct_score(spread, bull_when, _LOOKBACK_PCT_36M_DAILY, instrument)
+        if result is None:
+            result = _fundamentals_pct_score(spread, bull_when, _LOOKBACK_PCT_12M_DAILY, instrument)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_5d_z":
+        result = _fundamentals_delta_score(
+            spread,
+            bull_when,
+            delta_days=_DELTA_5D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_20d_z":
+        result = _fundamentals_delta_score(
+            spread,
+            bull_when,
+            delta_days=_DELTA_20D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        result = _fundamentals_extreme_flag(
+            spread,
+            hard=(mode == "extreme_flag_hard"),
+            lookback=_LOOKBACK_PCT_12M_DAILY,
+            instrument=instrument,
+        )
+        return result if result is not None else 0.0
+
+    _log.warning(
+        "credit_spread_change.unknown_mode_falling_back_to_default",
+        instrument=instrument,
+        mode=mode,
+    )
+    return _credit_spread_change_default(current, bull_when, params)
+
+
+def _credit_spread_change_default(current: float, bull_when: str, params: dict) -> float:
+    """Default-trapp på spread-NIVÅ (ikke delta — det fanges av delta-modes).
+
+    Lav spread = lav credit-stress = høy score for bull_when="low".
+    """
+    user_thresholds = params.get("thresholds")
+    if user_thresholds is None:
+        steps = _DEFAULT_CREDIT_LEVEL_THRESHOLDS_LOW
+    else:
+        steps = tuple((float(t), float(s)) for t, s in user_thresholds)
+
+    # Trappen er definert ascending (lav spread → høy score for "low").
+    score = 0.0
+    for threshold, s in sorted(steps, key=lambda t: t[0]):
+        if current <= threshold:
+            score = float(s)
+            break
+
+    if bull_when == "high":
+        # Speil for safe-haven: høy spread = bull → invertér.
+        return round(1.0 - score, 4)
+    return score
+
+
+# ---------------------------------------------------------------------------
+# nfci_change (B1 D1) — Chicago Fed National Financial Conditions Index
+# ---------------------------------------------------------------------------
+
+# NFCI default level-trapp. NFCI=0 = average financial conditions; positiv =
+# tighter, negativ = looser. Lav NFCI = looser conditions = bull risk-on.
+_DEFAULT_NFCI_LEVEL_THRESHOLDS_LOW: tuple[tuple[float, float], ...] = (
+    (-1.0, 1.0),  # mye løsere enn snitt = sterk bull risk-on
+    (-0.5, 0.75),
+    (0.0, 0.5),  # gjennomsnitt = nøytral
+    (0.5, 0.25),
+    (1.0, 0.1),  # tighter = bear risk-on
+)
+
+
+@register("nfci_change")
+def nfci_change(store: Any, instrument: str, params: dict) -> float:
+    """Chicago Fed NFCI (National Financial Conditions Index), 0..1.
+
+    B1 D1 (sub-fase 12.7, session 129). NFCI er en sammensatt indeks over
+    risiko, kreditt og leverage i USA: 0 = gjennomsnitt over 1971-, positiv
+    = tighter (mer stress), negativ = looser. Ukentlig (fre) FRED-rapport.
+
+    Default-tolkning (bull_when="low"): lav NFCI = looser conditions =
+    bull for risk-on-aktiva. bull_when="high" for hedge-aktiva (Gold).
+
+    NFCI er ukentlig — bruker WEEKLY-vinduer (LOOKBACK_PCT_12M_WEEKLY=52,
+    DELTA_5D_WEEKS=1).
+
+    Params:
+        series: FRED-serie (default ``NFCI``).
+        bull_when: ``"low"`` (default) eller ``"high"``.
+        thresholds: optional override.
+        mode: per ADR-010. Modes: ``"pct_12m"``, ``"pct_36m"``,
+            ``"delta_5d_z"`` (1-rapport-delta), ``"delta_20d_z"``
+            (4-rapport-delta), ``"extreme_flag_hard"``,
+            ``"extreme_flag_soft"``.
+        _horizon: engine-injisert.
+
+    Defensive 0.0 ved manglende serie.
+    """
+    _horizon = params.get("_horizon")
+    series_id = params.get("series", "NFCI")
+    bull_when = params.get("bull_when", "low")
+    mode = params.get("mode")
+
+    try:
+        series = store.get_fundamentals(series_id).dropna()
+    except KeyError:
+        _log.debug("nfci_change.series_missing", instrument=instrument)
+        return 0.0
+    except Exception as exc:
+        _log.warning("nfci_change.fetch_failed", instrument=instrument, error=str(exc))
+        return 0.0
+
+    if series.empty:
+        return 0.0
+
+    current = float(series.iloc[-1])
+
+    if mode is None:
+        return _nfci_change_default(current, bull_when, params)
+
+    if mode == "pct_12m":
+        result = _fundamentals_pct_score(series, bull_when, _LOOKBACK_PCT_12M_WEEKLY, instrument)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "pct_36m":
+        result = _fundamentals_pct_score(series, bull_when, _LOOKBACK_PCT_36M_WEEKLY, instrument)
+        if result is None:
+            result = _fundamentals_pct_score(
+                series, bull_when, _LOOKBACK_PCT_12M_WEEKLY, instrument
+            )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_5d_z":
+        result = _fundamentals_delta_score(
+            series,
+            bull_when,
+            delta_days=_DELTA_5D_WEEKS,
+            lookback=_LOOKBACK_DELTA_WEEKLY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_20d_z":
+        result = _fundamentals_delta_score(
+            series,
+            bull_when,
+            delta_days=_DELTA_20D_WEEKS,
+            lookback=_LOOKBACK_DELTA_WEEKLY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        result = _fundamentals_extreme_flag(
+            series,
+            hard=(mode == "extreme_flag_hard"),
+            lookback=_LOOKBACK_PCT_12M_WEEKLY,
+            instrument=instrument,
+        )
+        return result if result is not None else 0.0
+
+    _log.warning(
+        "nfci_change.unknown_mode_falling_back_to_default",
+        instrument=instrument,
+        mode=mode,
+    )
+    return _nfci_change_default(current, bull_when, params)
+
+
+def _nfci_change_default(current: float, bull_when: str, params: dict) -> float:
+    """Default-trapp på NFCI-NIVÅ. Lav NFCI = bull for bull_when='low'."""
+    user_thresholds = params.get("thresholds")
+    if user_thresholds is None:
+        steps = _DEFAULT_NFCI_LEVEL_THRESHOLDS_LOW
+    else:
+        steps = tuple((float(t), float(s)) for t, s in user_thresholds)
+
+    score = 0.0
+    for threshold, s in sorted(steps, key=lambda t: t[0]):
+        if current <= threshold:
+            score = float(s)
+            break
+    else:
+        score = 0.0  # ingen terskel matchet → høyere enn alle = bear
+
+    if bull_when == "high":
+        return round(1.0 - score, 4)
+    return score
+
+
+# ---------------------------------------------------------------------------
+# net_fed_liq_change (B1 D1)
+# ---------------------------------------------------------------------------
+
+# Default-trapp på NetFedLiq-NIVÅ-pct-endring (year-over-year fungerer ikke
+# her siden alle 3 inputs har høy autokorrelasjon — vi bruker 4-uke pct-
+# endring som er mer responsiv). bull_when="high" = liquidity-vekst er bull.
+_DEFAULT_NETFEDLIQ_PCT_THRESHOLDS_HIGH: tuple[tuple[float, float], ...] = (
+    # bull_when="high": positiv pct-endring = liquidity-injeksjon = bull
+    (2.0, 1.0),  # > 2% 4w-vekst = sterk QE
+    (1.0, 0.75),
+    (0.0, 0.5),  # flat = nøytral
+    (-1.0, 0.25),
+    (-2.0, 0.1),  # < -2% = sterk QT = bear
+)
+
+
+@register("net_fed_liq_change")
+def net_fed_liq_change(store: Any, instrument: str, params: dict) -> float:
+    """Net Federal Reserve Liquidity = WALCL − RRPONTSYD − WTREGEN, 0..1.
+
+    B1 D1 (sub-fase 12.7, session 129). NetFedLiq tracker den effektive
+    likviditeten i markedet etter at Fed's balance sheet (WALCL) er
+    justert for cash som sitter i RRP-fasiliteten (RRPONTSYD) og Treasury
+    General Account (WTREGEN). Stigende NetFedLiq = liquidity-flow inn
+    i risk-aktiva.
+
+    Tre input-serier alle ukentlige (ons). Default-mode bruker 4-uke pct-
+    endring som signal (mer responsiv enn level — selve nivået er trended
+    over tid og lav-informativt).
+
+    Tolkning (bull_when="high"): vekst i NetFedLiq = bull risk-on.
+    bull_when="low" for kontrære posisjoner.
+
+    Params:
+        walcl_series: default ``WALCL``.
+        rrp_series: default ``RRPONTSYD``.
+        tga_series: default ``WTREGEN``.
+        bull_when: ``"high"`` (default — risk-on) eller ``"low"``.
+        chg_window_weeks: 4-uke endring (default 4 — månedlig kadens).
+        thresholds: optional override.
+        mode: ``"pct_12m"``, ``"pct_36m"``, ``"delta_5d_z"``,
+            ``"delta_20d_z"``, ``"extreme_flag_hard"``,
+            ``"extreme_flag_soft"``. Modes opererer på NetFedLiq-rå-
+            serien (ikke pct-change-output) per dxy_chg5d-presedens.
+        _horizon: engine-injisert.
+
+    Defensive 0.0 ved manglende serier.
+    """
+    _horizon = params.get("_horizon")
+    walcl_id = params.get("walcl_series", "WALCL")
+    rrp_id = params.get("rrp_series", "RRPONTSYD")
+    tga_id = params.get("tga_series", "WTREGEN")
+    bull_when = params.get("bull_when", "high")
+    mode = params.get("mode")
+
+    try:
+        walcl = store.get_fundamentals(walcl_id).dropna()
+        rrp = store.get_fundamentals(rrp_id).dropna()
+        tga = store.get_fundamentals(tga_id).dropna()
+    except KeyError as exc:
+        _log.debug("net_fed_liq_change.series_missing", instrument=instrument, error=str(exc))
+        return 0.0
+    except Exception as exc:
+        _log.warning("net_fed_liq_change.fetch_failed", instrument=instrument, error=str(exc))
+        return 0.0
+
+    # WALCL er i USD millions; RRP og TGA i USD millions (FRED units
+    # matcher). Linje-by-linje subtraksjon på felles datoer (alle ukentlig
+    # ons → bør allerede være justert).
+    aligned = pd.concat([walcl, rrp, tga], axis=1, join="inner")
+    if aligned.empty:
+        _log.debug("net_fed_liq_change.no_overlap", instrument=instrument)
+        return 0.0
+
+    aligned.columns = ["walcl", "rrp", "tga"]
+    net_liq = (aligned["walcl"] - aligned["rrp"] - aligned["tga"]).dropna()
+    if net_liq.empty:
+        return 0.0
+
+    if mode is None:
+        return _net_fed_liq_change_default(net_liq, bull_when, params)
+
+    if mode == "pct_12m":
+        result = _fundamentals_pct_score(net_liq, bull_when, _LOOKBACK_PCT_12M_WEEKLY, instrument)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "pct_36m":
+        result = _fundamentals_pct_score(net_liq, bull_when, _LOOKBACK_PCT_36M_WEEKLY, instrument)
+        if result is None:
+            result = _fundamentals_pct_score(
+                net_liq, bull_when, _LOOKBACK_PCT_12M_WEEKLY, instrument
+            )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_5d_z":
+        result = _fundamentals_delta_score(
+            net_liq,
+            bull_when,
+            delta_days=_DELTA_5D_WEEKS,
+            lookback=_LOOKBACK_DELTA_WEEKLY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_20d_z":
+        result = _fundamentals_delta_score(
+            net_liq,
+            bull_when,
+            delta_days=_DELTA_20D_WEEKS,
+            lookback=_LOOKBACK_DELTA_WEEKLY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        result = _fundamentals_extreme_flag(
+            net_liq,
+            hard=(mode == "extreme_flag_hard"),
+            lookback=_LOOKBACK_PCT_12M_WEEKLY,
+            instrument=instrument,
+        )
+        return result if result is not None else 0.0
+
+    _log.warning(
+        "net_fed_liq_change.unknown_mode_falling_back_to_default",
+        instrument=instrument,
+        mode=mode,
+    )
+    return _net_fed_liq_change_default(net_liq, bull_when, params)
+
+
+def _net_fed_liq_change_default(net_liq: pd.Series, bull_when: str, params: dict) -> float:
+    """Default-bane: 4-uke pct-endring i NetFedLiq, mappet via terskel-trapp."""
+    chg_window = int(params.get("chg_window_weeks", 4))
+    if len(net_liq) <= chg_window:
+        return 0.0
+
+    current = float(net_liq.iloc[-1])
+    prev = float(net_liq.iloc[-1 - chg_window])
+    if prev == 0:
+        return 0.0
+
+    pct_chg = ((current - prev) / abs(prev)) * 100.0
+
+    user_thresholds = params.get("thresholds")
+    if user_thresholds is None:
+        steps = _DEFAULT_NETFEDLIQ_PCT_THRESHOLDS_HIGH
+    else:
+        steps = tuple((float(t), float(s)) for t, s in user_thresholds)
+
+    # Default-trappen er definert som "high"-aware (positiv = bull).
+    if bull_when == "high":
+        for threshold, score in sorted(steps, key=lambda t: -t[0]):
+            if pct_chg >= threshold:
+                return float(score)
+    else:
+        # bull_when="low": speil — negativ pct-endring = bull (kontrært)
+        for threshold, score in sorted(steps, key=lambda t: t[0]):
+            if pct_chg <= -threshold:
+                return float(score)
+    return 0.0
+
+
+# ---------------------------------------------------------------------------
 # eia_stock_change (sub-fase 12.5+ session 107)
 # ---------------------------------------------------------------------------
 
@@ -1310,9 +1924,13 @@ def mining_disruption(store: Any, instrument: str, params: dict) -> float:
 
 __all__ = [
     "comex_stress",
+    "credit_spread_change",
     "dxy_chg5d",
     "eia_stock_change",
     "mining_disruption",
+    "net_fed_liq_change",
+    "nfci_change",
     "real_yield",
     "vix_regime",
+    "yield_diff_10y",
 ]
