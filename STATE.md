@@ -123,7 +123,7 @@
 - **AsOfDateStore (session 116):** utvidet med 9 nye proxy-getters (econ_events/cot_ice/cot_euronext/eia_inventory/comex_inventory/seismic_events/conab_estimates/unica_reports/shipping_indices) + tilsvarende `has_*`-helpers. Kritisk fix — uten denne falt orchestrator-replay tilbake til defensive 0.0 for alle nye Phase A-C-drivere fordi underlying-getterne kastet `AttributeError`. 24 nye tester dekker hver getter + region/from_ts-filter + tom-clip-fallback.
 - **Phase D-output (session 116):** `data/_meta/backtest_phase_d_baseline.json` (68 rader, session 99-reprise), `data/_meta/backtest_phase_d_orchestrator.json` (48 rader, 86.4 min sweep), `data/_meta/backtest_phase_d_spike_{cot_ice_mm_pct,conab_yoy,unica_change}.json` (3 spikes). Rapport: `docs/backtest_phase_d_2026-04.md` med diff-tabeller + flagg-terskel ≥3pp Δhit_rate eller ≥2 grade-flips.
 - **Sub-fase 12.6-fundament (session 117):** 3 nye SQLite-tabeller (`driver_observations` long-format, `signal_setups`, `feature_snapshots`) + 5 nye scripts (`harvest_driver_observations.py`, `harvest_feature_snapshots.py`, `run_full_history_harvest.sh`, `analyze_driver_performance.py`, `analyze_cross_correlations.py`). Detached harvest startet 2026-04-27 21:58 — features ETA ~10 min, driver_observations ETA ~24-35 timer.
-- **Next task:** **Session 128 = D1 fortsettelse — B3 DXY Yahoo + A4 CFTC TFF + C1** (L-fase per § 19.4). Session 127 leverte verifiserings-runde (5 D0-flagg) + TG2 helper-konsolidering. TG1 (event_distance._now) var allerede implementert (risk.py:201) — fantom-task. B3 + A4 + C1 ble vurdert for stort for session 127's resterende tid og deferredes til 128. **D1-scope (sessions 128-129):** B3 DXY Yahoo (krever Yahoo→fundamentals-adapter ELLER endre dxy_chg5d til prices-source ELLER multi-YAML-bytte til ny serie-ID), A4 CFTC TFF + C1 (cot_legacy→cot_tff for 8 finansielle: EURUSD/GBPUSD/USDJPY/AUDUSD/BTC/ETH/Nasdaq/SP500), B1 FRED-serier (9 av 11; OAS-paret erstattes med Moody's AAA10Y/BAA10Y per V2-funn). Token-kilder (A2 AGSI, A3 FAS) krever bruker-registrering før implementasjon. **Sub-fase 12.6 PAUSER fortsatt**, gjenåpnes etter D3.
+- **Next task:** **Session 129 = D1 fortsettelse — B1 FRED-utvidelse** (L-fase per § 19.4). Session 128 leverte B3 (DXY Yahoo) + A4 (CFTC TFF fetcher + 2 nye drivere) + C1 (YAML for 8 finansielle). 6 commits: ef62a17 (B3), 67df28e (A4 fetcher), 6676ce0 (A4 drivere), ed20057 (C1 YAML + ny baseline), 9b86235 (test-fixture fix). Pyright 0/0/0; pytest 2219 passed (etter test-fixture fix). **B1 deferred til 129:** 11 FRED-serier (9 GO + OAS-paret erstattes med Moody's AAA10Y/BAA10Y per V2-funn). 4 yield-diff-drivere + credit_spread_change + nfci_change + net_fed_liq_change. YAML for FX/indekser/krypto macro-familien. **A1 Baker Hughes:** ingen FRED-rute funnet. Bruker må bekrefte (a) drop fra 12.7-scope, (b) utsett til Plan-S, eller (c) manuell CSV-fallback. **Token-kilder (A2 AGSI, A3 FAS):** krever bruker-registrering før implementasjon. **Sub-fase 12.6 PAUSER fortsatt**, gjenåpnes etter D3.
 - **Git-modus:** Nivå 1 aktivt under sub-fase 12.5+ docs/cleanup-pass. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt valgfri.
 
 ## Data-gjeld (sub-fase 12.6)
@@ -266,6 +266,116 @@ URL-mønstre + CSV-format-krav: `docs/manual_download_shopping_list.md`.
 ---
 
 ## Session log (newest first)
+
+### 2026-04-29 — Session 128: sub-fase 12.7 D1 fortsettelse (B3 DXY + A4 CFTC TFF + C1)
+
+**Scope:** D1 hovedimplementasjon. Mål: B3 DXY Yahoo (lavest blast-radius)
++ A4 CFTC TFF + C1 (8 finansielle YAML-omlegging) + B1 FRED-utvidelse
+(stretch). Stop-criterion: >5 timer eller første blocker.
+
+**Levert:** B3 + A4 + C1. **B1 deferred til 129** (D1 hovedscope nådd
+prioritert; B1 ikke kritisk-blocker for resten av D1).
+
+**B3 DXY Yahoo (commit `ef62a17`):**
+
+Kilde-bytte fra FRED `DTWEXBGS` (Federal Reserve broad dollar, 26
+valutaer) til Yahoo `DX-Y.NYB` (ICE Dollar Index, 6-valuta basket
+EUR/JPY/GBP/CAD/SEK/CHF — markedsstandard).
+
+Implementasjon (minimal-impact):
+- `scripts/backfill/dxy_yahoo.py`: engangs-skript per ADR-011 (10-år
+  rolling cutoff). 2596 rader (2016-01-04 → 2026-04-29) lagret som
+  pseudo-FRED-serie i fundamentals-tabellen med series_id='DX-Y.NYB'.
+- `macro.py`: `dxy_chg5d` default 'series'-param byttet til 'DX-Y.NYB'.
+  DTWEXBGS beholdes som sekundær via `params={'series': 'DTWEXBGS'}`.
+- Ingen YAML-endring (vekt uendret).
+
+Snapshot pre-B3-baseline tatt; post-B3-diff = 0 forskjeller (DTWEXBGS
+-0.22% og DX-Y.NYB +0.16% siste 5d-pct begge i ±0.5%-bin → samme
+step-mapping på dette markedstidspunktet). Ekte kilde-bytte gjennomført;
+framtidig divergens vil vise seg i score.
+
+**A4 CFTC TFF — commit chain (`67df28e` + `6676ce0` + `ed20057`):**
+
+- **67df28e (fetcher + schema + backfill):**
+  - `schemas.py`: TABLE_COT_TFF + DDL_COT_TFF + CotTffRow Pydantic +
+    COT_TFF_COLS-tuple. 11 felter (dealer/asset_mgr/lev_funds/other/
+    nonrep long+short + open_interest); _spread-felter droppet.
+  - `store.py`: append_cot_tff + get_cot_tff + has_cot_tff. _init_schema
+    kaller DDL_COT_TFF.
+  - `cot_cftc.py`: fetch_cot_tff + CFTC_TFF_URL + _TFF_FIELD_MAP.
+    Gjenbruker _fetch_cot_socrata-klient.
+  - `scripts/backfill/cot_tff.py`: 10-år rolling cutoff. 3276 rader
+    backfilt for 8 finansielle: EURUSD/USDJPY/AUDUSD/Nasdaq fra 2016
+    (538 rader hver), GBPUSD/SP500 fra 2022 (220 hver), BTC fra 2018
+    (420), ETH fra 2021 (264).
+
+- **6676ce0 (drivere + 11 tester):**
+  - `_compute_metric` utvidet med TFF-typer: lev_funds_net + _net_pct,
+    asset_mgr_net + _net_pct, dealer_net + _net_pct.
+  - Felles `_load_tff_metric_series` + `_load_tff_metric_full_series` +
+    `_tff_driver_default` + `_tff_driver_with_modes` (med default_metric-
+    param for å håndtere lev_funds vs asset_mgr).
+  - `@register('positioning_lev_funds_pct')`: hedge funds + CTAs
+    (primær spec-mål).
+  - `@register('positioning_asset_mgr_pct')`: institutional real money
+    (slow-moving secular flow).
+  - Begge har full R4-mode-utbygging (default + pct_12m + pct_36m +
+    delta_5d_z + delta_20d_z + extreme_flag_hard/soft).
+  - 11 nye tester (Type A/B/C + extreme_flag + differensiering mellom
+    de to driverne).
+  - Bug-fix: initial implementasjon hadde hardkodet `lev_funds_net_pct`
+    som default i `_load_tff_metric_series`; fikset til å akseptere
+    `default_metric` per caller-driver.
+
+- **ed20057 (C1 YAML + ny baseline):** 8 finansielle YAML-omlegging:
+  - Før: positioning_mm_pct@0.6 + cot_z_score@0.4 = 1.0
+  - Etter: positioning_lev_funds_pct@0.40 + positioning_asset_mgr_pct@0.20
+    + cot_z_score@0.40 = 1.0
+  - cot_z_score beholdt på legacy noncomm_net_pct (per § 19.3-spec
+    "cot_z_score beholdes uendret") som cross-validering.
+  - Pydantic-validering: alle 8 har positioning-familie-sum = 1.0000 ✓
+  - Snapshot post-C1-diff: 90 endringer (8 finansielle × 6 = 48 fra
+    C1 + ~42 fra B3 dxy-bytte for andre instrumenter). Ny baseline
+    regenerert.
+
+**Test-fix follow-up (commit `9b86235`):**
+
+Eksisterende `test_drivers_macro.py` brukte DTWEXBGS i mock-store-
+fixturene; etter B3-default-bytte ga 4 dxy_chg5d-tester
+`series_missing` → 0.0 fall-back. Bytte fixture-key fra DTWEXBGS til
+DX-Y.NYB (mock-store er agnostisk til series_id-content). 22
+dxy_chg5d/vix_regime-tester grønne.
+
+**Verifikasjon:**
+
+- Pyright `src/`: 0 errors, 0 warnings, 0 informations ✓
+- Full pytest: **2219 passed** (etter fixture-fix; +28 nye tester:
+  11 TFF-drivere + +backfill-script-tester implisitt). Var 2191 før
+  session 128.
+- Pydantic familie-sum=1.0 for alle 8 finansielle ✓
+- Snapshot-baseline regenerert som ny anker for D1.
+
+**B1 deferred-rasjonale:**
+
+Etter A4+C1 var session-budget brukt opp pragmatisk. B1 er separabelt
+— 11 FRED-serier + 4-7 nye drivere + macro-familie YAML-bytte for
+FX/indekser/krypto + ny baseline. Best for egen session 129 for
+sporing-disiplin.
+
+**Ingen blockers.**
+
+**Tech-gjeld åpne:**
+
+1. **A1 Baker Hughes:** ingen FRED-rute (V3-funn). Bruker må bekrefte
+   drop / utsett til Plan-S / manuell CSV-fallback.
+2. **A2 AGSI + A3 FAS:** token-registrering pending (ikke-kritisk for
+   D1 finansiell-scope).
+3. **B1 OAS → Moody's AAA10Y/BAA10Y:** D1 session 129 implementerer.
+4. **TFF kortere historikk for noen kontrakter** (GBPUSD/SP500 fra
+   2022 = 4 år, ETH fra 2021 = 5 år): ikke kritisk på D1-tidspunkt
+   men begrenser pct_36m-vinduet for de instrumenter — fall-back til
+   pct_12m-pattern fungerer.
 
 ### 2026-04-29 — Session 127: sub-fase 12.7 D1 åpning (verifiserings-runde + helper-konsolidering)
 
