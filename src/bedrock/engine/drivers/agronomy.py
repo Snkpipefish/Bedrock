@@ -1015,10 +1015,197 @@ def _fas_exports_default(series: Any, bull_when: str, params: dict) -> float:
     return round(score, 4)
 
 
+# ---------------------------------------------------------------------------
+# drought_monitor (sub-fase 12.7 D2 A9, session 133)
+# ---------------------------------------------------------------------------
+#
+# US Drought Monitor — ukentlig CONUS-aggregat fra USDM (cumulative %-areal
+# per drought-severity-bucket). Brukes av grain/softs weather-familier som
+# co-driver med weather_stress.
+#
+# Default-input er ``d2_pct`` (% i D2+ severe+) for siste observasjon.
+# Tolkning: høy drought-andel = bull for grain price (yield-risk reduserer
+# supply). bull_when=high (default).
+#
+# Mode-banen bruker d2_pct-tids-serien direkte via fundamentals_*-helpers.
+# USDM er ukentlig — DAILY-lookback-konstanter approximerer rolling-window
+# (252 ukentlige rader = ~5 år).
+
+_DEFAULT_DROUGHT_PCT_THRESHOLDS_HIGH: tuple[tuple[float, float], ...] = (
+    # bull_when="high": høy D2+ andel = bull. Steps på rå d2_pct (0..100).
+    (5.0, 0.0),  # ≤ 5% i D2+ = ingen reell drought = bear
+    (15.0, 0.25),  # ~normal varians
+    (25.0, 0.5),  # nøytral — moderat drought
+    (40.0, 0.75),  # høy drought-bekymring
+    (100.0, 1.0),  # ≥ 40% i D2+ = sterk drought = sterk bull
+)
+
+
+@register("drought_monitor")
+def drought_monitor(store: Any, instrument: str, params: dict) -> float:
+    """USDM drought-severity mappet til 0..1 for grain/softs weather.
+
+    Sub-fase 12.7 D2 A9 (session 133). Co-driver med weather_stress i
+    Corn/Soybean/Wheat/Cotton weather-familien.
+
+    Default (mode=None): terskel-trapp på rå ``d2_pct`` (% i D2+ severe+)
+    fra siste USDM-observasjon. R4-modes bruker d2_pct-tids-serien via
+    fundamentals_*-helpere.
+
+    Frekvens: USDM publiserer ukentlig (torsdag, basert på tirsdags-data).
+    Bruker DAILY-lookback-konstantene som approximation.
+
+    Tolkning:
+        bull_when="high" (default): høy drought-andel = bull (yield-risk
+            reduserer supply).
+        bull_when="low": invertert.
+
+    Params:
+        aoi: USDM-AOI-kode. Default ``"us"`` (CONUS-aggregat). Per-state
+            tilgjengelig: ``"IA"``, ``"IL"``, etc.
+        metric: hvilken D-bucket skal brukes (``"d2_pct"`` default). Kan
+            være ``d0_pct``/``d1_pct``/``d3_pct``/``d4_pct``.
+        bull_when: "high" (default) eller "low".
+        thresholds: optional override for default-trapp.
+        mode: feature-velger per ADR-010.
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt i R4.
+
+    Defensive 0.0 ved manglende data.
+    """
+    _horizon = params.get("_horizon")
+    aoi = str(params.get("aoi", "us")).lower()
+    metric = str(params.get("metric", "d2_pct"))
+    bull_when = str(params.get("bull_when", "high")).lower()
+    mode = params.get("mode")
+
+    try:
+        df = store.get_drought_monitor(aoi)
+    except KeyError:
+        _log.debug("drought_monitor.no_data", instrument=instrument, aoi=aoi)
+        return 0.0
+    except Exception as exc:
+        _log.warning(
+            "drought_monitor.fetch_failed",
+            instrument=instrument,
+            aoi=aoi,
+            error=str(exc),
+        )
+        return 0.0
+
+    if df.empty or metric not in df.columns:
+        return 0.0
+
+    import pandas as pd
+
+    series = pd.Series(
+        df[metric].values,
+        index=pd.to_datetime(df["map_date"]),
+    ).dropna()
+
+    if series.empty:
+        return 0.0
+
+    current = float(series.iloc[-1])
+
+    if mode is None:
+        return _drought_monitor_default(current, bull_when, params)
+
+    from bedrock.engine.drivers.horizon_helpers import (
+        DELTA_5D_DAYS as _DELTA_5D_DAYS,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        DELTA_20D_DAYS as _DELTA_20D_DAYS,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        LOOKBACK_DELTA_DAILY as _LOOKBACK_DELTA_DAILY,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        LOOKBACK_PCT_12M_DAILY as _LOOKBACK_PCT_12M_DAILY,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        LOOKBACK_PCT_36M_DAILY as _LOOKBACK_PCT_36M_DAILY,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        fundamentals_delta_score as _fundamentals_delta_score,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        fundamentals_extreme_flag as _fundamentals_extreme_flag,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        fundamentals_pct_score as _fundamentals_pct_score,
+    )
+
+    if mode == "pct_12m":
+        result = _fundamentals_pct_score(series, bull_when, _LOOKBACK_PCT_12M_DAILY, instrument)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "pct_36m":
+        result = _fundamentals_pct_score(series, bull_when, _LOOKBACK_PCT_36M_DAILY, instrument)
+        if result is None:
+            result = _fundamentals_pct_score(series, bull_when, _LOOKBACK_PCT_12M_DAILY, instrument)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_5d_z":
+        result = _fundamentals_delta_score(
+            series,
+            bull_when,
+            delta_days=_DELTA_5D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_20d_z":
+        result = _fundamentals_delta_score(
+            series,
+            bull_when,
+            delta_days=_DELTA_20D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        result = _fundamentals_extreme_flag(
+            series,
+            hard=(mode == "extreme_flag_hard"),
+            lookback=_LOOKBACK_PCT_12M_DAILY,
+            instrument=instrument,
+        )
+        return result if result is not None else 0.0
+
+    _log.warning(
+        "drought_monitor.unknown_mode_falling_back_to_default",
+        instrument=instrument,
+        mode=mode,
+    )
+    return _drought_monitor_default(current, bull_when, params)
+
+
+def _drought_monitor_default(current: float, bull_when: str, params: dict) -> float:
+    """Default-trapp på rå d2_pct (0..100)."""
+    user_thresholds = params.get("thresholds")
+    if user_thresholds is None:
+        steps = _DEFAULT_DROUGHT_PCT_THRESHOLDS_HIGH
+    else:
+        steps = tuple((float(t), float(s)) for t, s in user_thresholds)
+
+    score = 1.0
+    for threshold, s in sorted(steps, key=lambda t: t[0]):
+        if current <= threshold:
+            score = float(s)
+            break
+
+    if bull_when == "low":
+        return round(1.0 - score, 4)
+    return round(score, 4)
+
+
 __all__ = [
     "conab_yoy",
     "crop_progress_stage",
     "disease_pressure",
+    "drought_monitor",
     "export_event_active",
     "fas_exports",
     "igc_stocks_change",
