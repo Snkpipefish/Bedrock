@@ -252,19 +252,14 @@ def main() -> int:
                 continue
 
             # Hver PDF gir multiple måneder (12 meses + multi-år-comparison).
-            # Vi tar med alle unike (year, month) på tvers av PDFer.
+            # INSERT OR REPLACE på (month, coffee_type)-PK håndterer dedupe;
+            # senere PDFer overskriver tidligere (Cecafé reviderer iblant
+            # historiske rader, så den nyeste PDF-en er autoritativ).
             for r in rows:
-                month_str = str(r["month"])  # ISO YYYY-MM-01
-                yr, mo = int(month_str[0:4]), int(month_str[5:7])
-                key = (yr, mo)
-                if key in seen_months and r["coffee_type"] == "sum":
-                    # Telle 'sum'-key som anker for dedupe, men vi har 4 rader
-                    # per måned — sjekk på sum-nøkkelen.
-                    continue
-                # Add row regardless; we'll dedupe via PK på append.
                 all_rows.append(r)
                 if r["coffee_type"] == "sum":
-                    seen_months.add(key)
+                    month_str = str(r["month"])
+                    seen_months.add((int(month_str[0:4]), int(month_str[5:7])))
 
             _log.info(
                 "  PDF %d/%d %s %d: %d rows parsed (%d unique months total so far)",
