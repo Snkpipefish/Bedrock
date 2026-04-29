@@ -61,16 +61,22 @@ families:
   macro:
     # USDJPY: lav real-yield = bear USDJPY (USD-svak). Høy VIX = risk-off
     # = JPY-styrke = bear USDJPY (invert=true).
+    # B1 D1 (sub-fase 12.7, session 129): yield_diff_10y@0.35 lagt til.
+    # USDJPY er invertert vs andre FX: høy diff = USD strong vs JPY = bull
+    # USDJPY → bull_when=high. Sum = 1.00.
     drivers:
       - name: real_yield
-        weight: 0.4
-        params: {bull_when: high}  # Høy real yield = bull USDJPY (USD-styrke)
+        weight: 0.25
+        params: {bull_when: high}
       - name: dxy_chg5d
-        weight: 0.5
-        params: {bull_when: positive, window: 5}  # USD-styrke = bull USDJPY
+        weight: 0.30
+        params: {bull_when: positive, window: 5}
       - name: vix_regime
-        weight: 0.1
-        params: {invert: true}  # Høy VIX = bear USDJPY (JPY safe-haven)
+        weight: 0.10
+        params: {invert: true}
+      - name: yield_diff_10y
+        weight: 0.35
+        params: {foreign_series: IRLTLT01JPM156N, bull_when: high}  # Høy diff (US>JP) = bull USDJPY
   structure:
     drivers:
       - name: range_position

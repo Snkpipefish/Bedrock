@@ -59,16 +59,21 @@ families:
     # EURUSD-tolkning: EUR styrker når USD svekkes (negativ DXY = bull EURUSD).
     # Real yield: lav yield støtter ikke-USD-valutaer.
     # VIX: høy vol typisk bear EUR (flight-to-USD).
+    # B1 D1 (sub-fase 12.7, session 129): yield_diff_10y@0.35 lagt til,
+    # eksisterende drivere redusert per § 19.8-eksempel. Sum = 1.00.
     drivers:
       - name: real_yield
-        weight: 0.4
-        params: {bull_when: low}  # Lav real yield = bull EUR (vs USD)
+        weight: 0.25  # Var 0.4 — yield-diff overtar deler av rente-signalet
+        params: {bull_when: low}
       - name: dxy_chg5d
-        weight: 0.5
-        params: {bull_when: negative, window: 5}  # USD svakt = bull EURUSD
+        weight: 0.30  # Var 0.5 — yield-diff er mer presist for FX-signal
+        params: {bull_when: negative, window: 5}
       - name: vix_regime
-        weight: 0.1
-        params: {invert: false}  # Lav VIX = risk-on = bull EUR (mild effekt)
+        weight: 0.10
+        params: {invert: false}
+      - name: yield_diff_10y
+        weight: 0.35
+        params: {foreign_series: IRLTLT01DEM156N, bull_when: low}  # Lav diff (EU≥US) = bull EUR
   structure:
     drivers:
       - name: range_position

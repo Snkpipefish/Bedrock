@@ -67,18 +67,26 @@ families:
   macro:
     # BTC-tolkning: lav real yield = bull (alt-asset i lav-rente-miljø);
     # USD-svakhet = bull (BTC priset i USD); lav VIX = bull (risk-on).
-    # Empirisk er disse mindre presise enn for equity, men retning er
-    # robust.
+    # B1 D1 (sub-fase 12.7, session 129): net_fed_liq_change@0.30 +
+    # nfci_change@0.20 lagt til. NetFedLiq tyngst-vektet for crypto
+    # (empirisk meget likviditets-sensitiv, særlig i 2020-2022).
+    # Sum = 1.00.
     drivers:
       - name: real_yield
-        weight: 0.4
+        weight: 0.20
         params: {bull_when: low}
       - name: dxy_chg5d
-        weight: 0.4
+        weight: 0.20
         params: {bull_when: negative, window: 5}
       - name: vix_regime
-        weight: 0.2
-        params: {invert: false}  # Lav VIX = risk-on = bull BTC
+        weight: 0.10
+        params: {invert: false}
+      - name: net_fed_liq_change
+        weight: 0.30
+        params: {bull_when: high}
+      - name: nfci_change
+        weight: 0.20
+        params: {bull_when: low}
   structure:
     # 20-dagers range-position fungerer bra på BTC også — høy volatilitet
     # gjør range-bredder dynamiske, men relative posisjonen er meningsfull.
@@ -90,16 +98,21 @@ families:
     polarity: neutral  # ADR-006: vol_regime trend-friendly begge retninger
     # BTC har inherent høy vol; kalibrer lookback til 252 dager som
     # fanger både bull- og bear-regimer.
+    # B1 D1 (sub-fase 12.7, session 129): credit_spread_change@0.25 lagt
+    # til — crypto er empirisk korrelert med credit-stress (2022).
     drivers:
       - name: vol_regime
-        weight: 0.7
+        weight: 0.55
         params: {period: 14, lookback: 252, mode: high_is_bull}
       - name: event_distance
-        weight: 0.3
+        weight: 0.20
         params:
           countries: [USD]
           impact_levels: [High]
           min_hours: 4
+      - name: credit_spread_change
+        weight: 0.25
+        params: {bull_when: low}
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     drivers:

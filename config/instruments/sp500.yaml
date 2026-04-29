@@ -66,18 +66,25 @@ families:
         params: {metric: noncomm_net_pct, lookback_weeks: 52}
   macro:
     # Equity-tolkning identisk Nasdaq men med fokus på rente-følsomhet
-    # (SP500 er bredere, mindre tech-tung). Lavere DGS10-følsomhet
-    # enn Nasdaq men fortsatt risk-on-asset.
+    # (SP500 er bredere, mindre tech-tung).
+    # B1 D1 (sub-fase 12.7, session 129): net_fed_liq_change@0.25 +
+    # nfci_change@0.20 lagt til. Sum = 1.00.
     drivers:
       - name: real_yield
-        weight: 0.3
+        weight: 0.20
         params: {bull_when: low}
       - name: dxy_chg5d
-        weight: 0.4
+        weight: 0.20
         params: {bull_when: negative, window: 5}
       - name: vix_regime
-        weight: 0.3
-        params: {invert: false}  # Lav VIX = bull SP500
+        weight: 0.15
+        params: {invert: false}
+      - name: net_fed_liq_change
+        weight: 0.25
+        params: {bull_when: high}
+      - name: nfci_change
+        weight: 0.20
+        params: {bull_when: low}
   structure:
     drivers:
       - name: range_position
@@ -85,16 +92,20 @@ families:
         params: {window: 20, mode: continuation}
   risk:
     polarity: neutral  # ADR-006: vol_regime trend-friendly begge retninger
+    # B1 D1 (sub-fase 12.7, session 129): credit_spread_change@0.25 lagt til.
     drivers:
       - name: vol_regime
-        weight: 0.7
+        weight: 0.55
         params: {period: 14, lookback: 252, mode: high_is_bull}
       - name: event_distance
-        weight: 0.3
+        weight: 0.20
         params:
           countries: [USD]
           impact_levels: [High]
           min_hours: 4
+      - name: credit_spread_change
+        weight: 0.25
+        params: {bull_when: low}
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     drivers:

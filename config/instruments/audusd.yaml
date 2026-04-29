@@ -56,16 +56,22 @@ families:
         params: {metric: noncomm_net_pct, lookback_weeks: 52}
   macro:
     # AUD: risk-on currency. Lav VIX = bull. USD-svak = bull.
+    # B1 D1 (sub-fase 12.7, session 129): yield_diff_10y@0.30 lagt til.
+    # AUD-spesifikt: VIX-vekt litt høyere enn EUR/GBP fordi AUD er
+    # commodity-correlated. Sum = 1.00.
     drivers:
       - name: real_yield
-        weight: 0.3
+        weight: 0.20
         params: {bull_when: low}
       - name: dxy_chg5d
-        weight: 0.5
+        weight: 0.30
         params: {bull_when: negative, window: 5}
       - name: vix_regime
-        weight: 0.2
-        params: {invert: false}  # Lav VIX = risk-on = bull AUD
+        weight: 0.20
+        params: {invert: false}
+      - name: yield_diff_10y
+        weight: 0.30
+        params: {foreign_series: IRLTLT01AUM156N, bull_when: low}  # Lav diff (AU≥US) = bull AUD
   structure:
     drivers:
       - name: range_position
