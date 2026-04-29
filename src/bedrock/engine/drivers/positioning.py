@@ -215,6 +215,42 @@ def _compute_metric(df: pd.DataFrame, metric: str) -> pd.Series | None:
         oi = df["open_interest"].astype("float64").replace(0, pd.NA)
         return net / oi
 
+    # TFF (Traders in Financial Futures, sub-fase 12.7 D1 A4 session 128).
+    # Trader-typene Dealer / Asset Manager / Leveraged Funds er primær
+    # spec-mål for finansielle futures (FX, krypto, indekser).
+    if metric in ("lev_funds_net", "lev_funds_net_pct"):
+        if "lev_funds_long" not in df.columns or "lev_funds_short" not in df.columns:
+            return None
+        net = df["lev_funds_long"].astype("float64") - df["lev_funds_short"].astype("float64")
+        if metric == "lev_funds_net":
+            return net
+        if "open_interest" not in df.columns:
+            return None
+        oi = df["open_interest"].astype("float64").replace(0, pd.NA)
+        return net / oi
+
+    if metric in ("asset_mgr_net", "asset_mgr_net_pct"):
+        if "asset_mgr_long" not in df.columns or "asset_mgr_short" not in df.columns:
+            return None
+        net = df["asset_mgr_long"].astype("float64") - df["asset_mgr_short"].astype("float64")
+        if metric == "asset_mgr_net":
+            return net
+        if "open_interest" not in df.columns:
+            return None
+        oi = df["open_interest"].astype("float64").replace(0, pd.NA)
+        return net / oi
+
+    if metric in ("dealer_net", "dealer_net_pct"):
+        if "dealer_long" not in df.columns or "dealer_short" not in df.columns:
+            return None
+        net = df["dealer_long"].astype("float64") - df["dealer_short"].astype("float64")
+        if metric == "dealer_net":
+            return net
+        if "open_interest" not in df.columns:
+            return None
+        oi = df["open_interest"].astype("float64").replace(0, pd.NA)
+        return net / oi
+
     return None
 
 
@@ -1135,9 +1171,327 @@ def _cot_euronext_mm_pct_default(store: Any, params: dict) -> float:
     return round(pct / 100.0, 4)
 
 
+# ---------------------------------------------------------------------------
+# TFF (Traders in Financial Futures) drivere — D1 A4 (session 128)
+# ---------------------------------------------------------------------------
+#
+# To drivere som leser fra `cot_tff`-tabellen istedenfor cot_disaggregated/
+# cot_legacy. Brukt for 8 finansielle instrumenter:
+# EURUSD/GBPUSD/USDJPY/AUDUSD/BTC/ETH/Nasdaq/SP500.
+#
+# - `positioning_lev_funds_pct`: Leveraged Funds net% (hedge funds, CTAs —
+#   primær spec-mål for finansiell positioning)
+# - `positioning_asset_mgr_pct`: Asset Manager/Institutional net% (pensjon,
+#   forsikring, real money — slow-moving institutional flow)
+#
+# Begge gjenbruker `_compute_metric` (utvidet med TFF-typer), `_mode_pct`,
+# `_mode_delta_z`, `_extreme_flag` fra positioning_mm_pct-presedensen.
+
+
+def _load_tff_metric_series(
+    store: Any,
+    instrument: str,
+    params: dict,
+    *,
+    default_metric: str = "lev_funds_net_pct",
+) -> tuple[float, list[float]] | None:
+    """Datastrøm-loader for TFF-COT, parallell til ``_load_metric_series``.
+
+    Leser via ``store.get_cot_tff(contract)`` istedenfor ``get_cot``.
+    Kontrakt-navn hentes fra instrument-config (samme cot_contract som
+    eksisterende positioning-drivere — TFF-rapporten bruker eksakt samme
+    kontrakt-streng som disaggregated/legacy).
+
+    `default_metric` lar caller (lev_funds- vs asset_mgr-driver) sette
+    riktig default når YAML ikke overstyrer via `metric`-param.
+
+    Returnerer ``(current, history)`` eller ``None`` ved feil.
+    """
+    contract_info = _resolve_contract(instrument)
+    if contract_info is None:
+        return None
+    contract, _report = contract_info  # report-felt ignoreres for TFF
+
+    lookback = int(params.get("lookback_weeks", _DEFAULT_LOOKBACK))
+    metric = str(params.get("metric", default_metric))
+
+    try:
+        df = store.get_cot_tff(contract, last_n=lookback + 1)
+    except KeyError:
+        _log.debug("positioning_tff.data_missing", instrument=instrument, contract=contract)
+        return None
+    except Exception as exc:
+        _log.warning("positioning_tff.fetch_failed", instrument=instrument, error=str(exc))
+        return None
+
+    series = _compute_metric(df, metric)
+    if series is None:
+        _log.warning("positioning_tff.unknown_metric", instrument=instrument, metric=metric)
+        return None
+
+    series = series.dropna()
+    if len(series) < MIN_OBS_FOR_PCTILE + 1:
+        _log.debug(
+            "positioning_tff.short_history",
+            instrument=instrument,
+            n=len(series),
+            required=MIN_OBS_FOR_PCTILE + 1,
+        )
+        return None
+
+    current = float(series.iloc[-1])
+    history = [float(v) for v in series.iloc[:-1]]
+    return current, history
+
+
+def _load_tff_metric_full_series(
+    store: Any,
+    instrument: str,
+    params: dict,
+    *,
+    n_obs: int,
+    default_metric: str,
+) -> pd.Series | None:
+    """Hent TFF metric-serie med eksplisitt antall obs (for R4-modes).
+
+    Parallell til ``_load_metric_full_series`` for cot_disaggregated.
+    `default_metric` lar caller (driver) sette riktig default — ulikt
+    for lev_funds vs asset_mgr.
+    """
+    contract_info = _resolve_contract(instrument)
+    if contract_info is None:
+        return None
+    contract, _report = contract_info
+
+    metric = str(params.get("metric", default_metric))
+
+    try:
+        df = store.get_cot_tff(contract, last_n=n_obs)
+    except KeyError:
+        _log.debug("positioning_tff.data_missing", instrument=instrument, contract=contract)
+        return None
+    except Exception as exc:
+        _log.warning("positioning_tff.fetch_failed", instrument=instrument, error=str(exc))
+        return None
+
+    series = _compute_metric(df, metric)
+    if series is None:
+        _log.warning("positioning_tff.unknown_metric", instrument=instrument, metric=metric)
+        return None
+
+    series = series.dropna()
+    if series.empty:
+        return None
+    return series
+
+
+def _tff_driver_default(store: Any, instrument: str, params: dict, *, default_metric: str) -> float:
+    """Pre-R4-default-bane for TFF-baserte rank-pct-drivere.
+
+    Returnerer rank-percentile / 100 av siste obs vs lookback-vindu.
+    Bit-identisk output uavhengig av om mode-fall-back rammer.
+    `default_metric` velger TFF-trader-type (lev_funds vs asset_mgr) når
+    YAML ikke overstyrer via `metric`-param.
+    """
+    loaded = _load_tff_metric_series(store, instrument, params, default_metric=default_metric)
+    if loaded is None:
+        return 0.0
+    current, history = loaded
+    pct = rank_percentile(current, history)
+    if pct is None:
+        return 0.0
+    return round(pct / 100.0, 4)
+
+
+def _tff_driver_with_modes(
+    store: Any,
+    instrument: str,
+    params: dict,
+    *,
+    default_metric: str,
+    log_prefix: str,
+) -> float:
+    """Felles mode-dispatcher for TFF-drivere.
+
+    Default-bane (mode=None): rank-percentile av default_metric over
+    lookback_weeks (default 52). Modes: pct_12m / pct_36m (m/ fall-back) /
+    delta_5d_z / delta_20d_z / extreme_flag_hard/soft. Identisk pattern
+    som positioning_mm_pct.
+    """
+    # ADR-010: les _horizon for fremtidig bruk. R4-kontrakt: ikke endre
+    # default-output basert på _horizon.
+    _horizon = params.get("_horizon")
+    mode = params.get("mode")
+
+    if mode is None:
+        return _tff_driver_default(store, instrument, params, default_metric=default_metric)
+
+    # Sett default_metric hvis ikke eksplisitt overstyrt
+    params_with_default = {**params, "metric": params.get("metric", default_metric)}
+
+    if mode == "pct_12m":
+        series = _load_tff_metric_full_series(
+            store,
+            instrument,
+            params_with_default,
+            n_obs=_LOOKBACK_PCT_12M + 1,
+            default_metric=default_metric,
+        )
+        if series is None:
+            return 0.0
+        result = _mode_pct(series, instrument, _LOOKBACK_PCT_12M)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "pct_36m":
+        series = _load_tff_metric_full_series(
+            store,
+            instrument,
+            params_with_default,
+            n_obs=_LOOKBACK_PCT_36M + 1,
+            default_metric=default_metric,
+        )
+        if series is None:
+            return 0.0
+        result = _mode_pct(series, instrument, _LOOKBACK_PCT_36M)
+        if result is None:
+            _log.info(
+                f"{log_prefix}.pct_36m_fallback_to_12m",
+                instrument=instrument,
+                available_obs=len(series),
+                required=_LOOKBACK_PCT_36M + 1,
+            )
+            result = _mode_pct(series, instrument, _LOOKBACK_PCT_12M)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_5d_z":
+        series = _load_tff_metric_full_series(
+            store,
+            instrument,
+            params_with_default,
+            n_obs=_DELTA_5D_REPORTS + _LOOKBACK_DELTA + 1,
+            default_metric=default_metric,
+        )
+        if series is None:
+            return 0.0
+        result = _mode_delta_z(
+            series,
+            instrument,
+            delta_reports=_DELTA_5D_REPORTS,
+            lookback=_LOOKBACK_DELTA,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_20d_z":
+        series = _load_tff_metric_full_series(
+            store,
+            instrument,
+            params_with_default,
+            n_obs=_DELTA_20D_REPORTS + _LOOKBACK_DELTA + 1,
+            default_metric=default_metric,
+        )
+        if series is None:
+            return 0.0
+        result = _mode_delta_z(
+            series,
+            instrument,
+            delta_reports=_DELTA_20D_REPORTS,
+            lookback=_LOOKBACK_DELTA,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        series = _load_tff_metric_full_series(
+            store,
+            instrument,
+            params_with_default,
+            n_obs=_LOOKBACK_PCT_12M + 1,
+            default_metric=default_metric,
+        )
+        if series is None:
+            return 0.0
+        pct = _mode_pct(series, instrument, _LOOKBACK_PCT_12M)
+        if pct is None:
+            return 0.0
+        return _extreme_flag(pct, hard=(mode == "extreme_flag_hard"))
+
+    # Ukjent mode: log + fall-back
+    _log.warning(
+        f"{log_prefix}.unknown_mode_falling_back_to_default",
+        instrument=instrument,
+        mode=mode,
+    )
+    return _tff_driver_default(store, instrument, params, default_metric=default_metric)
+
+
+@register("positioning_lev_funds_pct")
+def positioning_lev_funds_pct(store: Any, instrument: str, params: dict) -> float:
+    """Rank-percentile av Leveraged Funds net positioning (TFF), 0..1.
+
+    D1 A4 (sub-fase 12.7, session 128). TFF-driver for finansielle
+    futures (FX, krypto, indekser). Leveraged Funds = hedge funds + CTAs
+    + andre spekulative aktører — primær spec-mål for "smart money"-
+    posisjonering.
+
+    Default-output (mode=None): 1.0 ved ekstrem long, 0.5 ved median,
+    0.0 ved ekstrem short. Bit-identisk pattern til positioning_mm_pct
+    men leser fra TFF-tabellen.
+
+    Mode-tabell (full R3-utbygging per pattern-doc § 1.1):
+    pct_12m / pct_36m / delta_5d_z / delta_20d_z / extreme_flag_hard/soft.
+
+    Params:
+        metric: TFF-metric (default ``lev_funds_net_pct`` —
+            normalisert mot OI). ``lev_funds_net`` for absolutt-tall.
+        lookback_weeks: rolling-vindu (default 52).
+        mode: R4 feature-velger.
+        _horizon: engine-injisert per ADR-010 (lest, ikke brukt i R4).
+
+    Defensiv 0.0-retur ved manglende TFF-data eller utilstrekkelig
+    historikk.
+    """
+    return _tff_driver_with_modes(
+        store,
+        instrument,
+        params,
+        default_metric="lev_funds_net_pct",
+        log_prefix="positioning_lev_funds_pct",
+    )
+
+
+@register("positioning_asset_mgr_pct")
+def positioning_asset_mgr_pct(store: Any, instrument: str, params: dict) -> float:
+    """Rank-percentile av Asset Manager net positioning (TFF), 0..1.
+
+    D1 A4 (sub-fase 12.7, session 128). TFF-driver for institutional
+    real-money flow. Asset Manager = pensjonsfond, forsikring, andre
+    institusjonelle investorer — slow-moving secular flow, vs Leveraged
+    Funds som er taktisk/mean-reverting.
+
+    Default + mode-utbygging identisk pattern som
+    positioning_lev_funds_pct.
+
+    Params:
+        metric: TFF-metric (default ``asset_mgr_net_pct``).
+        lookback_weeks: rolling-vindu (default 52).
+        mode: R4 feature-velger.
+        _horizon: engine-injisert per ADR-010.
+
+    Defensiv 0.0-retur ved manglende TFF-data.
+    """
+    return _tff_driver_with_modes(
+        store,
+        instrument,
+        params,
+        default_metric="asset_mgr_net_pct",
+        log_prefix="positioning_asset_mgr_pct",
+    )
+
+
 __all__ = [
     "cot_euronext_mm_pct",
     "cot_ice_mm_pct",
     "cot_z_score",
+    "positioning_asset_mgr_pct",
+    "positioning_lev_funds_pct",
     "positioning_mm_pct",
 ]
