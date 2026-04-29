@@ -49,29 +49,34 @@ families:
         params: {metric: mm_net_pct, lookback_weeks: 52}
   macro:
     # Silver: like Gold men mer industriell — også føler igjennom på
-    # vekstbekymring. Real-yield-følsomhet mindre enn Gold.
-    # Sub-fase 12.5+ session 108: comex_stress lagt til — sølv har
-    # historisk lavere coverage enn gull (mer industriell etterspørsel)
-    # så supply-stress er sterkere fundamental (vekt 0.30).
+    # vekstbekymring. Real-yield-følsomhet mindre enn Gold (vekt 0.15 vs Gold
+    # 0.30). Sub-fase 12.5+ session 108 + 109: comex_stress + mining_disruption
+    # (Mexico 23 % + Chile/Peru 18 %).
+    # Sub-fase 12.7 D2 A6 (session 132): etf_holdings_change@0.20 lagt til —
+    # iShares Silver (SLV) shares_outstanding-WoW som proxy for tonnes (SLV-
+    # feed mangler tonnes; expense-ratio-decay ~0.5 %/år neglisjerbar på
+    # WoW/MoM-skala). Vekter omfordelt til § 19.5 Del C+ måltilstand:
+    # real_yield 0.15 + dxy 0.25 + vix 0.10 + comex 0.20 + mining 0.10 +
+    # etf 0.20 = 1.00.
     drivers:
       - name: real_yield
-        weight: 0.2
+        weight: 0.15
         params: {bull_when: low}
       - name: dxy_chg5d
-        weight: 0.3
+        weight: 0.25
         params: {bull_when: negative, window: 5}
       - name: vix_regime
-        weight: 0.15
+        weight: 0.1
         params: {invert: true}
       - name: comex_stress
-        weight: 0.25
+        weight: 0.2
         params: {metal: silver, wow_window: 5}
-      # Sub-fase 12.5+ session 109: mining_disruption — Mexico (23%) +
-      # Chile/Peru (18%) er primære sølv-regioner. 0.10 vekt fordi sølv-
-      # mining er moderat konsentrert.
       - name: mining_disruption
         weight: 0.1
         params: {metal: silver, lookback_days: 7}
+      - name: etf_holdings_change
+        weight: 0.2
+        params: {ticker: slv, bull_when: high, wow_window: 5}
   structure:
     drivers:
       - name: range_position

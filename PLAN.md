@@ -1806,25 +1806,33 @@ Vekten i Brent/CrudeOil/NaturalGas macro er liten (co-driver) og
 arkitektonisk friksjon (manuell CSV-fallback fra dag 1) rettferdiggjør
 ikke 12.7-scope. Vurderes på nytt i Plan-S hvis ny rute åpner. ·
 A2 AGSI EU gas storage (API, 2011+, daglig, macro low_bull) ·
-**A3 FAS Export Sales — RE-AKTIVERT 2026-04-29 (D2-prep)**: USDA FAS
+**A3 FAS Export Sales — DEFERRED 2026-04-29 (D2-prep)**: USDA FAS
 Open Data API. Bruker har registrert api.data.gov-key (gratis,
 universell mot ESR/GATS/PSD og andre USDA/føderale endpoints).
 Lagret som `FAS_API_KEY` + `USDA_API_KEY` + `API_DATA_GOV_KEY` i
-`~/.bedrock/secrets.env`. Klar for D2-implementasjon. ·
+`~/.bedrock/secrets.env`. **Session 132 smoke-test feilet** mot
+`apps.fas.usda.gov/OpenData/api/esr/commodities` med både
+`X-Api-Key`-header, `?api_key=`-query-param og `API_KEY`-header
+("Bad API Key" / "An error has occurred"). FAS Open Data ser ut til
+å kreve egen Azure API-Management-subscription-format, ikke api.data.
+gov-stil-key. Defer til session 133 — krever bruker-undersøkelse av
+korrekt subscription-flyt på `apps.fas.usda.gov/opendataweb`. ·
 A4 CFTC TFF (ny tabell-variant i eksisterende COT-Socrata-modul, 2010+) ·
-**A5 GLD ETF holdings — GO 2026-04-29 (D2-prep)**: full historikk via
-SPDR `api.spdrgoldshares.com/api/v1/historical-archive`-endpoint
-(Excel/xlsx, 2004-11-18→2026-04-28, 5593 rader). Manuell data klar i
-`bedrock manuell data/gld_holdings/` med både `.xlsx` og normalisert
-CSV. Schema: `date, tonnes_in_trust, ounces_in_trust, nav_per_share,
-closing_price, shares_volume, nav_total`. ·
-**A6 SLV ETF holdings — PARTIAL 2026-04-29 (D2-prep)**: iShares xls-
-endpoint gir kun `nav_per_share` + `shares_outstanding` (5039 rader,
-2006-04-21→2026-04-28). **Ingen direkte tonnes/ounces** —
-`etf_holdings_change`-driver må bruke `shares_outstanding`-change som
-proxy (silver-per-share-endring er ~0.5%/år expense ratio,
-neglisjerbar på WoW/MoM-skala). Manuell data i
-`bedrock manuell data/slv_holdings/` med xls-original + CSV. ·
+**A5 GLD ETF holdings — LEVERT 2026-04-29 (session 132)**: full
+historikk via SPDR `api.spdrgoldshares.com/api/v1/historical-archive`-
+endpoint (Excel/xlsx, 2004-11-18→2026-04-28, 5593 rader, manuell
+data klar i `bedrock manuell data/gld_holdings/`). Implementert som
+felles `etf_holdings`-tabell + `etf_holdings_change`-driver med
+ticker-param-dispatch (delt med A6 SLV). Wired i Gold macro@0.15 per
+§ 19.5 Del C+ måltilstand. ·
+**A6 SLV ETF holdings — LEVERT 2026-04-29 (session 132, PARTIAL via
+proxy)**: iShares xls-endpoint gir kun `nav_per_share` +
+`shares_outstanding` (5039 rader, 2006-04-21→2026-04-28). Ingen
+direkte tonnes/ounces — `etf_holdings_change`-driver bruker
+`shares_outstanding`-change som proxy (silver-per-share-decay er
+~0.5 %/år expense ratio, neglisjerbar på WoW/MoM-skala; caveat
+dokumentert i driver-docstring + MANIFEST). Wired i Silver macro@0.20
+per § 19.5 Del C+ måltilstand. Delt schema/driver med A5 GLD. ·
 ~~A7 PPLT ETF holdings~~ — **DROPPED 2026-04-29 (D2-prep)**: abrdn
 har lukket alle public APIer for PPLT (etter migrering fra Aberdeen
 Standard). SEC EDGAR har kun kvartalsvise 10-K/10-Q (CIK 0001460235)

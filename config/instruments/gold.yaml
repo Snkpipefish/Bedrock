@@ -74,38 +74,47 @@ families:
           metric: mm_net_pct
           lookback_weeks: 52
   macro:
-    # Sub-fase 12.5 session 71 + 108: ekte macro-drivere.
+    # Sub-fase 12.5 session 71 + 108 + 109: ekte macro-drivere.
     # Gold som ikke-rentebærende metall får støtte når real-yield faller,
     # USD svekkes, og når VIX viser stress (safe-haven via invert=true).
-    # Sub-fase 12.5+ session 108: comex_stress lagt til — låg coverage
-    # (registered/total) = supply tight = squeeze-risk = bullish.
+    # comex_stress (108): låg coverage (registered/total) = supply tight =
+    # squeeze-risk = bullish. mining_disruption (109): USGS-events i
+    # gull-mining-regioner.
+    # Sub-fase 12.7 D2 A5 (session 132): etf_holdings_change@0.15 lagt til —
+    # SPDR Gold (GLD) tonnes_in_trust WoW change. ETF-inflows = økt physical
+    # investment demand = bull. Vekter omfordelt til § 19.5 Del C+ måltilstand:
+    # real_yield 0.30 + dxy 0.20 + vix 0.10 + comex 0.15 + mining 0.10 +
+    # etf 0.15 = 1.00.
     drivers:
       - name: real_yield
         weight: 0.3
         params:
           bull_when: low
       - name: dxy_chg5d
-        weight: 0.25
+        weight: 0.2
         params:
           bull_when: negative
           window: 5
       - name: vix_regime
-        weight: 0.15
+        weight: 0.1
         params:
           invert: true
       - name: comex_stress
-        weight: 0.2
+        weight: 0.15
         params:
           metal: gold
           wow_window: 5
-      # Sub-fase 12.5+ session 109: mining_disruption — USGS-events i
-      # gull-mining-regioner. Mindre vekt enn comex_stress siden gull-
-      # mining er spredt globalt (ingen enkelt region dominerer).
       - name: mining_disruption
         weight: 0.1
         params:
           metal: gold
           lookback_days: 7
+      - name: etf_holdings_change
+        weight: 0.15
+        params:
+          ticker: gld
+          bull_when: high
+          wow_window: 5
   structure:
     # Sub-fase 12.5 Block A polish session 79: range_position erstatter
     # sma200_align (sma er trend, ikke structure). 20-dagers range-posisjon
