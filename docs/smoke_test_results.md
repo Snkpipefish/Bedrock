@@ -286,7 +286,64 @@ viste Yahoo-curve), backtest-validering.
    D1 eller pre-D1.
 2. **Cross-module helper-import** (R4-tech-gjeld 2) — lazy-import-løsning
    fungerer; utsatt.
-3. **B1 BAMLH0A0HYM2 + BAMLC0A0CM 3-års-historikk** (D0-funn) — D1 må
-   undersøke alternativ kilde eller drop fra B1-scope.
-4. **A1 Baker Hughes endpoint-timeout** — verifiseres på annen maskin
-   før D1-implementasjon.
+
+## D1-pre-verifiseringsrunde (session 127)
+
+5 D0-flagg re-testet ved D1-åpning:
+
+### V1 — A8 NOPA alternativ-rute
+
+**Funn:** Soybean yield-familien er allerede på 0.25/0.25/0.50
+(weather/crop_progress/wasde) — NOPA-justering ble ALDRI implementert i
+YAML. **Ingen revertering kreves.** A8 NOPA forblir BLOCK; § 19.8-vekt-
+notatet er hypotetisk og er nå droppet siden NOPA er bekreftet paywall.
+
+### V2 — B1 OAS-pair re-test → AAA10Y/BAA10Y-bytte
+
+**Funn:** OAS-paret er ekte 3y-begrenset fra FRED gratis-API (ikke API-
+bug). Re-test med `observation_start=1996-01-01` ga samme 793 rader
+fra 2023-04-30. **D1 anbefaling:** Bytt B1 OAS-paret til Moody's
+kreditt-spread-proxier:
+- `AAA10Y` (Moody's AAA Corporate − 10Y Treasury): 30 år historikk
+  (1996-01-01+, 7911 rader daglig)
+- `BAA10Y` (Moody's BAA Corporate − 10Y Treasury): 30 år historikk
+  (proxy for kreditt-stress; BAA er laveste IG-grade, ikke HY, men
+  bedre enn ingenting)
+
+Begge GO ved 30 år. Dokumenter i B1-scope at OAS-paret er erstattet
+med AAA10Y + BAA10Y for D1-implementasjon.
+
+### V3 — A1 Baker Hughes via FRED
+
+**Funn:** FRED har INGEN Baker Hughes rig count-serier (`series/search?
+search_text=baker+hughes+rig` = 0 treff; generisk "rig count" treff er
+falske lønnsdata). **A1 forblir RISK.** D1-implementasjon må enten:
+1. Verifisere `rigcount.bakerhughes.com` fra annen maskin
+2. Bruke manuell CSV-fallback fra dag 1 (per ADR-007)
+3. Drop fra D1-scope hvis ingen alternativ
+
+### V4 — A4 TFF metadata pre-2010
+
+**Funn:** TFF-data fra juni 2006 er ekte (non-zero OI + dealer-
+positioning på alle 5 viste kontrakter: Eurodollars, Russell 2000,
+Nikkei). **Ikke backfilled/extrapolated.** A4 historikk **bedre enn
+forventet:** 19.9 år (juni 2006+) vs spec-anslag 2010+. Klassifikasjon
+**GO** bekreftet.
+
+### V5 — A5/A6/A7 direkte-CSV-URL-patterns
+
+**Funn:**
+- GLD `spdrgoldshares.com/assets/dynamic/GLD/GLD_US_archive_EN.csv`:
+  HTTP 200, 697KB, men er **PDF-arkiv** (filendelse er misvisende).
+  Krever PDF-parsing for tabeller.
+- SLV `ishares.com/.../SLV_holdings`: HTTP 200, men returnerer 3 bytes
+  (empty JSON).
+- PPLT `abrdn.com/api/etf-holdings/PPLT`: HTTP 500 (intet endpoint).
+
+**A5/A6/A7 forblir RISK.** D2-implementasjon må enten:
+1. PDF-parsing av GLD-arkivet (poppler-utils + pypdf-fallback per
+   ADR-007 § 6)
+2. Reverse-engineer iShares + Aberdeen JSON/AJAX-API
+3. Manuell CSV-fallback fra dag 1
+4. Yahoo-tickere GLD/SLV/PPLT som tertiær fallback (gir markedspris,
+   ikke fysiske holdings)
