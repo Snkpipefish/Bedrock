@@ -1201,7 +1201,205 @@ def _drought_monitor_default(current: float, bull_when: str, params: dict) -> fl
     return round(score, 4)
 
 
+# ---------------------------------------------------------------------------
+# cecafe_export_change (sub-fase 12.7 D3 A10, session 135)
+# ---------------------------------------------------------------------------
+#
+# Cecafé månedlig brasiliansk kaffe-eksport — proxy for global supply-stress.
+# Brasil står for ~40 % av global kaffeproduksjon og er klart største
+# eksportør av arabica. Lave eksport-volumer = supply-stress = bullish for
+# kaffe-pris (KC). bull_when="low" default per § 19.5 Del A A10.
+#
+# Default-trapp på MoM %-endring i ``volume_60kg_bags`` for
+# ``coffee_type='sum'``. NB: Brasiliansk kaffe har sterk sesongmessig
+# variasjon (lav-eksport jan-mar, høy-eksport apr-aug), så MoM-volatilitet
+# er stor. Wider thresholds enn FAS weekly. R4-modes (pct_12m/pct_36m)
+# opererer på full serie og gir bedre signal — bruk dem hvis tilgjengelig.
+
+_DEFAULT_CECAFE_MOM_THRESHOLDS_HIGH: tuple[tuple[float, float], ...] = (
+    # bull_when="high": positiv MoM = bull (sterk export demand).
+    # Etter flip ved bull_when="low" (kaffe default): lavt MoM-volume =
+    # bull (supply tight). Steps på MoM %-endring i sum(volume_60kg_bags).
+    # Wider intervaller enn weekly-drivere pga månedlig sesongvariasjon.
+    (-40.0, 0.0),  # ≤ -40% MoM = sterk drop = bear i "high"-konvensjon
+    (-15.0, 0.25),
+    (0.0, 0.5),  # flat MoM = nøytral
+    (15.0, 0.75),
+    (40.0, 1.0),  # ≥ +40% MoM = sterk increase = bull i "high"-konvensjon
+)
+
+
+@register("cecafe_export_change")
+def cecafe_export_change(store: Any, instrument: str, params: dict) -> float:
+    """Cecafé månedlig kaffe-eksport-endring mappet til 0..1 for Coffee.
+
+    Sub-fase 12.7 D3 A10 (session 135). Brukes i Coffee conab-familien
+    sammen med ``conab_yoy`` (Brazil-produksjons-anslag).
+
+    Default (mode=None): MoM (måned-til-måned) %-endring i
+    ``volume_60kg_bags`` for ``coffee_type='sum'``. Steps via terskel-
+    trapp (-40 → 0; +40 → 1.0; bredere enn weekly pga sesongvariasjon).
+
+    Modes per ADR-010 (pct_12m/pct_36m/delta_5d_z/delta_20d_z/
+    extreme_flag_*) opererer på månedlig sum-tids-serie. Månedlig data
+    + DAILY-lookback-konstanter gir rolling-vindu på 252 rader = ~21 år
+    månedlig (godt nok for percentile-rangering); pct_36m faller tilbake
+    til pct_12m hvis utilstrekkelig historikk.
+
+    Tolkning:
+        bull_when="low" (default): lavt eksportvolum = supply-issue =
+            bull for kaffe-pris (Brasil ~40 % av global supply).
+        bull_when="high": invertert.
+
+    Params:
+        coffee_type: hvilken type skal brukes (default ``"sum"``). Andre:
+            ``"arabica"`` (KC primær), ``"robusta"``, ``"industrialized"``.
+        bull_when: "low" (default) eller "high".
+        thresholds: optional override for default-trapp.
+        mode: feature-velger per ADR-010.
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt i R4.
+
+    Defensive 0.0 ved manglende data.
+    """
+    _horizon = params.get("_horizon")
+    coffee_type = str(params.get("coffee_type", "sum")).lower()
+    bull_when = str(params.get("bull_when", "low")).lower()
+    mode = params.get("mode")
+
+    try:
+        df = store.get_cecafe_exports(coffee_type)
+    except KeyError:
+        _log.debug("cecafe_export_change.no_data", instrument=instrument, coffee_type=coffee_type)
+        return 0.0
+    except Exception as exc:
+        _log.warning(
+            "cecafe_export_change.fetch_failed",
+            instrument=instrument,
+            coffee_type=coffee_type,
+            error=str(exc),
+        )
+        return 0.0
+
+    if df.empty or "volume_60kg_bags" not in df.columns:
+        return 0.0
+
+    import pandas as pd
+
+    series = pd.Series(
+        df["volume_60kg_bags"].values,
+        index=pd.to_datetime(df["month"]),
+    ).dropna()
+
+    if series.empty:
+        return 0.0
+
+    if mode is None:
+        return _cecafe_export_change_default(series, bull_when, params)
+
+    from bedrock.engine.drivers.horizon_helpers import (
+        DELTA_5D_DAYS as _DELTA_5D_DAYS,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        DELTA_20D_DAYS as _DELTA_20D_DAYS,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        LOOKBACK_DELTA_DAILY as _LOOKBACK_DELTA_DAILY,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        LOOKBACK_PCT_12M_DAILY as _LOOKBACK_PCT_12M_DAILY,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        LOOKBACK_PCT_36M_DAILY as _LOOKBACK_PCT_36M_DAILY,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        fundamentals_delta_score as _fundamentals_delta_score,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        fundamentals_extreme_flag as _fundamentals_extreme_flag,
+    )
+    from bedrock.engine.drivers.horizon_helpers import (
+        fundamentals_pct_score as _fundamentals_pct_score,
+    )
+
+    if mode == "pct_12m":
+        result = _fundamentals_pct_score(series, bull_when, _LOOKBACK_PCT_12M_DAILY, instrument)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "pct_36m":
+        result = _fundamentals_pct_score(series, bull_when, _LOOKBACK_PCT_36M_DAILY, instrument)
+        if result is None:
+            result = _fundamentals_pct_score(series, bull_when, _LOOKBACK_PCT_12M_DAILY, instrument)
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_5d_z":
+        result = _fundamentals_delta_score(
+            series,
+            bull_when,
+            delta_days=_DELTA_5D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode == "delta_20d_z":
+        result = _fundamentals_delta_score(
+            series,
+            bull_when,
+            delta_days=_DELTA_20D_DAYS,
+            lookback=_LOOKBACK_DELTA_DAILY,
+            instrument=instrument,
+        )
+        return round(result, 4) if result is not None else 0.0
+
+    if mode in ("extreme_flag_hard", "extreme_flag_soft"):
+        result = _fundamentals_extreme_flag(
+            series,
+            hard=(mode == "extreme_flag_hard"),
+            lookback=_LOOKBACK_PCT_12M_DAILY,
+            instrument=instrument,
+        )
+        return result if result is not None else 0.0
+
+    _log.warning(
+        "cecafe_export_change.unknown_mode_falling_back_to_default",
+        instrument=instrument,
+        mode=mode,
+    )
+    return _cecafe_export_change_default(series, bull_when, params)
+
+
+def _cecafe_export_change_default(series: Any, bull_when: str, params: dict) -> float:
+    """Default-trapp på MoM %-endring i sum(volume_60kg_bags)."""
+    if len(series) < 2:
+        return 0.5
+
+    current = float(series.iloc[-1])
+    prev = float(series.iloc[-2])
+
+    if prev == 0:
+        return 0.5
+
+    pct_change = (current - prev) / abs(prev) * 100.0
+
+    user_thresholds = params.get("thresholds")
+    if user_thresholds is None:
+        steps = _DEFAULT_CECAFE_MOM_THRESHOLDS_HIGH
+    else:
+        steps = tuple((float(t), float(s)) for t, s in user_thresholds)
+
+    score = 1.0
+    for threshold, s in sorted(steps, key=lambda t: t[0]):
+        if pct_change <= threshold:
+            score = float(s)
+            break
+
+    if bull_when == "low":
+        return round(1.0 - score, 4)
+    return round(score, 4)
+
+
 __all__ = [
+    "cecafe_export_change",
     "conab_yoy",
     "crop_progress_stage",
     "disease_pressure",
