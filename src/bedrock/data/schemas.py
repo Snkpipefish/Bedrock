@@ -1576,3 +1576,64 @@ class AaiiSentimentRow(BaseModel):
     bull_bear_spread: float | None = None
 
     model_config = ConfigDict(extra="forbid")
+
+
+# ---------------------------------------------------------------------------
+# ETF holdings (sub-fase 12.7 D2 A5/A6, session 132)
+# ---------------------------------------------------------------------------
+# Felles tabell for daglig physical-ETF holdings — initialt SPDR Gold (GLD)
+# og iShares Silver (SLV). Future-extensible til PPLT/IAU/PHYS hvis daglige
+# holdings-feeds åpner. Driver `etf_holdings_change` dispatcher på ticker
+# og leser primær-metric per ticker:
+#
+# - ``gld``: ``tonnes_in_trust`` (primær), ``ounces_in_trust`` (sekundær).
+# - ``slv``: ``shares_outstanding`` (primær — SLV-feed mangler tonnes;
+#   driver-docstring forklarer expense-ratio-proxy-caveat).
+#
+# Tolkning: økt holdings = økt physical investment demand = bull-of-metal.
+# Driver bull_when=high.
+
+TABLE_ETF_HOLDINGS = "etf_holdings"
+
+DDL_ETF_HOLDINGS = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_ETF_HOLDINGS} (
+    ticker              TEXT NOT NULL,         -- 'gld', 'slv', evt. 'pplt'
+    date                TEXT NOT NULL,         -- ISO YYYY-MM-DD
+    tonnes_in_trust     REAL,                  -- primær for GLD; NULL for SLV
+    ounces_in_trust     REAL,                  -- sekundær for GLD
+    shares_outstanding  REAL,                  -- primær for SLV; brukbar for GLD
+    nav_per_share       REAL,
+    PRIMARY KEY (ticker, date)
+)
+"""
+
+ETF_HOLDINGS_COLS: tuple[str, ...] = (
+    "ticker",
+    "date",
+    "tonnes_in_trust",
+    "ounces_in_trust",
+    "shares_outstanding",
+    "nav_per_share",
+)
+
+
+class EtfHoldingsRow(BaseModel):
+    """Én daglig observasjon av physical-ETF holdings.
+
+    Felter er nullable for å tåle ulike feeds: GLD har tonnes/ounces/NAV;
+    SLV har kun shares_outstanding + NAV. ``ticker`` lowercase.
+    """
+
+    ticker: str = Field(min_length=2, max_length=8)
+    date: date
+    tonnes_in_trust: float | None = None
+    ounces_in_trust: float | None = None
+    shares_outstanding: float | None = None
+    nav_per_share: float | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("ticker")
+    @classmethod
+    def _normalize_ticker(cls, v: str) -> str:
+        return v.lower().strip()

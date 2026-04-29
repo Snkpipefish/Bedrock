@@ -58,6 +58,7 @@ from bedrock.data.schemas import (
     DDL_DISEASE_ALERTS,
     DDL_ECON_EVENTS,
     DDL_EIA_INVENTORY,
+    DDL_ETF_HOLDINGS,
     DDL_EXPORT_EVENTS,
     DDL_FUNDAMENTALS,
     DDL_IGC,
@@ -72,6 +73,7 @@ from bedrock.data.schemas import (
     DISEASE_ALERTS_COLS,
     ECON_EVENTS_COLS,
     EIA_INVENTORY_COLS,
+    ETF_HOLDINGS_COLS,
     EXPORT_EVENTS_COLS,
     FUNDAMENTALS_COLS,
     IGC_COLS,
@@ -94,6 +96,7 @@ from bedrock.data.schemas import (
     TABLE_DISEASE_ALERTS,
     TABLE_ECON_EVENTS,
     TABLE_EIA_INVENTORY,
+    TABLE_ETF_HOLDINGS,
     TABLE_EXPORT_EVENTS,
     TABLE_FUNDAMENTALS,
     TABLE_IGC,
@@ -197,6 +200,9 @@ class DataStore:
             conn.execute(DDL_AGSI_STORAGE)
             # Sub-fase 12.7 D2 A12 (session 131): AAII Sentiment Survey.
             conn.execute(DDL_AAII_SENTIMENT)
+            # Sub-fase 12.7 D2 A5/A6 (session 132): physical-ETF holdings
+            # (GLD/SLV; future-extensible).
+            conn.execute(DDL_ETF_HOLDINGS)
             conn.commit()
 
     def _migrate_bdi_to_shipping_indices(self, conn: sqlite3.Connection) -> None:
@@ -2044,6 +2050,97 @@ class DataStore:
         """Test-hjelper: sjekk om tabellen har minst én rad."""
         with self._connect() as conn:
             cursor = conn.execute(f"SELECT 1 FROM {TABLE_AAII_SENTIMENT} LIMIT 1")
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # ETF holdings (sub-fase 12.7 D2 A5/A6, session 132)
+    # ------------------------------------------------------------------
+
+    def append_etf_holdings(self, df: pd.DataFrame) -> int:
+        """Skriv ETF-holdings-rader til ``etf_holdings``. Returnerer antall.
+
+        `df` må ha kolonnene i ``ETF_HOLDINGS_COLS``. Idempotent på
+        (ticker, date) via INSERT OR REPLACE.
+        """
+        missing = [c for c in ETF_HOLDINGS_COLS if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_etf_holdings: missing columns {missing}. "
+                f"Required: {list(ETF_HOLDINGS_COLS)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df[list(ETF_HOLDINGS_COLS)].copy()
+        prepared["date"] = pd.to_datetime(prepared["date"]).dt.strftime("%Y-%m-%d")
+
+        def _opt(v: object) -> float | None:
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return None
+            return float(v)  # type: ignore[arg-type]
+
+        rows: Sequence[tuple] = [
+            (
+                str(row.ticker).lower(),
+                row.date,
+                _opt(row.tonnes_in_trust),
+                _opt(row.ounces_in_trust),
+                _opt(row.shares_outstanding),
+                _opt(row.nav_per_share),
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_ETF_HOLDINGS} "
+                f"(ticker, date, tonnes_in_trust, ounces_in_trust, "
+                f"shares_outstanding, nav_per_share) "
+                f"VALUES (?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_etf_holdings(
+        self,
+        ticker: str,
+        from_date: str | date | None = None,
+        to_date: str | date | None = None,
+    ) -> pd.DataFrame:
+        """Returner ETF-holdings for `ticker`, sortert ASC på date.
+
+        Kaster ``KeyError`` hvis ingen rader finnes for `ticker`.
+        """
+        ticker_norm = ticker.lower().strip()
+        clauses = ["ticker = ?"]
+        params: list[Any] = [ticker_norm]
+        if from_date is not None:
+            clauses.append("date >= ?")
+            params.append(str(from_date))
+        if to_date is not None:
+            clauses.append("date <= ?")
+            params.append(str(to_date))
+
+        query = (
+            f"SELECT * FROM {TABLE_ETF_HOLDINGS} "
+            f"WHERE {' AND '.join(clauses)} ORDER BY date ASC"
+        )
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=params)
+
+        if df.empty:
+            raise KeyError(f"No ETF holdings for ticker={ticker_norm!r}")
+
+        df["date"] = pd.to_datetime(df["date"])
+        return df
+
+    def has_etf_holdings(self, ticker: str) -> bool:
+        """Test-hjelper: sjekk om `ticker` har minst én rad."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"SELECT 1 FROM {TABLE_ETF_HOLDINGS} WHERE ticker = ? LIMIT 1",
+                (ticker.lower().strip(),),
+            )
             return cursor.fetchone() is not None
 
     # ------------------------------------------------------------------
