@@ -34,6 +34,7 @@ from bedrock.data.schemas import (
     AAII_SENTIMENT_COLS,
     AGSI_STORAGE_COLS,
     ANALOG_OUTCOMES_COLS,
+    CECAFE_EXPORTS_COLS,
     COMEX_INVENTORY_COLS,
     CONAB_ESTIMATES_COLS,
     COT_DISAGGREGATED_COLS,
@@ -46,6 +47,7 @@ from bedrock.data.schemas import (
     DDL_AAII_SENTIMENT,
     DDL_AGSI_STORAGE,
     DDL_ANALOG_OUTCOMES,
+    DDL_CECAFE_EXPORTS,
     DDL_COMEX_INVENTORY,
     DDL_CONAB_ESTIMATES,
     DDL_COT_DISAGGREGATED,
@@ -88,6 +90,7 @@ from bedrock.data.schemas import (
     TABLE_AGSI_STORAGE,
     TABLE_ANALOG_OUTCOMES,
     TABLE_BDI,
+    TABLE_CECAFE_EXPORTS,
     TABLE_COMEX_INVENTORY,
     TABLE_CONAB_ESTIMATES,
     TABLE_COT_DISAGGREGATED,
@@ -213,6 +216,8 @@ class DataStore:
             conn.execute(DDL_FAS_ESR)
             # Sub-fase 12.7 D2 A9 (session 133): US Drought Monitor.
             conn.execute(DDL_DROUGHT_MONITOR)
+            # Sub-fase 12.7 D3 A10 (session 135): Cecafé Brasil kaffe-eksport.
+            conn.execute(DDL_CECAFE_EXPORTS)
             conn.commit()
 
     def _migrate_bdi_to_shipping_indices(self, conn: sqlite3.Connection) -> None:
@@ -2362,6 +2367,103 @@ class DataStore:
             cursor = conn.execute(
                 f"SELECT 1 FROM {TABLE_DROUGHT_MONITOR} WHERE aoi = ? LIMIT 1",
                 (aoi.lower().strip(),),
+            )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # Cecafé Brasil kaffe-eksport (sub-fase 12.7 D3 A10, session 135)
+    # ------------------------------------------------------------------
+
+    def append_cecafe_exports(self, df: pd.DataFrame) -> int:
+        """Skriv Cecafé-eksport-rader til ``cecafe_exports``. Idempotent på
+        (month, coffee_type) via INSERT OR REPLACE. Returnerer antall rader."""
+        missing = [c for c in CECAFE_EXPORTS_COLS if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_cecafe_exports: missing columns {missing}. "
+                f"Required: {list(CECAFE_EXPORTS_COLS)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df[list(CECAFE_EXPORTS_COLS)].copy()
+        prepared["month"] = pd.to_datetime(prepared["month"]).dt.strftime("%Y-%m-%d")
+
+        def _opt_int(v: object) -> int | None:
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return None
+            return int(v)  # type: ignore[arg-type]
+
+        def _opt_float(v: object) -> float | None:
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return None
+            return float(v)  # type: ignore[arg-type]
+
+        def _opt_str(v: object) -> str | None:
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return None
+            s = str(v).strip()
+            return s if s else None
+
+        rows: Sequence[tuple] = [
+            (
+                row.month,
+                str(row.coffee_type).lower().strip(),
+                _opt_int(row.volume_60kg_bags),
+                _opt_float(row.fob_value_usd),
+                _opt_str(row.source_pdf),
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_CECAFE_EXPORTS} "
+                f"(month, coffee_type, volume_60kg_bags, fob_value_usd, source_pdf) "
+                f"VALUES (?, ?, ?, ?, ?)",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_cecafe_exports(
+        self,
+        coffee_type: str = "sum",
+        from_month: str | date | None = None,
+        to_month: str | date | None = None,
+    ) -> pd.DataFrame:
+        """Returner Cecafé-rader for `coffee_type`, sortert ASC på month.
+
+        Default `coffee_type='sum'` (Cecafés total — primær for driver).
+        Kaster ``KeyError`` hvis ingen rader.
+        """
+        type_norm = coffee_type.lower().strip()
+        clauses = ["coffee_type = ?"]
+        params: list[Any] = [type_norm]
+        if from_month is not None:
+            clauses.append("month >= ?")
+            params.append(str(from_month))
+        if to_month is not None:
+            clauses.append("month <= ?")
+            params.append(str(to_month))
+
+        query = (
+            f"SELECT * FROM {TABLE_CECAFE_EXPORTS} WHERE {' AND '.join(clauses)} ORDER BY month ASC"
+        )
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=params)
+
+        if df.empty:
+            raise KeyError(f"No Cecafé exports for coffee_type={type_norm!r}")
+
+        df["month"] = pd.to_datetime(df["month"])
+        return df
+
+    def has_cecafe_exports(self, coffee_type: str = "sum") -> bool:
+        """Test-hjelper: sjekk om `coffee_type` har minst én rad."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"SELECT 1 FROM {TABLE_CECAFE_EXPORTS} WHERE coffee_type = ? LIMIT 1",
+                (coffee_type.lower().strip(),),
             )
             return cursor.fetchone() is not None
 

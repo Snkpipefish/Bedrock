@@ -1789,3 +1789,68 @@ class DroughtMonitorRow(BaseModel):
     @classmethod
     def _normalize_aoi(cls, v: str) -> str:
         return v.lower().strip()
+
+
+# ---------------------------------------------------------------------------
+# Cecafé Brasil kaffe-eksport (sub-fase 12.7 D3 A10, session 135)
+# ---------------------------------------------------------------------------
+# Cecafé (Conselho dos Exportadores de Café do Brasil) publiserer månedlige
+# eksport-bulletiner i PDF-format. Brasil står for ~40 % av global kaffe-
+# produksjon og er klart største eksportør av arabica. Lave eksport-volumer
+# = supply-stress = bullish for kaffe-pris (KC).
+#
+# Kilde: https://www.cecafe.com.br/site/wp-content/uploads/graficos/
+#   CECAFE-Relatorio-Mensal-{MONTH-PT}-{YEAR}.pdf
+# Historikk: 2017-01+ via faste URLer (~120 mnd × 4 coffee_types = ~480 rad).
+# ADR-011 rolling 10-y er oppfylt (2026 - 2017 = 9 år komplett + inneværende).
+#
+# Schema: én rad per (month, coffee_type). coffee_type ∈
+# {arabica, robusta, industrialized, sum} — siste er totalen som driver
+# defaulter til.
+
+TABLE_CECAFE_EXPORTS = "cecafe_exports"
+
+DDL_CECAFE_EXPORTS = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_CECAFE_EXPORTS} (
+    month             TEXT NOT NULL,         -- ISO YYYY-MM-01 (måned-anker)
+    coffee_type       TEXT NOT NULL,         -- 'arabica'|'robusta'|'industrialized'|'sum'
+    volume_60kg_bags  INTEGER,               -- Cecafé-standard enhet (60kg bags)
+    fob_value_usd     REAL,                  -- Receita Cambial US$ FOB (mil ⇒ multiplisert)
+    source_pdf        TEXT,                  -- URL til kilde-PDF
+    PRIMARY KEY (month, coffee_type)
+)
+"""
+
+CECAFE_EXPORTS_COLS: tuple[str, ...] = (
+    "month",
+    "coffee_type",
+    "volume_60kg_bags",
+    "fob_value_usd",
+    "source_pdf",
+)
+
+_CECAFE_TYPES = frozenset({"arabica", "robusta", "industrialized", "sum"})
+
+
+class CecafeExportRow(BaseModel):
+    """Én månedlig Cecafé-eksport-observasjon for én coffee_type.
+
+    `coffee_type='sum'` er totalen Cecafé selv rapporterer (arabica + robusta
+    + torrado + solúvel). Driver `cecafe_export_change` defaulter til denne.
+    """
+
+    month: date
+    coffee_type: str = Field(min_length=3, max_length=16)
+    volume_60kg_bags: int | None = None
+    fob_value_usd: float | None = None
+    source_pdf: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("coffee_type")
+    @classmethod
+    def _normalize_type(cls, v: str) -> str:
+        norm = v.lower().strip()
+        if norm not in _CECAFE_TYPES:
+            raise ValueError(f"coffee_type must be one of {sorted(_CECAFE_TYPES)}, got {v!r}")
+        return norm
