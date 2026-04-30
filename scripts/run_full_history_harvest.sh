@@ -23,6 +23,25 @@ REPO_ROOT="$(pwd)"
 
 STEP_DAYS="${BEDROCK_HARVEST_STEP_DAYS:-14}"
 
+# Auto-resume av paused fetch-timere ved exit (session 136 mitigation
+# mot OOM/timer-kollisjon — operator pauser timere før harvest-start,
+# trap sørger for at de re-aktiveres når harvest avslutter, uavhengig
+# av suksess/feil/SIGTERM). BEDROCK_HARVEST_RESUME_TIMERS=0 skrur av
+# auto-resume hvis ønsket (f.eks. for testing).
+if [[ "${BEDROCK_HARVEST_RESUME_TIMERS:-1}" == "1" ]]; then
+    _resume_timers() {
+        echo "=== trap EXIT: re-aktiverer pausede fetch-timere ==="
+        for TIMER in bedrock-fetch-prices bedrock-fetch-fundamentals \
+                     bedrock-fetch-weather bedrock-fetch-seismic \
+                     bedrock-fetch-comex bedrock-fetch-eia_inventories \
+                     bedrock-fetch-cot_disaggregated bedrock-fetch-cot_legacy \
+                     bedrock-fetch-cot_ice bedrock-fetch-cot_euronext; do
+            systemctl --user start "${TIMER}.timer" 2>&1 | sed "s/^/  /"
+        done
+    }
+    trap _resume_timers EXIT
+fi
+
 # Alle 22 instrumenter. Whitelist-distinksjonen er IKKE tatt med —
 # fordi (a) listen endrer seg over tid og (b) vi vil teste alt på
 # tvers. Instrumenter uten analog_outcomes (BTC/ETH/NaturalGas/Copper/
