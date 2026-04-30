@@ -58,7 +58,8 @@
   - **117:** **Sub-fase 12.5+ LUKKET — ADR-009 cutover-readiness + sub-fase 12.6 åpnet + tag `v0.12.5-fetch-port-complete`.** Bruker re-direkterte session 117 fra cutover-tagging mot å bygge fundamentet for empirisk vekt-rebalansering først (full historisk kryss-asset-backtest). Resultat: 3 nye SQLite-tabeller (`driver_observations` long-format med 3 horisonter inkl. SWING/60d, `signal_setups` med entry/SL/TP/RR/ATR fra Engine.build_setup, `feature_snapshots` med 22 priser + 5 FRED + 4 shipping + 22 COT MM-net%). 5 nye scripts: harvester for driver_observations (per-instrument, resumable), harvester for feature_snapshots (Gold-kalenderdrevet, ~20-30 min for full historikk), nohup-vennlig wrapper-script for alle 22 inst sekvensielt, analyzer for per-driver IC/kvartil-hit-rate/monotonisitet, analyzer for forward-looking kryss-asset IC-matrise (alle prediktorer × alle targets). For instrumenter uten analog_outcomes (BTC/ETH/NaturalGas/Copper/Platinum) syntetiserer harvester forward_return fra prices. Detached harvest startet i session 117 — kjører ~24-35 timer i bakgrunnen. ADR-009 skrevet med 5 låste beslutninger: (a) sub-fase 12.5+ teknisk lukket; (b) ny sub-fase 12.6 "data-driven rebalansering" innføres mellom 12.5+ og Fase 13; (c) news_intel/crypto_sentiment driver-aktivering UTSETTES til harvest-data foreligger; (d) Branch-modus forblir Nivå 1 inntil Fase 13-nærhet; (e) Cutover-tidspunkt for Fase 13 IKKE besluttet — kriterier skjerpet med sub-fase 12.6-konvergens-krav. PLAN § 12.3 cutover-kriterier utvidet, ny § 12.5+ "LUKKET"-blokk, ny § 12.6 "data-driven rebalansering" med scope-detaljer (sesong-bucketing, lead-lag-IC, setup-walker), § 13-tabell oppdatert. Tag `v0.12.5-fetch-port-complete` settes på siste session 117-commit. **2036/2036 grønt, pyright 0 errors.** **LUKKET 2026-04-27**.
   - **118:** **Sub-fase 12.6 historisk datagrunnlag — massiv backfill av Phase A-C-tabeller.** Bruker rapporterte at backtest scoret over perioder uten data og kalkulerte sløsing av ressurser. Tre arbeidsstrømmer i én session: (a) Komplett gap-analyse + shopping-liste (`docs/manual_download_shopping_list.md`) som dokumenterer hva som kan automatiseres vs hva bruker må laste manuelt, med eksakte URL-mønstre og CSV-format-krav per kilde. (b) **Automatiserbare backfills** kjørt detached via ny `scripts/run_backfill.sh` (nohup + disown, overlever session-exit): USGS seismic 2010-2026 via FDSN-API år-walker → 123 350 events; ICE-COT 2011-2024 via COTHist<YEAR>.csv-arkiv → 1 598 rader; Euronext optimalisert med DB-skip + 0.7s pacing → 636 nye rader 2018-2026; CFTC navn-drift Tier 1 fortsatt → 6/8 instrumenter renamed til canonical (Brent + Copper har CFTC-data først fra 2022, ikke navn-drift). (c) **Manuell ingest** via ny `scripts/ingest_manual_data.py` (forex/conab/bdi subcommands): Forex Factory CSV 83k → 41 021 events (High+Medium impact, 2007-2026); CONAB Excel 41 filer (algodao/milho/soja/trigo, 2021/22-2025/26) → 111 rader; Investing.com BDI PDF via pdftotext → 851 rader 2014-2018 fyller pre-Yahoo-BDRY-gap. NASS-fetcher fixet med per-commodity metric-whitelist (`_VALID_METRICS_PER_COMMODITY`) — wheat har HEADING ikke SILKING; pre-flight skip av invalid kombinasjoner unngår 400 Bad Request fra USDA. **DB-effekt:** econ_events 37→41058, seismic_events 100→123 350, cot_ice 136→1598, cot_euronext 15→1218, shipping BDI 2018+→2014+, conab 7→118. **Data-gjeld dokumentert** under §Data-gjeld i denne fila — gaps som krever ekstra manuell innsats. **LUKKET 2026-04-28**.
   - **119+:** Sub-fase 12.6 fortsettelse — vente på NASS 2010-2021 (kjører detached med fix), sesong-bucketing-analyzer, setup-walker, YAML-rebalansering basert på empiri.
-- **Sub-fase 12.7 ÅPEN 2026-04-28** — horisont-refactor + data-utvidelse. Se PLAN § 19. **Alt γ LÅST**: bruker-policy "ingen backtest før all data er på plass" → 12.6 PAUSES (harvest fortsetter detached), Spor R (R1-R4) kjøres nå (bit-identisk score), Spor D (D0-D3) etter R, 12.6 gjenåpnes etter D3 over hele systemet. Trading-logikk-svar låst: 12m+36m percentil-vinduer, 2/98+5/95 ekstrem-terskler, drop GHS/XOF (Cocoa cross = dxy@0.85 + event_distance@0.15), Cotton ENSO uendret. Arkitektur låst: Alt 1 (YAML-styrt `_horizon`-param via engine-propagering analogt med `_direction`/ADR-006). ADR-012 (deprecation) + ADR-013 (failure-mode) UTSATT (Alt Z) — håndteres reaktivt per fetcher.
+- **Sub-fase 12.7 LUKKET 2026-04-30** (tag `v0.12.7-fase-12.7-LUKKET`) — horisont-refactor + data-utvidelse. Se PLAN § 19. **Alt γ LÅST**: bruker-policy "ingen backtest før all data er på plass" → 12.6 PAUSES (harvest fortsetter detached), Spor R (R1-R4) bit-identisk score, Spor D (D0-D3) etter R, 12.6 gjenåpnes etter D3. Trading-logikk-svar låst: 12m+36m percentil-vinduer, 2/98+5/95 ekstrem-terskler, drop GHS/XOF (Cocoa cross = dxy@0.85 + event_distance@0.15), Cotton ENSO uendret. Arkitektur låst: Alt 1 (YAML-styrt `_horizon`-param via engine-propagering analogt med `_direction`/ADR-006). ADR-012 + ADR-013 UTSATT (Alt Z). **Sluttilstand:** 17 nye drivere på 22 instrumenter, 13 ny SQLite-tabeller, alle D-faser tagged. R-spor bit-identisk verifisert. D3 grade-validering (3 instr flagget, ≤5-terskel = ingen eskalering).
+  - **135:** **D3 LUKKET 2026-04-30 — A10 Cecafé Brasil kaffe-eksport levert + grade-validering ×12mnd + tag `v0.12.7-d3` + tag `v0.12.7-fase-12.7-LUKKET`.** Sub-fase 12.7 endelig komplett. **A10 Cecafé** levert i 4 commit-isolerte trinn: (a) `849b693` schema/store/11 tester (TABLE_CECAFE_EXPORTS + DDL + Pydantic CecafeExportRow + append/get/has). PK (month, coffee_type) — 4 typer per måned. (b) `9a74c07` driver `cecafe_export_change` i agronomy.py (default MoM %-endring i volume_60kg_bags coffee_type='sum', terskel-trapp -40 → 0; +40 → 1.0; bull_when='low' default per § 19.5 Del A A10). R4 mode-utbygging via fundamentals_*-helpere (pct_12m/pct_36m/delta_5d_z/delta_20d_z/extreme_*). + engangs-backfill `scripts/backfill/cecafe_exports.py` per ADR-011: URL-pattern `cecafe.com.br/.../CECAFE-Relatorio-Mensal-{MONTH-PT}-{YEAR}.pdf` verifisert tilgjengelig 2017-01+ (10 år rolling oppfylt). PDF-parser med disambiguering vs receita-only-tabeller (token #9 må være price-médio i 50-1000 USD/saca). 12 driver-tester. (c) `39aed5b` backfill dedup-fix (sum-rad bevares fra siste PDF — Cecafé reviderer historiske rader; INSERT OR REPLACE PK håndterer). Live-backfill: 119/132 PDFer lastet, 167 unike måneder × 4 typer = 668 rader (2012-05 → 2026-03; 5 fremtids-måneder 404). (d) `7e15535` YAML Coffee conab fra `conab_yoy@1.00` til `conab_yoy@0.70 + cecafe_export_change@0.30 = 1.00`. Pydantic familie-sum=1.0 verifisert (alle 7 Coffee-familier). Snapshot-diff vs pre-A10-YAML baseline: 92/104 score-endringer (>1e-6), 14 grade-flips. Coffee-spesifikt: NONE buy 6.32→6.23 (B drift), NONE sell 10.98→11.07 (A→A+; direkte A10-effekt — Mar26 vs Feb26 +16% MoM = bear high-conv → bull low-conv via direction-flip). Resterende 13 grade-flips er drift-only (live data har endret seg siden forrige baseline-regen). **Live driver-verifisering 2026-04-30:** Coffee default MoM low_bull=0.0 (Mar26 +16% = bear), bull_when=high=1.0, mode=pct_12m=0.476, mode=pct_36m=0.476, coffee_type=arabica default=0.25, robusta default=0.0. **Grade-validering ×12mnd × 22 instrumenter** (`ebf8690`) — `scripts/analysis/grade_validation_12_7.py` sammenligner snapshot-baseline pre-D-spor (tag `v0.12.7-r4-finish`, bit-identisk equivalent med pre-R1 per ADR-010) vs post-D3. Resultat: 3 instrumenter flagget (≥50 % relative endring i A+-andel): Brent (A+ 0→1, B1 NetFedLiq energi-effekt — D2 viste 0→2, redusert til 1 i D3 = stabilisert), Coffee (A+ 0→1, direkte A10-effekt), Silver (A+ 1→0, drift-related). 3 ≤ 5 = under eskalerings-terskel, ingen umiddelbar terskel-rekalibrering nødvendig. Per asset-class: balansert distribusjon, ingen konsentrert bias. Per § 19.6: terskler rekalibreres ikke i 12.7, dokumenteres for 12.6. **Total drivere registrert: 44** (var 43). Pyright src/: 0/0/0. **2399/2399 tester grønne.** Tag `v0.12.7-d3` settes på `ebf8690` (siste D3-commit, før dette STATE-commit). Tag `v0.12.7-fase-12.7-LUKKET` settes på samme commit som overordnet sub-fase-finale-tag. **Sub-fase 12.6 GJENÅPNES** etter dette state-commit per Alt γ-låsen — men faktisk analyzer-runde tas i egen session 136+. **Harvest-blocker for 12.6:** detached harvest fra session 117 (startet 2026-04-27 21:58) hang seg på Brent COT-data-missing-loop ved 200/289 (~69 %) på 2026-04-28 01:35 UTC. driver_observations har kun 2691 rader (alle Brent, 2010-02 til 2021-09 ranges) — ikke komplett. feature_snapshots har 23601 rader (mer komplett). **Må diagnostiseres + restartes som første blocker i 12.6-gjenåpning.** **LUKKET 2026-04-30**.
   - **119:** **R1 ferdig 2026-04-28**: audit (`docs/horizon_refactor_audit.md`) + **ADR-010** (horisont-bevisst driver-pattern, Alt 1: YAML-styrt `_horizon` via engine-propagering analogt med `_direction`) + **ADR-011** (backfill-policy: 2010-cutoff, sekvensiell pacing 1.5s, engangs-skripts i `scripts/backfill/<source>.py` separat fra `bedrock backfill`-CLI). Engine-patch: `_score_families` setter `_horizon` i `params_with_dir` (~5 linjer + ny `horizon: str | None`-parameter). 5 micro-tester for propagering + bit-identitet. Snapshot-baseline (104 rader: 15 financial × 3 × 2 + 7 agri × 1 × 2) tatt PRE-patch og verifisert **0 forskjeller POST-patch** — score-uendret-garantien (PLAN § 19.1) konkret bekreftet. Renumret fra opprinnelig "ADR-009/010" fordi ADR-009 var tatt av cutover-readiness 2026-04-27. **2046/2046 grønt, pyright src/ 0 errors. LUKKET 2026-04-28**.
   - **129:** **D1 fortsettelse — A1 dropp + B1 FRED-utvidelse fullført 2026-04-29.** A1 Baker Hughes droppet fra 12.7-scope (commit `96a7022`) basert på V3-funn (ingen FRED-rute + endpoint-timeout); rig-count-vekten i Brent/CrudeOil/NaturalGas macro var liten og arkitektonisk friksjon overstiger signal-verdien. PLAN § 19.5 + § 19.4 + § 19.6 oppdatert med strikethrough-notat. **B1-leveransen** i 3 commit-isolerte trinn: (a) `000bcec` — 4 nye macro-drivere (yield_diff_10y / credit_spread_change / nfci_change / net_fed_liq_change) i macro.py med ADR-010 mode-dispatcher + 40 nye tester. V2-substitusjon dokumentert (HY/IG OAS → Moody's AAA10Y/BAA10Y pga 30+ år historikk vs 3 år). (b) `de3c5bb` — fred_series_ids utvidet i 8 instrument-YAMLs (4 FX + 2 indices + 2 crypto) + scripts/backfill/fred_b1.py (engangs-skript per ADR-011, 11 serier × ~30s = ~5 min). Live-backfill OK etter retry på 4 serier (FRED HTTP 500/502 transient): DGS2 4257 rader (2010+), foreign 10Y × 4 land 120 mnd hver, AAA10Y/BAA10Y/RRPONTSYD 2610 rader daglig, WALCL/WTREGEN/NFCI 522/521 ukentlig. (c) `904b378` — YAML-driver-wiring + ny baseline. FX macro: yield_diff_10y@0.35 lagt til; real_yield 0.4→0.25, dxy 0.5→0.30. Indices+crypto macro: net_fed_liq_change@0.25-0.30 + nfci_change@0.20 lagt til. Indices+crypto risk: credit_spread_change@0.25 lagt til. Pydantic familie-sum=1.0 verifisert for alle 8 × {macro, risk}. **Snapshot-diff vs pre-B1 baseline**: 90 score-endringer ≥1e-6 (alle 15 financial × 6 hor×dir; 7 agri uendret), **13 grade-flips** (B1-wired: AUDUSD MAKRO buy B→A, BTC MAKRO sell C→B, ETH SWING buy C→B, EURUSD SCALP buy C→B + sell A→B, GBPUSD MAKRO/SWING buy C→B, SP500 MAKRO sell C→B; drift-only: Gold SCALP buy, NaturalGas × 3). D-disiplin C oppfylt — ny baseline regenerert som anker. Live driver-sanity for Nasdaq 2026-04-29: credit_spread=1.00 (tight), nfci=0.50 (≈0), net_fed_liq=0.10 (QT regime), yield_diff EURUSD=0.50, USDJPY=0.75. **Total drivere registrert: 36** (var 32). Pyright src/: 0 errors. CI-flicker session 128 markert lukket (siste 3 commits grønne etter 9b86235). **LUKKET 2026-04-29**. **A2 AGSI + A3 FAS** forblir utsatt (token-kilder, venter på bruker-registrering).
   - **133:** **D2 fortsettelse 2026-04-30 — A3 FAS levert (domain-korrigering) + A9 USDM levert + C3 drop shipping (Cotton + Cocoa); B5 deferred til 134.** A3 auth-fail i 132 skyldtes feil domain — `apps.fas.usda.gov` er Azure-managed, korrekt domain er `api.fas.usda.gov` med X-Api-Key (api.data.gov-konvensjon). Cotton-kode korrigert mid-session 501 → 1404 ("All Upland Cotton" aggregat) — 501 ga 0 rader 2024+. **6 commit-isolerte trinn:** (a) `df3fc01` A3 schema/store/8 tester. (b) `66d11d7` A3 fetcher + 8 tester + backfill (~91500 rader 4 commodities × 11 MYs, ~3-4 min med 1.5s pacing). (c) `8b6ac75` A3 driver `fas_exports` med default-WoW-trapp + R4 mode-utbygging + 13 tester. (d) `9d56269` A9 schema/store/7 tester. (e) `13e9993` A9 fetcher + backfill (1096 rader CONUS 2015-12→2026-04). (f) `985f5fb` A9 driver `drought_monitor` + 10 tester. (g) `3cfd737` PLAN.md A3/A9/C3 LEVERT-status + B5 defer-note. (h) `b28a2b2` kombinert YAML A3+A9+C3 + ny baseline (per session 132 A5+A6-presedens). 5 instrumenter touched: Corn/Soybean/Wheat/Cotton (cross+weather) + Cocoa (cross only). Pydantic familie-sum=1.0 22/22 OK. **Snapshot-diff vs pre-133**: 100/104 endret, 14 grade-flips (D2-flips: Cocoa NONE sell A→B, Corn NONE sell A→B, Cotton NONE buy B→A; resten drift-only). Total drivere: 43 (var 41). Mid-session learning lagret som memory: `feedback_baseline_regen_fresh_python.md` (regen må starte fra fresh Python hvis driver-registry endres). D2-progresjon: 8/9 levert. Eneste gjenstående: B5 cal-spreads. **LUKKET 2026-04-30**.
@@ -106,7 +107,7 @@
 - **Blocked:** nei.
 - **Aktive systemd-timere:** 6 system-installerte (calendar_ff [session 105], cot_ice [session 106], signals-all, monitor, compare, server [service]) + 15 user-installerte (prices, cot_disaggregated/legacy, fundamentals, weather, enso, wasde, crop_progress, shipping [session 113], eia_inventories [session 107], comex [session 108], seismic [session 109], cot_euronext [session 110], conab [session 111], unica [session 112]). Sessions 114+115 timers (`news_intel` + `crypto_sentiment`) er ennå ikke generert/installert — kan tas i én batch nå når begge fetchere er på plass.
 - **Instrumenter:** 22 totalt (Gold/Silver/Copper/Platinum metals; CrudeOil/Brent/NaturalGas energy; Corn/Wheat/Soybean grains; Cotton/Sugar/Coffee/Cocoa softs; Nasdaq/SP500 indices; EURUSD/GBPUSD/USDJPY/AUDUSD fx; BTC/ETH crypto).
-- **Drivere:** **43 registrert** (session 133 D2: +2 — fas_exports, drought_monitor. Session 132 D2: +1 — etf_holdings_change. Session 131 D2: +3 — vix_term_ratio, aaii_extreme, hdd_cdd_anomaly. Session 130 D1 A2: +1 — agsi_storage_pct. Session 129 D1 B1: +4 — yield_diff_10y, credit_spread_change, nfci_change, net_fed_liq_change. Session 128 D1 A4: +2 — positioning_lev_funds_pct, positioning_asset_mgr_pct. Sessions 114+115 var UI-only).
+- **Drivere:** **44 registrert** (session 135 D3: +1 — cecafe_export_change. Session 133 D2: +2 — fas_exports, drought_monitor. Session 132 D2: +1 — etf_holdings_change. Session 131 D2: +3 — vix_term_ratio, aaii_extreme, hdd_cdd_anomaly. Session 130 D1 A2: +1 — agsi_storage_pct. Session 129 D1 B1: +4 — yield_diff_10y, credit_spread_change, nfci_change, net_fed_liq_change. Session 128 D1 A4: +2 — positioning_lev_funds_pct, positioning_asset_mgr_pct. Sessions 114+115 var UI-only).
 - **Bedrock-fetchere:** 19 totalt (prices, cot_disaggregated, cot_legacy, fundamentals, weather, enso, wasde, crop_progress, shipping [session 113], calendar_ff [session 105], cot_ice [session 106], eia_inventories [session 107], comex [session 108], seismic [session 109], cot_euronext [session 110], conab [session 111], unica [session 112], news_intel [session 114, UI-only], **crypto_sentiment [session 115, UI-only]**). **Alle 11 fetchere fra § 7.5 er nå portet — Phase A-C ferdig.**
 - **PLAN § 7.3:** 6/8 live data (WASDE, BRL, ICE softs COT via cot_disaggregated, BDI/BDRY, NASS Crop Progress, ENSO). 2/8 manuell sample (eksport-events, disease-alerts). 1/8 betalt/manuell import (IGC).
 - **System-status:** `docs/system_status_2026-04-26.md` — full ende-til-ende rapport (sub-fase 12.5+ refresh i session 117).
@@ -127,8 +128,8 @@
 - **Crypto_sentiment DB:** Tom på commit-tidspunkt (7 sample-rader i `data/manual/crypto_sentiment.csv`). Refresh via fetch.yaml `crypto_sentiment`-entry (cron 0 7 Oslo, daglig). Forventet vekst ~5 indikatorer/dag (1 F&G + 4 CoinGecko). ≥30 dager akkumulering før driver-vurdering. Live-verifisert i preview med 30d sample-data — kort + sparkline + modal rendrer korrekt.
 - **AsOfDateStore (session 116):** utvidet med 9 nye proxy-getters (econ_events/cot_ice/cot_euronext/eia_inventory/comex_inventory/seismic_events/conab_estimates/unica_reports/shipping_indices) + tilsvarende `has_*`-helpers. Kritisk fix — uten denne falt orchestrator-replay tilbake til defensive 0.0 for alle nye Phase A-C-drivere fordi underlying-getterne kastet `AttributeError`. 24 nye tester dekker hver getter + region/from_ts-filter + tom-clip-fallback.
 - **Phase D-output (session 116):** `data/_meta/backtest_phase_d_baseline.json` (68 rader, session 99-reprise), `data/_meta/backtest_phase_d_orchestrator.json` (48 rader, 86.4 min sweep), `data/_meta/backtest_phase_d_spike_{cot_ice_mm_pct,conab_yoy,unica_change}.json` (3 spikes). Rapport: `docs/backtest_phase_d_2026-04.md` med diff-tabeller + flagg-terskel ≥3pp Δhit_rate eller ≥2 grade-flips.
-- **Sub-fase 12.6-fundament (session 117):** 3 nye SQLite-tabeller (`driver_observations` long-format, `signal_setups`, `feature_snapshots`) + 5 nye scripts (`harvest_driver_observations.py`, `harvest_feature_snapshots.py`, `run_full_history_harvest.sh`, `analyze_driver_performance.py`, `analyze_cross_correlations.py`). Detached harvest startet 2026-04-27 21:58 — features ETA ~10 min, driver_observations ETA ~24-35 timer.
-- **Next task:** **Session 135 = D3 åpning** eller tech-gjeld-cleanup-runde. D2 LUKKET 2026-04-30 (session 134) med tag `v0.12.7-d2`. D2 endelig: 8 implementert + 1 deferred (B5→Plan-S) + 5 dropped (A7/A8/A11/C2/A14). § 19.4 D3-rad: A10 Cecafé Brasil kaffe-eksport (Tier 3, månedlig PDF, 2002+) + grade-distribusjons-rapport × 12mnd × 22 instrumenter (per § 19.6). Etter D3 → sub-fase 12.6 GJENÅPNES (Alt γ-spec). Open tech-gjeld: PPLT SEC EDGAR Plan-S-vurdering, NOPA WASDE-utvidelse-vurdering, CONAB Café-PDF-historikk-backfill (sub-fase 12.6 KRITISK 3). **Sub-fase 12.6 PAUSER fortsatt**, gjenåpnes etter D3.
+- **Sub-fase 12.6-fundament (session 117):** 3 nye SQLite-tabeller (`driver_observations` long-format, `signal_setups`, `feature_snapshots`) + 5 nye scripts (`harvest_driver_observations.py`, `harvest_feature_snapshots.py`, `run_full_history_harvest.sh`, `analyze_driver_performance.py`, `analyze_cross_correlations.py`). Detached harvest startet 2026-04-27 21:58 — **HANG seg ved 200/289 (~69 %) på 2026-04-28 01:35 UTC** i Brent COT-data-missing-loop. driver_observations har 2691 rader (alle Brent, 2010-02 til 2021-09 — ikke komplett). feature_snapshots 23601 rader (mer komplett). **Må diagnostiseres + restartes som første blocker i 12.6-gjenåpning** (session 136+).
+- **Next task:** **Session 136 = sub-fase 12.6 gjenåpning** (Alt γ-låsen oppfylt etter D3). Første blocker: diagnostisere + restarte detached harvest fra session 117. Forventet rekkefølge: (1) finn root-cause for Brent-loop (sannsynlig: cot_data_missing-spam hindrer progresjon; sjekk om cot_disaggregated mangler Brent-rows, eller om driver-iterasjon ikke håndterer missing-data-edge-case), (2) restart harvest med fix, (3) vente på full driver_observations-akkumulering (~24-35 timer per session 117-estimat — nye drivere fra 12.7 D-spor inkluderes naturlig), (4) analyzer-runde via `analyze_driver_performance.py` + `analyze_cross_correlations.py` som leveranse. Etter analyzer-runde: data-driven YAML-rebalansering. Open tech-gjeld: PPLT SEC EDGAR Plan-S-vurdering, NOPA WASDE-utvidelse-vurdering, CONAB Café-PDF-historikk-backfill (sub-fase 12.6 KRITISK 3). Plan-S kan startes parallelt hvis 12.6-harvest-fix tar lang tid.
 - **Git-modus:** Nivå 1 aktivt under sub-fase 12.5+ docs/cleanup-pass. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt valgfri.
 
 ## Data-gjeld (sub-fase 12.6)
@@ -305,6 +306,160 @@ D2-implementasjon må:
 ---
 
 ## Session log (newest first)
+
+### 2026-04-30 — Session 135: sub-fase 12.7 D3 LUKKET + sub-fase 12.7 LUKKET (A10 Cecafé + grade-validering + 2 tags)
+
+**Scope:** D3-finalisering + sub-fase 12.7-finalisering. Per § 19.4
+D3-rad: A10 Cecafé Brasil kaffe-eksport (Tier 3, månedlig PDF) +
+grade-validering ×12mnd × 22 instrumenter (per § 19.6 kvalitetskrav).
+Per Alt γ-låsen: D3 er siste D-fase i 12.7; sub-fase 12.6 gjenåpnes
+etter D3.
+
+**Levert:** alle 5 mål oppnådd.
+
+1. **A10 Cecafé Brasil kaffe-eksport** levert i 4 commit-isolerte trinn:
+   - **(a) `849b693`** schema/store/11 tester. Ny tabell
+     `cecafe_exports` (PK month + coffee_type) — 4 typer: arabica,
+     robusta, industrialized, sum. Nullable volume_60kg_bags +
+     fob_value_usd + source_pdf. Pydantic `CecafeExportRow` med
+     normalisering (lowercase + validering av ukjent type). Schema
+     additivt; init handler oppretter tabell idempotent.
+   - **(b) `9a74c07`** driver `cecafe_export_change` i agronomy.py
+     + engangs-backfill `scripts/backfill/cecafe_exports.py` per
+     ADR-011 + 12 driver-tester. Default: MoM %-endring i
+     `volume_60kg_bags` for `coffee_type='sum'`, terskel-trapp
+     (-40 → 0; +40 → 1.0; bredere enn weekly-drivere pga månedlig
+     sesongvariasjon). bull_when="low" default per § 19.5 Del A
+     A10 (lavt eksportvolum = supply-stress = bullish for KC). R4
+     mode-utbygging via fundamentals_*-helpere
+     (pct_12m/pct_36m/delta_5d_z/delta_20d_z/extreme_*).
+     Backfill-script: URL-pattern
+     `cecafe.com.br/.../CECAFE-Relatorio-Mensal-{MONTH-PT}-{YEAR}.pdf`
+     verifisert tilgjengelig 2017-01+ (10-år rolling per ADR-011).
+     PDF-parser av tabell "Últimos 12 meses" på alle sider med
+     disambiguering vs receita-only-tabeller (token #9 = preço médio
+     må være i 50-1000 USD/saca-rangen). Sekvensiell HTTP med 1.5s
+     pacing per memory `free-api-no-parallel-requests`.
+   - **(c) `39aed5b`** backfill dedup-fix. Original logikk skipte
+     `sum`-rader for allerede sett (year, month) fra etterfølgende
+     PDFer mens andre typer ble overskrevet via INSERT OR REPLACE
+     PK. Resultat: inkonsistens — sum fra første PDF (preliminær),
+     andre typer fra siste PDF (revidert). Cecafé reviderer
+     historiske rader. Fix: la SQLite INSERT OR REPLACE håndtere
+     dedupe; senere PDFer overskriver tidligere (autoritativ
+     versjon vinner). Verifisert mot Feb 2026: arabica + robusta +
+     industrialized = sum (2,633,488 sacas, alle fra MARCO 2026 PDF).
+     Live-backfill: 119/132 PDFer lastet (5 fremtids-måneder 404),
+     167 unike måneder × 4 typer = 668 rader (2012-05 → 2026-03).
+   - **(d) `7e15535`** YAML Coffee conab + ny baseline. Coffee
+     conab-familien: `conab_yoy@1.00` → `conab_yoy@0.70 +
+     cecafe_export_change@0.30 = 1.00`. Pydantic familie-sum=1.0
+     verifisert (alle 7 Coffee-familier). 70/30 split — CONAB
+     primær (forward-looking strategisk supply-side), Cecafé
+     co-driver (backward-looking taktisk supply-realization).
+
+2. **Snapshot-baseline regenerert** som ny anker per § 5.3 D-disiplin
+   C. Pre-A10-YAML baseline kopiert til
+   `/tmp/baseline_pre_a10_yaml.json` før regen. Diff mot post-A10:
+   92/104 score-endringer (>1e-6), 14 grade-flips. Coffee-spesifikt:
+   NONE buy 6.32 → 6.23 (B → B drift), NONE sell 10.98 → 11.07
+   (A → A+; direkte A10-effekt — Mar26 vs Feb26 +16% MoM = bear
+   high-conv → bull low-conv via direction-flip). Resterende 13
+   grade-flips er drift-only (live data har endret seg siden forrige
+   baseline-regen i ulike fundamentals/COT-tabeller).
+
+3. **Live driver-verifisering 2026-04-30** mot ekte DB:
+   - Coffee default (MoM, low_bull): 0.0 (Mar26 +16% = bear)
+   - Coffee bull_when=high: 1.0
+   - Coffee mode=pct_12m: 0.476 (midten av 12m-vindu)
+   - Coffee mode=pct_36m: 0.476 (samme — 167 mnd holder for begge)
+   - Coffee coffee_type=arabica default: 0.25 (+10.5% MoM, mid-low)
+   - Coffee coffee_type=robusta default: 0.0 (+59.7% MoM, sterk
+     harvest-flush)
+
+4. **Grade-validering ×12mnd × 22 instrumenter** (`ebf8690`) per
+   § 19.6 kvalitetskrav. Nytt script
+   `scripts/analysis/grade_validation_12_7.py` sammenligner
+   snapshot-baseline pre-D-spor (tag `v0.12.7-r4-finish`,
+   bit-identisk equivalent med pre-R1 per ADR-010 — score_baseline.json
+   ble ikke committed pre-R1, men R-spor var bit-identisk slik at
+   post-R4 baseline = numerisk hva pre-R1 ville vært) vs post-D3
+   (etter D0..D3). Output: `docs/12_7_grade_validation.md`. Resultat:
+   3 instrumenter flagget (≥50 % relative endring i A+-andel):
+   - **Brent**: A+ 0 → 1 (B1 D1 NetFedLiq energi-effekt — D2-rapport
+     viste 0→2, redusert til 1 i D3 = stabilisert per session
+     135-prompt forventning)
+   - **Coffee**: A+ 0 → 1 (direkte A10 D3-effekt på sell-side)
+   - **Silver**: A+ 1 → 0 (drift-related, ikke driver-konfig-bias)
+
+   3 ≤ 5 = under eskalerings-terskel (per session 135-prompt-spec);
+   ingen umiddelbar terskel-rekalibrering nødvendig. Per asset-class:
+   balansert distribusjon, ingen konsentrert bias. Per § 19.6:
+   terskler rekalibreres ikke i 12.7, dokumenteres for senere
+   kalibrering i sub-fase 12.6.
+
+5. **Sub-fase 12.7 finalisering — 2 tags** på siste D3-commit
+   (`ebf8690`):
+   - `v0.12.7-d3` (D3-LUKKET-tag per tag-strategi i § 19.4)
+   - `v0.12.7-fase-12.7-LUKKET` (overordnet sub-fase-finale-tag)
+
+   Sluttilstand 12.7: 17 nye drivere på 22 instrumenter, 13 nye
+   SQLite-tabeller (cecafe_exports + alle fra D0..D2 + utvidelser),
+   alle D-faser tagged (`-d0`/`-d1`/`-d2`/`-d3`), R-spor bit-identisk
+   verifisert (tag `-r4-finish`), grade-distribusjon stabil
+   (3 flagg ≤ 5-terskel).
+
+**Totals:**
+- **Drivere registrert: 44** (var 43; +1: cecafe_export_change)
+- **SQLite-tabeller (totalt for 12.7): 13 nye** (cecafe_exports +
+  fas_esr + drought_monitor + etf_holdings + aaii_sentiment +
+  agsi_storage + ... fra D0..D2)
+- **Tester: 2399 grønne** (+23 fra session 134:
+  11 store cecafe + 12 driver cecafe)
+- **Pyright src/: 0 errors, 0 warnings**
+- **CI siste: success** (e5dc056 — neste run testes etter dette
+  STATE-commit)
+
+**Sub-fase 12.6-gjenåpning — prep + harvest-blocker:** Per Alt γ
+låsen gjenåpnes 12.6 etter D3. Faktisk analyzer-runde tas i egen
+session 136+. **Blocker identifisert:** detached harvest fra
+session 117 (startet 2026-04-27 21:58) har hang seg. Verifisert:
+- Ingen `harvest`-prosess kjører (ps aux + grep)
+- driver_observations: 2691 rader (alle Brent, ranges 2010-02 til
+  2021-09, ikke komplett — burde ha tusenvis × 22 inst)
+- feature_snapshots: 23601 rader (mer komplett)
+- signal_setups: 166 rader
+- Harvest-log `data/_meta/backfill_harvest_drivers.log` viser at
+  prosessen sto fast på 200/289 (~69 %) på 2026-04-28 01:35 UTC
+  med endeløs Brent `cot_data_missing`-debug-spam (positioning-
+  driver iterer over manglende COT-rows for Brent uten
+  edge-case-håndtering)
+
+**Root-cause-hypotese for session 136:** positioning-driveren
+mangler tidlig-exit hvis `cot_data_missing` for hver kandidat-
+ref_date — enten har Brent ikke COT-data tilbake i tid harvesteren
+prøver, eller iterasjons-loopen mangler progress-guard. Fix bør
+diagnostiseres + restartes som første blocker i 12.6-gjenåpning.
+
+**Open spørsmål for 12.6 / Plan-S:**
+- Brent positioning-loop root-cause + harvest-restart
+- PPLT SEC EDGAR vurdering (sub-fase 12.6 KRITISK 2)
+- NOPA WASDE-utvidelse vurdering
+- CONAB Café-PDF-historikk full backfill (`scripts/backfill_conab_cafe.py`,
+  IP-throttled per session 118)
+
+**Memory-skrivinger (denne session):** ingen nye memory-entries.
+Eksisterende `feedback_baseline_regen_fresh_python.md` (session 133)
+ble fulgt: brukte fresh `.venv/bin/python`-prosess for baseline-regen
+etter driver-kode-endringer.
+
+**Læring fra denne session:** PDF-parser-disambiguering når flere
+tabeller på samme side har lignende format krever en stabil
+"sentinel"-kolonne — for Cecafé var dette preço-médio (50-1000
+USD/saca-range). Initial parser feil-matchet receita-only-tabeller
+før denne disambigueringen ble lagt til. Lesson: når man parser
+flere tabeller fra samme PDF med lik kolonnestruktur, identifiser
+en kolonne med kjent magnitude-range som sanity-filter.
 
 ### 2026-04-30 — Session 134: sub-fase 12.7 D2 LUKKET (B5 defer + tech-gjeld + grade-rapport + tag)
 
