@@ -586,6 +586,214 @@ def _classify_staleness(has_data: bool, age_hours: float | None, stale_hours: fl
     return "stale"
 
 
+@ui_bp.get("/api/ui/risk_indicators")
+def risk_indicators() -> Response:
+    """Aggregerte risk-indikatorer for Markedspuls-fanen.
+
+    Sammenstiller (fra `bedrock.db`):
+      - vix_term_spread: VIXCLS minus VIX3M. Negativ = contango (normal),
+        positiv = backwardation (akutt stress).
+      - aaii_bull_bear:  AAII bull/bear-spread (siste ukerapport).
+      - nfci:            Chicago Fed NFCI. < 0 = looser, > 0 = tighter.
+      - credit_spread:   BAA10Y (Moody's BAA over 10Y treasury, %-poeng).
+      - real_yield:      DGS10 - T10YIE (10Y nominal - breakeven, %-poeng).
+
+    For hver: returnerer siste verdi + dato + klassifisering
+    (calm/normal/elevated/stress) basert på enkle terskler.
+
+    Read-only mot DB — WAL-trygg under harvest.
+    """
+    from datetime import datetime
+
+    from bedrock.data.store import DataStore
+
+    cfg = _config()
+    now = datetime.now(timezone.utc)
+
+    try:
+        store = DataStore(cfg.db_path)
+        # Hent siste verdi per series_id i fundamentals (én rundtur).
+        with store._connect() as con:
+            con.execute("PRAGMA query_only = 1")
+            fund_rows = con.execute(
+                """
+                SELECT f.series_id, f.date, f.value
+                FROM fundamentals f
+                INNER JOIN (
+                    SELECT series_id, MAX(date) AS d
+                    FROM fundamentals
+                    WHERE series_id IN (
+                        'VIXCLS','VIX3M','NFCI','BAA10Y','DGS10','T10YIE','DTWEXBGS'
+                    )
+                    GROUP BY series_id
+                ) m ON f.series_id = m.series_id AND f.date = m.d
+                """
+            ).fetchall()
+            fund = {row[0]: {"date": row[1], "value": float(row[2])} for row in fund_rows}
+
+            aaii_row = con.execute(
+                "SELECT date, bullish_pct, bearish_pct, bull_bear_spread "
+                "FROM aaii_sentiment ORDER BY date DESC LIMIT 1"
+            ).fetchone()
+    except Exception as exc:
+        log.warning("[UI] risk_indicators db-feil: %s", exc)
+        return jsonify(
+            {
+                "available": False,
+                "reason": f"db-feil: {exc}",
+                "last_check": now.isoformat(),
+                "indicators": [],
+            }
+        )
+
+    def _val(series: str) -> tuple[float | None, str | None]:
+        d = fund.get(series)
+        return (d["value"], d["date"]) if d else (None, None)
+
+    indicators: list[dict[str, Any]] = []
+
+    # VIX term-spread: VIXCLS - VIX3M
+    vix1, d1 = _val("VIXCLS")
+    vix3, d3 = _val("VIX3M")
+    if vix1 is not None and vix3 is not None:
+        spread = vix1 - vix3
+        # Backwardation (positiv) = akutt stress; flat ~ 0; sterkt contango ≤ -3
+        if spread >= 0.5:
+            cls = "stress"
+        elif spread >= -0.5:
+            cls = "elevated"
+        elif spread >= -2.0:
+            cls = "normal"
+        else:
+            cls = "calm"
+        indicators.append(
+            {
+                "key": "vix_term",
+                "name": "VIX term-spread",
+                "value": round(spread, 2),
+                "unit": "pt",
+                "as_of": max(d1 or "", d3 or "") or None,
+                "class": cls,
+                "context": f"VIX 1m {vix1:.2f} − 3m {vix3:.2f}",
+                "guide": "Positiv = backwardation (akutt stress). Sterkt negativ = roen.",
+            }
+        )
+
+    # AAII bull/bear-spread.
+    # Merk: kolonnen `bull_bear_spread` i DB er feilskrevet av fetcher
+    # (lagrer bull + neutral + bear ≈ 100). Vi regner derfor direkte
+    # fra bull% − bear% her — bypass av kjent fetcher-bug for å unngå
+    # endringer i fetch/-laget under live harvest.
+    if aaii_row is not None:
+        a_date, a_bull, a_bear, _ = aaii_row
+        spread = float(a_bull) - float(a_bear)
+        # Klassiske terskler: > +20 = grådighet, < -20 = frykt (kontrarisk)
+        if spread >= 20:
+            cls = "stress"  # ekstrem grådighet → kontra-bearish
+        elif spread >= 10:
+            cls = "elevated"
+        elif spread >= -10:
+            cls = "normal"
+        elif spread >= -20:
+            cls = "elevated"
+        else:
+            cls = "stress"  # ekstrem frykt → kontra-bullish
+        indicators.append(
+            {
+                "key": "aaii_bull_bear",
+                "name": "AAII bull-bear",
+                "value": round(spread, 1),
+                "unit": "pp",
+                "as_of": a_date,
+                "class": cls,
+                "context": f"bull {float(a_bull):.1f}% / bear {float(a_bear):.1f}%",
+                "guide": "Klassisk kontra-indikator: ekstreme verdier signaliserer flokk-atferd.",
+            }
+        )
+
+    # NFCI
+    nfci, nfci_d = _val("NFCI")
+    if nfci is not None:
+        if nfci >= 0.5:
+            cls = "stress"
+        elif nfci >= 0:
+            cls = "elevated"
+        elif nfci >= -0.5:
+            cls = "normal"
+        else:
+            cls = "calm"
+        indicators.append(
+            {
+                "key": "nfci",
+                "name": "NFCI",
+                "value": round(nfci, 3),
+                "unit": "z",
+                "as_of": nfci_d,
+                "class": cls,
+                "context": "Chicago Fed financial conditions",
+                "guide": "Negativ = lettere finansforhold (lav risk-aversjon). Positiv = strammere.",
+            }
+        )
+
+    # Credit spread (BAA10Y)
+    baa, baa_d = _val("BAA10Y")
+    if baa is not None:
+        if baa >= 3.0:
+            cls = "stress"
+        elif baa >= 2.0:
+            cls = "elevated"
+        elif baa >= 1.5:
+            cls = "normal"
+        else:
+            cls = "calm"
+        indicators.append(
+            {
+                "key": "credit_spread",
+                "name": "Credit-spread (BAA-10Y)",
+                "value": round(baa, 2),
+                "unit": "pp",
+                "as_of": baa_d,
+                "class": cls,
+                "context": "Moody's BAA over 10Y treasury",
+                "guide": "Bredere spread = økt credit-risk-pris. Snitt ~ 2.0; > 3.0 = stress.",
+            }
+        )
+
+    # Real yield = DGS10 - T10YIE
+    dgs10, d_dgs = _val("DGS10")
+    bei, d_bei = _val("T10YIE")
+    if dgs10 is not None and bei is not None:
+        ry = dgs10 - bei
+        if ry >= 2.5:
+            cls = "stress"
+        elif ry >= 1.5:
+            cls = "elevated"
+        elif ry >= 0.5:
+            cls = "normal"
+        else:
+            cls = "calm"
+        indicators.append(
+            {
+                "key": "real_yield",
+                "name": "10Y real yield",
+                "value": round(ry, 2),
+                "unit": "%",
+                "as_of": max(d_dgs or "", d_bei or "") or None,
+                "class": cls,
+                "context": f"DGS10 {dgs10:.2f}% − T10YIE {bei:.2f}%",
+                "guide": "Høy real yield = strammere policy / negativt for gull og lange varigheter.",
+            }
+        )
+
+    return jsonify(
+        {
+            "available": True,
+            "indicators": indicators,
+            "last_check": now.isoformat(),
+        }
+    )
+
+
 @ui_bp.get("/api/ui/system_health")
 def system_health() -> Response:
     """Daglig systemsjekk — siste monitor-rapport.

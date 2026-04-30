@@ -1195,6 +1195,79 @@ span.status-pill {
   color: var(--c-ink-muted);
 }
 
+/* ─── Markedspuls: risk-indikator-kort ───────────────────── */
+.risk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+.ri-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-left: 4px solid var(--c-ink-faint);
+  border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-3);
+  box-shadow: var(--shadow-1);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ri-card.ri-calm     { border-left-color: var(--c-pos); }
+.ri-card.ri-normal   { border-left-color: var(--c-info); }
+.ri-card.ri-elevated { border-left-color: var(--c-warn); }
+.ri-card.ri-stress   { border-left-color: var(--c-neg); }
+.ri-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.ri-name {
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  color: var(--c-ink);
+}
+.ri-class {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  text-transform: uppercase;
+}
+.ri-card.ri-calm     .ri-class { background: var(--c-pos-soft);  color: var(--c-pos); }
+.ri-card.ri-normal   .ri-class { background: var(--c-info-soft); color: var(--c-info); }
+.ri-card.ri-elevated .ri-class { background: var(--c-warn-soft); color: var(--c-warn); }
+.ri-card.ri-stress   .ri-class { background: var(--c-neg-soft);  color: var(--c-neg); }
+.ri-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-num-md);
+  font-weight: 600;
+  color: var(--c-ink);
+  line-height: var(--lh-tight);
+}
+.ri-unit {
+  font-size: var(--fs-xs);
+  color: var(--c-ink-muted);
+  margin-left: 4px;
+  font-weight: 400;
+}
+.ri-context {
+  font-size: var(--fs-xs);
+  color: var(--c-ink-muted);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.ri-asof {
+  font-size: 10px;
+  color: var(--c-ink-faint);
+  font-family: var(--font-mono);
+  letter-spacing: 0.2px;
+}
+
 /* ─── Datakilder: daglig systemsjekk-banner + checks ─────── */
 .sys-health {
   display: flex;
@@ -1363,6 +1436,17 @@ span.status-pill {
     padding: var(--sp-2) var(--sp-3);
   }
   .sys-checks {
+    grid-template-columns: 1fr;
+  }
+  /* Risk-grid: 2-kol på mobil (tett, lesbart), 1-kol på smal skjerm. */
+  .risk-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--sp-1);
+  }
+}
+
+@media (max-width: 480px) {
+  .risk-grid {
     grid-template-columns: 1fr;
   }
 }

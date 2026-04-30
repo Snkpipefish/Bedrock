@@ -765,13 +765,22 @@ function renderKartrommet(res) {
   `).join('');
 }
 
-// ─── Sentiment-fane (session 114 news_intel + 115 crypto) ────────
+// ─── Markedspuls-fane (sentiment + risk-indikatorer) ────────
 async function loadSentiment() {
-  // Last begge parallelt — ingen avhengighet mellom dem.
-  const [newsRes, cryptoRes] = await Promise.allSettled([
+  // Last alle tre parallelt — ingen avhengighet mellom dem.
+  const [newsRes, cryptoRes, riskRes] = await Promise.allSettled([
     fetch('/api/ui/news_intel?days=7&limit=120').then(r => r.json()),
     fetch('/api/ui/crypto_sentiment?history_days=30').then(r => r.json()),
+    fetch('/api/ui/risk_indicators').then(r => r.json()),
   ]);
+
+  if (riskRes.status === 'fulfilled') {
+    renderRiskIndicators(riskRes.value);
+  } else {
+    console.error('Risk-indikatorer load feilet:', riskRes.reason);
+    const el = document.getElementById('risk-indicators');
+    if (el) el.innerHTML = `<p class="empty">Fetch feilet: ${riskRes.reason.message}</p>`;
+  }
 
   if (newsRes.status === 'fulfilled') {
     renderSentimentNews(newsRes.value);
@@ -788,6 +797,34 @@ async function loadSentiment() {
     const el = document.getElementById('sentiment-crypto');
     if (el) el.innerHTML = `<p class="empty">Crypto fetch feilet: ${cryptoRes.reason.message}</p>`;
   }
+}
+
+// Render risk-indikator-grid: ett kort per indikator med klassifisert
+// fargekant og guide-tekst. Fortegn-pil viser om verdien er positiv/
+// negativ (kun for kontekst — klasse-fargen styrer alvor).
+function renderRiskIndicators(res) {
+  const root = document.getElementById('risk-indicators');
+  if (!root) return;
+  if (!res || !res.available || !res.indicators?.length) {
+    root.innerHTML = `<p class="empty">${res?.reason || 'Ingen risk-indikatorer tilgjengelig.'}</p>`;
+    return;
+  }
+  root.innerHTML = `<div class="risk-grid">${res.indicators.map(ind => {
+    const cls = `ri-${ind.class || 'normal'}`;
+    const v = ind.value;
+    const sign = (typeof v === 'number' && v > 0) ? '+' : '';
+    const valStr = (typeof v === 'number') ? `${sign}${v}` : '–';
+    const unit = ind.unit ? `<span class="ri-unit">${ind.unit}</span>` : '';
+    return `<article class="ri-card ${cls}" title="${ind.guide || ''}">
+      <div class="ri-head">
+        <span class="ri-name">${ind.name}</span>
+        <span class="ri-class">${(ind.class || '').toUpperCase()}</span>
+      </div>
+      <div class="ri-value">${valStr}${unit}</div>
+      <div class="ri-context">${ind.context || ''}</div>
+      <div class="ri-asof">per ${ind.as_of || '–'}</div>
+    </article>`;
+  }).join('')}</div>`;
 }
 
 function _formatMcap(usd) {
