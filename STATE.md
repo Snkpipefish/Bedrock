@@ -188,6 +188,34 @@ D2-implementasjon må:
    WoW/MoM-skala).
 3. Følge DROP-anbefalingene for A7 PPLT, A8 NOPA, A11 ICE per A1/A14-presedens.
 
+## Kjente bugs (oppdaget i UI-arbeid 2026-04-30)
+
+Bugs som er identifisert under UI-refresh (Etappe 1-4) men ikke fikset
+fordi de ligger i fetch/-laget eller config/instruments som er
+harvest-trygt-låst. Plukk dem opp etter at harvest-session 136 er
+ferdig og 12.6-rebalansering er gjort.
+
+1. **AAII `bull_bear_spread`-kolonnen er feilskrevet** (oppdaget 2026-04-30
+   under Etappe 4 risk_indicators-endpoint). Fetcher i `src/bedrock/fetch/`
+   skriver `bullish_pct + neutral_pct + bearish_pct ≈ 100.0` til
+   `aaii_sentiment.bull_bear_spread` istedenfor `bullish_pct - bearish_pct`.
+   Verifisert: alle 537 rader har spread-verdi i intervallet [99.99, 100.01].
+   Korrekt verdi (bull − bear) for siste rad (2026-04-23): bull 46.05% −
+   bear 34.42% = +11.63pp.
+   **Workaround:** `signal_server`-endepunktet `/api/ui/risk_indicators`
+   regner spread direkte fra bull% − bear% (commit `5b526c3`).
+   **Fix-pakke:**
+   - Identifiser fetcher-fil (`grep -rn "bull_bear_spread" src/bedrock/fetch/`)
+   - Endre kalkulasjonen til `bull - bear`
+   - Backfill alle 537 eksisterende rader:
+     `UPDATE aaii_sentiment SET bull_bear_spread = bullish_pct - bearish_pct;`
+   - Sjekk om noen drivere konsumerer `bull_bear_spread` direkte fra DB
+     (grep i `src/bedrock/engine/drivers/`) — hvis ja, har de vært no-op
+     til nå (konstant ~100), og fix-en aktiverer dem på riktig signal.
+   - **Risiko:** Hvis driver leser denne kolonnen, vil scoring endres
+     etter backfill — bør gjøres som ledd i 12.6-rebalanseringen, ikke
+     mid-harvest.
+
 ## Workflow-notes (2026-04-26)
 
 - **Session 103 commit-struktur:** STATE.md-endringen for session 103
