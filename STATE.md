@@ -336,6 +336,133 @@ ferdig og 12.6-rebalansering er gjort.
 
 ## Session log (newest first)
 
+### 2026-04-30 — Session 137: UI-refresh Etappe 1-6 (parallell med harvest-session 136)
+
+**Scope:** UI-oppdatering så fanene matcher backend-arbeid fra
+sub-fase 12.5/12.6/12.7. Kjørt parallelt med harvest-session 136 —
+kun rørt `web/**` + `src/bedrock/signal_server/**` + STATE.md, aldri
+`config/instruments/*.yaml` eller `src/bedrock/engine/drivers/**`
+(harvest leser disse per iterasjon). Backend-API utvidet med tre nye
+read-only-endepunkter mot `bedrock.db` (WAL-trygg under harvest).
+
+**Etapper levert (6 av 7 fra plan):**
+
+1. **Etappe 1 — horisont-filter (allerede implementert)** — verifisert
+   at filter-bar med pills `Alle/Scalp/Swing/Makro` allerede mountet
+   i `web/assets/app.js:39-42` + `filter.js:12-14` fra session 51.
+   Ingen kode-arbeid nødvendig.
+
+2. **Etappe 2 — horisont-badge + familie-breakdown på setup-kort** +
+   fane-renaming + første mobil-tilpasning. Commit `1d969ee`.
+   - Faner renavnet: Skipsloggen→Handelslogg, Financial setups→Finans,
+     Soft commodities→Agri, Sentiment→Markedspuls, Kartrommet→Datakilder.
+     Section-IDer holdt uendret slik at JS-bindinger ikke brekker.
+   - Setup-kort: ny `_horizonBadgeHtml()` (fargekodet pille per horisont:
+     scalp=blå, swing=oransje, makro=lilla), `_scoreBarMiniHtml()` med
+     publish-floor-mark, `_familyMiniHtml()` som rangerer alle 6 familier
+     etter relativ score.
+   - Første `@media`-blokker i prosjektet (≤ 768px og ≤ 480px): 1-kol
+     setups-grid, kompakt KPI/header, scrollende tabs, skjul mindre
+     essensielle trade-tabell-kolonner, full-skjerm modal, scrollende
+     pipeline-tabell.
+
+3. **Etappe 3 — daglig systemsjekk-banner i Datakilder.** Commit `943961f`.
+   - Nytt endpoint `GET /api/ui/system_health` leser nyeste
+     `data/_meta/monitor_*.json` og returnerer `overall_ok` + checks
+     (fetcher_freshness, pipeline_log_errors, agri_tp_override, signal_diff).
+   - Datakilder-fanen får fargekodet helse-banner over fetcher-gruppene
+     (OK=grønn, FAIL=rød, ukjent=grå) + grid med ett kort per check.
+   - Verifisert mot live monitor (2026-04-30): overall_ok=false, 4 checks
+     (2 ok, 2 fail) rendret korrekt.
+
+4. **Etappe 4 — risk-indikator-grid i Markedspuls.** Commit `5b526c3`.
+   - Nytt endpoint `GET /api/ui/risk_indicators` leser bedrock.db
+     read-only og returnerer 5 indikatorer med klassifisering
+     (calm/normal/elevated/stress):
+     - VIX term-spread (VIXCLS − VIX3M)
+     - AAII bull-bear (kontrarisk indikator)
+     - NFCI (Chicago Fed financial conditions)
+     - Credit-spread BAA-10Y (Moody's)
+     - 10Y real yield (DGS10 − T10YIE)
+   - Markedspuls-fanen får ny seksjon "Risk-indikatorer" øverst.
+     Hver indikator vist som kort med fargekodet venstre-kant + verdi
+     + kontekst + as-of-dato.
+   - Verifisert mot live DB: VIX term −3.01pt (calm), AAII +11.6pp
+     (elevated), NFCI −0.497 (normal), Credit-spread 1.7pp (normal),
+     Real yield 1.9% (elevated).
+
+5. **Etappe 5 — weather-overlay på agri-kort.** Commit `ba991e1`.
+   - Nytt endpoint `GET /api/ui/agri_weather` aggregerer ENSO (NOAA
+     ONI klassifisert som la_nina/neutral/el_nino), per agri-instrument
+     primær weather-region + siste weather_monthly-rad (water_bal,
+     dry_days), og US Drought Monitor (kun for US-baserte instrumenter).
+   - Instrument→region-mapping holdt på Python-siden (`_AGRI_REGION_MAP`)
+     for å unngå konflikt med harvest som leser config/instruments YAML
+     per iterasjon. Kan flyttes til instrument-config etter 12.6.
+   - Agri-fanen får weather-strip nederst på hvert kort med 2-3 pills
+     (ENSO + region-data + drought-pille for US).
+   - Verifisert mot live data: ENSO Nøytral (−0.16), US-instrumenter
+     viser severe drought 66.3% (D2+ 53.8%), Cotton water_bal −49.2mm.
+
+6. **Etappe 6 — driver-utforsker i admin.html.** Commit `04d9fea`.
+   - Nytt admin-endpoint `GET /admin/drivers` (X-Admin-Code-protected)
+     kombinerer in-process driver-registry + `driver_observations`-stats
+     + YAML-familie-mapping. Klassifiserer hver driver som
+     active/monotone/silent/deprecated.
+   - Admin.html får ny "Drivers"-fane mellom Rules og Logs. UI viser
+     summary-chips + filter-dropdown + grupperte tabeller per familie.
+   - Verifisert mot live DB: 44 drivere totalt, 12 active (Brent/CrudeOil),
+     2 monotone, 30 silent. Bekrefter sub-fase 12.6-forventning — block
+     A/B/C-drivere venter på bredere instrument-kjøring.
+
+**Ikke startet:**
+
+7. **Etappe 7 — backtest-IC-fane.** Avventer harvest-session 136
+   fullføring (~21:00 i kveld). Datagrunnlaget endres mens harvest
+   kjører, så fanen må bygges på faktisk IC-rapport-output etter
+   analyzer-execution (session 137+ analyzer-runde).
+
+**Bug logget i STATE.md (commit `56353c9`):**
+- AAII `bull_bear_spread`-kolonnen i DB er feilskrevet av fetcher
+  (lagrer bull+neutral+bear ≈ 100, ikke bull−bear). Workaround:
+  `risk_indicators`-endpoint regner spreaden direkte fra bull% − bear%.
+  Fix-pakke dokumentert i ny seksjon "Kjente bugs (oppdaget i UI-arbeid)".
+
+**Filer endret (kun UI-trygt scope):**
+- `web/index.html`, `web/admin.html`
+- `web/assets/app.js`, `web/assets/admin.js`, `web/assets/style.css`,
+  `web/assets/admin.css`
+- `src/bedrock/signal_server/endpoints/ui.py` (3 nye endepunkter:
+  system_health, risk_indicators, agri_weather)
+- `src/bedrock/signal_server/endpoints/rules.py` (1 nytt endpoint:
+  /admin/drivers)
+- `STATE.md` (ny seksjon "Kjente bugs")
+
+**Commits:**
+- `1d969ee` feat(ui): horisont-badges + familie-breakdown + mobil
+- `943961f` feat(ui): daglig systemsjekk-banner i Datakilder
+- `5b526c3` feat(ui): risk-indikator-grid i Markedspuls
+- `56353c9` state: log AAII bull_bear_spread fetcher-bug
+- `ba991e1` feat(ui): weather-overlay på agri setup-kort
+- `04d9fea` feat(admin): driver-utforsker i admin.html
+
+**Status:** 6/7 etapper ferdig. Etappe 7 venter på harvest-fullføring.
+
+**Helse ved start:** rød (kjent) — fetcher_freshness viser 2 missing
+(crypto_sentiment, news_intel) + 4 aging COT, signal_diff baseline-mangel.
+Ikke blockers for UI-arbeid.
+
+**Open questions:** ingen nye fra session 137. Bruker åpner nytt
+kontekstvindu for Etappe 7 når harvest er fullført og analyzer-runde
+levert IC-data.
+
+**Neste task:** Etappe 7 — backtest-IC-fane som leser harvest-output
++ analyze_driver_performance.py-resultater per driver × instrument
+× horisont. Mest naturlig som ny fane mellom Datakilder og evt.
+adminlink. Krever nytt UI-endepunkt som aggregerer
+`data/_meta/backtest_*.json`-filer eller leser `driver_observations`
+med forward-return-kolonner direkte.
+
 ### 2026-04-30 — Session 136: sub-fase 12.6 GJENÅPNET — harvest restartet med 44 drivere
 
 **Scope:** sub-fase 12.6 gjenåpning per Alt γ-låsen (sub-fase 12.7
