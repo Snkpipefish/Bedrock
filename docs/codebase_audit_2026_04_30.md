@@ -221,14 +221,14 @@ Per [STATE.md:222-275](../STATE.md): `signals_bot.json` har annen schema enn `bo
 | `ice_certified_stocks/` | ✅ | DROPPED (A11) | n/a | OK |
 | `nopa_crush/` | ✅ | DROPPED (A8) | n/a | OK |
 | `pplt_holdings/` | ✅ | DROPPED (A7) | n/a | OK |
-| `forex_factory_2007_2025.csv` (toppnivå) | n/a | `forex` subkommando | 41063 rader (CSV har 83428 linjer) | ⚠️ **Halvparten av rader** — verifiser om filter (high-impact only?) er bevisst |
+| `forex_factory_2007_2025.csv` (toppnivå) | n/a | `forex` subkommando | 41063 rader (CSV har 83428 linjer) | ✅ **Bevisst filter** — High+Medium impact only per session 118 STATE-entry. Low + Non-Economic events filtreres ut for å redusere støy i `event_distance`-driver. Ikke bug. |
 | `unica_quinzenal_latest.pdf` (toppnivå) | n/a | **ingen** | 1 rad i unica_reports (fra fetcher) | **GAP — orphan PDF** |
 | `Baltic Dry Index ... .pdf` (toppnivå) | n/a | `bdi` subkommando | 2888 rader BDI i shipping_indices | OK |
 
 **Anbefaling (MEDIUM):**
 1. Legg til `comex`-subkommando i `ingest_manual_data.py` for å laste manuell COMEX inventory-data (KRITISK 1 PARTIALLY RESOLVED → fully resolved).
 2. Legg til `cafe`-subkommando for CONAB Café-boletins (parallelt med 9.3).
-3. Verifisér at `forex` 41063/83428-ratio er bevisst (impact-filter?), eller fix ingest-loop.
+3. ~~Verifisér at `forex` 41063/83428-ratio er bevisst~~ — **AVKLART**: bevisst High+Medium impact-filter per session 118 STATE-entry. Ikke action.
 4. Skriv README.md i `cafe_boletins/`, `comex data/`, `conab_boletins/` — matcher mønsteret fra D2-prep-mapper.
 5. UNICA manuell PDF: enten lag `unica`-PDF-parser-subkommando, eller dokumenter at manuell PDF kun er for arkiv-formål (fetcher dekker fersk data).
 
@@ -261,7 +261,7 @@ Ingen.
 
 - **FRED hard-fail-policy** (Sjekk 9.1): hva er konkret policy-endring som ønskes? Soft per-serie-rapportering i runner vs. hard raise i underliggende `fred.py`?
 - **NOPA WASDE-utvidelse** (Sjekk 9.2): er det bekreftet at WASDE-rapportene faktisk inneholder crush-data (rå XML)? Hvis ikke, dropp tech-gjeld-item.
-- **forex_factory CSV** (Sjekk 10): er 41063/83428-ratio (50%) bevisst impact-filter, eller bug i ingest?
+- ~~**forex_factory CSV** (Sjekk 10): er 41063/83428-ratio (50%) bevisst impact-filter, eller bug i ingest?~~ — **AVKLART 2026-04-30 audit-runde 2:** Bevisst High+Medium-filter per session 118 STATE. Ikke spørsmål til bruker.
 
 ---
 
