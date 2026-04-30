@@ -630,6 +630,10 @@ class EntryEngine:
                     price,
                     entry_zone,
                 )
+                # MAKRO: ingen fast TP, trailing aktiveres fra entry —
+                # ingen tids-baserte exits, og T1-hit/giveback/EMA9-grener
+                # i ExitEngine slås av via horizon-sjekk.
+                is_makro = (horizon or "").upper() == "MAKRO"
                 state = TradeState(
                     signal_id=sig.get("id", ""),
                     direction=dirn,
@@ -641,6 +645,7 @@ class EntryEngine:
                     horizon=horizon,
                     horizon_config=hcfg_init,
                     correlation_group=sig.get("correlation_group"),
+                    trail_active=is_makro,
                 )
                 self._active_states.append(state)
 

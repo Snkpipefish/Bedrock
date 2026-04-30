@@ -35,13 +35,20 @@ Wire-up (session 46 `bot/__main__.py`):
 Exit-prioritet (P1 → P5):
   P1  Geo-spike: move_against > geo_mult × ATR → STENG
   P2  Kill-switch: state.kill_switch satt → STENG
-  P2.5 Weekend: fredag ≥20 CET → SCALP-lukk + SWING/MAKRO SL-stram
+  P2.5 Weekend: fredag ≥20 CET → SCALP-lukk + SWING SL-stram
+       (MAKRO unntatt — skal tåle helge-volatilitet)
   P3  T1 nådd → partial-close (t1_close_pct) + break-even + trail-aktiv
-  P3.5 Trailing-stop (post-T1) → close < trail_level → STENG
+       (kun SCALP/SWING — MAKRO har ingen fast T1)
+  P3.5 Trailing-stop → close brøt trail_level → STENG
+       (post-T1 for SCALP/SWING; aktiv fra entry for MAKRO)
   P3.6 Give-back (pre-T1): peak ≥ gb_peak og progress ≤ gb_exit → STENG
+       (kun SCALP/SWING — krever fast T1-mål)
   P4  EMA9-kryss (post-T1): close brøt EMA9 → STENG (hvis gp.ema9_exit)
+       (kun SCALP — SWING/MAKRO ignorerer 15m EMA-kryss)
   P5a Timeout (candles_since_entry ≥ expiry): progress-basert sortering
+       (kun SCALP — SWING/MAKRO holdes uten tids-tak)
   P5b Hard close (candles_since_entry ≥ 2×expiry) → STENG
+       (kun SCALP — SWING/MAKRO unntatt)
 """
 
 from __future__ import annotations
@@ -128,7 +135,11 @@ class ExitEngine:
 
             state.candles_since_entry += 1
             close = candle.close
-            horizon = state.horizon or "SCALP"
+            horizon = (state.horizon or "SCALP").upper()
+            is_makro = horizon == "MAKRO"
+            # SWING+MAKRO holdes uten tids-tak og uten kortsiktig EMA9-exit;
+            # kun trail/SL/T1/give-back/geo/kill styrer utgang.
+            is_long_horizon = horizon in ("SWING", "MAKRO")
             # SWING/MAKRO bruker 1H ATR/EMA; SCALP bruker 15m
             if horizon in ("SWING", "MAKRO"):
                 atr = self._entry.get_atr14_h1(symbol_id) or self._entry.get_atr14(symbol_id)
@@ -172,7 +183,9 @@ class ExitEngine:
                 self._close_all(state, close, "WEEKEND-CLOSE")
                 remove.append(state)
                 continue
-            if weekend["tighten_sl"] and horizon in ("SWING", "MAKRO") and atr is not None:
+            # MAKRO ekskludert: skal tåle volatilitet over flere helger;
+            # geo-spike-gaten håndterer ekte krise-gap mandag morgen.
+            if weekend["tighten_sl"] and horizon == "SWING" and atr is not None:
                 tighter_sl = self._compute_weekend_sl(state, close, atr)
                 if tighter_sl is not None:
                     old_sl = state.stop_price
@@ -202,7 +215,10 @@ class ExitEngine:
             )
 
             # ── P3: T1 nådd (partial close + BE + trail-aktiv) ──
-            if not state.t1_price_reached:
+            # MAKRO har ingen fast T1 (tp=None fra setup-generator) — hopp
+            # over partial-close, BE-flytting og trail-aktivering. Trailing
+            # er aktivert fra entry og håndteres i P3.5 nedenfor.
+            if not is_makro and not state.t1_price_reached:
                 t1_reached = close <= state.t1_price if is_sell else close >= state.t1_price
                 if t1_reached:
                     t1_close_pct = hcfg.get("exit_t1_close_pct", 0.50)
@@ -230,24 +246,29 @@ class ExitEngine:
                         remove.append(state)
                     continue
 
-            # ── P3.5: Trailing stop (post-T1) ─────────────────
-            if state.trail_active and state.trail_level is not None:
+            # ── P3.5: Trailing stop (post-T1, eller fra entry for MAKRO) ──
+            if state.trail_active:
                 trail_mult = self._resolve_trail_mult(state, hcfg, rules, gp)
                 self._update_trail(state, close, symbol_id, trail_mult)
-                trail_hit = close < state.trail_level if not is_sell else close > state.trail_level
-                if trail_hit:
-                    log.info(
-                        "[TRAIL STOP] %s — close %.5f brøt trail %.5f. Stenger.",
-                        state.signal_id,
-                        close,
-                        state.trail_level,
+                if state.trail_level is not None:
+                    trail_hit = (
+                        close < state.trail_level if not is_sell else close > state.trail_level
                     )
-                    self._close_all(state, close, "TRAIL")
-                    remove.append(state)
-                    continue
+                    if trail_hit:
+                        log.info(
+                            "[TRAIL STOP] %s — close %.5f brøt trail %.5f. Stenger.",
+                            state.signal_id,
+                            close,
+                            state.trail_level,
+                        )
+                        self._close_all(state, close, "TRAIL")
+                        remove.append(state)
+                        continue
 
             # ── P3.6: Give-back beskyttelse (pre-T1) ──────────
-            if not state.t1_price_reached:
+            # MAKRO har ingen T1-mål — give-back måles relativt til T1 og
+            # er meningsløst her. Trail i P3.5 ivaretar exit.
+            if not is_makro and not state.t1_price_reached:
                 gb_peak = rules.get("giveback_peak_threshold", gp.gb_peak)
                 gb_exit = rules.get("giveback_exit_threshold", gp.gb_exit)
                 if state.peak_progress >= gb_peak and progress <= gb_exit:
@@ -262,12 +283,16 @@ class ExitEngine:
                     continue
 
             # ── P4: EMA9-kryss (post-T1) ──────────────────────
+            # Kun SCALP bruker kortsiktig EMA9-exit. SWING/MAKRO holder
+            # uavhengig av 15m EMA9 — trail er eneste exit-mekanikk
+            # utover P1/P2/P3/P3.6.
             ema9_exit_enabled = gp.ema9_exit
             if hcfg.get("exit_ema_tf") == "D1":
                 ema9_exit_enabled = False  # D1-EMA ikke implementert
             reconcile_grace = 3 if state.reconciled else 0
             if (
-                state.t1_price_reached
+                not is_long_horizon
+                and state.t1_price_reached
                 and ema_c
                 and ema9_exit_enabled
                 and state.candles_since_entry > reconcile_grace
@@ -280,9 +305,15 @@ class ExitEngine:
                     continue
 
             # ── P5a: Timeout ──────────────────────────────────
+            # SWING+MAKRO holdes til trail/SL/T1 utløses — ingen tids-exit.
+            # Kun SCALP får 8-candle-timeout.
             exp = state.expiry_candles
             timeout_partial_pct = hcfg.get("exit_timeout_partial_pct", 0.50)
-            if not state.t1_price_reached and state.candles_since_entry >= exp:
+            if (
+                not is_long_horizon
+                and not state.t1_price_reached
+                and state.candles_since_entry >= exp
+            ):
                 if progress > timeout_partial_pct:
                     base_trail = self._resolve_trail_mult(state, hcfg, rules, gp)
                     log.info(
@@ -313,7 +344,8 @@ class ExitEngine:
                     continue
 
             # ── P5b: Hard close ───────────────────────────────
-            if state.candles_since_entry >= exp * 2:
+            # SWING+MAKRO unntatt fra hard close også. Kun SCALP.
+            if not is_long_horizon and state.candles_since_entry >= exp * 2:
                 log.info("[16-CANDLE] %s — hard close.", state.signal_id)
                 self._close_all(state, close, "16-CANDLE")
                 remove.append(state)
@@ -367,7 +399,7 @@ class ExitEngine:
     def _update_trail(self, state: TradeState, close: float, symbol_id: int, mult: float) -> None:
         """Ratchet trail-level og send amend til cTrader hvis forbedret.
         Portert fra `trading_bot.py:_update_trail` (2617-2659)."""
-        horizon = state.horizon or "SCALP"
+        horizon = (state.horizon or "SCALP").upper()
         if horizon in ("SWING", "MAKRO"):
             atr = self._entry.get_atr14_h1(symbol_id) or self._entry.get_atr14(symbol_id) or 0.0
         else:
