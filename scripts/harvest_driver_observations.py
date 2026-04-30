@@ -209,9 +209,14 @@ def harvest_one(
     step_days: int,
     instruments_dir: str,
     progress_every: int = 25,
+    start_date: pd.Timestamp | None = None,
 ) -> int:
     """Harvest én (instrument, horizon, direction)-kombo. Returnerer antall
     nye rader skrevet (0 hvis alt var allerede gjort).
+
+    ``start_date`` filtrerer ut ref_dates før gitt timestamp (per-instrument
+    coverage-trimming — sparer kompute på år før instrumentets primære
+    drivere har data).
     """
     horizon_name = _HORIZON_DAYS_TO_NAME[horizon_days]
     outcomes = _outcomes_for_instrument(store, instrument, horizon_days)
@@ -221,6 +226,19 @@ def harvest_one(
             flush=True,
         )
         return 0
+
+    # Filter på start-date hvis gitt
+    if start_date is not None:
+        n_before = len(outcomes)
+        outcomes = outcomes[outcomes["ref_date"] >= start_date].reset_index(drop=True)
+        n_after = len(outcomes)
+        if n_after < n_before:
+            print(
+                f"  [{instrument} {horizon_days}d {direction}] "
+                f"start_date={start_date.strftime('%Y-%m-%d')} filtrerte {n_before - n_after} ref_dates "
+                f"({n_before} → {n_after})",
+                flush=True,
+            )
 
     # Step subsampling
     if step_days > 1:
@@ -368,6 +386,7 @@ def harvest_instrument(
     instruments_dir: str,
     horizons: list[int] | None = None,
     directions: list[str] | None = None,
+    start_date: pd.Timestamp | None = None,
 ) -> int:
     """Harvest alle (horizon, direction)-kombinasjoner for ett instrument."""
     horizons = horizons or HORIZONS
@@ -384,6 +403,7 @@ def harvest_instrument(
                 direction=direction,
                 step_days=step_days,
                 instruments_dir=instruments_dir,
+                start_date=start_date,
             )
             total += n
     return total
@@ -396,13 +416,22 @@ def main() -> int:
     parser.add_argument("--direction", action="append", choices=["buy", "sell"], default=None)
     parser.add_argument("--step-days", type=int, default=14)
     parser.add_argument("--instruments-dir", default="config/instruments")
+    parser.add_argument(
+        "--start-date",
+        default=None,
+        help="ISO-dato (YYYY-MM-DD). Skipper ref_dates før denne — for å unngå "
+        "compute-sløsing på år hvor instrumentets primær-drivere mangler data.",
+    )
     args = parser.parse_args()
 
     cfg = load_from_env()
     store = DataStore(cfg.db_path)
 
+    start_date = pd.Timestamp(args.start_date) if args.start_date else None
+
     print(
-        f"Harvest start: instrument={args.instrument} step={args.step_days} db={cfg.db_path}",
+        f"Harvest start: instrument={args.instrument} step={args.step_days} "
+        f"start_date={args.start_date or '(full historikk)'} db={cfg.db_path}",
         flush=True,
     )
 
@@ -414,6 +443,7 @@ def main() -> int:
         instruments_dir=args.instruments_dir,
         horizons=args.horizon,
         directions=args.direction,
+        start_date=start_date,
     )
 
     print(f"\nFerdig: {args.instrument} +{n_total} rows totalt", flush=True)
