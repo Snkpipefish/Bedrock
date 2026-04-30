@@ -632,25 +632,41 @@ function renderSetupCards(containerId, setups, totalBeforeFilter) {
   }).join('');
 }
 
-// ─── Soft commodities setups (session 49) ─────────────────────
-// Gjenbruker renderSetupCards — ingen agri-spesifikke felt i setup-
-// dict enda. Runde 2 / Fase 10 legger til weather/ENSO/Conab-badges
-// når fetch-lagene er ferdige.
+// ─── Agri-fanen: setups + weather-overlay (Etappe 5) ──────────
+// Setup-kort gjenbrukes via renderSetupCards, men blir post-prosessert
+// med en weather-strip per kort hvor instrument finnes i ENSO/region-
+// mappingen. Weather-data fetches en gang per fane-load.
 let AGRI_SETUPS = [];
+let AGRI_WEATHER = null;  // { enso, instruments: { [name]: {...} } }
 
 async function loadAgriSetups() {
-  try {
-    const res = await fetch('/api/ui/setups/agri').then(r => r.json());
+  // Setups + weather hentes parallelt — uavhengige.
+  const [setupsRes, weatherRes] = await Promise.allSettled([
+    fetch('/api/ui/setups/agri').then(r => r.json()),
+    fetch('/api/ui/agri_weather').then(r => r.json()),
+  ]);
+
+  if (weatherRes.status === 'fulfilled' && weatherRes.value?.available) {
+    AGRI_WEATHER = weatherRes.value;
+  } else {
+    AGRI_WEATHER = null;
+    if (weatherRes.status === 'rejected') {
+      console.error('Agri-weather load feilet:', weatherRes.reason);
+    }
+  }
+
+  if (setupsRes.status === 'fulfilled') {
+    const res = setupsRes.value;
     AGRI_SETUPS = res.setups || [];
     const visEl = document.getElementById('agri-count');
     const totEl = document.getElementById('agri-total');
     if (visEl) visEl.textContent = res.visible_count;
     if (totEl) totEl.textContent = res.total_count;
     renderAgriFiltered();
-  } catch (err) {
-    console.error('Agri setups load feilet:', err);
+  } else {
+    console.error('Agri setups load feilet:', setupsRes.reason);
     const el = document.getElementById('agri-cards');
-    if (el) el.innerHTML = `<p class="empty">Fetch feilet: ${err.message}</p>`;
+    if (el) el.innerHTML = `<p class="empty">Fetch feilet: ${setupsRes.reason.message}</p>`;
   }
 }
 
@@ -658,6 +674,65 @@ function renderAgriFiltered() {
   const filtered = applyFilter('agri', AGRI_SETUPS, fltAxesFromSetup);
   setFilterCount('agri', filtered.length, AGRI_SETUPS.length);
   renderSetupCards('agri-cards', filtered, AGRI_SETUPS.length);
+  // Etter render — injiser weather-strip på hvert kort som har data.
+  if (AGRI_WEATHER) _decorateAgriWeather('agri-cards', filtered, AGRI_WEATHER);
+}
+
+// Bygger en kompakt weather-strip og setter den inn i hvert agri-kort.
+// Gjøres post-render istedenfor å endre signaturen til renderSetupCards
+// (som er delt med Finans-fanen). Strip-en plasseres rett under family-mini.
+function _decorateAgriWeather(containerId, setups, weather) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+  const cards = root.querySelectorAll('.setup-card');
+  if (cards.length !== setups.length) return;
+  const enso = weather.enso;
+  const instruments = weather.instruments || {};
+  setups.forEach((s, i) => {
+    const ctx = instruments[s.instrument];
+    if (!ctx && !enso) return;
+    const card = cards[i];
+    if (!card || card.querySelector('.weather-strip')) return;
+    card.insertAdjacentHTML('beforeend', _weatherStripHtml(enso, ctx));
+  });
+}
+
+function _weatherStripHtml(enso, ctx) {
+  const parts = [];
+  if (enso) {
+    const cls = `wt-enso-${enso.class || 'neutral'}`;
+    parts.push(`<span class="wt-pill ${cls}" title="NOAA ONI per ${enso.as_of || '–'}">
+      <span class="wt-pill-key">ENSO</span>
+      <span class="wt-pill-val">${enso.label || '–'} ${_signedNum(enso.value)}</span>
+    </span>`);
+  }
+  if (ctx) {
+    const wm = ctx.weather_monthly;
+    if (wm) {
+      const wb = wm.water_bal;
+      const wbCls = (wb == null) ? 'wt-neutral' : (wb < -20 ? 'wt-dry' : (wb > 20 ? 'wt-wet' : 'wt-neutral'));
+      parts.push(`<span class="wt-pill ${wbCls}" title="${ctx.region} per ${wm.month || '–'}">
+        <span class="wt-pill-key">${(ctx.region || '').replace(/_/g, ' ')}</span>
+        <span class="wt-pill-val">vannbalanse ${wb == null ? '–' : _signedNum(wb)}mm · tørr ${wm.dry_days ?? '–'}d</span>
+      </span>`);
+    }
+    const dr = ctx.drought;
+    if (dr) {
+      const cls = `wt-drought-${dr.class || 'low'}`;
+      parts.push(`<span class="wt-pill ${cls}" title="US Drought Monitor per ${dr.as_of || '–'}">
+        <span class="wt-pill-key">Tørke</span>
+        <span class="wt-pill-val">${dr.drought_pct.toFixed(1)}% (D2+ ${(dr.d2_pct + dr.d3_pct + dr.d4_pct).toFixed(1)}%)</span>
+      </span>`);
+    }
+  }
+  if (!parts.length) return '';
+  return `<div class="weather-strip">${parts.join('')}</div>`;
+}
+
+function _signedNum(v) {
+  if (v == null || isNaN(v)) return '–';
+  const n = Number(v);
+  return (n >= 0 ? '+' : '') + n.toFixed(2).replace(/\.?0+$/, '');
 }
 
 // ─── Datakilder: pipeline-helse + daglig systemsjekk ──────────

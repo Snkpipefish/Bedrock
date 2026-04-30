@@ -586,6 +586,161 @@ def _classify_staleness(has_data: bool, age_hours: float | None, stale_hours: fl
     return "stale"
 
 
+# Mapping: agri-instrument → primær weather-region. Holdt på Python-
+# siden (ikke YAML) for å unngå konflikt med harvest som leser YAML
+# per iterasjon. Senere kan vi flytte dette til config/instruments
+# når 12.6 er ferdig og instrument-filer kan oppdateres trygt.
+_AGRI_REGION_MAP: dict[str, str] = {
+    "Corn": "us_cornbelt",
+    "Soybean": "us_cornbelt",
+    "Wheat": "us_great_plains",
+    "Cotton": "us_delta_cotton",
+    "Coffee": "brazil_coffee",
+    "Sugar": "brazil_mato_grosso",
+    "Cocoa": "west_africa_cocoa",
+    # Energi-kort som lever i agri-fanen kan også scenes (hvis aktuelt):
+    "NaturalGas": "us_ng_midwest",
+    "NatGas": "us_ng_midwest",
+}
+
+
+def _classify_enso(oni: float) -> str:
+    if oni <= -0.5:
+        return "la_nina"
+    if oni >= 0.5:
+        return "el_nino"
+    return "neutral"
+
+
+def _enso_label(cls: str) -> str:
+    return {"la_nina": "La Niña", "el_nino": "El Niño", "neutral": "Nøytral"}.get(cls, cls)
+
+
+def _classify_drought(none_pct: float) -> str:
+    drought_pct = 100.0 - none_pct
+    if drought_pct < 20:
+        return "low"
+    if drought_pct < 40:
+        return "moderate"
+    if drought_pct < 60:
+        return "high"
+    return "severe"
+
+
+@ui_bp.get("/api/ui/agri_weather")
+def agri_weather() -> Response:
+    """Vær-/klima-kontekst for agri-instrumenter.
+
+    Aggregerer (read-only fra DB):
+      - global: NOAA ONI (ENSO-indeks) + klassifisering
+      - per instrument: primær weather-region, siste weather_monthly-rad,
+        og US Drought Monitor-status (kun hvis region er amerikansk).
+
+    Returnerer alt på én gang slik at agri-fanen ikke trenger N
+    parallelle kall. Ukjente instrumenter får tom kontekst-blokk.
+    WAL-trygg under harvest.
+    """
+    from datetime import datetime
+
+    from bedrock.data.store import DataStore
+
+    cfg = _config()
+    now = datetime.now(timezone.utc)
+
+    try:
+        store = DataStore(cfg.db_path)
+        with store._connect() as con:
+            con.execute("PRAGMA query_only = 1")
+
+            oni_row = con.execute(
+                "SELECT date, value FROM fundamentals "
+                "WHERE series_id = 'NOAA_ONI' ORDER BY date DESC LIMIT 1"
+            ).fetchone()
+
+            wm_rows = con.execute(
+                """
+                SELECT region, month, temp_mean, precip_mm, hot_days, dry_days, wet_days, water_bal
+                FROM weather_monthly wm
+                INNER JOIN (
+                    SELECT region AS r, MAX(month) AS m
+                    FROM weather_monthly GROUP BY region
+                ) latest ON wm.region = latest.r AND wm.month = latest.m
+                """
+            ).fetchall()
+            weather_by_region = {
+                row[0]: {
+                    "month": row[1],
+                    "temp_mean": float(row[2]) if row[2] is not None else None,
+                    "precip_mm": float(row[3]) if row[3] is not None else None,
+                    "hot_days": int(row[4]) if row[4] is not None else None,
+                    "dry_days": int(row[5]) if row[5] is not None else None,
+                    "wet_days": int(row[6]) if row[6] is not None else None,
+                    "water_bal": float(row[7]) if row[7] is not None else None,
+                }
+                for row in wm_rows
+            }
+
+            drought_row = con.execute(
+                "SELECT map_date, none_pct, d0_pct, d1_pct, d2_pct, d3_pct, d4_pct "
+                "FROM drought_monitor WHERE aoi = 'us' ORDER BY map_date DESC LIMIT 1"
+            ).fetchone()
+    except Exception as exc:
+        log.warning("[UI] agri_weather db-feil: %s", exc)
+        return jsonify(
+            {
+                "available": False,
+                "reason": f"db-feil: {exc}",
+                "last_check": now.isoformat(),
+            }
+        )
+
+    enso: dict[str, Any] | None = None
+    if oni_row is not None:
+        oni_val = float(oni_row[1])
+        cls = _classify_enso(oni_val)
+        enso = {
+            "value": round(oni_val, 2),
+            "class": cls,
+            "label": _enso_label(cls),
+            "as_of": oni_row[0],
+        }
+
+    drought_us: dict[str, Any] | None = None
+    if drought_row is not None:
+        none_pct = float(drought_row[1]) if drought_row[1] is not None else 100.0
+        drought_us = {
+            "as_of": drought_row[0],
+            "none_pct": round(none_pct, 1),
+            "drought_pct": round(100.0 - none_pct, 1),
+            "d0_pct": round(float(drought_row[2] or 0), 1),
+            "d1_pct": round(float(drought_row[3] or 0), 1),
+            "d2_pct": round(float(drought_row[4] or 0), 1),
+            "d3_pct": round(float(drought_row[5] or 0), 1),
+            "d4_pct": round(float(drought_row[6] or 0), 1),
+            "class": _classify_drought(none_pct),
+        }
+
+    # Per-instrument-pakker — en for hvert kjent agri-instrument.
+    instruments: dict[str, dict[str, Any]] = {}
+    for inst, region in _AGRI_REGION_MAP.items():
+        wm = weather_by_region.get(region)
+        is_us = region.startswith("us_")
+        instruments[inst] = {
+            "region": region,
+            "weather_monthly": wm,
+            "drought": drought_us if is_us else None,
+        }
+
+    return jsonify(
+        {
+            "available": True,
+            "enso": enso,
+            "instruments": instruments,
+            "last_check": now.isoformat(),
+        }
+    )
+
+
 @ui_bp.get("/api/ui/risk_indicators")
 def risk_indicators() -> Response:
     """Aggregerte risk-indikatorer for Markedspuls-fanen.
