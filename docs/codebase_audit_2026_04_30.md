@@ -230,14 +230,28 @@ Verifisert: [src/bedrock/fetch/fas_esr.py:134](../src/bedrock/fetch/fas_esr.py) 
 6. Tester: 2 nye unit-tester i `tests/unit/test_engine_now_propagation.py` — `test_now_propagated_to_driver_params` + `test_no_now_falls_back_to_wallclock`.
 
 **Steg 2 — Type B: Forex Factory backfill med publikasjons-lag**
+
+**Semantikk-valg (presisert audit-runde 4):** Tre mulige tolkninger av `fetched_at`:
+- **(a) "import-tidspunkt"** — alle 41063 events får `fetched_at=2026` → AsOfDateStore filtrerer ut alle for ref_date < 2026. Ikke nyttig for backtest.
+- **(b) "event_ts" (nåværende)** — samme-dag-filtrering bug. Ikke korrekt.
+- **(c) "publikasjons-tidspunkt"** — Forex Factory publiserer kalenderen ~7 dager før event. Korrekt look-ahead-fri backtest-semantikk.
+
+**Valg: (c) med approximation `event_ts - 7 days`**. Ekonomiske kalendere som Forex Factory publiseres typisk uker/måneder i forveien for scheduled events; 7 dager er konservativ approximation som unngår look-ahead-bias mens den fortsatt eksponerer events for backtest-replay 1+ uke før event.
+
+Implementasjon:
 1. `ingest_manual_data.py:91-97`: legg til `--publication-lag-days INT` arg (default 7). Sett `filtered["fetched_at"] = filtered["event_ts"] - pd.Timedelta(days=publication_lag_days)`.
 2. Re-import `data/manual/forex_factory_2007_2025.csv` med `--publication-lag-days 7`. Krever lokal DB-write; må vente til Codespace-harvest er ferdig OG synkronisert lokalt, eller kjøres i Codespace selv etter harvest.
 3. Tester: oppdater `tests/integration/test_ingest_forex_factory.py` (hvis finnes) til å assert at fetched_at < event_ts.
 
 **Steg 3 — Type C: Driver backtest-mode (valgfri, vurder etter steg 1+2)**
-1. Etter steg 1+2 er live: kjør event_distance for sample ref_dates med ekte `_now=ref_date+12:00:00` UTC (markeds-tid) og sjekk om variasjon dukker opp. Hvis fortsatt monotone → driver-design må endres.
-2. Foreslått driver-endring: ny param `snapshot_time_offset_hours` (default 0 for live, 12 for backtest) som forskyver `_now` i driver-koden; eller `mode: 'live' | 'snapshot'` der `snapshot`-mode bruker dag-buckets ("event innen 1 dag = score X").
-3. Beslutning utsettes til etter steg 1+2 + IC-måling.
+
+**Presisering audit-runde 4:** Type C er ikke uavhengig bug. `min_hours=4` er intensjonell live-trading-design ("vent 4h før scheduled release"). For backtest-snapshot kl 00:00 UTC er events typisk 8-14h unna (markeds-åpning) så score=1.0 (ingen event imminent) er semantisk korrekt utfall. Det er Type A+B som forhindrer driveren fra å EVER se events i utgangspunktet.
+
+Type C bør derfor IKKE fixes uavhengig — kun re-evalueres etter A+B er live.
+
+1. Etter steg 1+2 er live: kjør event_distance for sample ref_dates med ekte `_now=ref_date+12:00:00` UTC (markeds-tid) og sjekk om variasjon dukker opp. Hvis IC > 0 → bug fixet, ingen Type C-endring nødvendig.
+2. Hvis fortsatt monotone etter A+B: vurder ny param `snapshot_time_offset_hours` (default 0 for live, 12 for backtest) som forskyver `_now` i driver-koden; eller `mode: 'live' | 'snapshot'` der `snapshot`-mode bruker dag-buckets ("event innen 1 dag = score X").
+3. Beslutning om Type C-endring utsettes til etter A+B + IC-måling i analyzer-runde.
 
 **Steg 4 — Backfill driver_observations**
 1. Slett event_distance-rader for berørte ref_dates: `DELETE FROM driver_observations WHERE driver_name='event_distance';` (3153 rader, alle ugyldige).
@@ -256,6 +270,38 @@ Verifisert: [src/bedrock/fetch/fas_esr.py:134](../src/bedrock/fetch/fas_esr.py) 
 - Eksponerer `_now`-propagering for fremtidige tids-bevisste drivere — muligheter (ikke umiddelbar effekt).
 
 **Status:** ÅPEN — eskalert til **PRE-REBALANSERINGS-BLOCKER** for sub-fase 12.6 analyzer-runde. Se [STATE.md](../STATE.md) tech-gjeld-blokken.
+
+#### Strategi for sub-fase 12.6 analyzer-runde (audit-runde 4)
+
+Tre alternativer for hvordan event_distance håndteres mens fix-en pågår:
+
+**Strategi 1 — Akseptér event_distance droppet av analyzer**
+- Vent på Codespace-harvest, kjør analyzer, IC=0 for event_distance, rebalansering dropper den.
+- Fix bug separat senere, re-aktiver event_distance i en senere YAML-rebalanserings-runde.
+- **Pro:** Enkleste path, ingen avbrudd av Codespace-harvest.
+- **Con:** Mister event_distance-signal i scoring til neste rebalansering. "Hvorfor ble den droppet?"-spørsmål senere.
+
+**Strategi 2 — Fix bug før analyzer**
+- Stopp Codespace-harvest, fix Type A + B i én session, re-harvest event_distance kun (de instrumentene som er ferdige), så fortsette med resten + analyzer.
+- **Pro:** event_distance fungerer fra start i 12.6-rebalansering.
+- **Con:** Avbryter 24t-harvest, krever DB-state-håndtering, kan introdusere nye bugs midt i kritisk fase.
+
+**Strategi 3 — Filter event_distance fra analyzer (ANBEFALT)**
+- Kjør analyzer som planlagt, men la `analyze_driver_performance.py` eksplisitt skip event_distance (kjent buggy → IC ikke meningsfull).
+- Rebalansering ignorerer driveren helt — vekt-fordeling i risk-familie justeres som om den ikke eksisterer.
+- Fix + re-harvest event_distance etter at 12.6-runden er ferdig.
+- **Pro:** Hverken stopp-harvest eller dropp driver permanent. Cleanest.
+- **Con:** Krever 1-2 linjers commit i analyzer-skriptet før session 137 kjører analyzer.
+
+**Anbefaling: Strategi 3.** Strategi 1 forurenser rebalanseringen med "kunstig droppet"-driver. Strategi 2 risikerer kritisk-fase-disruption. Strategi 3 isolerer bug-en uten å forstyrre flyten.
+
+Konkret implementasjon for session 137:
+```python
+# I analyze_driver_performance.py — første action før IC-loop:
+SKIP_DRIVERS = {"event_distance"}  # Buggy per audit 2026-04-30 Sjekk 9.5 — fix pending
+df = df[~df["driver_name"].isin(SKIP_DRIVERS)]
+```
++ commit-melding som dokumenterer hvorfor: `feat(analyzer): skip event_distance grunnet pre-rebalanserings-blocker (audit-runde 3)`.
 
 ### 9.6 — AAII bull_bear_spread-bug
 
