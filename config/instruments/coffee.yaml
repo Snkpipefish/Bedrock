@@ -61,15 +61,23 @@ families:
         weight: 1.0
         params: {}
   conab:
-    # Sub-fase 12.5+ session 111: Brasil er ~40% av global kaffeproduksjon
-    # — DOMINANT. KC-kontrakten er primært arabica-basert, så cafe_arabica
-    # er mest relevant metrikk. conab_yoy som eneste driver.
+    # Sub-fase 12.7 D3 A10 (session 135): A10 Cecafé månedlig kaffe-eksport
+    # lagt til som co-driver med CONAB. Brasil er ~40% av global
+    # kaffeproduksjon — CONAB anslår produksjon (forward-looking strategisk
+    # supply-side), Cecafé rapporterer realisert eksport (backward-looking
+    # taktisk supply-realization). 0.70/0.30 split — CONAB primær,
+    # Cecafé co-driver.
     weight: 2
     drivers:
       - name: conab_yoy
-        weight: 1.0
+        weight: 0.7
         params:
           commodity: cafe_arabica
+      - name: cecafe_export_change
+        weight: 0.3
+        params:
+          coffee_type: sum
+          bull_when: low
   cross:
     # Sub-fase 12.5+ session 80: erstattet DXY-proxy med direkte BRL-
     # måling via DEXBZUS. USDBRL UP = BRL svakhet = bull for
