@@ -538,6 +538,53 @@ function renderFinancialFiltered() {
   renderSetupCards('financial-cards', filtered, FINANCIAL_SETUPS.length);
 }
 
+// Horisont-pille med fargekodet bakgrunn (scalp/swing/makro).
+function _horizonBadgeHtml(horizon) {
+  const h = (horizon || '').toLowerCase();
+  const cls = h === 'scalp' || h === 'swing' || h === 'makro' ? `hz-${h}` : 'hz-unknown';
+  const label = horizon ? horizon.toUpperCase() : '–';
+  return `<span class="hz-badge ${cls}">${label}</span>`;
+}
+
+// Mini-score-bar som viser score / max_score med publish-floor markert.
+function _scoreBarMiniHtml(score, maxScore, minPublish) {
+  const sPct = _pctOf(score, maxScore);
+  const pPct = _pctOf(minPublish || 0, maxScore);
+  return `<div class="card-scorebar" title="score ${_fmt2(score)} / ${_fmt2(maxScore)} · publish-gulv ${_fmt2(minPublish)}">
+    <div class="card-scorebar-fill" style="width:${sPct.toFixed(1)}%"></div>
+    <div class="card-scorebar-mark" style="left:${pPct.toFixed(1)}%"></div>
+  </div>`;
+}
+
+// Familie-breakdown på kort: liste av små bars per familie.
+// `families` har form { name: { score, drivers: [...] } }. Vi viser
+// alle familier i synkende score-rekkefølge — inaktive (score=0)
+// dempes ned. Stripens bredde er score / makspoeng-i-settet, slik at
+// relativ-rangering er lesbar uavhengig av horisont-vekter.
+function _familyMiniHtml(families) {
+  if (!families || typeof families !== 'object') return '';
+  const items = Object.entries(families).map(([name, fam]) => ({
+    name,
+    score: Number(fam?.score || 0),
+    n: (fam?.drivers || []).length,
+  }));
+  if (!items.length) return '';
+  const peak = Math.max(...items.map(i => Math.abs(i.score)), 0.01);
+  items.sort((a, b) => Math.abs(b.score) - Math.abs(a.score));
+  return `<div class="family-mini">
+    ${items.map(i => {
+      const w = Math.max(2, Math.min(100, (Math.abs(i.score) / peak) * 100));
+      const inactive = i.score === 0 ? ' inactive' : '';
+      const sign = i.score < 0 ? ' neg' : '';
+      return `<div class="fm-row${inactive}${sign}" title="${i.n} driver${i.n === 1 ? '' : 'e'}">
+        <span class="fm-name">${i.name}</span>
+        <span class="fm-bar"><span class="fm-bar-fill" style="width:${w.toFixed(1)}%"></span></span>
+        <span class="fm-score">${_fmt2(i.score)}</span>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
 function renderSetupCards(containerId, setups, totalBeforeFilter) {
   const el = document.getElementById(containerId);
   if (!el) return;
@@ -570,15 +617,17 @@ function renderSetupCards(containerId, setups, totalBeforeFilter) {
         <span class="grade ${gradeCls}">${s.grade || '?'}</span>
       </header>
       <div class="card-row">
-        <span class="horizon">${s.horizon || '–'}</span>
-        <span class="score">score: ${fmt(s.score, 2)}</span>
+        ${_horizonBadgeHtml(s.horizon)}
+        <span class="score">${_fmt2(s.score)} / ${_fmt2(s.max_score)}</span>
       </div>
+      ${_scoreBarMiniHtml(s.score, s.max_score, s.min_score_publish)}
       <table class="levels">
         <tr><th>Entry</th><td>${fmt(entry)}</td></tr>
         <tr><th>Stop</th><td>${fmt(sl)}</td></tr>
         <tr><th>T1</th><td>${t1Cell}</td></tr>
         <tr><th>R:R</th><td>${rrCell}</td></tr>
       </table>
+      ${_familyMiniHtml(s.families)}
     </article>`;
   }).join('');
 }
