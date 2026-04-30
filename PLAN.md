@@ -7,6 +7,22 @@ Referanser: `NYTT_PROSJEKT_UTKAST.md` (i cot-explorer), `AGRI_KARTLEGGING.md` (i
 
 ## Endringshistorikk (etter initial godkjenning)
 
+**2026-04-30 (UI-refresh, session 137):** § 10 oppdatert fra "4 faner"
+til "5 faner" og fane-navnene rettet for å matche faktisk innhold.
+6 av 7 etapper levert (1d969ee, 943961f, 5b526c3, ba991e1, 04d9fea +
+bug-log 56353c9):
+- Fane-renaming: Skipsloggen→Handelslogg, Financial setups→Finans,
+  Soft commodities→Agri, Sentiment→Markedspuls, Kartrommet→Datakilder.
+- Setup-kort: horisont-pille + mini-score-bar + familie-mini-bars.
+- Tre nye read-only-API: `/api/ui/system_health`, `/api/ui/risk_indicators`,
+  `/api/ui/agri_weather`. Alle WAL-trygge under harvest.
+- Admin: ny "Drivers"-fane + `GET /admin/drivers`-endpoint.
+- Første mobile breakpoints i prosjektet (≤ 768px og ≤ 480px).
+- Kjent bug logget: `aaii_sentiment.bull_bear_spread`-kolonne
+  feilskrevet av fetcher (workaround i risk_indicators-endpoint).
+- **Etappe 7 (Backtest-fane) ikke startet** — venter på harvest-session
+  136-fullføring + analyzer-runde (session 137+).
+
 **2026-04-28 (planleggings-session, sub-fase 12.7):** Ny § 19 lagt til —
 "Horisont-refactor + data-utvidelse". To-spors plan godkjent etter audit
 + tre patcher fra bruker:
@@ -1129,29 +1145,111 @@ Splitt `trading_bot.py` (2977 linjer, én fil) i:
 
 ---
 
-## 10. UI — 4 faner
+## 10. UI — 5 faner
 
-### 10.1 Fane 1 — Skipsloggen
+> **Refresh-pass 2026-04-30 (session 137):** opprinnelig 4-fane-design er
+> utvidet til 5 faner og fane-navnene er rettet for å matche faktisk
+> innhold etter sub-fase 12.5/12.6/12.7-arbeid. Section-IDer i HTML er
+> beholdt (`skipsloggen`, `financial`, `agri`, `sentiment`, `kartrom`)
+> for å unngå JS-bindings-brudd. Mobile breakpoints (≤ 768px og ≤ 480px)
+> er lagt til samme runde — første `@media`-blokker i prosjektet.
 
-Bot-logg og historikk. Dagens `index.html` Skipsloggen-fane er et godt utgangspunkt. Leser `data/signal_log.json`. Kapteins-KPI, trade-log, pirat-flavor per trade (deterministisk hash).
+### 10.1 Fane 1 — Handelslogg (tidligere "Skipsloggen")
 
-### 10.2 Fane 2 — Financial setups
+Bot-logg og historikk. Leser `data/signal_log.json`. KPI-kort
+(trades/wins/losses/win-rate/total PnL) + filtrerbar trade-tabell med
+horisont-kolonne. Filter-bar med horisont-pills (`Alle/Scalp/Swing/Makro`).
 
-Aktive setups fra `data/setups/active.json` filtrert på asset_class ∈ {fx, metals, energy, indices, crypto}. 5 topp-kort med instrument/retning/horisont/grade/stjerner + entry/SL/TP + 6 familie-badges. Klikk → modal med full explain-trace og analog-matcher.
+### 10.2 Fane 2 — Finans (tidligere "Financial setups")
 
-### 10.3 Fane 3 — Soft commodities setups
+Aktive setups fra `data/signals.json` filtrert på asset_class ∈
+{fx, metals, energy, indices, crypto}. Setup-kort viser:
+- Instrument + retning + grade-pille
+- **Horisont-pille** (fargekodet: scalp=blå, swing=oransje, makro=lilla)
+- **Mini-score-bar** med publish-floor-mark
+- Entry/Stop/T1/R:R (trailing-tekst for MAKRO-setups uten TP)
+- **Familie-mini-bars** med alle 6 familier rangert etter relativ score
+Klikk → modal med full explain-trace og analog-matcher.
 
-Samme som fane 2 men for `asset_class ∈ {grains, softs}`. Viser i tillegg agri-spesifikke data: vær-stress per region, ENSO-status, Conab/UNICA-flagg, yield-score, analog-år.
+### 10.3 Fane 3 — Agri (tidligere "Soft commodities")
 
-### 10.4 Fane 4 — Kartrommet
+Samme kort-format som Finans, men leser `data/agri_signals.json`
+(asset_class ∈ {grains, softs}) og familie-mini bruker agri-familier
+(outlook/yield/weather/enso/cross/analog).
 
-Pipeline-kontrollbord. Viser helse per fetch-kilde (fresh/aging/stale/missing) med `_meta.generated_at` og rad-antall. Gruppert (Core / Bot-priser / CFTC / Ekstern COT / Fundamentals / Sektor / Geo). Read-only.
+**Weather-strip nederst på hvert kort** (Etappe 5, commit `ba991e1`):
+- ENSO-pille (NOAA ONI fase: La Niña / Nøytral / El Niño)
+- Region-pille (water_bal + tørr-dager fra weather_monthly)
+- Drought-pille (US Drought Monitor, kun for amerikanske instrumenter)
 
-### 10.5 Separat: Admin-rule-editor
+Backend-API: `GET /api/ui/agri_weather` aggregerer alt på én call.
 
-`web/admin.html`. Beskyttet med lokal kode (kode-input → hasha + matchet mot server-lagret hash). Lar bruker redigere YAML-regler, se dry-run-diff, commit. POST til `/admin/rules` på signal_server.
+### 10.4 Fane 4 — Markedspuls (tidligere "Sentiment")
 
-Fordi repoet er public ligger `admin.html` bak et separat endpoint som ikke linkes fra `index.html`. Bruker kan nå den via direkte URL + kode.
+Risk-indikatorer + sentiment + nyheter. Tre seksjoner:
+
+**Risk-indikatorer** (Etappe 4, commit `5b526c3`) — 5 makro-indikatorer
+fra `bedrock.db` med klassifisering (calm/normal/elevated/stress):
+- VIX term-spread (VIXCLS − VIX3M)
+- AAII bull-bear (kontrarisk, regnet bull% − bear% pga fetcher-bug —
+  se "Kjente bugs" i STATE.md)
+- NFCI (Chicago Fed financial conditions)
+- Credit-spread BAA-10Y (Moody's)
+- 10Y real yield (DGS10 − T10YIE)
+
+Backend-API: `GET /api/ui/risk_indicators`.
+
+**Crypto-sentiment** — Fear & Greed-historikk + market-cap.
+
+**Markedsnyheter** — Google News RSS-kategorier med artikkel-counts.
+
+### 10.5 Fane 5 — Datakilder (tidligere "Kartrommet")
+
+Pipeline-kontrollbord + daglig systemsjekk.
+
+**Daglig systemsjekk-banner** (Etappe 3, commit `943961f`):
+fargekodet OK/FAIL-pille + grid med ett kort per check
+(fetcher_freshness, pipeline_log_errors, agri_tp_override, signal_diff).
+
+Backend-API: `GET /api/ui/system_health` leser nyeste
+`data/_meta/monitor_*.json` skrevet av `scripts/daily_monitor.py`.
+
+**Pipeline-helse per fetch-kilde** (uendret fra session 50): viser
+fresh/aging/stale/missing med `_meta.generated_at` og rad-antall.
+Gruppert (Core / Bot-priser / CFTC / Ekstern COT / Fundamentals /
+Sektor / Geo). Read-only.
+
+### 10.6 Fane 6 — Backtest (planlagt, ikke implementert)
+
+**Etappe 7 av UI-refresh-arbeidet, ikke startet.** Avventer harvest-
+session 136-fullføring + analyzer-runde (session 137+). Skal vise:
+- IC per driver × instrument × horisont fra harvest-output
+- Forward-return-statistikk fra `driver_observations`
+- Cross-correlation-matrise mellom drivere
+- Anbefalinger for vekt-justeringer fra rebalanserings-analyse
+
+### 10.7 Separat: Admin-rule-editor + driver-utforsker
+
+`web/admin.html`. Beskyttet med lokal kode (kode-input → hasha + matchet
+mot server-lagret hash). Tre seksjoner via sidebar-nav:
+
+**Rules** (uendret): rediger YAML-regler per instrument, dry-run-diff,
+commit. POST til `/admin/rules`.
+
+**Drivers** (Etappe 6, commit `04d9fea`): driver-utforsker som viser
+alle registrerte drivere fra in-process registry + observation-stats
+fra `driver_observations`. Hver driver klassifisert som
+active/monotone/silent/deprecated. Brukes til å se hvilke drivere
+faktisk leverer signal vs. er stille (typisk symptom på data-mangel
+eller at trigger-instrument ikke er i drift).
+
+Backend-API: `GET /admin/drivers` (X-Admin-Code-protected).
+
+**Logs**: tail siste N linjer fra `logs/pipeline.log` med refresh.
+
+Fordi repoet er public ligger `admin.html` bak et separat endpoint
+som ikke linkes fra `index.html`. Bruker kan nå den via direkte URL
++ kode.
 
 ### 10.6 Prinsipp: ingenting krever terminal
 
