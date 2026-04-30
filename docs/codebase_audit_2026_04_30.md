@@ -8,11 +8,11 @@
 
 ## Sammendrag
 
-- **0 kritiske funn** (ingen security-issues, ingen korrupt DB-state, ingen breaking schema-drift).
-- **5 medium funn** (krever post-harvest-handling før Fase 13 cutover).
+- **1 kritisk funn** (audit-runde 3, 2026-04-30): `event_distance` trippel-bug eskalert til pre-rebalanserings-blocker (Sjekk 9.5).
+- **4 medium funn** (krever post-harvest-handling før Fase 13 cutover).
 - **6 lav-prio cleanup-items** (housekeeping; kan klumpes).
 
-Ingen funn flagget for umiddelbar respons mid-harvest. Audit-resultatet bekrefter at sub-fase 12.7 ble levert konsistent og at åpne tech-gjeld-items i [STATE.md](../STATE.md) (linje ~136 og ~200) fortsatt reflekterer reality.
+Det kritiske funnet trenger ikke mid-harvest-respons (read-only DB tillater ikke fix nå), men må adresseres i analyzer-runden FØR YAML-rebalansering for å unngå dobbel-arbeid. Audit-resultatet bekrefter at sub-fase 12.7 ble levert konsistent.
 
 ---
 
@@ -189,13 +189,73 @@ Verifisert: [src/bedrock/fetch/fas_esr.py:134](../src/bedrock/fetch/fas_esr.py) 
 
 **Status:** ÅPEN bekreftet. **Fix er en én-linje docstring-edit**.
 
-### 9.5 — event_distance monotone-bug
+### 9.5 — event_distance monotone-bug — **DYP-DIAGNOSE 2026-04-30 (audit-runde 3)**
 
-Verifisert via DB: `driver_observations` har **3153 rader for event_distance, kun 1 distinct value (1.0)**.
+**Bekreftet bug-omfang:** `driver_observations` har **3153 rader for `event_distance`, ALLE med driver_value=1.0** (empty_score=max). Spenner 780 distinct ref_dates 2010-01-25 → 2026-03-02. Påvirker per nå 6 av 22 wirede instrumenter (Brent 1714, CrudeOil 1001, Cotton 155, Sugar 156, GBPUSD 123, NaturalGas 4) — øvrige 16 mangler harvest-rader fordi Codespace-pass pågår.
 
-Rotårsak ([src/bedrock/engine/drivers/risk.py:200](../src/bedrock/engine/drivers/risk.py)): driveren bruker `datetime.now(timezone.utc)` ved manglende `_now`-param. Harvester-skriptet (`harvest_driver_observations.py`) sender ikke `_now=ref_date` per observasjon — derfor får alle historiske ref_dates `now=harvest_run_time + lookahead 24t`, ingen events i window, retur=1.0 (empty_score).
+**Klassifisering: Type D — KOMPOUNDED bug i 3 lag.** Den preliminære hypotesen i audit-runde 1 ("harvester sender ikke `_now=ref_date`") var bare ⅓ av historien. Faktisk root-cause spenner driver-, engine- OG ingest-laget.
 
-**Status:** ÅPEN bekreftet. Fix krever at harvester injiserer `_now=ref_date` i params for tids-sensitive drivere.
+**Type A — Engine `_now`-propagering mangler (KRITISK):**
+- Harvester ([scripts/harvest_driver_observations.py:281](../scripts/harvest_driver_observations.py)) sender `now=ref_ts.to_pydatetime()` til `generate_signals(...)` ✅ riktig
+- Men [signals.py:233](../src/bedrock/orchestrator/signals.py) lagrer `run_ts = now or datetime.now(...)` og bruker det KUN til `stabilize_setup(now=run_ts)` ([signals.py:598](../src/bedrock/orchestrator/signals.py)) for hysterese
+- [signals.py:_compute_scores:359-393](../src/bedrock/orchestrator/signals.py) sender ikke `run_ts` videre til `eng.score(...)` — `Engine.score`-signaturen aksepterer ikke `now`
+- [engine.py:384-388](../src/bedrock/engine/engine.py) propagerer `params_with_dir = {**driver.params, "_direction": ..., "_horizon": ...}` — `_now` mangler i listen
+- [risk.py:201-205](../src/bedrock/engine/drivers/risk.py) faller tilbake til `datetime.now(timezone.utc)` = harvest-tidspunkt
+- **Konsekvens:** for alle 780 ref_dates er `now`-konteksten fast = harvest-tid. Alle rader får samme score basert på events-state ved harvest-kjøring.
+
+**Type B — `ingest_forex_factory` setter `fetched_at = event_ts` uten publikasjons-lag (KRITISK for backtest-realisme):**
+- [scripts/ingest_manual_data.py:91-97](../scripts/ingest_manual_data.py) hardkoder `filtered["fetched_at"] = filtered["event_ts"]` med kommentar "Forex Factory publiserer events i forveien så event_ts ≈ fetched_at er rimelig tilnærming". Det er IKKE rimelig: events publiseres typisk 1-7 dager før event-tidspunkt.
+- AsOfDateStore.get_econ_events ([store_view.py:236-263](../src/bedrock/backtest/store_view.py)) clipper på `fetched_at <= as_of_date`. Harvester setter `as_of_date = pd.Timestamp(ref_date_str)` = midnatt UTC.
+- Verifisert: for ref_date='2010-02-12' (00:00 UTC) returnerer underlying store 4877 rader, men AsOfDateStore returnerer **0 rader** fordi alle events samme dag har `fetched_at=event_ts > 00:00`.
+- Bug påvirker ALLE drivere som leser `get_econ_events` via AsOfDateStore i backtest, ikke bare event_distance. Per nå er event_distance eneste konsument.
+- Live-mode `calendar_ff.py` ([fetch/calendar_ff.py:66](../src/bedrock/fetch/calendar_ff.py)) setter `fetched_at = datetime.now(UTC)` korrekt — events i framtiden får fetched_at < event_ts. Bug-en er lokal til CSV-import.
+
+**Type C — Driver-design for backtest-snapshot (DESIGN-TWEAK):**
+- Default `min_hours=4`, `lookahead_hours=24`. For backtest-snapshot kl 00:00 UTC vil events typisk være 6-24h unna (markeds-åpningstid 12:30-21:00 UTC for US-events) → `nearest_h2e ≥ 4.0` → score=1.0 nesten alltid.
+- Selv simulert med Type-A+B fikset (manuell `_now` + bypassed AsOfDateStore-clipping): for sample 30 ref_dates Brent ga driver 1.0 i 30/30 også med `min_hours=24, lookahead=72`.
+- Driveren ble designet for live trading ("vent-med-entry"-flagg når event er 0-4h unna). For IC-måling i backtest trenger den enten dag-granularitet eller en `mode: 'live' | 'snapshot'`-bryter.
+
+**Andre drivere som leser `_now`:** Kun `event_distance`. Verifisert via grep over `src/bedrock/engine/drivers/`. Alle andre tids-bevisste drivere bruker `AsOfDateStore`-wrappet store-side filtrering (som fungerer korrekt for ikke-econ_events-tabeller siden de bruker `event_ts/report_date` ikke `fetched_at`).
+
+#### Fix-spec (post-harvest)
+
+**Estimert kompleksitet:** Medium-large (3 lag, +1 backfill-pass).
+
+**Steg 1 — Type A: Engine `_now`-propagering**
+1. `engine.py:Engine.score(...)`: legg til `now: datetime | None = None` parameter.
+2. `engine.py:_score_families(...)`: motta `now`, legg `_now=now.isoformat() if now else None` i `params_with_dir`.
+3. `signals.py:_compute_scores(...)`: aksepter `now: datetime | None`, send til `eng.score(..., now=now)`.
+4. `signals.py:253`: kall `_compute_scores(..., now=run_ts)`.
+5. Behold `risk.py:201-205` fallback-logikken (test-friendly).
+6. Tester: 2 nye unit-tester i `tests/unit/test_engine_now_propagation.py` — `test_now_propagated_to_driver_params` + `test_no_now_falls_back_to_wallclock`.
+
+**Steg 2 — Type B: Forex Factory backfill med publikasjons-lag**
+1. `ingest_manual_data.py:91-97`: legg til `--publication-lag-days INT` arg (default 7). Sett `filtered["fetched_at"] = filtered["event_ts"] - pd.Timedelta(days=publication_lag_days)`.
+2. Re-import `data/manual/forex_factory_2007_2025.csv` med `--publication-lag-days 7`. Krever lokal DB-write; må vente til Codespace-harvest er ferdig OG synkronisert lokalt, eller kjøres i Codespace selv etter harvest.
+3. Tester: oppdater `tests/integration/test_ingest_forex_factory.py` (hvis finnes) til å assert at fetched_at < event_ts.
+
+**Steg 3 — Type C: Driver backtest-mode (valgfri, vurder etter steg 1+2)**
+1. Etter steg 1+2 er live: kjør event_distance for sample ref_dates med ekte `_now=ref_date+12:00:00` UTC (markeds-tid) og sjekk om variasjon dukker opp. Hvis fortsatt monotone → driver-design må endres.
+2. Foreslått driver-endring: ny param `snapshot_time_offset_hours` (default 0 for live, 12 for backtest) som forskyver `_now` i driver-koden; eller `mode: 'live' | 'snapshot'` der `snapshot`-mode bruker dag-buckets ("event innen 1 dag = score X").
+3. Beslutning utsettes til etter steg 1+2 + IC-måling.
+
+**Steg 4 — Backfill driver_observations**
+1. Slett event_distance-rader for berørte ref_dates: `DELETE FROM driver_observations WHERE driver_name='event_distance';` (3153 rader, alle ugyldige).
+2. Re-kjør harvest med fixet kjede — kun event_distance trenger backfill, andre drivere er upåvirket.
+3. Forventet utfall: ≥5 distinct values, IC vs forward_return > 0.
+
+**Verifisering**
+1. SQL: `SELECT COUNT(DISTINCT driver_value) FROM driver_observations WHERE driver_name='event_distance';` → forvent ≥5.
+2. Per-instrument distribusjon viser ikke-monoton spredning (avg ≠ 1.0).
+3. Analyzer-rebalansering rapporterer IC > 0 for event_distance, driveren beholder plass i risk-familien.
+
+**Side-effekter etter fix**
+- Score-endring for 22 instrumenter (event_distance-vekt 0.10-0.30 i risk-familie): grade-flips og publish-flag-endringer forventes.
+- Krever ny baseline (men 12.6 baseline lages uansett etter harvest-end).
+- Påvirker rebalanserings-output: med bug-tilstand droppes driveren (IC=0). Med fix bevares og re-vektes.
+- Eksponerer `_now`-propagering for fremtidige tids-bevisste drivere — muligheter (ikke umiddelbar effekt).
+
+**Status:** ÅPEN — eskalert til **PRE-REBALANSERINGS-BLOCKER** for sub-fase 12.6 analyzer-runde. Se [STATE.md](../STATE.md) tech-gjeld-blokken.
 
 ### 9.6 — AAII bull_bear_spread-bug
 
@@ -236,17 +296,16 @@ Per [STATE.md:222-275](../STATE.md): `signals_bot.json` har annen schema enn `bo
 
 ## Anbefalt handlings-rekkefølge for post-harvest-sessioner
 
-### Kritisk (gjør i 12.6 analyzer-runde)
+### Kritisk (gjør i 12.6 analyzer-runde — FØR rebalansering)
 
-Ingen.
+1. **event_distance trippel-bug** (Sjekk 9.5) — **PRE-REBALANSERINGS-BLOCKER** (eskalert audit-runde 3). Type D kompounded bug i 3 lag (engine `_now`-propagering + Forex Factory ingest fetched_at-bug + driver-design). Hvis ikke fikset før analyzer kjøres, vil rebalansering droppe driveren (IC=0) — som så må re-introduseres etter fix → dobbel rebalansering. Se Sjekk 9.5 fix-spec.
 
 ### Medium (gjør før Fase 13 cutover)
 
 1. **Setup→bot signal-format-mismatch** (Sjekk 9.7) — adapter-design er størst arbeid. Egen session.
 2. **AAII bull_bear_spread fetcher-fix** (Sjekk 9.6) — fix fetcher + backfill 537 rader. Sjekk om driver leser kolonnen direkte.
-3. **event_distance monotone-bug** (Sjekk 9.5) — krever harvester-endring (`_now=ref_date`) + ny harvest-runde for event_distance-kolonnen i driver_observations.
-4. **Manuell-data ingest-gaps** (Sjekk 10) — `comex` + `cafe` subkommandoer i `ingest_manual_data.py`. KRITISK 1 + 9.3 løses sammen.
-5. **Schema-drift** (Sjekk 3) — flytt 3 harvester-tabellers DDL fra scripts/ til src/bedrock/data/schemas.py.
+3. **Manuell-data ingest-gaps** (Sjekk 10) — `comex` + `cafe` subkommandoer i `ingest_manual_data.py`. KRITISK 1 + 9.3 løses sammen.
+4. **Schema-drift** (Sjekk 3) — flytt 3 harvester-tabellers DDL fra scripts/ til src/bedrock/data/schemas.py.
 
 ### Lav-prio (housekeeping-runde — kan klumpes)
 
@@ -265,4 +324,4 @@ Ingen.
 
 ---
 
-**Audit lukket. Neste handling:** vente på Codespace-harvest, så kjør session 137 (analyzer-execution + YAML-rebalansering).
+**Audit lukket (3 runder).** Neste handling: vente på Codespace-harvest, så kjør session 137 (analyzer-execution + YAML-rebalansering). **Pre-rebalanserings-blocker:** event_distance-trippel-bug (Sjekk 9.5) må fikses først, ellers vil rebalansering droppe driveren og kreve dobbel re-balanseringsrunde.
