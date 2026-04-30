@@ -216,6 +216,51 @@ ferdig og 12.6-rebalansering er gjort.
      etter backfill — bør gjøres som ledd i 12.6-rebalanseringen, ikke
      mid-harvest.
 
+2. **Setup→bot signal-format-mismatch** (oppdaget 2026-04-30 under bot-
+   gjennomgang, session 138). `data/signals_bot.json` (skrevet av
+   `bedrock signals-all --bot-only` daglig 03:30) har en helt annen
+   nøkkel-struktur enn `bot/entry.py`/`comms.py` forventer. Resultatet
+   er at boten i prinsippet ikke kan handle disse setups slik koden står
+   i dag — alle entry-gates feiler stille fordi `sig.get("alert_level")`,
+   `sig.get("entry_zone")`, `sig.get("t1")`, `sig.get("stop")`,
+   `sig.get("status")`, `sig.get("id")`, `sig.get("created_at")`,
+   `sig.get("horizon_config")` returnerer alle `None`.
+
+   **Verifisert (2026-04-30):** AUDUSD-entry i signals_bot.json har
+   top-level keys `[active_families, analog, asset_class, direction,
+   families, gates_triggered, grade, horizon, instrument, max_score,
+   min_score_publish, published, score, setup, skip_reason]`. Pris-
+   nivåene ligger nestet i `setup.setup.{entry,sl,tp}` med field-navn
+   som ikke matcher bot-leseren. `horizon` er lowercase ("makro" vs
+   bot-eksisterende `"MAKRO"`-sammenligninger — den ene casing-buggen
+   ble allerede mitigert i session 138 ved at exit normaliserer til
+   uppercase, men entry leser fortsatt direkte).
+
+   **Konsekvens:** PLAN § 3.2 dataflyt-diagram viser "orchestrator →
+   signal_server /push-alert → bot polls /signals" som beskrivelse,
+   men implementasjonen valgte fil-route via `bedrock signals-all`
+   (PLAN § 3.1: `(publisher folded inn i CLI signals_all)`). Signals-
+   all skriver rå Setup-objekter til disk uten å transformere til den
+   `PersistedSignal`-aktige schema bot-koden konsumerer. Den daglige
+   pipelinen er ikke end-to-end testet mot ekte bot-fyring.
+
+   **Fix-pakke (utsatt til etter harvest, før Fase 13 cutover):**
+   - Adapter Setup → bot-signal-schema (mapper `setup.entry → alert_level`
+     med ±tolerance for `entry_zone`, `setup.tp → t1` (None for MAKRO),
+     `setup.sl → stop`, uppercaser `horizon`, kopierer
+     `setup.setup_id → id`, populerer `horizon_config` per horisont,
+     setter `status` ut fra publish-flag/grade).
+   - Avgjør: skal adapteren leve i `signals_all` (CLI som genererer fila)
+     eller i `signal_server` (transform on-read i `/signals`-endepunktet)?
+     Førstnevnte holder server enkel; sistnevnte holder fila human-
+     readable for diff/backtest.
+   - End-to-end-test: fiktivt MAKRO-signal → fil → server → bot-poller-
+     mock → `_on_candle_closed` skal gå inn i AWAITING_CONFIRMATION.
+   - **Risiko:** Endrer signal-schema bot leser fra. Må verifiseres mot
+     scalp_edge-bot's faktiske felter også (parallell-drift skal beholdes
+     uendret). Hvis adapteren skal levere samme schema gammel scalp-edge-
+     bot fikk, kan den hentes nær 1:1 fra `~/scalp_edge/`-bot-config.
+
 ## Workflow-notes (2026-04-26)
 
 - **Session 103 commit-struktur:** STATE.md-endringen for session 103
@@ -335,6 +380,108 @@ ferdig og 12.6-rebalansering er gjort.
 ---
 
 ## Session log (newest first)
+
+### 2026-04-30 — Session 138: Bot-rensing + horisont-spesifikk exit-logikk (parallell med harvest-session 136)
+
+**Scope:** Bruker initiert gjennomgang av `src/bedrock/bot/`. To
+arbeidsområder:
+(a) Fjerne dødkode fra bot-siden (push-prices ble portert fra scalp_edge
+    men aldri wired inn — harvester eier prises mot `DataStore`).
+(b) Justere ExitEngine slik at horisont-spesifikk atferd matcher
+    setup-generatorens kontrakt: MAKRO har `tp=None` fra
+    `src/bedrock/setups/generator.py`, og bruker har avklart at SWING
+    også skal slippe tids-baserte exits og kortsiktig EMA9-kryss.
+
+Kjørt parallelt med harvest-session 136 — kun rørt `src/bedrock/bot/**`
++ tester. Ingen `config/instruments/*.yaml` eller `engine/drivers/**`
+endret (harvest-trygt).
+
+**Endret:**
+
+A) Fjernet pris-push fra bot-siden:
+   - `src/bedrock/bot/comms.py`: slettet `assemble_prices_from_state()`
+     og `SignalComms.push_prices()`-metoden + `INSTRUMENT_TO_PRICE_KEY`-
+     importen. Modul-docstring oppdatert til å forklare at harvester
+     skriver direkte til `DataStore`.
+   - `src/bedrock/bot/instruments.py`: slettet `INSTRUMENT_TO_PRICE_KEY`
+     (kun konsument var den slettede `assemble_prices_from_state`).
+   - `tests/unit/bot/test_comms.py` + `tests/unit/bot/test_instruments.py`:
+     fjernet 9 tester for slettet funksjonalitet.
+   - Signal-server-endepunktet `/push-prices` er IKKE rørt — det er ren
+     server-API uten kjente kallere men beholdes for nå (utenfor
+     bot-scope).
+
+B) MAKRO-tilpasning i `src/bedrock/bot/exit.py` + `entry.py`:
+   - Nye MAKRO-states får `trail_active=True` ved opprettelse
+     (`entry.py:633-647`) — trailing aktiv fra entry, ingen venting
+     på T1.
+   - `manage_open_positions` utleder `is_makro` og `is_long_horizon` per
+     iterasjon. `horizon` normaliseres til uppercase for tolerans mot
+     casing-forskjeller (signals_bot.json bruker lowercase "makro").
+   - **P3 T1-hit + partial-close + BE:** skip for MAKRO (ingen fast T1).
+   - **P3.5 Trailing-stop:** kondisjon endret slik at `trail_level` kan
+     initialiseres på første tick når `trail_active=True` men
+     `trail_level=None`.
+   - **P3.6 Give-back:** skip for MAKRO (måles relativt til T1).
+
+C) SWING-tilpasning (utvidelse etter brukerens avklaring at SWING også
+   skal holde uten tids-tak og uten EMA9-kryss):
+   - **P4 EMA9-kryss:** kun SCALP. SWING og MAKRO ignorerer kortsiktig
+     15m EMA9-kryss.
+   - **P5a Timeout (8-candle):** kun SCALP. SWING og MAKRO holdes til
+     trail/SL/T1 utløses.
+   - **P5b Hard close (16-candle):** kun SCALP. SWING og MAKRO unntatt.
+   - Implementert via `not is_long_horizon`-gate på P4/P5a/P5b.
+
+D) Weekend SL-stram justert:
+   - Fredag 19-20 CET strammet tidligere SL for både SWING og MAKRO til
+     1.5×ATR. Endret slik at kun SWING får helge-stram. MAKRO holder
+     original SL gjennom helga; P1 geo-spike fanger ekte krise-gap mandag.
+   - Begrunnelse: MAKRO holder uker/måneder, å stramme SL hver fredag
+     krymper risikorommet kunstig over tid og kicker ut posisjoner som
+     tesen ennå er gyldig for.
+
+**Funn (ikke fikset — utsatt til etter harvest):**
+
+Setup→bot signal-format-mismatch: `data/signals_bot.json` har en helt
+annen nøkkel-struktur enn `bot/entry.py` og `bot/comms.py` leser. Alle
+`sig.get("alert_level"/"entry_zone"/"t1"/"stop"/"status"/"id"/
+"created_at"/"horizon_config")` returnerer `None` mot dagens fil-format.
+Pris-nivåene ligger nestet under `setup.setup.{entry,sl,tp}`. Dette er
+en reell pre-Fase-13 blocker som er nå dokumentert i "Kjente bugs" pkt 2
+med fix-pakke (Setup → bot-signal-adapter, plassering åpen: i
+`signals_all`-CLI eller server-side transform).
+
+**Beslutninger:**
+- Beholdt `_compute_progress`-helper og `state.t1_price`-feltet i
+  TradeState selv om MAKRO ikke bruker dem — endring til Pydantic eller
+  fjerning krever ADR + bredere refaktor.
+- Casing-normalisering kun gjort i ExitEngine. EntryEngine leser fortsatt
+  raw `sig.get("horizon")` — tas i samme adapter-PR som format-fixen.
+- Weekend-stram-konfig (`weekend.sl_atr_mult`) beholdt på 1.5×ATR for
+  SWING; ingen YAML-endringer.
+
+**Eksit-matrise etter session:**
+
+| Prioritet | SCALP | SWING | MAKRO |
+|---|:-:|:-:|:-:|
+| P1 Geo-spike | ✅ | ✅ | ✅ |
+| P2 Kill-switch | ✅ | ✅ | ✅ |
+| P2.5 Weekend SL-stram | ✅ (close) | ✅ (stram) | ❌ |
+| P3 T1 hit | ✅ | ✅ | ❌ |
+| P3.5 Trail-stop | post-T1 | post-T1 | fra entry |
+| P3.6 Give-back | ✅ | ✅ | ❌ |
+| P4 EMA9-kryss | ✅ | ❌ | ❌ |
+| P5a Timeout | ✅ | ❌ | ❌ |
+| P5b Hard close | ✅ | ❌ | ❌ |
+
+**Tester:** 2389/2389 grønne på 902.7s (full suite, eksl. snapshot).
+Bot+logical isolert: 323/323.
+
+**Commits:** ennå ikke committet (bruker velger commit-tidspunkt).
+
+**Neste session:** Etter at harvest-session 136 er ferdig — Setup→bot-
+adapter for signal-format-mismatch. Se "Kjente bugs" pkt 2 for fix-pakke.
 
 ### 2026-04-30 — Session 137: UI-refresh Etappe 1-6 (parallell med harvest-session 136)
 
