@@ -1052,7 +1052,10 @@ UI-flow: admin-siden (separat HTML, beskyttet med lokal kode), laster gjeldende 
 - Twisted + Protobuf + cTrader Open API
 - 3-punkts confirmation (body, wick-rejection, EMA-gradient)
 - Alle entry-gates (horizon-TTL, daily-loss, correlation, agri-subgruppe, session-times, Monday-gap, oil-geo)
-- Exit-prioritet P1-P5 (geo-spike, kill, weekend, T1, trail, EMA9, timeout, hard-close)
+- Exit-prioritet P1-P5 (geo-spike, kill, weekend, T1, trail, EMA9, timeout, hard-close) **— horisont-spesifikk gating per session 138 (2026-04-30):**
+  - **SCALP** kjører hele matrisen (P1-P5b)
+  - **SWING** ekskluderer P4 (EMA9-kryss), P5a (8-candle timeout), P5b (16-candle hard close); P2.5 weekend strammer SL men lukker ikke
+  - **MAKRO** ekskluderer P3 (T1, ingen fast TP), P3.6 (give-back), P4, P5a, P5b, og P2.5 weekend SL-stram. P3.5 trail er aktiv fra entry. Trail/SL er eneste exit utover P1/P2.
 - Position sizing (risk-% + lot-tier + VIX/geo-nedskalering)
 - Schema-versjons-toleranse (1.0, 2.0, 2.1, 2.2)
 - Daily-loss-state persistering
@@ -1142,6 +1145,35 @@ Splitt `trading_bot.py` (2977 linjer, én fil) i:
 | `bot/__main__.py` | Wire alt sammen | 100-150 |
 
 **Null logikk-endring i denne fasen** (utover fjerning av agri-override). Bare renaming + flytting.
+
+### 9.5 Pre-Fase-13 blockers (oppdaget 2026-04-30, session 138)
+
+To åpne saker som må adresseres før Fase 13 cutover (se STATE.md "Kjente
+bugs" for full kontekst):
+
+1. **Setup→bot signal-format-adapter.** `data/signals_bot.json` (skrevet
+   av `bedrock signals-all --bot-only`) har en helt annen schema enn
+   `bot/entry.py` + `bot/comms.py` leser. Bot kan ikke handle dagens
+   signal-fil. Krever en adapter som mapper:
+
+   - `setup.setup.entry → alert_level` med `entry_zone` ±tolerance
+   - `setup.setup.tp → t1` (None-respekt for MAKRO)
+   - `setup.setup.sl → stop`
+   - lowercase `horizon → uppercase`
+   - `setup.setup_id → id`
+   - populerer `horizon_config` per horisont (TTL, sizing-base-risk osv.)
+   - utleder `status` ut fra `published`-flag og grade
+
+   Plassering åpen: i `signals_all`-CLI (transformer ved skriving) eller
+   i `signal_server` (transformer ved `/signals`-respons). Førstnevnte
+   holder serveren enkel; sistnevnte holder fila human-readable for
+   diff/backtest. **Avgjøres i første post-harvest-session.**
+
+2. **Push-prices fra bot fjernet (2026-04-30).** `SignalComms.push_prices`
+   + `assemble_prices_from_state` + `INSTRUMENT_TO_PRICE_KEY` slettet —
+   harvester eier prises mot `DataStore`. Server-endepunktet
+   `/push-prices` beholdt foreløpig (utenfor bot-scope), kan vurderes
+   slettet senere.
 
 ---
 
