@@ -45,6 +45,7 @@
         <aside class="admin-sidebar">
             <nav class="admin-nav">
                 <button class="admin-nav-btn active" data-admin-section="rules">Rules</button>
+                <button class="admin-nav-btn" data-admin-section="drivers">Drivers</button>
                 <button class="admin-nav-btn" data-admin-section="logs">Logs</button>
             </nav>
 
@@ -88,6 +89,31 @@
 
                 <div class="admin-editor-feedback" id="feedback" hidden></div>
             </div>
+        </section>
+
+        <!-- Section: Drivers-utforsker (Etappe 6) -->
+        <section class="admin-editor-pane" id="drivers-pane" data-admin-section="drivers" hidden>
+            <header class="admin-editor-head">
+                <div>
+                    <h2>Drivers</h2>
+                    <p class="meta">Registrerte drivere + observation-stats fra <code>driver_observations</code>.</p>
+                </div>
+                <div class="admin-editor-actions">
+                    <label class="admin-tail-input">
+                        Filter:
+                        <select id="drivers-status-filter">
+                            <option value="all">Alle</option>
+                            <option value="active">Active</option>
+                            <option value="monotone">Monotone</option>
+                            <option value="silent">Silent</option>
+                            <option value="deprecated">Deprecated</option>
+                        </select>
+                    </label>
+                    <button class="btn btn-ghost" id="drivers-reload-btn">↻ Refresh</button>
+                </div>
+            </header>
+            <div id="drivers-summary" class="drivers-summary">Laster…</div>
+            <div id="drivers-list" class="drivers-list"></div>
         </section>
 
         <!-- Section: Logs-viewer -->

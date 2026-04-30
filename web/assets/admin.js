@@ -349,7 +349,7 @@ async function dryRunCurrent() {
 }
 
 
-// ─── Section-nav (Rules / Logs) ───────────────────────────────
+// ─── Section-nav (Rules / Drivers / Logs) ─────────────────────
 function showSection(name) {
   document.querySelectorAll('.admin-nav-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.adminSection === name);
@@ -359,6 +359,7 @@ function showSection(name) {
     el.hidden = el.dataset.adminSection !== name;
   });
   if (name === 'logs') loadLogs();
+  if (name === 'drivers') loadDrivers();
 }
 
 function wireNav() {
@@ -403,6 +404,94 @@ function wireLogs() {
   document.getElementById('logs-tail').addEventListener('change', loadLogs);
 }
 
+// ─── Drivers-utforsker (Etappe 6) ─────────────────────────────
+let DRIVERS_CACHE = null;
+
+async function loadDrivers() {
+  const summaryEl = document.getElementById('drivers-summary');
+  const listEl = document.getElementById('drivers-list');
+  summaryEl.textContent = 'Laster…';
+  listEl.innerHTML = '';
+  try {
+    const res = await authFetch('/admin/drivers');
+    if (!res.ok) {
+      const data = await safeJson(res);
+      summaryEl.textContent = `HTTP ${res.status}: ${data.error || 'ukjent feil'}`;
+      return;
+    }
+    const data = await res.json();
+    DRIVERS_CACHE = data;
+    renderDriversSummary(data.summary || {});
+    renderDriversList(data.drivers || []);
+  } catch (err) {
+    summaryEl.textContent = `Feil: ${err.message}`;
+  }
+}
+
+function renderDriversSummary(s) {
+  const el = document.getElementById('drivers-summary');
+  el.innerHTML = `
+    <span class="drv-stat drv-stat-total">${s.total ?? 0} drivere</span>
+    <span class="drv-stat drv-active">active: ${s.active ?? 0}</span>
+    <span class="drv-stat drv-monotone">monotone: ${s.monotone ?? 0}</span>
+    <span class="drv-stat drv-silent">silent: ${s.silent ?? 0}</span>
+    <span class="drv-stat drv-deprecated">deprecated: ${s.deprecated ?? 0}</span>
+  `;
+}
+
+function renderDriversList(drivers) {
+  const filterVal = document.getElementById('drivers-status-filter').value || 'all';
+  const filtered = filterVal === 'all' ? drivers : drivers.filter(d => d.status === filterVal);
+  // Group by family
+  const groups = {};
+  for (const d of filtered) {
+    const fam = d.family || '(ingen)';
+    (groups[fam] = groups[fam] || []).push(d);
+  }
+  const familyOrder = Object.keys(groups).sort();
+  const root = document.getElementById('drivers-list');
+  if (!filtered.length) {
+    root.innerHTML = '<p class="meta">Ingen drivere matcher filter.</p>';
+    return;
+  }
+  root.innerHTML = familyOrder.map(fam => `
+    <section class="drv-family">
+      <h3>${fam} <span class="meta">(${groups[fam].length})</span></h3>
+      <table class="drv-table">
+        <thead>
+          <tr>
+            <th>Driver</th>
+            <th>Status</th>
+            <th class="num">obs</th>
+            <th class="num">instr</th>
+            <th class="num">distinct</th>
+            <th>Siste obs</th>
+            <th>Tidligst obs</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${groups[fam].map(d => `<tr class="drv-row drv-row-${d.status}">
+            <td><code>${d.name}</code>${d.registered ? '' : ' <span class="drv-badge drv-deprecated">deprecated</span>'}</td>
+            <td><span class="drv-badge drv-${d.status}">${d.status}</span></td>
+            <td class="num">${d.n_obs}</td>
+            <td class="num">${d.n_instruments}</td>
+            <td class="num">${d.n_distinct_values}</td>
+            <td>${d.latest_ref_date || '–'}</td>
+            <td>${d.earliest_ref_date || '–'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </section>
+  `).join('');
+}
+
+function wireDrivers() {
+  document.getElementById('drivers-reload-btn').addEventListener('click', loadDrivers);
+  document.getElementById('drivers-status-filter').addEventListener('change', () => {
+    if (DRIVERS_CACHE) renderDriversList(DRIVERS_CACHE.drivers || []);
+  });
+}
+
 // ─── Init ─────────────────────────────────────────────────────
 function wireEditor() {
   document.getElementById('yaml-editor').addEventListener('input', () => setDirty());
@@ -430,6 +519,7 @@ wireGate();
 wireEditor();
 wireNav();
 wireLogs();
+wireDrivers();
 loadServerStatus();
 setInterval(loadServerStatus, 30000);
 bootGate();

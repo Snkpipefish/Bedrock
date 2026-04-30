@@ -449,3 +449,146 @@ def dry_run_rule(instrument_id: str) -> tuple[object, int]:
         ),
         200,
     )
+
+
+@rules_bp.get("/admin/drivers")
+def list_drivers() -> tuple[object, int]:
+    """Driver-utforsker — alle registrerte drivere + observation-stats.
+
+    Etappe 6: lar admin se hvilke drivere som faktisk har data i
+    `driver_observations` (harvest-output) vs. de som er registrert
+    men "stille". Stille drivere er typisk symptom på enten manglende
+    data-kilde eller at instrumenter som triggerer dem ikke er i drift.
+
+    Read-only mot DB — WAL-trygg under harvest.
+    """
+    auth_err = _check_auth()
+    if auth_err is not None:
+        return auth_err
+
+    cfg = _get_config()
+
+    # Hent registrerte driver-navn fra in-process registry.
+    try:
+        from bedrock.engine.drivers import all_names
+
+        registered = list(all_names())
+    except Exception as exc:
+        log.warning("[ADMIN] driver-registry-import feilet: %s", exc)
+        registered = []
+
+    # Aggreger observation-stats per driver fra DB.
+    import sqlite3
+
+    stats: dict[str, dict[str, object]] = {}
+    family_by_driver: dict[str, str] = {}
+    try:
+        con = sqlite3.connect(cfg.db_path)
+        try:
+            con.execute("PRAGMA query_only = 1")
+            rows = con.execute(
+                """
+                SELECT driver_name,
+                       MAX(family_name) AS family,
+                       COUNT(*) AS n_obs,
+                       COUNT(DISTINCT instrument) AS n_instruments,
+                       COUNT(DISTINCT driver_value) AS n_distinct_values,
+                       MAX(ref_date) AS latest_ref_date,
+                       MIN(ref_date) AS earliest_ref_date
+                FROM driver_observations
+                GROUP BY driver_name
+                """
+            ).fetchall()
+            for r in rows:
+                name = r[0]
+                family_by_driver[name] = r[1] or ""
+                stats[name] = {
+                    "n_obs": int(r[2] or 0),
+                    "n_instruments": int(r[3] or 0),
+                    "n_distinct_values": int(r[4] or 0),
+                    "latest_ref_date": r[5],
+                    "earliest_ref_date": r[6],
+                }
+        finally:
+            con.close()
+    except Exception as exc:
+        log.warning("[ADMIN] driver-observations db-feil: %s", exc)
+
+    # Fra YAML-config: bygg tentativ driver→familie-mapping for
+    # registrerte drivere som ikke har observasjoner ennå (gir oss
+    # en familie-grupperinghint selv for stille drivere).
+    yaml_family_by_driver: dict[str, str] = {}
+    try:
+        import yaml
+
+        for path in sorted(cfg.instruments_dir.glob("*.yaml")):
+            try:
+                doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            except Exception:
+                continue
+            rules = doc.get("rules") or {}
+            families = rules.get("families") or {}
+            if not isinstance(families, dict):
+                continue
+            for fam_name, fam_block in families.items():
+                if not isinstance(fam_block, dict):
+                    continue
+                drivers = fam_block.get("drivers") or []
+                if not isinstance(drivers, list):
+                    continue
+                for d in drivers:
+                    if isinstance(d, dict):
+                        dname = d.get("name")
+                    elif isinstance(d, str):
+                        dname = d
+                    else:
+                        dname = None
+                    if dname and dname not in yaml_family_by_driver:
+                        yaml_family_by_driver[dname] = fam_name
+    except Exception as exc:
+        log.warning("[ADMIN] yaml driver-family-map feilet: %s", exc)
+
+    # Bygg unionssett: alle registrerte + alle observert (kan finnes
+    # i DB som "deprecated" og ikke lenger registrert).
+    all_names_set = set(registered) | set(stats.keys())
+    drivers: list[dict[str, object]] = []
+    for name in sorted(all_names_set):
+        s = stats.get(name) or {}
+        family = family_by_driver.get(name) or yaml_family_by_driver.get(name) or "(ingen)"
+        is_registered = name in registered
+        n_obs = int(s.get("n_obs") or 0)
+        n_distinct = int(s.get("n_distinct_values") or 0)
+        # "Stille" = registrert men ingen observasjoner ennå.
+        # "Kvasi-stille" = har observasjoner, men ≤ 1 distinkt verdi
+        # (driver returnerer alltid samme tall — typisk placeholder).
+        if not is_registered:
+            status = "deprecated"
+        elif n_obs == 0:
+            status = "silent"
+        elif n_distinct <= 1:
+            status = "monotone"
+        else:
+            status = "active"
+        drivers.append(
+            {
+                "name": name,
+                "family": family,
+                "registered": is_registered,
+                "status": status,
+                "n_obs": n_obs,
+                "n_instruments": int(s.get("n_instruments") or 0),
+                "n_distinct_values": n_distinct,
+                "latest_ref_date": s.get("latest_ref_date"),
+                "earliest_ref_date": s.get("earliest_ref_date"),
+            }
+        )
+
+    summary = {
+        "total": len(drivers),
+        "active": sum(1 for d in drivers if d["status"] == "active"),
+        "monotone": sum(1 for d in drivers if d["status"] == "monotone"),
+        "silent": sum(1 for d in drivers if d["status"] == "silent"),
+        "deprecated": sum(1 for d in drivers if d["status"] == "deprecated"),
+    }
+
+    return jsonify({"drivers": drivers, "summary": summary}), 200
