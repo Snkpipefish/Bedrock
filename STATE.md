@@ -129,8 +129,11 @@
 - **AsOfDateStore (session 116):** utvidet med 9 nye proxy-getters (econ_events/cot_ice/cot_euronext/eia_inventory/comex_inventory/seismic_events/conab_estimates/unica_reports/shipping_indices) + tilsvarende `has_*`-helpers. Kritisk fix — uten denne falt orchestrator-replay tilbake til defensive 0.0 for alle nye Phase A-C-drivere fordi underlying-getterne kastet `AttributeError`. 24 nye tester dekker hver getter + region/from_ts-filter + tom-clip-fallback.
 - **Phase D-output (session 116):** `data/_meta/backtest_phase_d_baseline.json` (68 rader, session 99-reprise), `data/_meta/backtest_phase_d_orchestrator.json` (48 rader, 86.4 min sweep), `data/_meta/backtest_phase_d_spike_{cot_ice_mm_pct,conab_yoy,unica_change}.json` (3 spikes). Rapport: `docs/backtest_phase_d_2026-04.md` med diff-tabeller + flagg-terskel ≥3pp Δhit_rate eller ≥2 grade-flips.
 - **Sub-fase 12.6-fundament (session 117):** 3 nye SQLite-tabeller (`driver_observations` long-format, `signal_setups`, `feature_snapshots`) + 5 nye scripts (`harvest_driver_observations.py`, `harvest_feature_snapshots.py`, `run_full_history_harvest.sh`, `analyze_driver_performance.py`, `analyze_cross_correlations.py`).
-- **Sub-fase 12.6-harvest (session 136 restart 2026-04-30 08:14):** detached harvest re-startet med 44 drivere (auto-pickup via YAML — `harvest_driver_observations.py` har ingen statisk driver-liste, kaller `generate_signals()` og itererer over `entry.families[].drivers[]`). PID i `data/_meta/harvest_session_136.pid`, log i `harvest_session_136.log`. Kjører som `nice -n 10 ionice -c 3` for å unngå CPU/IO-konflikt. ETA: ~12-13t (resumable — Brent fortsetter fra 207/289 dates på 30d buy, andre 21 instrumenter starter fra null på alle 6 horizon×direction-kombinasjoner). Hung-harvest-diagnose fra session 117: PID 52658 dødd 2026-04-28 01:35, sannsynlig OOM eller systemd-timer-kollisjon (delt CPU/RAM med fetch-timere); ikke deadlock — prosessen fortsatte ~15 min etter siste progress-print, deretter døde. **Mitigation:** 10 fetch-timere `systemctl --user stop`-pauset (prices, fundamentals, weather, seismic, comex, eia_inventories, cot_disaggregated, cot_legacy, cot_ice, cot_euronext); auto-resume via `trap _resume_timers EXIT` i wrapper (commit `1ffae61`). 6 stale PID-filer fra session 117 ryddet.
-- **Next task:** **Session 137+ = analyzer-execution + YAML-rebalansering** når harvest er ferdig (~12-13t ETA fra 2026-04-30 08:14). Plan + thresholds dokumentert i `docs/12_6_analyzer_plan.md` (commit `469de54`). 4-stegs prosess: (1) `analyze_driver_performance.py` (IC per driver), (2) `analyze_cross_correlations.py` (forward-looking IC-matrise), (3) rebalanserings-thresholds per PLAN § 12.6 (drop hvis median |IC|<0.05+monoton.<0.4, øk hvis |IC|>0.10+monoton.>0.7, drop lavere-IC ved cross-corr>0.7), (4) YAML-rebalansering 22 instrumenter batched, snapshot-baseline regenerert. Open tech-gjeld: FRED-fetcher hard-fail-policy (12/14 ok = exit 1, 2026-04-30 02:30 dread; sannsynlig fix: exit 0 hvis ≥80% lykkes), PPLT SEC EDGAR Plan-S, NOPA WASDE-utvidelse, CONAB Café-PDF-historikk (KRITISK 3), `src/bedrock/fetch/fas_esr.py` L134 stale docstring (sier Cotton=501, koden bruker 1404; kosmetisk — funnet 2026-04-30 ved CI-failure-investigation; samme rotårsak som 3 historiske CI-failures session 133 sha `8b6ac75`/`985f5fb`/`3cfd737` som ble selvhealet av `b28a2b2`).
+- **Sub-fase 12.6-harvest (session 136, oppdatert 2026-04-30 ~20:04 CEST):** flyttet til **GitHub Codespaces cloud-VM** (4 cores, 16GB RAM, ARM/x86 ubuntu) for å unngå 24t × 100% CPU-stress på 13-år gammel laptop. Codespace: `stunning-sniffle-pv459prj4wgh664p` (Snkpipefish/Bedrock, branch=main, commit `2375780`). Harvest kjører detached via `nohup ./scripts/run_parallel_harvest.sh` med `BEDROCK_HARVEST_RESUME_TIMERS=0` (ingen systemd-timere på VM). 4 parallel-grupper, hver Python-worker ~93% CPU, totalt ~400MB RSS. Master PID 9414 på Codespace, log i `data/_meta/harvest_codespace.log` (på VM). DB-snapshot overført fra laptop via `gh codespace cp` (23MB komprimert → 82MB), WAL-mode aktivert. **Bevart progresjon ved overføring: 40,156 rader, 6 instrumenter (Brent FULL + CrudeOil/Cotton/Sugar/NaturalGas/GBPUSD partial)**. Forventet ETA ~24t på 4-core. Resumable via INSERT OR IGNORE.
+- **Cloud-keep-alive (session 136):** Local laptop kjører cron-job `*/20 * * * * /home/pc/bedrock/scripts/codespace_keepalive.sh` som SSH-pinger codespace hvert 20. min for å forhindre 30-min idle-suspend. Cron logger til `data/_meta/codespace_keepalive.log`; sender `notify-send`-popup når harvest er ferdig (HARVEST_DONE-detection). Laptop trenger kun å være på (ikke suspendert) — ingen CPU-stress, kun cron-heartbeat. Browser/Claude Code/VS Code-tab kan lukkes fritt; harvest påvirkes ikke (kjører nohup på VM, parent=init).
+- **AsOfDateStore-fix (session 136 commit `2e3f1eb`):** 13 manglende as-of-getters lagt til etter audit avdekket at 12 av 28 harvested drivere viste status="monotone" i admin-UI (1 distinct value = default 0.5 fra exception-fallback når underliggende getter manglet). Nye getters: `get_cot_tff`, `get_weather`, `get_crop_progress`, `get_wasde`, `get_export_events`, `get_disease_alerts`, `get_igc`, `get_agsi_storage`, `get_aaii_sentiment`, `get_etf_holdings`, `get_fas_esr`, `get_drought_monitor`, `get_cecafe_exports`. Integration-test på Cotton: 5 monotone drivere → 2-5 distinct values. 34 forurensede DB-rader slettet før restart. 203 tester (store_view+backtest+harvest+orchestrator+signals) passerte uten regresjon.
+- **Driver-status pre-harvest (session 136 audit):** Av 44 registrerte drivere er 42 wired i instrument-YAML-er (2 dead: `currency_cross_trend`, `igc_stocks_change`). Fordeling før AsOfDateStore-fix: 16 active, 12 monotone, 16 silent. Etter fix + full harvest forventes ~40 active. event_distance er kjent monotone (separat driver-bug, ikke getter-mangel — utsatt til egen runde).
+- **Next task:** **Session 137 = analyzer-execution + YAML-rebalansering** når Codespace-harvest er ferdig (~24t ETA fra 2026-04-30 ~20:04). Notify-send-popup på laptop signaliserer completion. Henteflyt: `gh codespace cp` DB tilbake fra VM, kjør `analyze_driver_performance.py` + `analyze_cross_correlations.py`, rebalansér YAML-vekter per `docs/12_6_analyzer_plan.md`. Stop codespace etter DB-hent for å spare core-hours (24h × 4-core = 96 core-hours, innenfor 120 free/mnd). Open tech-gjeld: FRED-fetcher hard-fail-policy, PPLT SEC EDGAR Plan-S, NOPA WASDE-utvidelse, CONAB Café-PDF-historikk (KRITISK 3), `src/bedrock/fetch/fas_esr.py` L134 stale docstring, event_distance monotone-bug.
 - **Git-modus:** Nivå 1 aktivt under sub-fase 12.5+ docs/cleanup-pass. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt valgfri.
 
 ## Data-gjeld (sub-fase 12.6)
@@ -609,6 +612,100 @@ levert IC-data.
 adminlink. Krever nytt UI-endepunkt som aggregerer
 `data/_meta/backtest_*.json`-filer eller leser `driver_observations`
 med forward-return-kolonner direkte.
+
+### 2026-04-30 — Session 136 (videre samme dag): cloud-flytt til GitHub Codespaces + AsOfDateStore-fix
+
+**Bakgrunn:** Etter første harvest-restart på laptop (08:14) viste tempo-realitetssjekk
+~5d wall-time for 4-core single-tråd, deretter omarbeidelse til 4-way parallel
+(commit `518aa02`, ~24h ETA på laptop). Pre-prompt-kjøring avdekket to kritiske
+problemer som krevde stopp og fikse før vi kunne fortsette:
+
+1. **AsOfDateStore-getter-mangel:** 12 av 28 harvested drivere returnerte
+   default 0.5 (status="monotone" i admin-UI) fordi underliggende
+   `store.get_X(...)`-kall feilet med `AttributeError`. Audit avdekket at
+   13 metoder manglet på `AsOfDateStore` selv om DataStore-versjonen
+   eksisterte. **Commit `2e3f1eb`** legger til alle 13 + 34 forurensede
+   DB-rader slettet for re-harvest. Integration-test på Cotton bekrefter
+   2-5 distinct values per fixed driver. 203 tester passerte uten
+   regresjon.
+
+2. **24h på 100% CPU = thermal risk for 13-år gammel AMD A10-laptop.**
+   Bruker uttrykte bekymring; valgte cloud-flytt som mitigering.
+
+**Cloud-flytt til GitHub Codespaces:**
+
+- Vurdert: Oracle Cloud Always Free (4 ARM Ampere) vs GitHub Codespaces
+  (4-core x86, 120 core-hours/mnd free på personal-tier).
+- **Valgt:** Codespaces — ingen kredittkort, brukeren har eksisterende GitHub-konto.
+- Codespace: `stunning-sniffle-pv459prj4wgh664p` (4 cores, 16GB RAM, 32GB storage).
+- DB-overføring: `gh codespace cp` av 23MB komprimert sqlite-snapshot,
+  unpack til 82MB, WAL-mode på.
+- Bevart progresjon: **40,156 rader, 6 instrumenter** (Brent FULL +
+  CrudeOil/Cotton/Sugar/NaturalGas/GBPUSD partial).
+- Harvest startet detached på VM med 4 parallel-grupper (`run_parallel_harvest.sh`,
+  `BEDROCK_HARVEST_RESUME_TIMERS=0` for å skippe systemd-kall).
+- Etter 5 min: 41,268 → 43,136 rader (+1,868), G1 CrudeOil 75/106 dates,
+  G3 Cotton 50/133 dates. Alle 4 workers @ ~93% CPU.
+
+**Keep-alive:** Local laptop kjører cron `*/20 * * * *
+/home/pc/bedrock/scripts/codespace_keepalive.sh` som SSH-pinger codespace
+hvert 20. min for å forhindre 30-min idle-suspend (GitHub-restriksjon —
+API tillot ikke å sette idle_timeout_minutes=240). Cron logger HARVEST_OK
+eller HARVEST_DONE til `data/_meta/codespace_keepalive.log`; sender
+`notify-send`-popup ved HARVEST_DONE-detection. Laptop trenger kun
+power-on (ikke suspendert) — ingen CPU-stress, kun heartbeat.
+
+**Commits:**
+- `2375780` docs(12.6): cloud harvest runbook (Oracle Cloud Always Free)
+- `2e3f1eb` fix(backtest): 13 manglende as-of-getters i AsOfDateStore
+- `518aa02` feat(harvest): 4-way parallel + per-instrument start-date
+- `1ffae61` feat(harvest): trap EXIT for auto-resume av paused fetch-timere
+- `469de54` docs(12.6): analyzer-runde-plan + rebalanserings-strategi
+
+**Status ved STATE-update:** harvest aktiv på Codespace, ~6 min elapsed,
+ETA ~24h.
+
+**Neste:** Session 137 = analyzer-execution når notify-send-popup
+signaliserer completion. Henteflyt:
+
+```bash
+# 1. Sjekk harvest er ferdig
+gh codespace ssh -c stunning-sniffle-pv459prj4wgh664p -- \
+  "pgrep -af run_parallel_harvest || echo DONE"
+
+# 2. Hente DB tilbake
+gh codespace ssh -c stunning-sniffle-pv459prj4wgh664p -- \
+  "cd /workspaces/Bedrock/data && PYTHONPATH=/workspaces/Bedrock/src \
+   /workspaces/Bedrock/.venv/bin/python -c \"import sqlite3; \
+   sqlite3.connect('bedrock.db').backup(sqlite3.connect('bedrock.db.final'))\" && \
+   gzip bedrock.db.final"
+gh codespace cp -c stunning-sniffle-pv459prj4wgh664p \
+  "remote:/workspaces/Bedrock/data/bedrock.db.final.gz" \
+  /home/pc/bedrock/data/bedrock.db.final.gz
+
+# 3. Backup local + replace
+cd /home/pc/bedrock/data
+mv bedrock.db bedrock.db.before-cloud-backup
+gunzip bedrock.db.final.gz
+mv bedrock.db.final bedrock.db
+
+# 4. Kjør analyzer
+PYTHONPATH=src .venv/bin/python scripts/analyze_driver_performance.py
+PYTHONPATH=src .venv/bin/python scripts/analyze_cross_correlations.py
+
+# 5. Stop codespace for å spare core-hours
+gh codespace stop -c stunning-sniffle-pv459prj4wgh664p
+
+# 6. Følg docs/12_6_analyzer_plan.md for YAML-rebalansering
+```
+
+**Open notes for session 137:**
+- Verifiser at alle 42 wired drivere er "active" i admin-UI etter full harvest
+- 2 dead drivere (`currency_cross_trend`, `igc_stocks_change`) — vurder om
+  fjerning fra registry eller wiring i fremtidig YAML
+- event_distance separat monotone-bug (returnerer 1.0 alltid på alle
+  instrumenter; krever egen undersøkelse av driver-koden)
+- FRED-fetcher tech-gjeld fortsatt åpen
 
 ### 2026-04-30 — Session 136: sub-fase 12.6 GJENÅPNET — harvest restartet med 44 drivere
 
