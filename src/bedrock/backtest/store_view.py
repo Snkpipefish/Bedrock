@@ -433,6 +433,229 @@ class AsOfDateStore:
             return False
 
     # ------------------------------------------------------------------
+    # 12.5 + 12.7-drivere — manglende getters lagt til i session 136
+    # for å unngå at drivere returnerer default 0.5 under harvest
+    # (oppdaget når 12 drivere viste status="monotone" i admin-UI).
+    # ------------------------------------------------------------------
+
+    # COT TFF (positioning_lev_funds_pct, positioning_asset_mgr_pct)
+
+    def get_cot_tff(self, contract: str, last_n: int | None = None) -> pd.DataFrame:
+        """Som DataStore.get_cot_tff, men clipped på report_date ≤ as_of_date."""
+        full = self._underlying.get_cot_tff(contract, last_n=None)
+        clipped = full[full["report_date"] <= self._as_of].copy()
+        if clipped.empty:
+            raise KeyError(f"No TFF COT for contract={contract!r} as of {self._as_of.date()}")
+        if last_n is not None:
+            clipped = clipped.tail(last_n).reset_index(drop=True)
+        return clipped
+
+    def has_cot_tff(self, contract: str) -> bool:
+        try:
+            return not self.get_cot_tff(contract).empty
+        except KeyError:
+            return False
+
+    # Weather (weather_stress, hdd_cdd_anomaly)
+
+    def get_weather(self, region: str, last_n: int | None = None) -> pd.DataFrame:
+        """Som DataStore.get_weather, men clipped på date ≤ as_of_date."""
+        full = self._underlying.get_weather(region, last_n=None)
+        if full.empty:
+            return full
+        # date-kolonnen er ISO-string, parser til Timestamp for sammenligning
+        date_ts = pd.to_datetime(full["date"])
+        clipped = full[date_ts <= self._as_of].reset_index(drop=True)
+        if last_n is not None and not clipped.empty:
+            clipped = clipped.tail(last_n).reset_index(drop=True)
+        return clipped
+
+    def has_weather(self, region: str) -> bool:
+        try:
+            return not self.get_weather(region).empty
+        except KeyError:
+            return False
+
+    # Crop progress (crop_progress_stage)
+
+    def get_crop_progress(
+        self,
+        commodity: str,
+        state: str = "US TOTAL",
+        metric: str | None = None,
+    ) -> pd.DataFrame:
+        """Som DataStore.get_crop_progress, men clipped på week_ending."""
+        full = self._underlying.get_crop_progress(commodity, state=state, metric=metric)
+        if full.empty:
+            return full
+        week_ts = pd.to_datetime(full["week_ending"])
+        return full[week_ts <= self._as_of].reset_index(drop=True)
+
+    # WASDE (wasde_s2u_change)
+
+    def get_wasde(self, commodity: str, metric: str, region: str = "US") -> pd.DataFrame:
+        """Som DataStore.get_wasde, men clipped på report_date."""
+        full = self._underlying.get_wasde(commodity, metric, region=region)
+        if full.empty:
+            return full
+        rdate_ts = pd.to_datetime(full["report_date"])
+        return full[rdate_ts <= self._as_of].reset_index(drop=True)
+
+    # Export events (export_event_active)
+
+    def get_export_events(
+        self,
+        commodity: str | None = None,
+        country: str | None = None,
+        from_date: str | None = None,
+    ) -> pd.DataFrame:
+        """Som DataStore.get_export_events, men clipped på event_date."""
+        full = self._underlying.get_export_events(
+            commodity=commodity, country=country, from_date=from_date
+        )
+        if full.empty:
+            return full
+        event_ts = pd.to_datetime(full["event_date"])
+        return full[event_ts <= self._as_of].reset_index(drop=True)
+
+    # Disease alerts (disease_pressure)
+
+    def get_disease_alerts(
+        self,
+        commodity: str | None = None,
+        from_date: str | None = None,
+    ) -> pd.DataFrame:
+        """Som DataStore.get_disease_alerts, men clipped på alert_date."""
+        full = self._underlying.get_disease_alerts(commodity=commodity, from_date=from_date)
+        if full.empty:
+            return full
+        alert_ts = pd.to_datetime(full["alert_date"])
+        return full[alert_ts <= self._as_of].reset_index(drop=True)
+
+    # IGC (igc_stocks_change — pt. ikke wired i noen YAML, men exposes for fremtid)
+
+    def get_igc(self, grain: str, metric: str) -> pd.DataFrame:
+        """Som DataStore.get_igc, men clipped på report_date."""
+        full = self._underlying.get_igc(grain, metric)
+        if full.empty:
+            return full
+        rdate_ts = pd.to_datetime(full["report_date"])
+        return full[rdate_ts <= self._as_of].reset_index(drop=True)
+
+    # AGSI gas storage (agsi_storage_pct)
+
+    def get_agsi_storage(self, country: str, last_n: int | None = None) -> pd.DataFrame:
+        """Som DataStore.get_agsi_storage, men clipped på gas_day_start."""
+        full = self._underlying.get_agsi_storage(country, last_n=None)
+        if full.empty:
+            return full
+        day_ts = pd.to_datetime(full["gas_day_start"])
+        clipped = full[day_ts <= self._as_of].reset_index(drop=True)
+        if last_n is not None and not clipped.empty:
+            clipped = clipped.tail(last_n).reset_index(drop=True)
+        return clipped
+
+    def has_agsi_storage(self, country: str) -> bool:
+        try:
+            return not self.get_agsi_storage(country).empty
+        except KeyError:
+            return False
+
+    # AAII sentiment (aaii_extreme)
+
+    def get_aaii_sentiment(self, last_n: int | None = None) -> pd.DataFrame:
+        """Som DataStore.get_aaii_sentiment, men clipped på date."""
+        full = self._underlying.get_aaii_sentiment(last_n=None)
+        if full.empty:
+            return full
+        date_ts = pd.to_datetime(full["date"])
+        clipped = full[date_ts <= self._as_of].reset_index(drop=True)
+        if last_n is not None and not clipped.empty:
+            clipped = clipped.tail(last_n).reset_index(drop=True)
+        return clipped
+
+    # ETF holdings (etf_holdings_change)
+
+    def get_etf_holdings(
+        self,
+        ticker: str,
+        from_date: str | date | None = None,
+        to_date: str | date | None = None,
+    ) -> pd.DataFrame:
+        """Som DataStore.get_etf_holdings, men clipped på date.
+
+        Hvis ``to_date`` er gitt og senere enn as_of, overstyres den
+        til as_of slik at clipping er konsistent."""
+        # Strict clipping: aldri returner data ≥ as_of
+        as_of_date = self._as_of.date()
+        if to_date is None:
+            effective_to = as_of_date
+        else:
+            requested_to = pd.Timestamp(to_date).date()
+            effective_to = min(requested_to, as_of_date)
+        full = self._underlying.get_etf_holdings(ticker, from_date=from_date, to_date=effective_to)
+        return full
+
+    # FAS ESR (fas_exports)
+
+    def get_fas_esr(
+        self,
+        commodity_code: int,
+        *,
+        country_code: int | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> pd.DataFrame:
+        """Som DataStore.get_fas_esr, men clipped på week_ending_date.
+
+        Hvis ``to_date`` er gitt og senere enn as_of, overstyres den
+        til as_of slik at clipping er konsistent."""
+        as_of_str = self._as_of.strftime("%Y-%m-%d")
+        if to_date is None:
+            effective_to = as_of_str
+        else:
+            effective_to = min(to_date, as_of_str)
+        full = self._underlying.get_fas_esr(
+            commodity_code,
+            country_code=country_code,
+            from_date=from_date,
+            to_date=effective_to,
+        )
+        return full
+
+    # Drought Monitor (drought_monitor)
+
+    def get_drought_monitor(self, aoi: str = "us") -> pd.DataFrame:
+        """Som DataStore.get_drought_monitor, men clipped på map_date."""
+        full = self._underlying.get_drought_monitor(aoi=aoi)
+        if full.empty:
+            return full
+        map_ts = pd.to_datetime(full["map_date"])
+        return full[map_ts <= self._as_of].reset_index(drop=True)
+
+    # Cecafe exports (cecafe_export_change)
+
+    def get_cecafe_exports(
+        self,
+        coffee_type: str = "sum",
+        from_month: str | date | None = None,
+        to_month: str | date | None = None,
+    ) -> pd.DataFrame:
+        """Som DataStore.get_cecafe_exports, men clipped på month.
+
+        Hvis ``to_month`` er gitt og senere enn as_of, overstyres den."""
+        as_of_date = self._as_of.date()
+        if to_month is None:
+            effective_to = as_of_date
+        else:
+            requested_to = pd.Timestamp(to_month).date()
+            effective_to = min(requested_to, as_of_date)
+        full = self._underlying.get_cecafe_exports(
+            coffee_type=coffee_type, from_month=from_month, to_month=effective_to
+        )
+        return full
+
+    # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 
