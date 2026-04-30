@@ -1,11 +1,9 @@
-"""Tester for bot.comms — signal-fetch, push-prices, batch-commit, adaptive poll.
+"""Tester for bot.comms — signal-fetch, batch-commit, adaptive poll.
 
 Dekker:
 - adaptive_poll_interval: signals_data med/uten SCALP watchlist
-- assemble_prices_from_state: trading + feed kombinert
 - SignalComms.fetch_signals: HTTP 200, 500, network error, schema-warning
 - SignalComms.fetch_kill_ids: liste, dict {signal_ids}, feil
-- SignalComms.push_prices: tom dict, HTTP 200, nettverks-feil
 - fetch_with_retry: 5xx retries, 4xx propagate, nettverk retry
 - fetch_once returnerer FetchResult med begge delene
 - commit_daily_trade_log: no-log, ikke-repo, utenfor-repo, add-fail,
@@ -28,7 +26,6 @@ from bedrock.bot.comms import (
     FetchResult,
     SignalComms,
     adaptive_poll_interval,
-    assemble_prices_from_state,
     commit_daily_trade_log,
 )
 from bedrock.bot.config import PollingConfig, StartupOnlyConfig
@@ -88,47 +85,6 @@ def test_adaptive_interval_default_when_scalp_not_watchlist() -> None:
     cfg = PollingConfig()
     data = {"signals": [{"horizon": "SCALP", "status": "closed"}]}
     assert adaptive_poll_interval(data, cfg) == cfg.default_seconds
-
-
-# ─────────────────────────────────────────────────────────────
-# Prices assembler
-# ─────────────────────────────────────────────────────────────
-
-
-def test_assemble_prices_trading_only() -> None:
-    sm = {"EURUSD": 1, "GOLD": 2}
-    feed = {}
-    bids = {1: 1.12345, 2: 2000.50}
-    prices = assemble_prices_from_state(sm, feed, bids)
-    assert prices["EURUSD"] == {"value": 1.12345}
-    assert prices["Gold"] == {"value": 2000.5}
-
-
-def test_assemble_prices_feed_only() -> None:
-    sm = {}
-    feed = {"BTC": 100, "NatGas": 101}
-    bids = {100: 50000.0, 101: 3.25}
-    prices = assemble_prices_from_state(sm, feed, bids)
-    assert prices["BTC"] == {"value": 50000.0}
-    assert prices["NatGas"] == {"value": 3.25}
-
-
-def test_assemble_prices_combined() -> None:
-    sm = {"EURUSD": 1}
-    feed = {"BTC": 2}
-    bids = {1: 1.12, 2: 50000.0}
-    prices = assemble_prices_from_state(sm, feed, bids)
-    assert "EURUSD" in prices
-    assert "BTC" in prices
-
-
-def test_assemble_skips_missing_bids() -> None:
-    sm = {"EURUSD": 1, "GOLD": 2}
-    # Kun sid 1 har bid
-    bids = {1: 1.10}
-    prices = assemble_prices_from_state(sm, {}, bids)
-    assert "EURUSD" in prices
-    assert "Gold" not in prices
 
 
 # ─────────────────────────────────────────────────────────────
@@ -334,41 +290,6 @@ def test_fetch_kill_ids_network_error_returns_empty(comms: SignalComms) -> None:
     assert ids == []
     # Kill-fail fryser IKKE bot
     assert comms._safety.server_frozen is False
-
-
-# ─────────────────────────────────────────────────────────────
-# push_prices
-# ─────────────────────────────────────────────────────────────
-
-
-def test_push_prices_empty_returns_false(comms: SignalComms) -> None:
-    assert comms.push_prices({}) is False
-
-
-def test_push_prices_200_returns_true(comms: SignalComms) -> None:
-    resp = MagicMock(status_code=200)
-    comms._session.post.return_value = resp  # type: ignore[attr-defined]
-    ok = comms.push_prices({"EURUSD": {"value": 1.1}})
-    assert ok is True
-
-
-def test_push_prices_500_returns_false(comms: SignalComms) -> None:
-    resp = MagicMock(status_code=500)
-    comms._session.post.return_value = resp  # type: ignore[attr-defined]
-    assert comms.push_prices({"X": {"value": 1.0}}) is False
-
-
-def test_push_prices_network_error_returns_false(comms: SignalComms) -> None:
-    comms._session.post.side_effect = requests.exceptions.Timeout("x")  # type: ignore[attr-defined]
-    assert comms.push_prices({"X": {"value": 1.0}}) is False
-
-
-def test_push_prices_sends_auth_header(comms: SignalComms) -> None:
-    resp = MagicMock(status_code=200)
-    comms._session.post.return_value = resp  # type: ignore[attr-defined]
-    comms.push_prices({"EURUSD": {"value": 1.1}})
-    call = comms._session.post.call_args  # type: ignore[attr-defined]
-    assert call.kwargs["headers"]["X-API-Key"] == "test-key"
 
 
 # ─────────────────────────────────────────────────────────────

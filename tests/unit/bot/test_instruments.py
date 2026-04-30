@@ -14,7 +14,6 @@ from bedrock.bot.instruments import (
     FX_USD_DIRECTION,
     INSTRUMENT_GROUP,
     INSTRUMENT_MAP,
-    INSTRUMENT_TO_PRICE_KEY,
     PRICE_FEED_MAP,
     get_group_name,
     looks_like_fx_pair,
@@ -32,12 +31,6 @@ def test_price_feed_map_excludes_trading_symbols() -> None:
     # Pris-feed-symboler skal ikke dobles med trading-symboler
     overlap = set(PRICE_FEED_MAP) & set(INSTRUMENT_MAP)
     assert overlap == set(), f"overlapp: {overlap}"
-
-
-def test_instrument_to_price_key_covers_trading_symbols() -> None:
-    # Alle trading-symboler må ha en prices-fil-nøkkel
-    missing = set(INSTRUMENT_MAP) - set(INSTRUMENT_TO_PRICE_KEY)
-    assert missing == set(), f"mangler price-key: {missing}"
 
 
 def test_agri_subgroups_match_agri_instruments() -> None:

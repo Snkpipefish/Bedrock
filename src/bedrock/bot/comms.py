@@ -19,9 +19,12 @@ logikk-endring utover:
 Ansvaret:
 - HTTP GET /signals + parse + schema-versjon-varsel
 - HTTP GET /kill → liste av signal-IDs som skal stoppes
-- HTTP POST /push-prices
 - Adaptiv polling-intervall (SCALP aktiv → kort, ellers lang)
 - Git-commit av trade-log en gang per dag
+
+Pris-push (`POST /push-prices`) er fjernet — harvester skriver
+direkte til `DataStore`. Bot er ren konsument av signaler, ikke
+prisleverandør.
 
 Ikke-ansvar:
 - Selve polling-løkken med `reactor.callLater` — implementeres i
@@ -45,7 +48,6 @@ from typing import Any
 import requests
 
 from bedrock.bot.config import PollingConfig, StartupOnlyConfig
-from bedrock.bot.instruments import INSTRUMENT_TO_PRICE_KEY
 from bedrock.bot.safety import SafetyMonitor
 
 log = logging.getLogger("bedrock.bot.comms")
@@ -83,27 +85,6 @@ def adaptive_poll_interval(signals_data: dict[str, Any] | None, cfg: PollingConf
         if sig.get("horizon") == "SCALP" and sig.get("status") == "watchlist":
             return cfg.scalp_active_seconds
     return cfg.default_seconds
-
-
-def assemble_prices_from_state(
-    symbol_map: dict[str, int],
-    price_feed_sids: dict[str, int],
-    last_bid: dict[int, float],
-) -> dict[str, dict[str, float]]:
-    """Bygg `{price_key: {"value": bid}}`-dict fra CtraderClient-state.
-
-    Dekker både trading-instrumenter (via `INSTRUMENT_TO_PRICE_KEY`) og
-    rene pris-feed-symboler. Kun instrumenter med siste-bid inkluderes.
-    """
-    prices: dict[str, dict[str, float]] = {}
-    for instr_name, price_key in INSTRUMENT_TO_PRICE_KEY.items():
-        sid = symbol_map.get(instr_name)
-        if sid is not None and sid in last_bid:
-            prices[price_key] = {"value": round(last_bid[sid], 5)}
-    for price_key, sid in price_feed_sids.items():
-        if sid in last_bid:
-            prices[price_key] = {"value": round(last_bid[sid], 5)}
-    return prices
 
 
 # ─────────────────────────────────────────────────────────────
@@ -342,29 +323,6 @@ class SignalComms:
             except Exception:
                 log.exception("[CALLBACK] on_kill_ids feilet")
         return ids
-
-    def push_prices(self, prices: dict[str, dict[str, float]]) -> bool:
-        """POST /push-prices med assembled prices-dict. Returnerer True
-        ved HTTP 2xx."""
-        if not prices:
-            log.warning("[PRISER] Ingen priser å pushe ennå.")
-            return False
-        try:
-            resp = self._session.post(
-                f"{self._url}/push-prices",
-                headers={
-                    **self._headers(),
-                    "Content-Type": "application/json",
-                },
-                json={"prices": prices},
-                timeout=5,
-            )
-            ok = 200 <= resp.status_code < 300
-            log.info("[PRISER] %d priser pushet → HTTP %d", len(prices), resp.status_code)
-            return ok
-        except Exception as exc:
-            log.warning("[PRISER] Push feilet: %s", exc)
-            return False
 
     def fetch_once(self) -> FetchResult:
         """Convenience: hent /signals + /kill i én runde. Brukes av

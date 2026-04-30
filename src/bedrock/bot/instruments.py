@@ -55,27 +55,6 @@ PRICE_FEED_MAP: dict[str, list[str]] = {
     "DOGE": ["DOGE", "DOGEUSD", "Dogecoin"],
 }
 
-# Mapping fra trading-instrument (signal-navn) → prices-fil-nøkkel
-INSTRUMENT_TO_PRICE_KEY: dict[str, str] = {
-    "EURUSD": "EURUSD",
-    "GBPUSD": "GBPUSD",
-    "USDJPY": "USDJPY",
-    "AUDUSD": "AUDUSD",
-    "GOLD": "Gold",
-    "SILVER": "Silver",
-    "OIL BRENT": "Brent",
-    "OIL WTI": "WTI",
-    "SPX500": "SPX",
-    "US100": "NAS100",
-    "Corn": "Corn",
-    "Wheat": "Wheat",
-    "Soybean": "Soybean",
-    "Coffee": "Coffee",
-    "Cotton": "Cotton",
-    "Sugar": "Sugar",
-    "Cocoa": "Cocoa",
-}
-
 # ─────────────────────────────────────────────────────────────
 # FX USD-retning: "long" = long USD ved BUY, "short" = short USD ved BUY.
 # Brukes for å detektere motstridende posisjoner (f.eks. EURUSD short +
