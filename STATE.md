@@ -128,8 +128,9 @@
 - **Crypto_sentiment DB:** Tom på commit-tidspunkt (7 sample-rader i `data/manual/crypto_sentiment.csv`). Refresh via fetch.yaml `crypto_sentiment`-entry (cron 0 7 Oslo, daglig). Forventet vekst ~5 indikatorer/dag (1 F&G + 4 CoinGecko). ≥30 dager akkumulering før driver-vurdering. Live-verifisert i preview med 30d sample-data — kort + sparkline + modal rendrer korrekt.
 - **AsOfDateStore (session 116):** utvidet med 9 nye proxy-getters (econ_events/cot_ice/cot_euronext/eia_inventory/comex_inventory/seismic_events/conab_estimates/unica_reports/shipping_indices) + tilsvarende `has_*`-helpers. Kritisk fix — uten denne falt orchestrator-replay tilbake til defensive 0.0 for alle nye Phase A-C-drivere fordi underlying-getterne kastet `AttributeError`. 24 nye tester dekker hver getter + region/from_ts-filter + tom-clip-fallback.
 - **Phase D-output (session 116):** `data/_meta/backtest_phase_d_baseline.json` (68 rader, session 99-reprise), `data/_meta/backtest_phase_d_orchestrator.json` (48 rader, 86.4 min sweep), `data/_meta/backtest_phase_d_spike_{cot_ice_mm_pct,conab_yoy,unica_change}.json` (3 spikes). Rapport: `docs/backtest_phase_d_2026-04.md` med diff-tabeller + flagg-terskel ≥3pp Δhit_rate eller ≥2 grade-flips.
-- **Sub-fase 12.6-fundament (session 117):** 3 nye SQLite-tabeller (`driver_observations` long-format, `signal_setups`, `feature_snapshots`) + 5 nye scripts (`harvest_driver_observations.py`, `harvest_feature_snapshots.py`, `run_full_history_harvest.sh`, `analyze_driver_performance.py`, `analyze_cross_correlations.py`). Detached harvest startet 2026-04-27 21:58 — **HANG seg ved 200/289 (~69 %) på 2026-04-28 01:35 UTC** i Brent COT-data-missing-loop. driver_observations har 2691 rader (alle Brent, 2010-02 til 2021-09 — ikke komplett). feature_snapshots 23601 rader (mer komplett). **Må diagnostiseres + restartes som første blocker i 12.6-gjenåpning** (session 136+).
-- **Next task:** **Session 136 = sub-fase 12.6 gjenåpning** (Alt γ-låsen oppfylt etter D3). Første blocker: diagnostisere + restarte detached harvest fra session 117. Forventet rekkefølge: (1) finn root-cause for Brent-loop (sannsynlig: cot_data_missing-spam hindrer progresjon; sjekk om cot_disaggregated mangler Brent-rows, eller om driver-iterasjon ikke håndterer missing-data-edge-case), (2) restart harvest med fix, (3) vente på full driver_observations-akkumulering (~24-35 timer per session 117-estimat — nye drivere fra 12.7 D-spor inkluderes naturlig), (4) analyzer-runde via `analyze_driver_performance.py` + `analyze_cross_correlations.py` som leveranse. Etter analyzer-runde: data-driven YAML-rebalansering. Open tech-gjeld: PPLT SEC EDGAR Plan-S-vurdering, NOPA WASDE-utvidelse-vurdering, CONAB Café-PDF-historikk-backfill (sub-fase 12.6 KRITISK 3). Plan-S kan startes parallelt hvis 12.6-harvest-fix tar lang tid.
+- **Sub-fase 12.6-fundament (session 117):** 3 nye SQLite-tabeller (`driver_observations` long-format, `signal_setups`, `feature_snapshots`) + 5 nye scripts (`harvest_driver_observations.py`, `harvest_feature_snapshots.py`, `run_full_history_harvest.sh`, `analyze_driver_performance.py`, `analyze_cross_correlations.py`).
+- **Sub-fase 12.6-harvest (session 136 restart 2026-04-30 08:14):** detached harvest re-startet med 44 drivere (auto-pickup via YAML — `harvest_driver_observations.py` har ingen statisk driver-liste, kaller `generate_signals()` og itererer over `entry.families[].drivers[]`). PID i `data/_meta/harvest_session_136.pid`, log i `harvest_session_136.log`. Kjører som `nice -n 10 ionice -c 3` for å unngå CPU/IO-konflikt. ETA: ~12-13t (resumable — Brent fortsetter fra 207/289 dates på 30d buy, andre 21 instrumenter starter fra null på alle 6 horizon×direction-kombinasjoner). Hung-harvest-diagnose fra session 117: PID 52658 dødd 2026-04-28 01:35, sannsynlig OOM eller systemd-timer-kollisjon (delt CPU/RAM med fetch-timere); ikke deadlock — prosessen fortsatte ~15 min etter siste progress-print, deretter døde. **Mitigation:** 10 fetch-timere `systemctl --user stop`-pauset (prices, fundamentals, weather, seismic, comex, eia_inventories, cot_disaggregated, cot_legacy, cot_ice, cot_euronext); auto-resume via `trap _resume_timers EXIT` i wrapper (commit `1ffae61`). 6 stale PID-filer fra session 117 ryddet.
+- **Next task:** **Session 137+ = analyzer-execution + YAML-rebalansering** når harvest er ferdig (~12-13t ETA fra 2026-04-30 08:14). Plan + thresholds dokumentert i `docs/12_6_analyzer_plan.md` (commit `469de54`). 4-stegs prosess: (1) `analyze_driver_performance.py` (IC per driver), (2) `analyze_cross_correlations.py` (forward-looking IC-matrise), (3) rebalanserings-thresholds per PLAN § 12.6 (drop hvis median |IC|<0.05+monoton.<0.4, øk hvis |IC|>0.10+monoton.>0.7, drop lavere-IC ved cross-corr>0.7), (4) YAML-rebalansering 22 instrumenter batched, snapshot-baseline regenerert. Open tech-gjeld: FRED-fetcher hard-fail-policy (12/14 ok = exit 1, 2026-04-30 02:30 dread; sannsynlig fix: exit 0 hvis ≥80% lykkes), PPLT SEC EDGAR Plan-S, NOPA WASDE-utvidelse, CONAB Café-PDF-historikk (KRITISK 3).
 - **Git-modus:** Nivå 1 aktivt under sub-fase 12.5+ docs/cleanup-pass. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt valgfri.
 
 ## Data-gjeld (sub-fase 12.6)
@@ -306,6 +307,100 @@ D2-implementasjon må:
 ---
 
 ## Session log (newest first)
+
+### 2026-04-30 — Session 136: sub-fase 12.6 GJENÅPNET — harvest restartet med 44 drivere
+
+**Scope:** sub-fase 12.6 gjenåpning per Alt γ-låsen (sub-fase 12.7
+LUKKET via `v0.12.7-fase-12.7-LUKKET`-tag). Hoved-leveranse: stabil
+restart av detached harvest fra session 117 hung-state, samt
+analyzer-prep-doc for session 137+ rebalansering.
+
+**Pre-prompt-diagnose (kvittert):** session 117-harvest PID 52658
+dødd 2026-04-28 01:35; 2,691 Brent-rader skrevet (207/289 dates =
+72% komplett for Brent), 0 rader for de 21 andre instrumentene.
+Ikke deadlock — prosessen fortsatte ~15 min etter siste progress-
+print deretter døde. Sannsynlig årsak: OOM eller systemd-timer-
+kollisjon (delt CPU/RAM med fetch-timere). 6 stale PID-filer
+i `data/_meta/`. **Beslutning: Single-tråd restart** (alternativ A;
+multi-tråd parallel-modus utsatt).
+
+**Levert:** alle 6 mål oppnådd.
+
+1. **6 stale PID-filer ryddet** (alle bekreftet døde via `ps -p`):
+   `backfill_cafe_history.pid`, `backfill_cftc_name_drift.pid`,
+   `backfill_euronext.pid`, `backfill_harvest_drivers.pid`,
+   `backfill_nass_crop_progress.pid`, `backfill_usgs_seismic.pid`.
+
+2. **Driver-registry-pickup verifisert.** `harvest_driver_observations.py`
+   har **ingen statisk driver-liste** — kaller `generate_signals()`
+   og itererer over `entry.families[].drivers[]`, fanger automatisk
+   alle drivere wired into YAML. Driver-registry har 44 drivere
+   totalt (30 original + 14 fra 12.7). Ingen kode-endring for
+   12.7-pickup.
+
+3. **Trap EXIT for fetch-timer-resume** lagt til i wrapper
+   `scripts/run_full_history_harvest.sh` (commit `1ffae61`):
+   `_resume_timers` kalles ved EXIT (suksess/feil/SIGTERM) og
+   `systemctl --user start`-er 10 paused fetch-timere.
+   `BEDROCK_HARVEST_RESUME_TIMERS=0` disabler for testing.
+
+4. **10 fetch-timere paused** for å redusere CPU/IO/network-
+   konflikt under harvest: prices, fundamentals, weather, seismic,
+   comex, eia_inventories, cot_disaggregated, cot_legacy, cot_ice,
+   cot_euronext. Dagens-base/månedlig-base-timere (shipping,
+   unica, crop_progress, enso, wasde, conab) latte være — lav
+   sannsynlighet for kollisjon.
+
+5. **Single-tråd harvest restartet detached** med ressurs-
+   begrensninger: `nohup nice -n 10 ionice -c 3 ./scripts/run_full_history_harvest.sh`.
+   PID i `data/_meta/harvest_session_136.pid`, log i
+   `harvest_session_136.log`. Verifisert running (PID alive,
+   nice=10, ionice idle-class). Resumable bekreftet — Brent 30d
+   buy: 207 done + 82 todo som forventet. Etter ~100s: Brent
+   30d buy progresjon 207→217 dates (5s/ref_date generate_signals-
+   rate). ETA fortsatt ~12-13t for full pass.
+
+6. **Analyzer-plan-doc skrevet** i `docs/12_6_analyzer_plan.md`
+   (commit `469de54`, 210 linjer). 4-stegs prosess for session 137+:
+   IC-måling + cross-correlation + thresholds + YAML-rebalansering.
+   Inkluderer fokus-områder for 14 nye 12.7-drivere (aaii_extreme,
+   vix_term_ratio, hdd_cdd_anomaly, cecafe_export_change,
+   drought_monitor, agsi_storage_pct, etf_holdings_change,
+   currency_cross_trend, mining_disruption, disease_pressure,
+   net_fed_liq_change, yield_diff_10y, nfci_change,
+   credit_spread_change), risiko-register, og output-artefakter.
+
+**Ikke gjort (utsatt til session 137+):**
+
+- Faktisk analyzer-execution (krever harvest-completion).
+- Faktisk YAML-rebalansering.
+- FRED-fetcher hard-fail-policy-fix (optional tech-gjeld; flagget
+  i Current state). 2026-04-30 02:30 service-failure: 12/14 FRED-
+  serier OK men 2 transient 500-er drepte service. Sannsynlig fix:
+  `src/bedrock/config/fetch_runner.py` exit 0 hvis ≥80% lykkes,
+  log warnings, retry på neste timer-runde. ~30-60 min kode.
+
+**Commits:**
+- `1ffae61` feat(harvest): trap EXIT for auto-resume av paused fetch-timere (session 136)
+- `469de54` docs(12.6): analyzer-runde-plan + rebalanserings-strategi (session 136)
+
+**Status:** sub-fase 12.6 GJENÅPNET 2026-04-30, harvest kjører
+detached, analyzer-prep-doc ferdig.
+
+**Helse ved start:** rød — fetch-fundamentals (12/14 ok, 2 FRED-
+feiler) + monitor (signal_diff baseline-mangel). Ikke blockers
+for harvest-restart. FRED-tech-gjeld flagget.
+
+**Open questions:** ingen nye fra session 136. Pre-eksisterende:
+D2 SLV proxy-driver-design (under 12.7 D2-prep), `ingest_manual_data.py`-
+utvidelser (gld/slv/comex), pre-commit-hook-aktivering.
+
+**Neste task:** Session 137+ = analyzer-execution når harvest er
+ferdig. Vent på:
+- `data/_meta/harvest_session_136.pid` — exit-status
+- `data/_meta/harvest_session_136.log` — final progress-summary
+- `driver_observations`-rad-count per (instrument, horizon, direction)
+- Re-aktiverte fetch-timere via trap EXIT
 
 ### 2026-04-30 — Session 135: sub-fase 12.7 D3 LUKKET + sub-fase 12.7 LUKKET (A10 Cecafé + grade-validering + 2 tags)
 
