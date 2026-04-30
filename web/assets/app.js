@@ -660,16 +660,69 @@ function renderAgriFiltered() {
   renderSetupCards('agri-cards', filtered, AGRI_SETUPS.length);
 }
 
-// ─── Kartrommet: pipeline-helse (session 50) ──────────────────
+// ─── Datakilder: pipeline-helse + daglig systemsjekk ──────────
+// Henter både pipeline_health (per-fetcher freshness) og system_health
+// (daglig monitor-rapport: overall_ok + checks). System-health rendres
+// som et banner over fetcher-grupper.
 async function loadKartrommet() {
-  try {
-    const res = await fetch('/api/ui/pipeline_health').then(r => r.json());
-    renderKartrommet(res);
-  } catch (err) {
-    console.error('Kartrommet load feilet:', err);
-    const el = document.getElementById('kartrom-groups');
-    if (el) el.innerHTML = `<p class="empty">Fetch feilet: ${err.message}</p>`;
+  const [pipeRes, sysRes] = await Promise.allSettled([
+    fetch('/api/ui/pipeline_health').then(r => r.json()),
+    fetch('/api/ui/system_health').then(r => r.json()),
+  ]);
+
+  if (sysRes.status === 'fulfilled') {
+    renderSystemHealth(sysRes.value);
+  } else {
+    console.error('System-health load feilet:', sysRes.reason);
+    const el = document.getElementById('kartrom-system-health');
+    if (el) el.innerHTML = '';
   }
+
+  if (pipeRes.status === 'fulfilled') {
+    renderKartrommet(pipeRes.value);
+  } else {
+    console.error('Kartrommet load feilet:', pipeRes.reason);
+    const el = document.getElementById('kartrom-groups');
+    if (el) el.innerHTML = `<p class="empty">Fetch feilet: ${pipeRes.reason.message}</p>`;
+  }
+}
+
+function renderSystemHealth(res) {
+  const root = document.getElementById('kartrom-system-health');
+  if (!root) return;
+  if (!res || !res.available) {
+    root.innerHTML = `<div class="sys-health unknown">
+      <span class="sys-health-pill">Ukjent</span>
+      <span class="sys-health-text">Daglig systemsjekk ikke tilgjengelig${res?.reason ? ` — ${res.reason}` : ''}.</span>
+    </div>`;
+    return;
+  }
+  const ok = !!res.overall_ok;
+  const cls = ok ? 'ok' : 'fail';
+  const label = ok ? 'OK' : 'FAIL';
+  const checks = res.checks || [];
+  const generated = res.generated_utc ? res.generated_utc.replace('T', ' ').replace(/\.\d+.*$/, ' UTC') : '–';
+  root.innerHTML = `
+    <div class="sys-health ${cls}">
+      <span class="sys-health-pill">${label}</span>
+      <span class="sys-health-text">
+        <strong>Daglig systemsjekk</strong> · generert ${generated} · kilde <code>${res.report_file || '–'}</code>
+      </span>
+    </div>
+    <div class="sys-checks">
+      ${checks.map(c => {
+        const okFlag = !!c.ok;
+        const checkCls = okFlag ? 'ok' : 'fail';
+        const detail = c.detail || '';
+        return `<div class="sys-check ${checkCls}">
+          <div class="sys-check-head">
+            <span class="sys-check-pill">${okFlag ? 'OK' : 'FAIL'}</span>
+            <span class="sys-check-name">${c.name}</span>
+          </div>
+          <div class="sys-check-detail">${detail}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
 }
 
 function renderKartrommet(res) {

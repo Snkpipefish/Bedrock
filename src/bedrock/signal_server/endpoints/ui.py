@@ -586,6 +586,68 @@ def _classify_staleness(has_data: bool, age_hours: float | None, stale_hours: fl
     return "stale"
 
 
+@ui_bp.get("/api/ui/system_health")
+def system_health() -> Response:
+    """Daglig systemsjekk — siste monitor-rapport.
+
+    Leser nyeste `data/_meta/monitor_YYYY-MM-DD.json` (skrevet av
+    `scripts/daily_monitor.py` via systemd-timer). Hver rapport har
+    en `overall_ok`-flagg + en liste med `checks` (fetcher_freshness,
+    pipeline_log_errors, agri_tp_override, signal_diff).
+
+    Fraværende meta-katalog → `{"available": False, ...}`. UI viser
+    da bare en placeholder-melding.
+    """
+    from datetime import datetime
+
+    cfg = _config()
+    meta_dir = cfg.data_root / "_meta"
+    now = datetime.now(timezone.utc)
+
+    if not meta_dir.exists():
+        return jsonify(
+            {
+                "available": False,
+                "reason": f"meta-katalog mangler: {meta_dir}",
+                "last_check": now.isoformat(),
+            }
+        )
+
+    candidates = sorted(meta_dir.glob("monitor_????-??-??.json"))
+    if not candidates:
+        return jsonify(
+            {
+                "available": False,
+                "reason": "ingen monitor-rapporter funnet",
+                "last_check": now.isoformat(),
+            }
+        )
+
+    latest = candidates[-1]
+    try:
+        report = json.loads(latest.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        log.warning("[UI] system_health parse-feil %s: %s", latest, exc)
+        return jsonify(
+            {
+                "available": False,
+                "reason": f"kunne ikke lese {latest.name}: {exc}",
+                "last_check": now.isoformat(),
+            }
+        )
+
+    return jsonify(
+        {
+            "available": True,
+            "report_file": latest.name,
+            "generated_utc": report.get("generated_utc"),
+            "overall_ok": bool(report.get("overall_ok")),
+            "checks": report.get("checks") or [],
+            "last_check": now.isoformat(),
+        }
+    )
+
+
 @ui_bp.get("/api/ui/pipeline_health")
 def pipeline_health() -> Response:
     """Pipeline-helse per fetch-kilde.
