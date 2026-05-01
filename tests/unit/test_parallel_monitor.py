@@ -155,14 +155,17 @@ def test_signal_diff_bedrock_missing_fails(tmp_path: Path) -> None:
     assert "mangler" in result.detail
 
 
-def test_signal_diff_no_old_files_fails(tmp_path: Path) -> None:
+def test_signal_diff_no_old_files_soft_skip(tmp_path: Path) -> None:
+    # Sub-fase 12.9 D5: parallel-drift er over, manglende old-signals er
+    # forventet og skal ikke flagge monitor som FAIL.
     bedrock = _write_bedrock_signals(tmp_path / "bedrock.json")
     result = check_signal_diff(
         bedrock_signals=bedrock,
         old_signals=(tmp_path / "missing1.json", tmp_path / "missing2.json"),
     )
-    assert result.ok is False
-    assert "ingen gamle signal-filer" in result.detail
+    assert result.ok is True
+    assert "skipped" in result.detail
+    assert "parallel-drift" in result.detail
 
 
 def test_signal_diff_identical_is_ok(tmp_path: Path) -> None:

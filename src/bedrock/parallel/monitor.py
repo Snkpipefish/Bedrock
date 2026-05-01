@@ -237,10 +237,13 @@ def check_signal_diff(
 
     existing_old: list[Path] = [Path(p) for p in old_signals if Path(p).exists()]
     if not existing_old:
+        # Sub-fase 12.9 D5: parallel-drift mot cot-explorer er over (bedrock-
+        # bot kjører på cTrader demo). Manglende old-signals er forventet,
+        # ikke en feil. Soft-skip; sjekken kan fjernes når 12.9 D6 lukker.
         return CheckResult(
             name="signal_diff",
-            ok=False,
-            detail="ingen gamle signal-filer funnet å sammenligne mot",
+            ok=True,
+            detail="skipped: parallel-drift over (ingen gamle signal-filer)",
             data={"old_signals_searched": [str(p) for p in old_signals]},
         )
 
