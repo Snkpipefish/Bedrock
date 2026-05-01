@@ -130,11 +130,32 @@ def test_build_bot_wires_all_modules(
     assert comms._on_signals == entry.on_signals
 
 
-def test_build_bot_warns_when_api_key_missing(
+def test_build_bot_warns_when_api_key_env_set_but_var_missing(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
+    """Hvis bot.yaml peker på en env-var som ikke er satt: WARNING."""
+    monkeypatch.setenv("CTRADER_CLIENT_ID", "id")
+    monkeypatch.setenv("CTRADER_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("CTRADER_ACCESS_TOKEN", "tok")
+    monkeypatch.setenv("CTRADER_ACCOUNT_ID", "12345")
+    monkeypatch.delenv("SCALP_API_KEY", raising=False)
+    cfg_path = tmp_path / "bot.yaml"
+    cfg_path.write_text('startup_only:\n  signal_api_key_env: "SCALP_API_KEY"\n', encoding="utf-8")
+    monkeypatch.setenv("BEDROCK_BOT_CONFIG", str(cfg_path))
+
+    with caplog.at_level("WARNING"):
+        build_bot(demo=True)
+    assert any("SCALP_API_KEY" in rec.message for rec in caplog.records)
+
+
+def test_build_bot_null_api_key_env_logs_info_no_warning(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Default null → INFO-log, ingen warning, comms får tom api_key."""
     monkeypatch.setenv("CTRADER_CLIENT_ID", "id")
     monkeypatch.setenv("CTRADER_CLIENT_SECRET", "secret")
     monkeypatch.setenv("CTRADER_ACCESS_TOKEN", "tok")
@@ -142,9 +163,16 @@ def test_build_bot_warns_when_api_key_missing(
     monkeypatch.delenv("SCALP_API_KEY", raising=False)
     monkeypatch.setenv("BEDROCK_BOT_CONFIG", str(tmp_path / "missing.yaml"))
 
-    with caplog.at_level("WARNING"):
-        build_bot(demo=True)
-    assert any("SCALP_API_KEY" in rec.message for rec in caplog.records)
+    with caplog.at_level("INFO"):
+        _, comms, _, _, bot_config, _ = build_bot(demo=True)
+
+    # Ingen WARNING om SCALP_API_KEY når env-var-navn er null
+    warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert not any("SCALP_API_KEY" in r.message for r in warnings)
+    # INFO logger at vi kjører uten api-key
+    assert any("api_key_env=null" in r.message for r in caplog.records)
+    assert bot_config.startup_only.signal_api_key_env is None
+    assert comms._api_key == ""
 
 
 def test_build_bot_raises_when_credentials_missing(

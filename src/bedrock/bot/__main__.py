@@ -117,12 +117,17 @@ def build_bot(
     )
 
     api_key_env = bot_config.startup_only.signal_api_key_env
-    api_key = os.environ.get(api_key_env, "")
-    if not api_key:
-        log.warning(
-            "[COMMS] Env-var %s ikke satt — signal-server-kall går uten API-nøkkel",
-            api_key_env,
-        )
+    if api_key_env is None:
+        # Lokal/loopback-trafikk uten auth — bevisst null i bot.yaml.
+        api_key = ""
+        log.info("[COMMS] signal_api_key_env=null — kjører uten API-nøkkel (lokal trafikk)")
+    else:
+        api_key = os.environ.get(api_key_env, "")
+        if not api_key:
+            log.warning(
+                "[COMMS] Env-var %s ikke satt — signal-server-kall går uten API-nøkkel",
+                api_key_env,
+            )
 
     comms = SignalComms(
         startup_cfg=bot_config.startup_only,

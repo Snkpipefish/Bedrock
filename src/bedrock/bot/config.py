@@ -56,8 +56,10 @@ class StartupOnlyConfig(BaseModel):
     gamle verdier til neste prosess-restart.
     """
 
-    signal_url: str = "http://localhost:5100"
-    signal_api_key_env: str = "SCALP_API_KEY"  # env-var-navn, ikke selve nøkkelen
+    signal_url: str = "http://127.0.0.1:5100/bot"
+    # `None` = ingen API-key sendes (lokal/loopback-trafikk). Sett til en
+    # env-var-streng hvis bot skal snakke med en remote signal-server.
+    signal_api_key_env: str | None = None
     reconnect: ReconnectConfig = Field(default_factory=ReconnectConfig)
 
     model_config = ConfigDict(extra="forbid")

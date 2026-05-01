@@ -13,13 +13,20 @@
 # Schema valideres av bedrock.bot.config.BotConfig (extra="forbid").
 
 startup_only:
-  # Signal-server URL. Bedrock-server lytter på 5100; gammel scalp_edge
-  # signal_server er fortsatt på 5000 i parallell-drift (Fase 11-12).
-  signal_url: "http://localhost:5100"
+  # Signal-server URL. Bedrock-server eksponerer bot-tilpasset signal-
+  # endpoint på `/bot/signals` (blueprint url_prefix=`/bot`, sub-fase
+  # 12.9 D1, commit 649f429). SignalComms gjør GET `<signal_url>/signals`
+  # → derfor må base-URL inkludere `/bot`-prefix for å lande på den
+  # nye endpointen. Bedrock-server lytter på 127.0.0.1:5100; gammel
+  # scalp_edge signal_server (port 5000) retires i D6.
+  signal_url: "http://127.0.0.1:5100/bot"
 
   # Navn på env-var som holder API-nøkkelen (ikke selve nøkkelen).
-  # Nøkkelen skal aldri ligge i YAML (CLAUDE.md + PLAN § 10.6).
-  signal_api_key_env: "SCALP_API_KEY"
+  # `null` = ingen API-key sendes. Bedrock-server kjører lokalt på
+  # samme host; trafikken er loopback-isolert og trenger ingen auth.
+  # Settes til en env-var-streng (f.eks. "SCALP_API_KEY") hvis bot
+  # skal snakke med en remote signal-server.
+  signal_api_key_env: null
 
   # cTrader reconnect-budsjett. >= max_in_window reconnects innen
   # window_sec sekunder = FATAL exit (kode 79).

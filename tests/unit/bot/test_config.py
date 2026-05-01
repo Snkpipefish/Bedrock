@@ -41,7 +41,8 @@ BUNDLED_YAML = REPO_ROOT / "config" / "bot.yaml"
 
 def test_bot_config_default_construction() -> None:
     cfg = BotConfig()
-    assert cfg.startup_only.signal_url == "http://localhost:5100"
+    assert cfg.startup_only.signal_url == "http://127.0.0.1:5100/bot"
+    assert cfg.startup_only.signal_api_key_env is None
     assert cfg.startup_only.reconnect.window_sec == 600
     assert cfg.reloadable.risk_pct.full == 1.0
     assert cfg.reloadable.horizon_ttl.scalp == 900
@@ -66,7 +67,7 @@ reloadable:
     # Half/quarter + andre seksjoner = default
     assert cfg.reloadable.risk_pct.half == 0.5
     assert cfg.reloadable.daily_loss.pct_of_balance == 2.0
-    assert cfg.startup_only.signal_url == "http://localhost:5100"
+    assert cfg.startup_only.signal_url == "http://127.0.0.1:5100/bot"
 
 
 def test_load_missing_file_gives_defaults(tmp_path: Path) -> None:
@@ -158,7 +159,7 @@ def test_diff_startup_only_top_level_change() -> None:
     diffs = diff_startup_only(a, b)
     assert len(diffs) == 1
     assert "signal_url" in diffs[0]
-    assert "localhost:5100" in diffs[0]
+    assert "127.0.0.1:5100/bot" in diffs[0]
     assert "new:7000" in diffs[0]
 
 
@@ -197,7 +198,7 @@ reloadable:
     merged, diffs = reload_bot_config(path, current)
 
     # startup_only = HOLDES (gammel verdi)
-    assert merged.startup_only.signal_url == "http://localhost:5100"
+    assert merged.startup_only.signal_url == "http://127.0.0.1:5100/bot"
     assert merged.startup_only.reconnect.window_sec == 600
 
     # reloadable = NY verdi
