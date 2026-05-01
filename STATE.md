@@ -133,7 +133,9 @@
 - **Cloud-keep-alive bug (session 136 fix `52bba9b`):** Første implementasjon brukte `pgrep -af run_parallel_harvest` som hadde self-match-bug — pgrep skannet sin egen SSH-payload's bash-cmdline som inneholdt søkestrengen, returnerte alltid HARVEST_OK selv etter at workers døde. Forårsaket 3.5t med falsk-positive HARVEST_OK 2026-05-01 06:00→09:20 CEST før manuell sjekk avdekket. Ny implementasjon bruker log-mtime (`find harvest_g[1-4].log -mmin -5`) — robust mot self-match. La til HARVEST_STALE-tilstand for early-warning hvis harvest dør uventet.
 - **AsOfDateStore-fix (session 136 commit `2e3f1eb`):** 13 manglende as-of-getters lagt til etter audit avdekket at 12 av 28 harvested drivere viste status="monotone" i admin-UI (1 distinct value = default 0.5 fra exception-fallback når underliggende getter manglet). Nye getters: `get_cot_tff`, `get_weather`, `get_crop_progress`, `get_wasde`, `get_export_events`, `get_disease_alerts`, `get_igc`, `get_agsi_storage`, `get_aaii_sentiment`, `get_etf_holdings`, `get_fas_esr`, `get_drought_monitor`, `get_cecafe_exports`. Integration-test på Cotton: 5 monotone drivere → 2-5 distinct values. 34 forurensede DB-rader slettet før restart. 203 tester (store_view+backtest+harvest+orchestrator+signals) passerte uten regresjon.
 - **Driver-status pre-harvest (session 136 audit):** Av 44 registrerte drivere er 42 wired i instrument-YAML-er (2 dead: `currency_cross_trend`, `igc_stocks_change`). Fordeling før AsOfDateStore-fix: 16 active, 12 monotone, 16 silent. Etter fix + full harvest forventes ~40 active. event_distance er kjent monotone (separat driver-bug, ikke getter-mangel — utsatt til egen runde).
-- **Sub-fase 12.6 LUKKET 2026-05-01** (tag `v0.12.6-fase-12.6-LUKKET`). Strategi 3 valgt for event_distance grunnet utilstrekkelig compute-budsjett — fix-en (commits `8003380`/`78e36c6`/`e994abe`) er deployed og smoke-testet (87 rader, 4 instr, 11 distinct values), men full re-harvest deferred til neste compute-budsjett-runde. event_distance YAML-vekter beholdes uendret. 41 andre drivere rebalansert basert på IC + cross-corr-data. **Next task: Plan-S** (PLAN § 19.10) — kan åpnes når bruker er klar.
+- **Sub-fase 12.6 LUKKET 2026-05-01** (tag `v0.12.6-fase-12.6-LUKKET`). Strategi 3 valgt for event_distance grunnet utilstrekkelig compute-budsjett — fix-en (commits `8003380`/`78e36c6`/`e994abe`) er deployed og smoke-testet (87 rader, 4 instr, 11 distinct values), men full re-harvest deferred til neste compute-budsjett-runde. event_distance YAML-vekter beholdes uendret. 41 andre drivere rebalansert basert på IC + cross-corr-data.
+
+- **Sub-fase 12.8 LUKKET 2026-05-01** (tag `v0.12.8-fase-12.8-LUKKET`). PLAN § 20 lagt til (data-gjeld + cron-tuning + whitelist-revisjon). § 20.2 låser horisont-bruk-prinsipper M/S/Sc. Session 139 leverte A1 (coverage-rapport-verktøy + first rapport) + A2 (paused timers reaktivert, AAII bug + schema-drift + fas_esr docstring) + B (stale_hours tuning + FRED policy) + C (per-(inst × hor) whitelist-kvalifisering dokumentert). Bot-handel default = SWING/MAKRO; SCALP filtreres til Plan-S. **Next task: Plan-S** (PLAN § 19.10) eller sub-fase 12.9 (WASDE pre-2019, comex+cafe ingest, bot-token + signal-format-mismatch, UI-coverage-fane).
 
 - **Open tech-gjeld for fremtidige sessioner** (oppdatert 2026-05-01 etter sub-fase 12.6 LUKKET):
   - **event_distance full re-harvest** når compute-budsjett tillater (Codespace-quota fornyes neste måned). Smoke-test bekreftet fix virker — venter kun på rader for IC-måling.
@@ -425,6 +427,91 @@ ferdig og 12.6-rebalansering er gjort.
 ---
 
 ## Session log (newest first)
+
+### 2026-05-01 — Session 139: sub-fase 12.8 åpen + A1 coverage-rapport + A2/B/C-fixes
+
+**Scope:** Sub-fase 12.8 startet etter sub-fase 12.6 LUKKET. PLAN § 20 lagt
+til (data-gjeld + cron-tuning + whitelist-revisjon, 4 sub-tasks 139-142).
+§ 20.2 låser horisont-bruk-prinsipper (M/S/Sc har ulik bruksverdi av
+samme datakilde) + full kilde × horisont-mapping (32 kilder).
+
+**Sub-task A1 (kartleggings-rapport):**
+- `scripts/report_data_coverage.py` (nytt verktøy) introspekter
+  fetch.yaml + DB-MAX(ts) + systemctl per fetcher, og per
+  instrument-YAML for å bygge per-(inst × hor) coverage-matrise med
+  ✓/⚠/✗-flagg.
+- `docs/data_coverage_2026-05-01.md` med sammendragstabell, drill-down
+  per instrument, og final-state etter A2/B/C-fixes.
+- Initial state: 0/22 instrumenter ✓ på noen horisont, 6 fetchere ✗.
+- Initial-flagging "fundamentals stale 38t" var rapport-bug — FRED
+  virker korrekt, business-day-aware aging la til.
+
+**Sub-task A2 (kode-fixer):**
+1. Reaktivert paused user-timers (crypto_sentiment + news_intel) — var
+   `enabled=linked active=inactive` fra tidligere testing. Trigger-
+   service manuelt → 0 → 34 + 87 rader.
+2. Trigger enso manuelt etter DNS-failure ved tidligere reboot
+   (NOAA_ONI 914 rader).
+3. Business-day-aware aging i rapport-verktøyet for daglige fetchere
+   som publiserer M-F med T+1-delay.
+4. AAII bull_bear_spread fetcher-bug fixet (audit Sjekk 9.6) — Excel
+   col4 var "Total" (~100), ikke spread. Erstattet alltid med
+   `bullish_pct - bearish_pct`. Backfilt 538 rader.
+5. Schema-drift fixet — 3 sub-fase 12.6 harvester-tabeller lagt til i
+   schemas.py (TABLE_DRIVER_OBSERVATIONS, TABLE_FEATURE_SNAPSHOTS,
+   TABLE_SIGNAL_SETUPS + DDL).
+6. fas_esr.py:134 stale docstring oppdatert (Cotton 501 → 1404).
+
+**Sub-task B (cron-tuning):**
+- Stale_hours i fetch.yaml økt 168/200 → 264h (11d) for ukentlig-
+  fetchere (cot_*, cot_euronext, eia_inventories) for å matche
+  rapport-verktøyets cycle-buffer. Unngår falsk-positiv fre-morgen.
+- FRED hard-fail-policy: bekreftet eksisterende. retry_with_backoff
+  + per-series-OK-counting + service exit 1 hvis ANY series feiler.
+- EIA "aging 7.6d" verifisert som ikke-bug — alle 3 series er på
+  2026-04-24 (siste EIA-publisering); neste ons 7. mai gir ny rad.
+
+**Sub-task C (whitelist-revisjon):**
+- Per-instrument data-historikk-dybde verifisert: 20/22 har 16y
+  priser + 16y CFTC. Brent + Copper har 4y CFTC (CFTC pre-2022 mangel).
+- Bot-whitelist (17 inst) kvalifiserer alle for Macro + Swing.
+- INGEN kvalifiserer for Scalp før Plan-S leverer surprise-z-feature
+  + VIX9D/3M-termstruktur-driver + cross-asset-ledere + real-time
+  seismic-trigger. Dokumentert i bot_whitelist.yaml.
+- Bot-handel default = SWING/MAKRO. SCALP-signaler filtreres til Plan-S.
+
+**Sluttilstand:**
+- Fetcher-helse: 15 ✓ / 4 ⚠ / 0 ✗ (var 12/2/6 ved A1-start).
+- Coverage: M 2 ✓ / 20 ⚠ / 0 ✗, S 0/2/20, Sc 0/22/0.
+- Forventet etter fre-kveld-fyringer: ~22 ✓ på M/S, 22 ⚠ på Sc.
+
+**8 commits + STATE-update på main:**
+- `8486aec` docs(plan): § 20 sub-fase 12.8
+- `e42dece` docs(12.8): A1 data-coverage-rapport
+- `de4609d` fix(12.8): business-day-aware aging + what-if-fresh
+- `0292c2d` fix(12.8): paused-timers reaktivert + cycle-buffer 11d
+- `a82a361` fix(12.8): A2 AAII + schema-drift + fas_esr
+- `8a4ca21` fix(12.8): B+C — stale_hours tuning
+- `81cd2b6` docs(12.8): bot_whitelist per-horisont-kvalifisering
+- `9679bb6` + `ed47a55` docs(12.8): final-state coverage update
+
+**Open follow-ups for sub-fase 12.9:**
+- WASDE pre-2019 ESMIS-walker (~1-2t kode)
+- comex + cafe ingest-subkommandoer i ingest_manual_data.py
+- README i cafe_boletins/ comex data/ conab_boletins/
+- disease_pressure test-coverage til ≥7 tester
+- enso DNS-failure-resilience ved boot
+- Bot-token-update + setup→bot signal-format-mismatch (audit Sjekk 9.7)
+- UI-coverage-fane (legge rapport inn i Datakilder-tab)
+
+**Plan-S-deferrals (PLAN § 19.10):**
+- calendar_ff `actual`-felt (FF JSON har kun forecast/prev)
+- VIX9D/3M-termstruktur-driver
+- Surprise-vs-consensus driver-feature
+- Cross-asset-leder-mønster
+- Real-time seismic M≥6-trigger
+
+**Tag:** `v0.12.8-fase-12.8-LUKKET` på siste 139-commit etter STATE-update.
 
 ### 2026-05-01 — Session 138: sub-fase 12.6 LUKKET (analyzer + YAML-rebalansering + dead-driver-cleanup)
 
