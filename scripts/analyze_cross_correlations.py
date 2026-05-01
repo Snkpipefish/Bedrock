@@ -35,6 +35,7 @@ import argparse
 import sqlite3
 from datetime import date
 from pathlib import Path
+from typing import cast
 
 import pandas as pd
 
@@ -42,6 +43,10 @@ from bedrock.signal_server.config import load_from_env
 
 # Hit-rate-terskel matcher session 99 + analog-driver
 THRESHOLDS_PCT: dict[int, float] = {30: 3.0, 90: 5.0}
+
+# Strategi 3 (audit-doc Sjekk 9.5): event_distance utelates fra cross-corr
+# (samme begrunnelse som i analyze_driver_performance.py).
+SKIP_DRIVERS: frozenset[str] = frozenset({"event_distance"})
 
 OUTPUT_PATH_TEMPLATE = "docs/cross_correlations_{date}.md"
 
@@ -283,6 +288,13 @@ def main() -> None:
     print(f"  feature_snapshots: {features_wide.shape}")
     print(f"  driver_observations: {len(driver_obs):,} rader")
     print(f"  targets (per inst, hor): {len(targets_df):,} rader")
+
+    if SKIP_DRIVERS and not driver_obs.empty:
+        skipped_mask = driver_obs["driver_name"].isin(SKIP_DRIVERS)
+        n_skipped = int(skipped_mask.sum())
+        if n_skipped:
+            driver_obs = cast(pd.DataFrame, driver_obs[~skipped_mask].copy())
+            print(f"  Skipper {n_skipped:,} driver-rader for {sorted(SKIP_DRIVERS)} (Strategi 3)")
 
     if features_wide.empty and driver_obs.empty:
         print("Ingen data — kjør harvest-scriptene først.")

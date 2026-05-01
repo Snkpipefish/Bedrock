@@ -35,13 +35,21 @@ import itertools
 import sqlite3
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
 from bedrock.signal_server.config import load_from_env
 
 THRESHOLDS_PCT: dict[int, float] = {30: 3.0, 90: 5.0}
+
+# Strategi 3 (audit-doc Sjekk 9.5): event_distance utelates fra analyzer
+# fordi smoke-test etter Type A+B+C-resolution kun produserte 87 rader
+# (4 instrumenter × ~22 ref_dates) — utilstrekkelig for IC-måling.
+# Fix-en (commits 8003380 / 78e36c6 / e994abe) er deployed; full
+# re-harvest deferred til neste compute-budsjett-runde. event_distance
+# YAML-vekter beholdes uendret i sub-fase 12.6-rebalansering.
+SKIP_DRIVERS: frozenset[str] = frozenset({"event_distance"})
 
 OUTPUT_PATH_TEMPLATE = "docs/driver_performance_{date}.md"
 
@@ -257,6 +265,16 @@ def main() -> None:
     if df.empty:
         print("Tom tabell — ingen analyse å gjøre.")
         return
+
+    if SKIP_DRIVERS:
+        skipped_mask = df["driver_name"].isin(SKIP_DRIVERS)
+        n_skipped = int(skipped_mask.sum())
+        if n_skipped:
+            df = cast(pd.DataFrame, df[~skipped_mask].copy())
+            print(
+                f"  Skipper {n_skipped:,} rader for drivere {sorted(SKIP_DRIVERS)} "
+                f"(Strategi 3 — se docstring)"
+            )
 
     print("Beregner IC + kvartil-hit-rate per (driver, instrument, horizon, direction)...")
     perf = _build_per_driver_table(df)
