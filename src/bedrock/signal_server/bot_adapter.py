@@ -37,6 +37,15 @@ SCHEMA_VERSION = "2.1"
 # Per-horisont default-konfig portert fra scalp_edge signal_server-præsedens.
 # expiry_candles bruker M5-candles per scalp_edge-konvensjon: SCALP=24
 # (2t), SWING=96 (8t), MAKRO=336 (28t = ~6 trading days).
+#
+# `sizing_base_risk_usd` styrer base-lot per horisont via
+# `bedrock.bot.sizing.compute_desired_lots`:
+#   ≥60 → 0.03 lot (MAKRO)
+#   ≥40 → 0.02 lot (SWING)
+#   <40 → 0.01 lot (SCALP)
+# Manglende felt = default 20 = SCALP-tier; settes derfor eksplisitt
+# her per horisont (sub-fase 12.9 D5+ fix). Verdiene matcher scalp_edge-
+# convention fra trading_bot.py:1551-1569.
 HORIZON_DEFAULTS: dict[str, dict[str, Any]] = {
     "SCALP": {
         "expiry_candles": 24,
@@ -46,6 +55,7 @@ HORIZON_DEFAULTS: dict[str, dict[str, Any]] = {
             "tf": "M5",
             "stop_atr_mult": 1.5,
             "tp_atr_mult": 2.5,
+            "sizing_base_risk_usd": 20,
         },
     },
     "SWING": {
@@ -56,6 +66,7 @@ HORIZON_DEFAULTS: dict[str, dict[str, Any]] = {
             "tf": "M15",
             "stop_atr_mult": 2.0,
             "tp_atr_mult": 3.5,
+            "sizing_base_risk_usd": 40,
         },
     },
     "MAKRO": {
@@ -66,6 +77,7 @@ HORIZON_DEFAULTS: dict[str, dict[str, Any]] = {
             "tf": "H1",
             "stop_atr_mult": 3.0,
             "tp_atr_mult": None,  # MAKRO bruker trailing-only per Fase 4
+            "sizing_base_risk_usd": 60,
         },
     },
 }
