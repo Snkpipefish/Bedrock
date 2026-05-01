@@ -211,6 +211,6 @@ def test_fetch_yaml_has_cot_euronext_entry() -> None:
     assert "cot_euronext" in config.fetchers
     spec = config.fetchers["cot_euronext"]
     assert spec.cron == "0 18 * * 3"
-    assert spec.stale_hours == 168
+    assert spec.stale_hours == 264  # sub-fase 12.8 § 20.4: ukentlig + 4d buffer
     assert spec.table == "cot_euronext"
     assert spec.ts_column == "report_date"

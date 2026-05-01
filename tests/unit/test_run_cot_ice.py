@@ -257,6 +257,6 @@ def test_fetch_yaml_has_cot_ice_entry() -> None:
     assert "cot_ice" in config.fetchers
     spec = config.fetchers["cot_ice"]
     assert spec.cron == "30 22 * * 5"
-    assert spec.stale_hours == 168
+    assert spec.stale_hours == 264  # sub-fase 12.8 § 20.4: ukentlig + 4d buffer
     assert spec.table == "cot_ice"
     assert spec.ts_column == "report_date"

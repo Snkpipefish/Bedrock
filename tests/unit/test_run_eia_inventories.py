@@ -236,6 +236,6 @@ def test_fetch_yaml_has_eia_entry() -> None:
     assert "eia_inventories" in config.fetchers
     spec = config.fetchers["eia_inventories"]
     assert spec.cron == "30 17 * * 3"
-    assert spec.stale_hours == 200
+    assert spec.stale_hours == 264  # sub-fase 12.8 § 20.4: ukentlig + 4d buffer
     assert spec.table == "eia_inventory"
     assert spec.ts_column == "date"
