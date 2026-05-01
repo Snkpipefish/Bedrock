@@ -60,18 +60,20 @@ DEFAULT_OUT = REPO_ROOT / "docs" / f"data_coverage_{date.today().isoformat()}.md
 # ---------------------------------------------------------------------------
 
 # Format: fetcher_name → ("cycle_label", red_threshold_hours)
+# For business-day-aware fetchere brukes business_days (M-F) i stedet for
+# wallclock-timer; se BUSINESS_DAY_FETCHERS-settet.
 CYCLE_PER_FETCHER: dict[str, tuple[str, float]] = {
     "prices": ("Daglig (M-F)", 36),
     "cot_disaggregated": ("Ukentlig (fre)", 9 * 24),
     "cot_legacy": ("Ukentlig (fre)", 9 * 24),
     "cot_ice": ("Ukentlig (fre)", 9 * 24),
     "cot_euronext": ("Ukentlig (ons)", 9 * 24),
-    "fundamentals": ("Daglig", 36),
+    "fundamentals": ("Daglig (M-F, T+1 publisering)", 36),
     "weather": ("Daglig", 36),
     "enso": ("Månedlig", 40 * 24),
     "wasde": ("Månedlig", 40 * 24),
     "crop_progress": ("Ukentlig (sesong apr-nov)", 9 * 24),
-    "shipping": ("Daglig (M-F)", 4 * 24),  # +12t buffer for fre→man
+    "shipping": ("Daglig (M-F)", 4 * 24),
     "calendar_ff": ("12t (intra-day)", 30),
     "eia_inventories": ("Ukentlig (ons)", 9 * 24),
     "comex": ("Daglig (M-F)", 4 * 24),
@@ -84,6 +86,12 @@ CYCLE_PER_FETCHER: dict[str, tuple[str, float]] = {
 
 # Fetchere som har sesong-ekskludering (off-season → ⚠ ikke ✗)
 SEASONAL_FETCHERS = {"crop_progress"}
+
+# Fetchere som publiserer kun forretningsdager (M-F) — aging mål mot
+# siste forretnings-dag, ikke wallclock-timer. FRED-data er T+1 fra
+# US-børs-close, så fredag-rad er siste tilgjengelig fra fredag morgen
+# norsk tid frem til lørdag tidlig.
+BUSINESS_DAY_FETCHERS = {"prices", "fundamentals", "comex", "shipping"}
 
 # ---------------------------------------------------------------------------
 # Per-asset-klasse horisont-mapping (PLAN § 20.2)
@@ -357,25 +365,56 @@ def _query_systemd(fetcher: str) -> tuple[datetime | None, str]:
 # ---------------------------------------------------------------------------
 
 
+def _last_business_day(now: datetime) -> datetime:
+    """Forrige forretnings-dag (M-F) før `now`. Inkluderer dagens dato hvis M-F."""
+    cur = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    while cur.weekday() > 4:  # 5=Sat, 6=Sun
+        cur = (
+            cur.replace(day=cur.day - 1)
+            if cur.day > 1
+            else cur.replace(month=cur.month - 1, day=28)
+        )
+    return cur
+
+
 def _classify_health(
     fetcher: str,
     last_obs: datetime | None,
     rows: int,
     now: datetime,
 ) -> tuple[str, float | None]:
-    """Returner (status_flag, age_hours_or_None) for én fetcher."""
+    """Returner (status_flag, age_hours_or_None) for én fetcher.
+
+    Business-day-aware: BUSINESS_DAY_FETCHERS måles mot siste M-F-dag
+    før `now` istedenfor mot wallclock-now. Dette unngår at en fredag-
+    rad flagges stale på en mandag morgen før ny fyring har skjedd.
+    """
     if last_obs is None or rows == 0:
         return "✗", None
-    age_hours = (now - last_obs).total_seconds() / 3600
+
+    if fetcher in BUSINESS_DAY_FETCHERS:
+        # Mål alder mot siste forretnings-dag (00:00 UTC) som er det
+        # eldste vi forventer å ha rad for.
+        ref = _last_business_day(now)
+        # Hvis fetcheren publiserer T+1 (FRED), så aksepterer vi at
+        # siste rad er fra forrige forretnings-dag før ref.
+        # Bruker wallclock-alder hvis last_obs >= ref (fersk i dag),
+        # ellers wallclock-alder fra ref-dato.
+        if last_obs >= ref:
+            age_hours = (now - last_obs).total_seconds() / 3600
+        else:
+            age_hours = (ref - last_obs).total_seconds() / 3600
+    else:
+        age_hours = (now - last_obs).total_seconds() / 3600
+
     cycle, red_threshold = CYCLE_PER_FETCHER.get(fetcher, ("Ukjent", 24))
-    yellow_threshold = red_threshold * 0.7  # lett buffer før rødt
+    yellow_threshold = red_threshold * 0.7
 
     if fetcher in SEASONAL_FETCHERS:
-        # crop_progress er ute av sesong nov-apr → ⚠ ikke ✗
         month = now.month
-        if month not in range(4, 12):  # apr-nov = 4..11
+        if month not in range(4, 12):
             if age_hours > red_threshold:
-                return "⚠", age_hours  # off-season aging er ikke kritisk
+                return "⚠", age_hours
             return "✓", age_hours
 
     if age_hours > red_threshold:
@@ -425,19 +464,30 @@ def _resolve_primary(inst_id: str, asset_class: str) -> dict[str, list[str]]:
     return PRIMARY_PER_HORIZON.get(asset_class, {"M": [], "S": [], "Sc": []})
 
 
-def build_coverage(db_path: Path) -> tuple[dict[str, FetcherHealth], list[InstrumentCoverage]]:
-    """Bygg fetcher-helse-map + per-instrument-coverage."""
+def build_coverage(
+    db_path: Path, force_fresh: set[str] | None = None
+) -> tuple[dict[str, FetcherHealth], list[InstrumentCoverage]]:
+    """Bygg fetcher-helse-map + per-instrument-coverage.
+
+    `force_fresh`: navn på fetchere som tvinges til status="✓" (hypotetisk
+    "what if X virker"-modus). Brukes for å forutse coverage etter
+    pending fixes uten å vente på neste cron-fyring.
+    """
     fetch_cfg = load_fetch_config()
     con = sqlite3.connect(db_path)
 
     now = datetime.now(UTC)
     health_map: dict[str, FetcherHealth] = {}
+    forced = force_fresh or set()
 
     for name, spec in fetch_cfg.fetchers.items():
         rows, last_obs = _query_table_state(con, spec.table, spec.ts_column)
         status, age = _classify_health(name, last_obs, rows, now)
         sd_last, sd_status = _query_systemd(name)
         cycle_label = CYCLE_PER_FETCHER.get(name, ("Ukjent", 24))[0]
+        if name in forced:
+            status = "✓"  # what-if-override
+            cycle_label = f"{cycle_label} [forced ✓]"
         health_map[name] = FetcherHealth(
             name=name,
             cycle_label=cycle_label,
@@ -618,13 +668,28 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument(
+        "--what-if-fresh",
+        type=str,
+        default=None,
+        help="Komma-separert liste over fetchere som tvinges til ✓ "
+        "(hypotetisk 'what if X virker' — for å se coverage etter pending fixes)",
+    )
     args = parser.parse_args()
 
     if not args.db.exists():
         raise SystemExit(f"DB ikke funnet: {args.db}")
 
+    force_fresh = (
+        {s.strip() for s in args.what_if_fresh.split(",") if s.strip()}
+        if args.what_if_fresh
+        else None
+    )
+
     print(f"Leser fetch.yaml + instrument-YAMLs + DB ({args.db}) ...")
-    health_map, coverages = build_coverage(args.db)
+    if force_fresh:
+        print(f"  What-if-fresh override på: {sorted(force_fresh)}")
+    health_map, coverages = build_coverage(args.db, force_fresh=force_fresh)
 
     print(f"  Vurdert {len(health_map)} fetchere mot {len(coverages)} instrumenter.")
 

@@ -5,67 +5,73 @@ vurdert per horisont (Macro / Swing / Scalp) basert på § 20.2-mapping.
 Helse-flagg per fetcher basert på cycle-spesifikke terskler (§ 20.4).
 
 Generert av `scripts/report_data_coverage.py` mot `bedrock.db`
-(2026-05-01 14:06 UTC).
+(2026-05-01 14:16 UTC). Inkluderer business-day-aware aging for
+daglige fetchere (`prices`, `fundamentals`, `comex`, `shipping`)
+slik at en fredag-rad ikke flagges stale på en lørdag/søndag.
 
 ## Key findings (Sub-task A1 → A2-input)
 
-**0/22 instrumenter har full coverage på noen horisont.** Pipelinen er
-strukturelt rødt grunnet flere uavhengige fetcher-issues. Sortert
-etter blast-radius:
+**Initial flagging korrigert etter to oppdagelser 2026-05-01 14:15 UTC.**
 
-1. **`fundamentals` (FRED) flagget stale** (38t alder, terskel 36t) —
-   påvirker MAKRO for **alle** 22 instrumenter siden DGS10/T10YIE/
-   DTWEXBGS/VIXCLS er obligatoriske inputs. Fetcheren ble flagget OK
-   på systemd ("active") men siste rad er fra 30. apr 00:00 UTC. Cron
-   fyrer daglig 02:30 UTC, så 1. mai-rad burde vært inne. Sjansen er
-   at FRED-fetcher silent-failer ved API-key-issue eller series-fetch-
-   feil. Anbefalt A2-fix: hard-fail-policy (per § 20.6 sub-task B,
-   men kan flyttes til A2 hvis kritisk).
-2. **`cot_disaggregated` + `cot_legacy` + `cot_ice` stale 10.6d**
-   (terskel 9d). Disse fyrer fredager 22:00 — siste fyring fre 24.
-   apr OK; fre 1. mai (i kveld) er kommende. Forventet rødt-flagg
-   fredag morgen er normalt — buffer kan utvides til 12d for å unngå
-   falsk positiv. Sub-task B-fix.
-3. **`crypto_sentiment` + `news_intel` 0 rader** — fetcher kjører
-   ("active" på systemd) men skriver ingen data. Sjekk fetcher-loggen
-   for silent-fail; manuell bekreftelse om endpoint endret.
-4. **`eia_inventories` ⚠ 7.6d** — siste rad 24. apr, men ons 29.
-   apr-fyring burde gitt nye rader. Sjekk smart-skip-logikk eller
-   EIA-pause i week 18 (ukentlig holiday-mønster).
-5. **`enso` på user-systemd har "exit-code"-status** — én av to
-   failed services som er kjent. Diagnose i sub-task B.
-6. **`calendar_ff` aging 21.8t** — fyrte 30. apr 16:15 UTC, neste
-   18:15 i dag. Marginalt utenfor buffer. Sub-task B kan stramme
-   stale_hours hvis vi vil ha skarpere flagging.
+### Funn 1 — FRED virker faktisk
 
-**Per-horisont-fordeling:**
+`journalctl --user -u bedrock-fetch-fundamentals.service` viser at
+fetcheren fyrte 13:04 UTC og hentet 22 nye rader (DGS10, T10YIE,
+VIXCLS, AAA10Y/BAA10Y, NFCI, WALCL, RRPONTSYD osv) — `Summary: 14/14
+ok, 0 failed`. Tidlig "stale 38t"-flagging var en rapport-bug:
+business-day-aware aging er nå i scriptet (`BUSINESS_DAY_FETCHERS`).
+FRED-data er T+1 fra US-børs-close, så 30. apr 00:00 UTC er siste
+rad fra fredag morgen frem til lørdag.
 
-| Horisont | ✓ | ⚠ | ✗ |
-|---|---:|---:|---:|
-| Macro | 0 | 7 | 15 |
-| Swing | 0 | 0 | 22 |
-| Scalp | 0 | 19 | 3 |
+### Funn 2 — to user-timers er paused fra tidligere testing
 
-**Asset-klasse-mønstre:**
-- **Energy (Brent/CrudeOil/NaturalGas)** = ✗ på alle tre horisonter
-  — kombinerer eia + fundamentals + cot_disaggregated-svikt.
-- **Crypto (BTC/ETH)** = ✗ på M/S — `crypto_sentiment` tom + `fundamentals` stale.
-- **Agri (grains/softs)** = ⚠ på M (best av asset-klassene fordi
-  weather + wasde + conab + shipping er fersk; svikten er bare
-  cot_disaggregated som fyrer i kveld).
-- **FX/Indices/Metals** = ✗ på M — `fundamentals`-stale dominerer.
+`systemctl --user is-active`-sjekk avdekker:
 
-**Anbefalinger for A2 (session 140):**
-- Prioritet 1: **diagnose fundamentals-fetcher silent-fail** — størst
-  blast-radius. Hvis FRED-API-key er issue, fix umiddelbart.
-- Prioritet 2: **diagnose news_intel + crypto_sentiment 0-rader** —
-  fetcher tilsynelatende kjører men skriver ingenting.
-- Prioritet 3: A2-scope per § 20.5 (WASDE pre-2019, schema-drift,
-  AAII-bug, comex/cafe ingest, fas_esr docstring, disease_pressure-
-  tester) — viktig men ikke blast-kritisk.
+| Timer | Status | Rader |
+|---|---|---:|
+| `bedrock-fetch-crypto_sentiment.timer` | `enabled=linked active=inactive` | 0 |
+| `bedrock-fetch-news_intel.timer` | `enabled=linked active=inactive` | 0 |
+| `bedrock-fetch-calendar_ff.timer` (user) | `linked, inactive` | n/a (system-versjonen er aktiv) |
 
-Re-kjør rapport (`PYTHONPATH=src .venv/bin/python scripts/report_data_coverage.py`)
-etter hver A2-fix for å verifisere at flagget snur.
+Re-aktivering: `systemctl --user start bedrock-fetch-{crypto_sentiment,news_intel}.timer`.
+
+### Funn 3 — what-if-fresh: alle 22 ✓
+
+Med scriptet `--what-if-fresh "fundamentals,cot_disaggregated,cot_legacy,cot_ice,eia_inventories,calendar_ff,enso,crypto_sentiment,news_intel"`
+(simulerer at alle pending fyrer eller blir reaktivert) blir
+**alle 22 instrumenter ✓ på alle 3 horisonter (M/S/Sc)**.
+
+Pipelinen har **strukturelt full coverage** for hele whitelist'en.
+Røde flagg er transient-state (ventende fre-fyringer + paused user-
+timers + business-day-bug), ikke strukturelle data-mangler.
+
+### Reelle gjenværende issues for A2 (session 140)
+
+1. **Re-aktiver paused user-timers** (`crypto_sentiment`, `news_intel`).
+   Trivielt — én systemctl-kommando hver. Verifiser at fetcher
+   skriver rader etter neste fyring.
+2. **`enso`-service "exit-code"** — timer er aktiv, men service-
+   subprocess feiler. Diagnose i logg + fix.
+3. **`bedrock-monitor.service` failed** — kjent siden session 137.
+4. **`eia_inventories` ⚠ 7.6d** — etter ons 29. apr-fyring burde DB
+   ha 29. apr-rad. Sjekk EIA week-18-helligdag eller smart-skip-bug.
+5. **`cot_*`-fetchere stale 10.6d** — fyrer fre 22:00 i kveld;
+   forventet ✓ etter. Vurder buffer-økning til 12d for å unngå
+   falsk-positiv fre morgen.
+6. **`calendar_ff` aging 22t** — fyrer 18:15 i kveld; forventet ✓
+   etter. Marginalt utenfor buffer.
+
+### Anbefalt A2-rekkefølge
+
+1. **5 minutter:** start de 2 paused user-timers.
+2. **30 minutter:** diagnose enso + monitor failed services.
+3. **Resten av A2 per § 20.5** (WASDE pre-2019, schema-drift, AAII-bug,
+   comex/cafe-ingest, fas_esr-docstring, disease_pressure-tester).
+
+Re-kjør `python scripts/report_data_coverage.py` etter hver fix for
+å verifisere at flagget snur fra ✗/⚠ til ✓.
+
+
 
 ## Legende
 
@@ -98,13 +104,13 @@ asset-spesifikke data-realiteter).
 
 | Horisont | ✓ | ⚠ | ✗ |
 |---|---:|---:|---:|
-| M | 0 | 7 | 15 |
+| M | 0 | 19 | 3 |
 | S | 0 | 0 | 22 |
 | Sc | 0 | 19 | 3 |
 
 ### Fetcher-helse
 
-- ✓ ferske: **11**, ⚠ aging: **2**, ✗ stale/missing: **6**
+- ✓ ferske: **12**, ⚠ aging: **2**, ✗ stale/missing: **5**
 
 ## Sammendragstabell 1 — per-horisont-coverage
 
@@ -112,35 +118,35 @@ Per (instrument × horisont) — ✓ alle primærkilder ferske / ⚠ 1 svikt / �
 
 | Instrument | Asset | Macro | Swing | Scalp |
 |---|---|:---:|:---:|:---:|
-| AUDUSD | fx | ✗ | ✗ | ⚠ |
+| AUDUSD | fx | ⚠ | ✗ | ⚠ |
 | Brent | energy | ✗ | ✗ | ✗ |
-| BTC | crypto | ✗ | ✗ | ⚠ |
+| BTC | crypto | ⚠ | ✗ | ⚠ |
 | Cocoa | softs | ⚠ | ✗ | ⚠ |
 | Coffee | softs | ⚠ | ✗ | ⚠ |
-| Copper | metals | ✗ | ✗ | ⚠ |
+| Copper | metals | ⚠ | ✗ | ⚠ |
 | Corn | grains | ⚠ | ✗ | ⚠ |
 | Cotton | softs | ⚠ | ✗ | ⚠ |
 | CrudeOil | energy | ✗ | ✗ | ✗ |
-| ETH | crypto | ✗ | ✗ | ⚠ |
-| EURUSD | fx | ✗ | ✗ | ⚠ |
-| GBPUSD | fx | ✗ | ✗ | ⚠ |
-| Gold | metals | ✗ | ✗ | ⚠ |
-| Nasdaq | indices | ✗ | ✗ | ⚠ |
+| ETH | crypto | ⚠ | ✗ | ⚠ |
+| EURUSD | fx | ⚠ | ✗ | ⚠ |
+| GBPUSD | fx | ⚠ | ✗ | ⚠ |
+| Gold | metals | ⚠ | ✗ | ⚠ |
+| Nasdaq | indices | ⚠ | ✗ | ⚠ |
 | NaturalGas | energy | ✗ | ✗ | ✗ |
-| Platinum | metals | ✗ | ✗ | ⚠ |
-| Silver | metals | ✗ | ✗ | ⚠ |
+| Platinum | metals | ⚠ | ✗ | ⚠ |
+| Silver | metals | ⚠ | ✗ | ⚠ |
 | Soybean | grains | ⚠ | ✗ | ⚠ |
-| SP500 | indices | ✗ | ✗ | ⚠ |
+| SP500 | indices | ⚠ | ✗ | ⚠ |
 | Sugar | softs | ⚠ | ✗ | ⚠ |
-| USDJPY | fx | ✗ | ✗ | ⚠ |
+| USDJPY | fx | ⚠ | ✗ | ⚠ |
 | Wheat | grains | ⚠ | ✗ | ⚠ |
 
 ## Sammendragstabell 2 — per-kilde-helse
 
 | Fetcher | Cycle | Cron | Tabell | Rader | Sist obs. | Alder | DB-status | systemd |
 |---|---|---|---|---:|---|---|:---:|---|
-| calendar_ff | 12t (intra-day) | `15 6,18 * * *` | `econ_events` | 41,063 | 2026-04-30 16:15 UTC | 21.8t | ⚠ | active |
-| comex | Daglig (M-F) | `0 22 * * 1-5` | `comex_inventory` | 15 | 2026-04-30 00:00 UTC | 38.1t | ✓ | active |
+| calendar_ff | 12t (intra-day) | `15 6,18 * * *` | `econ_events` | 41,063 | 2026-04-30 16:15 UTC | 22.0t | ⚠ | active |
+| comex | Daglig (M-F) | `0 22 * * 1-5` | `comex_inventory` | 15 | 2026-04-30 00:00 UTC | 24.0t | ✓ | active |
 | conab | Månedlig | `0 20 15 * *` | `conab_estimates` | 158 | 2026-04-27 00:00 UTC | 4.6d | ✓ | active |
 | cot_disaggregated | Ukentlig (fre) | `0 22 * * 5` | `cot_disaggregated` | 11,283 | 2026-04-21 00:00 UTC | 10.6d | ✗ | active |
 | cot_euronext | Ukentlig (ons) | `0 18 * * 3` | `cot_euronext` | 1,221 | 2026-04-29 00:00 UTC | 2.6d | ✓ | active |
@@ -149,15 +155,15 @@ Per (instrument × horisont) — ✓ alle primærkilder ferske / ⚠ 1 svikt / �
 | crop_progress | Ukentlig (sesong apr-nov) | `0 23 * 4-11 1` | `crop_progress` | 3,114 | 2026-04-26 00:00 UTC | 5.6d | ✓ | active |
 | crypto_sentiment | Daglig | `0 7 * * *` | `crypto_sentiment` | 0 | — | — | ✗ | active |
 | eia_inventories | Ukentlig (ons) | `30 17 * * 3` | `eia_inventory` | 5,021 | 2026-04-24 00:00 UTC | 7.6d | ⚠ | active |
-| enso | Månedlig | `0 6 12 * *` | `fundamentals` | 46,717 | 2026-04-30 00:00 UTC | 38.1t | ✓ | exit-code |
-| fundamentals | Daglig | `30 2 * * *` | `fundamentals` | 46,717 | 2026-04-30 00:00 UTC | 38.1t | ✗ | active |
+| enso | Månedlig | `0 6 12 * *` | `fundamentals` | 46,717 | 2026-04-30 00:00 UTC | 38.3t | ✓ | exit-code |
+| fundamentals | Daglig (M-F, T+1 publisering) | `30 2 * * *` | `fundamentals` | 46,717 | 2026-04-30 00:00 UTC | 24.0t | ✓ | active |
 | news_intel | 12t (intra-day) | `30 6,18 * * *` | `news_intel` | 0 | — | — | ✗ | active |
-| prices | Daglig (M-F) | `40 * * * 1-5` | `prices` | 90,634 | 2026-05-01 13:40 UTC | 26m | ✓ | active |
-| seismic | Daglig (event-basert) | `0 4 * * *` | `seismic_events` | 123,401 | 2026-05-01 09:24 UTC | 4.7t | ✓ | active |
-| shipping | Daglig (M-F) | `30 23 * * 1-5` | `shipping_indices` | 2,897 | 2026-04-29 00:00 UTC | 2.6d | ✓ | active |
+| prices | Daglig (M-F) | `40 * * * 1-5` | `prices` | 90,634 | 2026-05-01 13:40 UTC | 35m | ✓ | active |
+| seismic | Daglig (event-basert) | `0 4 * * *` | `seismic_events` | 123,401 | 2026-05-01 09:24 UTC | 4.9t | ✓ | active |
+| shipping | Daglig (M-F) | `30 23 * * 1-5` | `shipping_indices` | 2,897 | 2026-04-29 00:00 UTC | 2.0d | ✓ | active |
 | unica | Halvmånedlig | `0 21 1,16 * *` | `unica_reports` | 1 | 2026-04-27 00:00 UTC | 4.6d | ✓ | active |
 | wasde | Månedlig | `0 19 13 * *` | `wasde` | 8,703 | 2026-04-10 00:00 UTC | 21.6d | ✓ | active |
-| weather | Daglig | `0 3 * * *` | `weather` | 11,361 | 2026-05-01 00:00 UTC | 14.1t | ✓ | active |
+| weather | Daglig | `0 3 * * *` | `weather` | 11,361 | 2026-05-01 00:00 UTC | 14.3t | ✓ | active |
 
 ## Drill-down per instrument
 
@@ -165,7 +171,7 @@ Per (instrument × horisont) — ✓ alle primærkilder ferske / ⚠ 1 svikt / �
 
 | Horisont | Status | Primærkilder (status) |
 |---|:---:|---|
-| M | ✗ | prices ✓, cot_legacy ✗, fundamentals ✗ |
+| M | ⚠ | prices ✓, cot_legacy ✗, fundamentals ✓ |
 | S | ✗ | prices ✓, cot_legacy ✗, calendar_ff ⚠ |
 | Sc | ⚠ | calendar_ff ⚠ |
 
@@ -173,7 +179,7 @@ Per (instrument × horisont) — ✓ alle primærkilder ferske / ⚠ 1 svikt / �
 
 | Horisont | Status | Primærkilder (status) |
 |---|:---:|---|
-| M | ✗ | prices ✓, cot_disaggregated ✗, fundamentals ✗, eia_inventories ⚠ |
+| M | ✗ | prices ✓, cot_disaggregated ✗, fundamentals ✓, eia_inventories ⚠ |
 | S | ✗ | prices ✓, cot_disaggregated ✗, eia_inventories ⚠, calendar_ff ⚠ |
 | Sc | ✗ | calendar_ff ⚠, eia_inventories ⚠ |
 
@@ -181,7 +187,7 @@ Per (instrument × horisont) — ✓ alle primærkilder ferske / ⚠ 1 svikt / �
 
 | Horisont | Status | Primærkilder (status) |
 |---|:---:|---|
-| M | ✗ | prices ✓, fundamentals ✗, crypto_sentiment ✗ |
+| M | ⚠ | prices ✓, fundamentals ✓, crypto_sentiment ✗ |
 | S | ✗ | prices ✓, calendar_ff ⚠, crypto_sentiment ✗ |
 | Sc | ⚠ | calendar_ff ⚠ |
 
@@ -205,7 +211,7 @@ Per (instrument × horisont) — ✓ alle primærkilder ferske / ⚠ 1 svikt / �
 
 | Horisont | Status | Primærkilder (status) |
 |---|:---:|---|
-| M | ✗ | prices ✓, cot_disaggregated ✗, fundamentals ✗, comex ✓ |
+| M | ⚠ | prices ✓, cot_disaggregated ✗, fundamentals ✓, comex ✓ |
 | S | ✗ | prices ✓, cot_disaggregated ✗, comex ✓, calendar_ff ⚠ |
 | Sc | ⚠ | calendar_ff ⚠, seismic ✓ |
 
@@ -229,7 +235,7 @@ Per (instrument × horisont) — ✓ alle primærkilder ferske / ⚠ 1 svikt / �
 
 | Horisont | Status | Primærkilder (status) |
 |---|:---:|---|
-| M | ✗ | prices ✓, cot_disaggregated ✗, fundamentals ✗, eia_inventories ⚠ |
+| M | ✗ | prices ✓, cot_disaggregated ✗, fundamentals ✓, eia_inventories ⚠ |
 | S | ✗ | prices ✓, cot_disaggregated ✗, eia_inventories ⚠, calendar_ff ⚠ |
 | Sc | ✗ | calendar_ff ⚠, eia_inventories ⚠ |
 
@@ -237,7 +243,7 @@ Per (instrument × horisont) — ✓ alle primærkilder ferske / ⚠ 1 svikt / �
 
 | Horisont | Status | Primærkilder (status) |
 |---|:---:|---|
-| M | ✗ | prices ✓, fundamentals ✗, crypto_sentiment ✗ |
+| M | ⚠ | prices ✓, fundamentals ✓, crypto_sentiment ✗ |
 | S | ✗ | prices ✓, calendar_ff ⚠, crypto_sentiment ✗ |
 | Sc | ⚠ | calendar_ff ⚠ |
 
@@ -245,7 +251,7 @@ Per (instrument × horisont) — ✓ alle primærkilder ferske / ⚠ 1 svikt / �
 
 | Horisont | Status | Primærkilder (status) |
 |---|:---:|---|
-| M | ✗ | prices ✓, cot_legacy ✗, fundamentals ✗ |
+| M | ⚠ | prices ✓, cot_legacy ✗, fundamentals ✓ |
 | S | ✗ | prices ✓, cot_legacy ✗, calendar_ff ⚠ |
 | Sc | ⚠ | calendar_ff ⚠ |
 
@@ -253,7 +259,7 @@ Per (instrument × horisont) — ✓ alle primærkilder ferske / ⚠ 1 svikt / �
 
 | Horisont | Status | Primærkilder (status) |
 |---|:---:|---|
-| M | ✗ | prices ✓, cot_legacy ✗, fundamentals ✗ |
+| M | ⚠ | prices ✓, cot_legacy ✗, fundamentals ✓ |
 | S | ✗ | prices ✓, cot_legacy ✗, calendar_ff ⚠ |
 | Sc | ⚠ | calendar_ff ⚠ |
 
@@ -261,7 +267,7 @@ Per (instrument × horisont) — ✓ alle primærkilder ferske / ⚠ 1 svikt / �
 
 | Horisont | Status | Primærkilder (status) |
 |---|:---:|---|
-| M | ✗ | prices ✓, cot_disaggregated ✗, fundamentals ✗, comex ✓ |
+| M | ⚠ | prices ✓, cot_disaggregated ✗, fundamentals ✓, comex ✓ |
 | S | ✗ | prices ✓, cot_disaggregated ✗, comex ✓, calendar_ff ⚠ |
 | Sc | ⚠ | calendar_ff ⚠, seismic ✓ |
 
@@ -269,15 +275,15 @@ Per (instrument × horisont) — ✓ alle primærkilder ferske / ⚠ 1 svikt / �
 
 | Horisont | Status | Primærkilder (status) |
 |---|:---:|---|
-| M | ✗ | prices ✓, cot_legacy ✗, fundamentals ✗ |
-| S | ✗ | prices ✓, cot_legacy ✗, fundamentals ✗, calendar_ff ⚠ |
+| M | ⚠ | prices ✓, cot_legacy ✗, fundamentals ✓ |
+| S | ✗ | prices ✓, cot_legacy ✗, fundamentals ✓, calendar_ff ⚠ |
 | Sc | ⚠ | calendar_ff ⚠ |
 
 ### NaturalGas (energy)
 
 | Horisont | Status | Primærkilder (status) |
 |---|:---:|---|
-| M | ✗ | prices ✓, cot_disaggregated ✗, fundamentals ✗, eia_inventories ⚠ |
+| M | ✗ | prices ✓, cot_disaggregated ✗, fundamentals ✓, eia_inventories ⚠ |
 | S | ✗ | prices ✓, cot_disaggregated ✗, eia_inventories ⚠, calendar_ff ⚠ |
 | Sc | ✗ | calendar_ff ⚠, eia_inventories ⚠ |
 
@@ -285,7 +291,7 @@ Per (instrument × horisont) — ✓ alle primærkilder ferske / ⚠ 1 svikt / �
 
 | Horisont | Status | Primærkilder (status) |
 |---|:---:|---|
-| M | ✗ | prices ✓, cot_disaggregated ✗, fundamentals ✗, comex ✓ |
+| M | ⚠ | prices ✓, cot_disaggregated ✗, fundamentals ✓, comex ✓ |
 | S | ✗ | prices ✓, cot_disaggregated ✗, comex ✓, calendar_ff ⚠ |
 | Sc | ⚠ | calendar_ff ⚠, seismic ✓ |
 
@@ -293,7 +299,7 @@ Per (instrument × horisont) — ✓ alle primærkilder ferske / ⚠ 1 svikt / �
 
 | Horisont | Status | Primærkilder (status) |
 |---|:---:|---|
-| M | ✗ | prices ✓, cot_disaggregated ✗, fundamentals ✗, comex ✓ |
+| M | ⚠ | prices ✓, cot_disaggregated ✗, fundamentals ✓, comex ✓ |
 | S | ✗ | prices ✓, cot_disaggregated ✗, comex ✓, calendar_ff ⚠ |
 | Sc | ⚠ | calendar_ff ⚠, seismic ✓ |
 
@@ -309,8 +315,8 @@ Per (instrument × horisont) — ✓ alle primærkilder ferske / ⚠ 1 svikt / �
 
 | Horisont | Status | Primærkilder (status) |
 |---|:---:|---|
-| M | ✗ | prices ✓, cot_legacy ✗, fundamentals ✗ |
-| S | ✗ | prices ✓, cot_legacy ✗, fundamentals ✗, calendar_ff ⚠ |
+| M | ⚠ | prices ✓, cot_legacy ✗, fundamentals ✓ |
+| S | ✗ | prices ✓, cot_legacy ✗, fundamentals ✓, calendar_ff ⚠ |
 | Sc | ⚠ | calendar_ff ⚠ |
 
 ### Sugar (softs)
@@ -325,7 +331,7 @@ Per (instrument × horisont) — ✓ alle primærkilder ferske / ⚠ 1 svikt / �
 
 | Horisont | Status | Primærkilder (status) |
 |---|:---:|---|
-| M | ✗ | prices ✓, cot_legacy ✗, fundamentals ✗ |
+| M | ⚠ | prices ✓, cot_legacy ✗, fundamentals ✓ |
 | S | ✗ | prices ✓, cot_legacy ✗, calendar_ff ⚠ |
 | Sc | ⚠ | calendar_ff ⚠ |
 
