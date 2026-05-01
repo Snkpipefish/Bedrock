@@ -24,7 +24,7 @@ fetchers:
   cot_disaggregated:
     module: bedrock.fetch.cot_cftc
     cron: "0 22 * * 5"         # fredag 22:00 UTC (etter CFTC-publisering)
-    stale_hours: 168           # ukentlig
+    stale_hours: 264           # ukentlig + 4d buffer (sub-fase 12.8 § 20.4)
     on_failure: log_and_skip
     table: cot_disaggregated
     ts_column: report_date
@@ -32,7 +32,7 @@ fetchers:
   cot_legacy:
     module: bedrock.fetch.cot_cftc
     cron: "0 22 * * 5"
-    stale_hours: 168
+    stale_hours: 264           # ukentlig + 4d buffer
     on_failure: log_and_skip
     table: cot_legacy
     ts_column: report_date
@@ -111,7 +111,7 @@ fetchers:
   cot_ice:
     module: bedrock.fetch.cot_ice
     cron: "30 22 * * 5"          # Fre 22:30 Oslo (etter ICE 19:30 + buffer)
-    stale_hours: 168             # ukentlig
+    stale_hours: 264             # ukentlig + 4d buffer (sub-fase 12.8 § 20.4)
     on_failure: log_and_skip
     table: cot_ice
     ts_column: report_date
@@ -123,7 +123,7 @@ fetchers:
   eia_inventories:
     module: bedrock.fetch.eia_inventories
     cron: "30 17 * * 3"          # Ons 17:30 Oslo (etter EIA 16:30 + buffer)
-    stale_hours: 200             # ukentlig + nat-gas-slack
+    stale_hours: 264             # ukentlig + 4d buffer (sub-fase 12.8 § 20.4)
     on_failure: log_and_skip
     table: eia_inventory
     ts_column: date
@@ -157,7 +157,7 @@ fetchers:
   cot_euronext:
     module: bedrock.fetch.cot_euronext
     cron: "0 18 * * 3"           # Ons 18:00 Oslo (etter publisering)
-    stale_hours: 168             # ukentlig
+    stale_hours: 264             # ukentlig + 4d buffer (sub-fase 12.8 § 20.4)
     on_failure: log_and_skip
     table: cot_euronext
     ts_column: report_date
