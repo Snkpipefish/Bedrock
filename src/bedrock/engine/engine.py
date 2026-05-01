@@ -30,7 +30,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from bedrock.engine import aggregators, drivers, grade
 from bedrock.engine.gates import (
@@ -49,11 +49,59 @@ Aggregation = Literal["weighted_horizon", "additive_sum"]
 
 
 class DriverSpec(BaseModel):
-    """YAML: `{name: sma200_align, weight: 0.4, params: {tf: D1}}`."""
+    """YAML: `{name: sma200_align, weight: 0.4, params: {tf: D1}}`.
+
+    Sub-fase 12.9 Fase 3 (per § 20.2 horisont-bruk-prinsipper):
+    `horizons` lar driveren begrenses til en delmengde av {SCALP, SWING,
+    MAKRO}. Eksempel: `event_distance` (calendar_ff KJERNE) er
+    SCALP+SWING-spesifikk; `vix_term_ratio` er ren MAKRO-regime;
+    `aaii_extreme` er SWING-mean-reversion. None (default) = alle 3
+    horisonter, bakoverkompatibelt med eksisterende YAMLer.
+
+    Engine `_score_families` filtrerer drivere etter horisont og re-
+    normaliserer gjenværende vekter slik at familie-summen holdes på
+    1.0 (financial) / sum-av-spec (agri). Hvis filtrering tømmer
+    familien, hopper familien med skip-grunn
+    `all_drivers_filtered_for_horizon`.
+    """
 
     name: str
     weight: float
     params: dict[str, Any] = Field(default_factory=dict)
+    horizons: list[str] | None = Field(
+        default=None,
+        description=(
+            "Valgfri liste av horisont-navn (SCALP/SWING/MAKRO eller "
+            "lowercase). None = driveren bidrar til alle 3 horisonter."
+        ),
+    )
+
+    @field_validator("horizons")
+    @classmethod
+    def _validate_horizons(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        if not v:
+            raise ValueError("horizons kan ikke være tom liste; bruk None for 'alle'")
+        valid = {"SCALP", "SWING", "MAKRO"}
+        normalized: list[str] = []
+        for h in v:
+            up = h.upper()
+            if up not in valid:
+                raise ValueError(f"Ukjent horisont {h!r}. Tillatt: {sorted(valid)}")
+            normalized.append(up)
+        return normalized
+
+    def applies_to(self, horizon: str | None) -> bool:
+        """True hvis driveren skal kjøre for gitt horisont.
+
+        None horizon = ingen filter (kjør alltid). Brukes f.eks. når
+        agri-engine kaller score uten horisont-kontekst (status quo
+        før Fase 3).
+        """
+        if self.horizons is None or horizon is None:
+            return True
+        return horizon.upper() in self.horizons
 
 
 # ---------------------------------------------------------------------------
@@ -390,7 +438,27 @@ class Engine:
             family_score = 0.0
             do_flip = flip and family_spec.polarity == "directional"
 
-            for driver_spec in family_spec.drivers:
+            # Sub-fase 12.9 Fase 3: filtrer drivere etter horisont via
+            # DriverSpec.applies_to. None horisont = ingen filter
+            # (status quo for agri-engine før Fase 3-rebase).
+            applicable = [d for d in family_spec.drivers if d.applies_to(horizon)]
+
+            # Re-normaliser vekter etter filtrering. Bevarer family-sum=1.0
+            # (financial) eller spec-sum (agri) som det var før filter.
+            # Hvis applicable er tom, hopper familien — driver_results+score=0.
+            if applicable:
+                applied_weight_sum = sum(d.weight for d in applicable)
+                original_weight_sum = sum(d.weight for d in family_spec.drivers)
+                # Skaler kun hvis filtrering faktisk fjernet noe; ellers er
+                # applied_weight_sum == original_weight_sum og scale=1.0.
+                if applied_weight_sum > 0 and applied_weight_sum != original_weight_sum:
+                    scale = original_weight_sum / applied_weight_sum
+                else:
+                    scale = 1.0
+            else:
+                scale = 1.0
+
+            for driver_spec in applicable:
                 fn = drivers.get(driver_spec.name)
                 # Propagér direction + horisont + now via interne `_direction`/
                 # `_horizon`/`_now`-keys i en kopi av params. Drivere som er
@@ -406,12 +474,13 @@ class Engine:
                 }
                 raw_value = fn(store, instrument, params_with_dir)
                 value = (1.0 - raw_value) if do_flip else raw_value
-                contribution = value * driver_spec.weight
+                effective_weight = driver_spec.weight * scale
+                contribution = value * effective_weight
                 driver_results.append(
                     DriverResult(
                         name=driver_spec.name,
                         value=value,
-                        weight=driver_spec.weight,
+                        weight=effective_weight,
                         contribution=contribution,
                     )
                 )
