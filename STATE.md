@@ -135,7 +135,9 @@
 - **Driver-status pre-harvest (session 136 audit):** Av 44 registrerte drivere er 42 wired i instrument-YAML-er (2 dead: `currency_cross_trend`, `igc_stocks_change`). Fordeling før AsOfDateStore-fix: 16 active, 12 monotone, 16 silent. Etter fix + full harvest forventes ~40 active. event_distance er kjent monotone (separat driver-bug, ikke getter-mangel — utsatt til egen runde).
 - **Sub-fase 12.6 LUKKET 2026-05-01** (tag `v0.12.6-fase-12.6-LUKKET`). Strategi 3 valgt for event_distance grunnet utilstrekkelig compute-budsjett — fix-en (commits `8003380`/`78e36c6`/`e994abe`) er deployed og smoke-testet (87 rader, 4 instr, 11 distinct values), men full re-harvest deferred til neste compute-budsjett-runde. event_distance YAML-vekter beholdes uendret. 41 andre drivere rebalansert basert på IC + cross-corr-data.
 
-- **Sub-fase 12.8 LUKKET 2026-05-01** (tag `v0.12.8-fase-12.8-LUKKET`). PLAN § 20 lagt til (data-gjeld + cron-tuning + whitelist-revisjon). § 20.2 låser horisont-bruk-prinsipper M/S/Sc. Session 139 leverte A1 (coverage-rapport-verktøy + first rapport) + A2 (paused timers reaktivert, AAII bug + schema-drift + fas_esr docstring) + B (stale_hours tuning + FRED policy) + C (per-(inst × hor) whitelist-kvalifisering dokumentert). Bot-handel default = SWING/MAKRO; SCALP filtreres til Plan-S. **Next task: Plan-S** (PLAN § 19.10) eller sub-fase 12.9 (WASDE pre-2019, comex+cafe ingest, bot-token + signal-format-mismatch, UI-coverage-fane).
+- **Sub-fase 12.8 LUKKET 2026-05-01** (tag `v0.12.8-fase-12.8-LUKKET`). PLAN § 20 lagt til (data-gjeld + cron-tuning + whitelist-revisjon). § 20.2 låser horisont-bruk-prinsipper M/S/Sc. Session 139 leverte A1 (coverage-rapport-verktøy + first rapport) + A2 (paused timers reaktivert, AAII bug + schema-drift + fas_esr docstring) + B (stale_hours tuning + FRED policy) + C (per-(inst × hor) whitelist-kvalifisering dokumentert). Bot-handel default = SWING/MAKRO; SCALP filtreres til Plan-S.
+
+- **Sub-fase 12.9 ÅPEN 2026-05-01** — bedrock-bot cutover. PLAN § 21 lagt til. Scalp_edge retires (auth-failure crash-loop siden 28. apr); bedrock-bot tar over. **D1 LANDET** (`649f429`): adapter `bedrock.signal_server.bot_adapter` + `/bot/signals`-endpoint + 29 tester. **D2-D6 pending:** refresh-token-flow + bot.yaml + systemd-service + demo-test ≥24t + scalp_edge-retire. Full plan: `docs/bedrock_bot_cutover.md`. **cTrader-credentials klare i `~/.bedrock/secrets.env`** (CTRADER_CLIENT_ID/CLIENT_SECRET/ACCESS_TOKEN/REFRESH_TOKEN/ACCOUNT_ID — alle 5 verifisert). **Next task: D2** (refresh-token-flow i ctrader_client.py).
 
 - **Open tech-gjeld for fremtidige sessioner** (oppdatert 2026-05-01 etter sub-fase 12.6 LUKKET):
   - **event_distance full re-harvest** når compute-budsjett tillater (Codespace-quota fornyes neste måned). Smoke-test bekreftet fix virker — venter kun på rader for IC-måling.
@@ -427,6 +429,49 @@ ferdig og 12.6-rebalansering er gjort.
 ---
 
 ## Session log (newest first)
+
+### 2026-05-01 — Session 139 fortsettelse: sub-fase 12.9 åpning + D1 (adapter + endpoint)
+
+**Scope:** Etter sub-fase 12.8 LUKKET, åpnet sub-fase 12.9 (bedrock-bot cutover) basert på audit av scalp_edge-loggen som viste auth-failure crash-loop siden 28. apr (CH_ACCESS_TOKEN_INVALID). Bruker bekreftet at scalp_edge retires.
+
+**Funn fra scalp_edge:**
+- Auth: token expired 28. apr, crash-loop siden
+- Schema-mismatch: bot mottar `schema_version='2.2'` fra signal_server.py men støtter kun {1.0, 2.0, 2.1}
+- Token har ingen refresh-flow → manuell regenerering hver 30 dager
+
+**Bedrock-bot state-assessment:**
+- 95% bygget per Fase 8 (11 moduler, 4950 linjer)
+- Mangler 6 ting for cutover (D1-D6)
+- Adapter (D1a) er største overraskelse — bedrocks signals_bot.json (flat list) vs bot's wrapped object er to ulike formater
+
+**D1 levert i denne sessionen (commit `649f429`):**
+- `src/bedrock/signal_server/bot_adapter.py` (177 lin) — transformerer signals_bot.json → bot-format med schema_version="2.1"
+- `src/bedrock/signal_server/endpoints/bot.py` (62 lin) — ny route `/bot/signals` (blueprint url_prefix=`/bot`)
+- `ServerConfig.signals_bot_path`-field
+- 29 nye tester (22 adapter + 7 endpoint), alle grønne
+- Pyright 0/0/0
+- Per-horisont defaults hard-kodet for SCALP/SWING/MAKRO (expiry_candles 24/96/336 M5-candles)
+- asset_class → correlation_group-mapping
+- Filter: kun published=true entries
+
+**cTrader-credentials klargjort:**
+- `~/.bedrock/secrets.env` har nå CTRADER_CLIENT_ID (56 tegn), CTRADER_CLIENT_SECRET (50), CTRADER_ACCESS_TOKEN (43), CTRADER_REFRESH_TOKEN (43), CTRADER_ACCOUNT_ID (13). Alle verifisert.
+
+**Commits:**
+- `361e969` docs(12.9): bedrock-bot cutover-plan
+- `3ed92af` docs(12.9): D1a adapter-design + revidert estimater
+- `649f429` feat(12.9): D1 — bot signal-adapter + /bot/signals endpoint
+- (denne) state: session 139 fortsettelse + PLAN § 21
+
+**Next task: D2 (refresh-token-flow)** — implementer i `ctrader_client.py`:
+- Add `refresh_token: str | None = None` til CtraderCredentials
+- Add CTRADER_REFRESH_TOKEN i load_credentials_from_env
+- Add `refresh_ctrader_access_token(creds)` modul-level helper (POST mot https://connect.spotware.com/apps/token)
+- Add `update_secrets_env_var(key, value)` helper i bedrock.config.secrets
+- I `_on_error_res`: ved AUTH_FATAL_ERROR_CODES, prøv refresh først (én gang) før `_fatal_exit(78)`
+- Tester: mock-HTTP for refresh-flow
+
+Estimat: 2-3t. Etter D2 → D3 (bot.yaml) → D4 (systemd) → D5 (demo-test) → D6 (scalp_edge retire) → tag `v0.12.9-fase-12.9-LUKKET`.
 
 ### 2026-05-01 — Session 139: sub-fase 12.8 åpen + A1 coverage-rapport + A2/B/C-fixes
 

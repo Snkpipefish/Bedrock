@@ -2,10 +2,20 @@
 
 Dato opprettet: 2026-04-23
 Sist oppdatert: 2026-05-01
-Status: Fase 0-11 fullført, Fase 12 åpen (sub-fase 12.5+/12.6/12.7 LUKKET — sub-fase 12.8 åpen, se § 20)
+Status: Fase 0-11 fullført, Fase 12 åpen (sub-fase 12.5+/12.6/12.7/12.8 LUKKET — sub-fase 12.9 åpen, bedrock-bot cutover, se § 21)
 Referanser: `NYTT_PROSJEKT_UTKAST.md` (i cot-explorer), `AGRI_KARTLEGGING.md` (i cot-explorer), fase-1-audit-rapport (i chat-logg).
 
 ## Endringshistorikk (etter initial godkjenning)
+
+**2026-05-01 (sub-fase 12.9 åpning, session 139 fortsettelse):** Ny § 21
+lagt til — "bedrock-bot cutover". Scalp_edge retires; bedrock-bot
+(allerede 95% bygget per Fase 8) tar over som cTrader-grensesnitt.
+D1 (signal-adapter + `/bot/signals`-endpoint) LANDET (`649f429`).
+D2-D6 pending: refresh-token-flow, bot.yaml + secrets, systemd-service,
+demo-test ≥24t, scalp_edge retire. Full operasjonell plan i
+`docs/bedrock_bot_cutover.md`. cTrader-credentials lagt i
+`~/.bedrock/secrets.env` (CTRADER_CLIENT_ID/CLIENT_SECRET/ACCESS_TOKEN/
+REFRESH_TOKEN/ACCOUNT_ID — alle 5 ✓).
 
 **2026-05-01 (planleggings-session, sub-fase 12.8):** Ny § 20 lagt til —
 "Data-gjeld + cron-tuning + whitelist-revisjon". Sub-fase 12.6 LUKKET
@@ -2476,3 +2486,129 @@ Tag: `v0.12.8-fase-12.8-LUKKET`. Plan-S kan åpnes umiddelbart etter.
   med 12.8 (release-clock-infrastruktur, surprise-vs-consensus-
   schema, cross-asset-ledere) tilhører Plan-S og adresseres ikke
   i 12.8 ut over coverage-flagging.
+
+---
+
+## 21. Sub-fase 12.9 — bedrock-bot cutover
+
+**ÅPEN 2026-05-01** etter sub-fase 12.8 LUKKET. Erstatter scalp_edge-
+boten med bedrock-bot som cTrader-trading-grensesnitt. Trigger:
+scalp_edge har vært i auth-failure crash-loop (CH_ACCESS_TOKEN_INVALID)
+siden 28. apr. Bruker bekreftet retire av scalp_edge.
+
+Full operasjonell plan: `docs/bedrock_bot_cutover.md`.
+
+### 21.1 Eksisterende state
+
+**Bedrock-bot (`src/bedrock/bot/`, 4950 linjer, 11 moduler)** er en
+komplett refaktor av scalp_edge per Fase 8 (sessions 41-46). Allerede
+ferdig: `ctrader_client.py`, `entry.py`, `exit.py`, `sizing.py`,
+`safety.py`, `instruments.py`, `comms.py`, `state.py`, `__main__.py`,
+`config.py`, `instruments.py`.
+
+### 21.2 Sub-tasks
+
+| Task | Innhold | Status | Estimat |
+|---|---|---|---|
+| **D1a** | Schema-adapter `signals_bot.json` → bot-format | ✓ LANDET (`649f429`) | — |
+| **D1b** | HTTP `/bot/signals`-endpoint i bedrock-server | ✓ LANDET (`649f429`) | — |
+| **D2** | Refresh-token-flow i `ctrader_client.py` | PENDING | 2-3t |
+| **D3** | `bot.yaml`-config + secrets-env-mønster | PENDING | 30 min |
+| **D4** | Systemd user-service `bedrock-bot.service` | PENDING | 30 min |
+| **D5** | End-to-end demo-test | PENDING | 1-2t |
+| **D6** | scalp_edge retire (disable timer + arkiver) | PENDING | 30 min |
+
+### 21.3 D1 — adapter + endpoint (LANDET 2026-05-01)
+
+Ny modul `src/bedrock/signal_server/bot_adapter.py` transformerer
+bedrocks flat-list `signals_bot.json` til wrapped object med
+`schema_version="2.1"` (matcher bot's SUPPORTED_SCHEMA_VERSIONS).
+Per-horisont defaults hard-kodet for SCALP/SWING/MAKRO. Filter:
+kun `published=true`. Ny route `/bot/signals` (blueprint
+url_prefix=`/bot`) som leser `signals_bot.json` fra
+`ServerConfig.signals_bot_path` og returnerer adapter-output.
+29 nye tester (22 adapter + 7 endpoint). Pyright 0/0/0.
+
+### 21.4 D2 — refresh-token-flow
+
+cTrader-tokens expirer ~30 dager. Eksisterende bot leser kun
+`CTRADER_ACCESS_TOKEN` og krasjer ved expired (CH_ACCESS_TOKEN_INVALID).
+
+Fix: ved auth-fatal-error, kall
+`https://connect.spotware.com/apps/token` med
+`grant_type=refresh_token` + `refresh_token`, oppdater
+`~/.bedrock/secrets.env` med ny access + refresh, retry auth
+**én gang** før `_fatal_exit(78)`.
+
+Implementering:
+- Add `refresh_token: str | None = None` til `CtraderCredentials`
+- Add `CTRADER_REFRESH_TOKEN` (valgfri) i `load_credentials_from_env`
+- Add `refresh_ctrader_access_token(creds) -> dict` modul-level helper
+- Add `update_secrets_env_var(key, value, path)` helper i
+  `bedrock.config.secrets`
+- I `_on_error_res`: `if creds.refresh_token and not _refresh_attempted: try refresh, retry`
+- Tester: simulert auth-fail med mock-HTTP-response
+
+### 21.5 D3 — bot.yaml + secrets-env-mønster
+
+Ny `config/bot.yaml` med:
+- `signal_url: http://127.0.0.1:5100/bot` (treffer `/bot/signals`)
+- Mode-default: `demo`
+- Polling-intervall: 60s normal / 20s SCALP-active
+- Daily-loss-limits, position-sizing-defaults
+- `signal_api_key_env: null` (lokal trafikk, ingen API-key trengs)
+
+Bekrefte at `~/.bedrock/secrets.env` har 5 cTrader-vars:
+`CTRADER_CLIENT_ID/CLIENT_SECRET/ACCESS_TOKEN/REFRESH_TOKEN/ACCOUNT_ID`.
+
+### 21.6 D4 — systemd user-service
+
+Ny `~/.config/systemd/user/bedrock-bot.service`:
+- ExecStart: `python -m bedrock.bot --demo`
+- EnvironmentFile: `~/.bedrock/secrets.env`
+- Restart: on-failure (men ikke ved exit 78 = FATAL — operatør må
+  generere ny token manuelt hvis refresh også feiler)
+- After: network-online.target + bedrock-server.service
+
+### 21.7 D5 — demo-test ≥24t
+
+Skjerm-overvåking under første demo-test. Verify:
+- Auth-flow OK (først direkte, deretter refresh-test ved simulert
+  expiry)
+- Signal-fetch (parse + schema 2.1 + ingen warnings)
+- Ordre-plassering på 1 paper-money-trade
+- TP/SL-hit + position-close
+- Daily_loss-persistens etter restart
+
+### 21.8 D6 — scalp_edge retire
+
+Etter ≥24t grønt på bedrock-bot:
+- `systemctl --user disable --now scalp_edge.*` (alt)
+- Arkiv-tag: `scalp-edge-final-2026-05-XX` på siste fungerende
+  scalp_edge-commit
+- Behold `~/scalp_edge/` katalog som referanse (ikke slett)
+- Update STATE.md med retire-status
+
+### 21.9 Stop-criterion sub-fase 12.9
+
+- D2: refresh-flow tester grønt (mock + livet test)
+- D3+D4: bot starter via systemctl uten env-feil
+- D5: ≥24t demo uten crash, ≥1 trade plassert + lukket
+- D6: scalp_edge disabled
+
+Tag: `v0.12.9-fase-12.9-LUKKET`. Etter dette starter Plan-S
+(§ 19.10) eller sub-fase 12.10 (resterende UI-arbeid + WASDE pre-2019
++ comex/cafe ingest hvis prioritert).
+
+### 21.10 Hva tas fra scalp_edge
+
+| scalp_edge-fil | bedrock-bot-status |
+|---|---|
+| `trading_bot.py` (2977 lin) | ✓ Refactored til 11 moduler i `src/bedrock/bot/` |
+| `signal_server.py` (974 lin) | ⚠ ERSTATTET av `/bot/signals`-route (D1) |
+| `get_token.py` | ⚠ Beholdes som standalone-script for OAuth-bootstrap |
+| `start_bot.sh` | ✗ ERSTATTES av systemd-service (D4) |
+| `signal_log.json` | ✓ bedrock-bot logger til `state.py` |
+| `daily_loss_state.json` | ✓ `state.py` har persistens |
+| `latest_signals.json` | ✓ Bedrock genererer `signals_bot.json` |
+| `live_prices.json` | ✗ Bot fetcher live priser fra cTrader direkte |
