@@ -107,7 +107,7 @@
 - **Blocked:** nei.
 - **Aktive systemd-timere:** 6 system-installerte (calendar_ff [session 105], cot_ice [session 106], signals-all, monitor, compare, server [service]) + 15 user-installerte (prices, cot_disaggregated/legacy, fundamentals, weather, enso, wasde, crop_progress, shipping [session 113], eia_inventories [session 107], comex [session 108], seismic [session 109], cot_euronext [session 110], conab [session 111], unica [session 112]). Sessions 114+115 timers (`news_intel` + `crypto_sentiment`) er ennå ikke generert/installert — kan tas i én batch nå når begge fetchere er på plass.
 - **Instrumenter:** 22 totalt (Gold/Silver/Copper/Platinum metals; CrudeOil/Brent/NaturalGas energy; Corn/Wheat/Soybean grains; Cotton/Sugar/Coffee/Cocoa softs; Nasdaq/SP500 indices; EURUSD/GBPUSD/USDJPY/AUDUSD fx; BTC/ETH crypto).
-- **Drivere:** **44 registrert** (session 135 D3: +1 — cecafe_export_change. Session 133 D2: +2 — fas_exports, drought_monitor. Session 132 D2: +1 — etf_holdings_change. Session 131 D2: +3 — vix_term_ratio, aaii_extreme, hdd_cdd_anomaly. Session 130 D1 A2: +1 — agsi_storage_pct. Session 129 D1 B1: +4 — yield_diff_10y, credit_spread_change, nfci_change, net_fed_liq_change. Session 128 D1 A4: +2 — positioning_lev_funds_pct, positioning_asset_mgr_pct. Sessions 114+115 var UI-only).
+- **Drivere:** **42 registrert** (sub-fase 12.6 session 138: −2 dead drop — currency_cross_trend + igc_stocks_change slettet etter 42/44-harvest-bekreftelse. Sub-fase 12.6 session 138: vix_term_ratio droppet fra sp500/nasdaq risk-familien (ikke fra registry — kan bli wired igjen senere). Session 135 D3: +1 — cecafe_export_change. Session 133 D2: +2 — fas_exports, drought_monitor. Session 132 D2: +1 — etf_holdings_change. Session 131 D2: +3 — vix_term_ratio, aaii_extreme, hdd_cdd_anomaly. Session 130 D1 A2: +1 — agsi_storage_pct. Session 129 D1 B1: +4 — yield_diff_10y, credit_spread_change, nfci_change, net_fed_liq_change. Session 128 D1 A4: +2 — positioning_lev_funds_pct, positioning_asset_mgr_pct. Sessions 114+115 var UI-only).
 - **Bedrock-fetchere:** 19 totalt (prices, cot_disaggregated, cot_legacy, fundamentals, weather, enso, wasde, crop_progress, shipping [session 113], calendar_ff [session 105], cot_ice [session 106], eia_inventories [session 107], comex [session 108], seismic [session 109], cot_euronext [session 110], conab [session 111], unica [session 112], news_intel [session 114, UI-only], **crypto_sentiment [session 115, UI-only]**). **Alle 11 fetchere fra § 7.5 er nå portet — Phase A-C ferdig.**
 - **PLAN § 7.3:** 6/8 live data (WASDE, BRL, ICE softs COT via cot_disaggregated, BDI/BDRY, NASS Crop Progress, ENSO). 2/8 manuell sample (eksport-events, disease-alerts). 1/8 betalt/manuell import (IGC).
 - **System-status:** `docs/system_status_2026-04-26.md` — full ende-til-ende rapport (sub-fase 12.5+ refresh i session 117).
@@ -133,7 +133,23 @@
 - **Cloud-keep-alive bug (session 136 fix `52bba9b`):** Første implementasjon brukte `pgrep -af run_parallel_harvest` som hadde self-match-bug — pgrep skannet sin egen SSH-payload's bash-cmdline som inneholdt søkestrengen, returnerte alltid HARVEST_OK selv etter at workers døde. Forårsaket 3.5t med falsk-positive HARVEST_OK 2026-05-01 06:00→09:20 CEST før manuell sjekk avdekket. Ny implementasjon bruker log-mtime (`find harvest_g[1-4].log -mmin -5`) — robust mot self-match. La til HARVEST_STALE-tilstand for early-warning hvis harvest dør uventet.
 - **AsOfDateStore-fix (session 136 commit `2e3f1eb`):** 13 manglende as-of-getters lagt til etter audit avdekket at 12 av 28 harvested drivere viste status="monotone" i admin-UI (1 distinct value = default 0.5 fra exception-fallback når underliggende getter manglet). Nye getters: `get_cot_tff`, `get_weather`, `get_crop_progress`, `get_wasde`, `get_export_events`, `get_disease_alerts`, `get_igc`, `get_agsi_storage`, `get_aaii_sentiment`, `get_etf_holdings`, `get_fas_esr`, `get_drought_monitor`, `get_cecafe_exports`. Integration-test på Cotton: 5 monotone drivere → 2-5 distinct values. 34 forurensede DB-rader slettet før restart. 203 tester (store_view+backtest+harvest+orchestrator+signals) passerte uten regresjon.
 - **Driver-status pre-harvest (session 136 audit):** Av 44 registrerte drivere er 42 wired i instrument-YAML-er (2 dead: `currency_cross_trend`, `igc_stocks_change`). Fordeling før AsOfDateStore-fix: 16 active, 12 monotone, 16 silent. Etter fix + full harvest forventes ~40 active. event_distance er kjent monotone (separat driver-bug, ikke getter-mangel — utsatt til egen runde).
-- **Next task:** **Sub-fase 12.6 oppdelt i 2 sessioner per audit-runde 5 (`c87e278`).** Strategi 2 (fix-first + re-harvest) anbefalt etter harvest-completion. **Mid-session 137 prompt-revisjon (audit-runde 6, 2026-05-01):** Smoke-test bekreftet audit-doc Sjekk 9.5 linje 215-prediksjon — A+B alene gir score=1.0 ved midnatts-ref_date pga `min_hours=4` + US-events kl 12:30+ UTC alltid >4h unna. Min original-prompt var selv-motsigende ("HOPP OVER Type C" + stop-criterion "AVG ≠ 1.0" — uoppnåelig samtidig). Type C-resolution flyttet inn i 137: harvest-side noon-shift, ikke driver-endring. Live trading uendret pga `risk.py:201-205` wallclock-fallback når `_now` mangler.
+- **Sub-fase 12.6 LUKKET 2026-05-01** (tag `v0.12.6-fase-12.6-LUKKET`). Strategi 3 valgt for event_distance grunnet utilstrekkelig compute-budsjett — fix-en (commits `8003380`/`78e36c6`/`e994abe`) er deployed og smoke-testet (87 rader, 4 instr, 11 distinct values), men full re-harvest deferred til neste compute-budsjett-runde. event_distance YAML-vekter beholdes uendret. 41 andre drivere rebalansert basert på IC + cross-corr-data. **Next task: Plan-S** (PLAN § 19.10) — kan åpnes når bruker er klar.
+
+- **Open tech-gjeld for fremtidige sessioner** (oppdatert 2026-05-01 etter sub-fase 12.6 LUKKET):
+  - **event_distance full re-harvest** når compute-budsjett tillater (Codespace-quota fornyes neste måned). Smoke-test bekreftet fix virker — venter kun på rader for IC-måling.
+  - **Setup→bot signal-format-mismatch** (audit Sjekk 9.7) — adapter-design er størst arbeid. Egen session før Fase 13 cutover.
+  - **AAII bull_bear_spread fetcher-fix** (audit Sjekk 9.6).
+  - **CONAB Café-PDF-historikk** (KRITISK 3 i Data-gjeld — IP-throttled).
+  - **Manuell-data ingest-gaps** (audit Sjekk 10): comex + cafe-subkommandoer i ingest_manual_data.py.
+  - **FRED-fetcher hard-fail-policy.**
+  - **PPLT SEC EDGAR Plan-S.** **NOPA WASDE-utvidelse.**
+  - **`src/bedrock/fetch/fas_esr.py` L134 stale docstring.**
+  - **Schema-drift** (3 harvester-tabeller mangler i `schemas.py`).
+  - **disease_pressure test-coverage < 7.**
+  - **Vurder gjeninnføring av `vix_term_ratio` for sp500/nasdaq** når mer data akkumuleres (12 obs / instrument × horizon × dir er for lite — målt median |IC|=0.029 men n er for liten til å være konklusiv).
+
+- **Tidligere "Next task"-historikk** (kun for kontekst — ikke aktiv):
+  - **Sub-fase 12.6 oppdelt i 2 sessioner per audit-runde 5 (`c87e278`).** Strategi 2 (fix-first + re-harvest) anbefalt etter harvest-completion. **Mid-session 137 prompt-revisjon (audit-runde 6, 2026-05-01):** Smoke-test bekreftet audit-doc Sjekk 9.5 linje 215-prediksjon — A+B alene gir score=1.0 ved midnatts-ref_date pga `min_hours=4` + US-events kl 12:30+ UTC alltid >4h unna. Min original-prompt var selv-motsigende ("HOPP OVER Type C" + stop-criterion "AVG ≠ 1.0" — uoppnåelig samtidig). Type C-resolution flyttet inn i 137: harvest-side noon-shift, ikke driver-endring. Live trading uendret pga `risk.py:201-205` wallclock-fallback når `_now` mangler.
   - **Session 137 = event_distance pre-rebalanserings-fix + re-harvest** (Steg 1+2+3+4 av 6-stegs-plan):
     1. **Type A** ✅ LANDET (`8003380`): Engine `_now`-propagering — `engine.py:Engine.score(...)` aksepterer `now: datetime | None = None`; `_score_families` legger til `_now=now.isoformat() if now else None` i `params_with_dir`; `signals.py:_compute_scores(...)` propagerer `now=run_ts` til `eng.score(...)`. `risk.py:201-205` wallclock-fallback beholdt for live-mode. 2 nye tester i `tests/unit/test_engine_now_propagation.py`. Pyright 0/0/0, full pytest 2394/2394.
     2. **Type B** ✅ LANDET (`78e36c6`): Forex Factory publikasjons-lag — `--publication-lag-days INT` (default 7) i `scripts/ingest_manual_data.py`. Re-importert 41021 rader med `fetched_at = event_ts - 7d`. Semantikk: (c) "publikasjons-tidspunkt" — Forex Factory publiserer kalenderen ~7 dager før event = korrekt look-ahead-fri backtest-semantikk.
@@ -409,6 +425,55 @@ ferdig og 12.6-rebalansering er gjort.
 ---
 
 ## Session log (newest first)
+
+### 2026-05-01 — Session 138: sub-fase 12.6 LUKKET (analyzer + YAML-rebalansering + dead-driver-cleanup)
+
+**Scope:** Sub-fase 12.6 Steg 5 + 6 + 6.5 per audit-runde 5/6. Strategi 3 valgt for event_distance grunnet utilstrekkelig compute-budsjett (full re-harvest ~61h, ikke tilgjengelig). Fix-en (sessions 137 commits 8003380/78e36c6/e994abe) er deployed og smoke-testet (87 rader, 4 instr, 11 distinct values) — re-harvest deferred.
+
+**Helse ved start:** rød (kjent) — `bedrock-fetch-enso.service` + `bedrock-monitor.service` failed. Påvirker ikke analyzer-arbeid mot eksisterende harvest-data. Fortsatte uten å rette.
+
+**Pre-flight verifisert:** 453,351 driver_observations rader, 87 event_distance-rader (smoke-test only), 42 drivere med data, ingen aktive harvest-prosesser, CI grønt på siste 137-commit.
+
+**Steg 1 — Skip-config (commit `7ad5bb0`):**
+- `SKIP_DRIVERS = frozenset({"event_distance"})` lagt til i begge analyzer-skripter (`analyze_driver_performance.py` + `analyze_cross_correlations.py`).
+- Filtrerer driver-rader før IC + cross-corr-loop. `cast(pd.DataFrame, ...)`-pattern brukt for pyright-overlevelse uten ny dep.
+
+**Steg 2 — Analyzer-fixer + runde (commits `6debb22`, `77da9a6`, `103f4f8`):**
+- 3 pre-existing bugs fixed underveis:
+  1. **scipy mangler** → `corr(method="spearman")` returnerte stille None for alle IC-er. Erstattet med rank+Pearson-pattern (matematisk ekvivalent, ingen ny dep).
+  2. **`pd.qcut(val, 4, labels=[...])` feilet** for stepped drivere som kollapser til <4 bins ("Bin labels must be one fewer than bin edges"). Erstattet med `qcut(val, 4, duplicates="drop")` uten labels-lock + posisjonell bin-indeksering.
+  3. **Per-driver-summary aggregerte median IC over BUY+SELL** som speiler hverandre → 0. Endret til median |IC| per PLAN § 12.6-tersklene.
+- `docs/12_6_ic_table.md`: 1680/1680 (driver, instrument, horizon, direction)-kombinasjoner alle med n ≥ 30. Topp drivere etter median |IC|: enso_regime 0.185, vix_regime 0.130, positioning_mm_pct 0.130, cot_ice_mm_pct 0.121, agsi_storage_pct 0.119, real_yield 0.118 (max |IC| 0.541 for Gold 90d!). Bunn: cecafe_export_change 0.012, vix_term_ratio 0.029.
+- `docs/12_6_cross_correlation.md`: 21,450 par, 7,005 (33%) kvalifiserte med n ≥ 50. Topp: real_yield.AUDUSD → USDJPY 90d (+0.756). real_yield-driverne dominerer cross-asset (12 av topp-30).
+
+**Steg 3 — YAML-rebalansering (commits `af07c48`, `28e2fa2`, `30d74e1`):**
+- **DROP** (median |IC|<0.05 + median monotonisitet<0.4 — eneste strict-failure): `vix_term_ratio` fra sp500/nasdaq risk-familien. 0.20-vekt redistribuert proporsjonalt: vol_regime 0.45→0.59, credit_spread_change 0.20→0.26, event_distance 0.15 uendret.
+- **ØK VEKT** (instrument-spesifikk |IC|>0.10 + mono>0.7): `real_yield` i gold macro 0.30→0.35 (max |IC|=0.541), silver 0.15→0.20 (0.382), copper 0.20→0.25 (0.468). `vix_regime` i audusd macro 0.20→0.25 (0.322 mono 1.00 SELL). Trim-balanser: vix_regime 0.05pp ned i metal-macros, yield_diff_10y 0.05pp ned i audusd (borderline-svak).
+- EURUSD positioning + Corn enso ikke endret (vekter låst per § 19.5 Del C+ / driver allerede maks 1.0).
+- Snapshot-baseline regenerert mot identisk DB-tilstand. Pre/post-diff (kun YAML-effekt): 24/104 rader endret, 2 grade-flips (Copper SWING SELL C→B +0.025, SP500 SWING BUY A→B -0.136). Gold/Silver gav null score-change pga driver-output netting til samme verdi under nåværende data. Rapport: `docs/12_6_post_rebalansering_grade_dist.md`.
+
+**Steg 4 — Dead-driver-cleanup (commit `0094f08`):**
+- Slettet `currency_cross_trend` (entire `currency.py` modul + tester) + `igc_stocks_change` (funksjon i agronomy.py + tester).
+- Bekreftet via 42/44-harvest-resultat: ingen YAML refererer noen av dem.
+- `len(all_names()) == 42` ✓.
+- Beholdt: `DataStore.get_igc` + `AsOfDateStore.get_igc` + `TABLE_IGC` for fremtidig bruk når data igjen får aktiv driver.
+
+**Sluttilstand:** 2361/2361 grønt (mister 33 slettede tester pga driver-cleanup), pyright 0/0/0, 8 commits + 1 tag på main:
+- `7ad5bb0` feat(analyzer): skip event_distance grunnet utilstrekkelig IC-data (Strategi 3)
+- `6debb22` fix(analyzer): scipy-fri Spearman + adaptiv qcut + median |IC|-summary
+- `77da9a6` docs(12.6): IC-måling per driver (analyzer-output)
+- `103f4f8` docs(12.6): cross-correlation-matrise per familie
+- `af07c48` feat(yaml): rebalansering financial macro/risk (12.6)
+- `28e2fa2` test(snapshot): post-rebalansering baseline (12.6)
+- `30d74e1` docs(12.6): grade-distribusjons-rapport post-rebalansering
+- `0094f08` chore(drivers): slett dead drivers currency_cross_trend + igc_stocks_change
+
+**Open follow-ups for fremtidige sessioner:**
+- event_distance full re-harvest når Codespace-quota fornyes (~30 dager). Smoke-test bekrefter fix virker — venter kun på datavolum.
+- Vurder gjeninnføring av `vix_term_ratio` for sp500/nasdaq når mer data akkumuleres (12 obs/instrument er for få til å være konklusiv).
+- Plan-S klar for åpning som neste task (PLAN § 19.10).
+
+**Tag:** `v0.12.6-fase-12.6-LUKKET` på siste 138-commit etter STATE-update.
 
 ### 2026-05-01 — Session 137 (re-purposed): event_distance pre-rebalanserings-fix + detached re-harvest
 
