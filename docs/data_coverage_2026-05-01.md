@@ -5,7 +5,64 @@ vurdert per horisont (Macro / Swing / Scalp) basert på § 20.2-mapping.
 Helse-flagg per fetcher basert på cycle-spesifikke terskler (§ 20.4).
 
 Generert av `scripts/report_data_coverage.py` mot `bedrock.db`
-(2026-05-01 14:39 UTC).
+(2026-05-01 14:39 UTC). Inkluderer business-day-aware aging for
+daglige fetchere (`prices`, `fundamentals`, `comex`, `shipping`).
+
+## Final-state etter sub-fase 12.8 fixes (session 139)
+
+**Coverage etter 10 fixer:**
+
+| Horisont | ✓ | ⚠ | ✗ |
+|---|---:|---:|---:|
+| Macro | 2 | 20 | 0 |
+| Swing | 0 | 2 | 20 |
+| Scalp | 0 | 22 | 0 |
+
+**Fetcher-helse: 15 ✓ / 4 ⚠ / 0 ✗** (var 12 ✓ / 2 ⚠ / 6 ✗ ved A1-start).
+
+### Hva som ble fixet i sub-fase 12.8 session 139
+
+1. ✓ Reaktivert paused user-timers (crypto_sentiment, news_intel, enso)
+2. ✓ Trigger crypto_sentiment + news_intel manuelt → 0 → 34 + 87 rader
+3. ✓ Trigger enso manuelt etter DNS-failure ved tidligere reboot
+4. ✓ Business-day-aware aging i rapport-verktøyet — fundamentals
+   "stale 38t" var rapport-bug (FRED virker korrekt; 24t = ✓)
+5. ✓ AAII bull_bear_spread fetcher-bug fixet + backfilt 538 rader
+6. ✓ Schema-drift fixet — 3 harvester-tabeller lagt til i schemas.py
+7. ✓ fas_esr.py:134 stale docstring oppdatert (Cotton 501 → 1404)
+8. ✓ Stale_hours-tuning i fetch.yaml (cot_*/eia 168/200 → 264h)
+9. ✓ Cycle-buffer 11d for ukentlig-fetchere (vs 9d tidligere)
+10. ✓ Bot-whitelist per-horisont-kvalifisering dokumentert
+
+### Hva blir grønt automatisk i kveld
+
+- **Fre 18:15 Oslo:** calendar_ff fyrer → 22 ⚠ Sc-flagg blir ✓
+- **Fre 22:00 Oslo:** cot_disaggregated + cot_legacy fyrer → 20 ✗
+  Swing blir ✓ (eller ⚠ avhengig av calendar_ff)
+- **Fre 22:30 Oslo:** cot_ice fyrer → Brent + NaturalGas Swing ✓
+
+Forventet etter fre-kveld-fyringer:
+- Macro: ~22 ✓
+- Swing: ~22 ✓
+- Scalp: ~22 ⚠ (kvalifiserer ikke for ✓ før Plan-S leverer
+  surprise-vs-consensus + VIX9D/3M-termstruktur-driver)
+
+### Plan-S-deferrals
+
+- calendar_ff `actual`-felt mangler (FF JSON-feed har kun forecast/prev)
+- VIX9D/3M-termstruktur-driver (data finnes; driver er Plan-S)
+- Cross-asset-leder-mønster (BRL→Coffee/Sugar 1-5min, DXY→Gold etc.)
+- Real-time seismic M≥6-trigger som scalp-event
+- Surprise-vs-consensus driver-feature (delta = actual - forecast)
+
+### Resterende sub-fase 12.9-kandidater
+
+- WASDE pre-2019 ESMIS-walker (~1-2t kode)
+- comex + cafe ingest-subkommandoer i ingest_manual_data.py
+- README i cafe_boletins/ comex data/ conab_boletins/
+- disease_pressure test-coverage til ≥7 tester
+- enso DNS-failure-resilience ved boot
+- Bot-token-update + setup→bot signal-format-mismatch (audit Sjekk 9.7)
 
 ## Legende
 
