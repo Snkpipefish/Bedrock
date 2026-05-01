@@ -532,7 +532,8 @@ class AsOfDateStore:
         alert_ts = pd.to_datetime(full["alert_date"])
         return full[alert_ts <= self._as_of].reset_index(drop=True)
 
-    # IGC (igc_stocks_change — pt. ikke wired i noen YAML, men exposes for fremtid)
+    # IGC (driver fjernet i sub-fase 12.6 session 138; tabellen + getteren beholdes
+    # for fremtidig bruk når IGC-data igjen får aktiv driver).
 
     def get_igc(self, grain: str, metric: str) -> pd.DataFrame:
         """Som DataStore.get_igc, men clipped på report_date."""

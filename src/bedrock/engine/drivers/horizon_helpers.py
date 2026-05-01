@@ -3,8 +3,7 @@
 Sub-fase 12.7 D1 (session 127). Samler de delte mode-helpers som ble
 generalisert i sessions 123-125 fra real_yield-spesifikke til generiske
 fundamentals-helpers. Tidligere lå de i ``macro.py`` med underscore-
-prefiks og ble lazy-importert fra ``agronomy.py`` (shipping_pressure)
-og ``currency.py`` (currency_cross_trend).
+prefiks og ble lazy-importert fra ``agronomy.py`` (shipping_pressure).
 
 Modulen eksporterer publiske funksjoner uten underscore-prefiks (de er
 nå modul-API, ikke private). Konstantene er fortsatt med ``_``-prefiks
@@ -18,7 +17,6 @@ Brukere:
 - ``macro.vix_regime`` (R4 session 123)
 - ``macro.eia_stock_change`` (R4 session 124)
 - ``agronomy.shipping_pressure`` (R4 session 125)
-- ``currency.currency_cross_trend`` (R4 session 125)
 
 NB: ``positioning.py`` har sin egen ``_extreme_flag`` med identisk
 implementasjon. Konsolidering av den til ``extreme_flag`` her er

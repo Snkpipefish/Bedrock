@@ -1,17 +1,19 @@
 """Mini-tester for R4 disiplin B "kun _horizon-lesing"-drivere fra session 125.
 
-Sub-fase 12.7 R4 finish (session 125). Verifiserer at de 7 domene-
+Sub-fase 12.7 R4 finish (session 125). Verifiserer at de domene-
 spesifikke/event-baserte/K-NN-baserte/kalender-aware driverne fra
 session 125 leser ``_horizon``-param uten å endre output.
 
 Drivere dekket:
 - disease_pressure (event-basert severity + yield_impact)
-- igc_stocks_change (rapport-til-rapport pct-change i månedlig IGC)
 - conab_yoy (månedlig CONAB med årlig YoY-metric)
 - unica_change (~halv-månedlig multi-metric)
 - analog_hit_rate (K-NN hit-rate output)
 - analog_avg_return (K-NN avg-return output)
 - seasonal_stage (kalender-aware måneds-mapping)
+
+igc_stocks_change ble fjernet i sub-fase 12.6 session 138 som dead
+driver (var ikke wired i noen YAML).
 """
 
 from __future__ import annotations
@@ -23,7 +25,6 @@ import pandas as pd
 from bedrock.engine.drivers.agronomy import (
     conab_yoy,
     disease_pressure,
-    igc_stocks_change,
     unica_change,
 )
 from bedrock.engine.drivers.analog import analog_avg_return, analog_hit_rate
@@ -39,14 +40,6 @@ class _MockDiseaseStore:
         self._df = df
 
     def get_disease_alerts(self, commodity: str, from_date: str):
-        return self._df
-
-
-class _MockIgcStore:
-    def __init__(self, df: pd.DataFrame):
-        self._df = df
-
-    def get_igc(self, grain: str, metric: str):
         return self._df
 
 
@@ -99,25 +92,6 @@ def test_disease_pressure_horizon_noop():
     no_horizon = disease_pressure(store, "Corn", {})
     with_swing = disease_pressure(store, "Corn", {"_horizon": "SWING"})
     with_makro = disease_pressure(store, "Corn", {"_horizon": "MAKRO"})
-    assert no_horizon == with_swing == with_makro
-
-
-# ---------------------------------------------------------------------------
-# igc_stocks_change
-# ---------------------------------------------------------------------------
-
-
-def test_igc_stocks_change_horizon_noop():
-    df = pd.DataFrame(
-        [
-            {"report_date": "2026-03-10", "value_mil_tons": 280.0},
-            {"report_date": "2026-04-10", "value_mil_tons": 270.0},
-        ]
-    )
-    store = _MockIgcStore(df)
-    no_horizon = igc_stocks_change(store, "Corn", {})
-    with_swing = igc_stocks_change(store, "Corn", {"_horizon": "SWING"})
-    with_makro = igc_stocks_change(store, "Corn", {"_horizon": "MAKRO"})
     assert no_horizon == with_swing == with_makro
 
 
