@@ -44,3 +44,28 @@ mapping:
 # - Copper, Platinum (eksperimentelle metals)
 # - NaturalGas (energy, men ikke aktivert i bot)
 # - BTC, ETH (crypto, ikke aktivert i bot)
+
+# ---------------------------------------------------------------------------
+# Per-horisont kvalifisering (sub-fase 12.8 § 20.7)
+# ---------------------------------------------------------------------------
+# Bot-whitelist over kvalifiserer for **Macro + Swing** (alle 17 instrumenter
+# har ≥5 år priser, ≥3 år CFTC for primær-kontrakten, og strukturelle
+# kilder ferske per coverage-rapport). Brent + Copper har ≥4 år CFTC
+# (CFTC publiserte ikke før 2022) — borderline, men aksepteres siden
+# kvalitet > kvantitet for Brent (Brent Last Day-kontrakten er primær for
+# globale crude-flow-signaler).
+#
+# **Scalp**: ingen instrumenter kvalifiserer for Scalp-handel før
+# sub-fase Plan-S (PLAN § 19.10) leverer:
+#   - calendar_ff forecast/prev/actual-trio (i dag mangler `actual`-feltet
+#     fra Forex Factory JSON-feed; må hentes fra alternativ kilde)
+#   - surprise-vs-consensus driver-feature (delta = actual - forecast,
+#     z-normalisert)
+#   - VIX9D/VIX3M-termstruktur-driver (data finnes i fundamentals; driver
+#     er Plan-S-arbeid etter at session 138 droppet vix_term_ratio)
+#   - cross-asset-leder-mønster (BRL→Coffee/Sugar 1-5 min, DXY→Gold,
+#     VIX→SP500, US10Y→USDJPY) som event-driven scalp-trigger
+#   - real-time event-detektor for seismic M≥6 i Cu/Au/Ag-mining-regioner
+#
+# Bot-handel kjører på SWING/MAKRO-horisontene per default. SCALP-signaler
+# fra signal_server filtreres ut til Plan-S leverer scalp-arkitektur.
