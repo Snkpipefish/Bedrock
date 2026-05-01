@@ -137,14 +137,15 @@
 
 - **Sub-fase 12.8 LUKKET 2026-05-01** (tag `v0.12.8-fase-12.8-LUKKET`). PLAN § 20 lagt til (data-gjeld + cron-tuning + whitelist-revisjon). § 20.2 låser horisont-bruk-prinsipper M/S/Sc. Session 139 leverte A1 (coverage-rapport-verktøy + first rapport) + A2 (paused timers reaktivert, AAII bug + schema-drift + fas_esr docstring) + B (stale_hours tuning + FRED policy) + C (per-(inst × hor) whitelist-kvalifisering dokumentert). Bot-handel default = SWING/MAKRO; SCALP filtreres til Plan-S.
 
-- **Sub-fase 12.9 ÅPEN 2026-05-01** — bedrock-bot cutover. PLAN § 21 lagt til. Scalp_edge retires (auth-failure crash-loop siden 28. apr); bedrock-bot tar over. **D1+D2+D3+D4 LANDET 2026-05-01:**
+- **Sub-fase 12.9 ÅPEN 2026-05-01** — bedrock-bot cutover. PLAN § 21 lagt til. Scalp_edge retires (auth-failure crash-loop siden 28. apr); bedrock-bot tar over. **D1+D2+D3+D4+D5-start LANDET 2026-05-01:**
   - **D1** (`649f429`): adapter `bedrock.signal_server.bot_adapter` + `/bot/signals`-endpoint + 29 tester.
   - **D2** (`f394098`): refresh-token-flow i `ctrader_client.py` — `CtraderCredentials.refresh_token`, `refresh_ctrader_access_token()`-modul-helper mot `connect.spotware.com/apps/token`, `update_secrets_env_var()` atomic+0o600 i `config/secrets.py`, `_on_error_res` engangs-retry før `_fatal_exit(78)`. 28 nye tester (17 refresh + 11 secrets-update). Plus `fa4286f` fix(tests): pre-eksisterende 12.8 stale_hours-asserts → 264h (3 trivielle, urelatert til D2).
   - **D3** (`4c63ff2`): `config/bot.yaml` `signal_url` → `http://127.0.0.1:5100/bot` (treffer `/bot/signals`-blueprint), `signal_api_key_env` → `null` (lokal/loopback-trafikk uten auth). Pydantic-modell utvidet til `str | None`, `__main__.py` håndterer `None` med INFO ikke WARN. Test-defaults oppdatert + 1 ny null-pathway-test.
   - **D4** (`5f3de0f`): `systemd/bedrock-bot.service` med `--demo`, `EnvironmentFile=/home/pc/.bedrock/secrets.env`, `Restart=on-failure`, `RestartPreventExitStatus=78 79` (FATAL 78 = refresh-flyt ga opp; 79 = reconnect-budsjett oppbrukt — operatør må intervenere). 7 smoke-tester. `systemd-analyze --user verify` ✓.
-  - **D5+D6 pending:** demo-test ≥24t (operatør-kjørt manuelt) + scalp_edge retire. Tag `v0.12.9-fase-12.9-LUKKET` settes etter D6.
+  - **D5-start (session 141, 2026-05-01 22:00–22:45):** Bot live på cTrader demo. Underveis-fix-bunke: 8 commits. **`5689618`** UI bot-status panel + horisont-kolonne i Datakilder-fane (per-fetcher M/Sw/Sc-chips per § 20.2). **`9c60dd1`** unit Requires=bedrock-server.service fjernet (user-units kan ikke kreve system-units). **`fc20811`** bot_status /proc-fallback for cross-uid-scenario (root-server kan ikke spørre user-systemd direkte; vi scanner /proc/<pid>/cmdline i stedet). **`bab3370`** intra-day signals_bot regen-timer + `--horizons`-CLI-flag (mocked-tester). **`9c31bd9`** § 20.2-mapping-oppdatering (COT×4 + crop_progress → M+Sw+Sc; crypto_sentiment → Sw+Sc). **`bee3bed`** PLAN § 21.11 follow-up-logg (Fase 2 signals-all-ytelse, Fase 3 per-horisont drivere, secrets.env+pyOpenSSL kosmetikk). Ad-hoc fixer ikke i git: `CTRADER_ACCOUNT_ID` byttet fra brukernavn → `32290195` (numerisk ctidTraderAccountId fra Spotware Open API), `pip install pyOpenSSL` (manglet i venv → Twisted SSL `NameError: CertificateOptions`). Bot-instans bekreftet kjørende: konto 32290195, balanse 484k NOK, 1340 symboler, 17 trading-instruments, alle 17 har 39+50 candles lastet. Intra-day timer (`bedrock-signals-bot-intraday.timer`) aktivert som user-systemd, neste fyring Mon 06:00 CEST. SCALP-staleness gått fra 24t → ≤30 min market hours. Endepunkter live: `/bot/signals` 200 + `/api/ui/bot_status` 200 viser `state=active sub_state=running`.
+  - **D5-resterende + D6 pending:** ≥24t-vindu uten crash + ≥1 trade plassert+lukket + scalp_edge.timer disable. Tag `v0.12.9-fase-12.9-LUKKET` settes etter D6.
   - Full plan: `docs/bedrock_bot_cutover.md`. **cTrader-credentials klare i `~/.bedrock/secrets.env`** (CTRADER_CLIENT_ID/CLIENT_SECRET/ACCESS_TOKEN/REFRESH_TOKEN/ACCOUNT_ID — alle 5 verifisert).
-  - **Next task: D5** — operatør lenker unit-fila (`systemctl --user link /home/pc/bedrock/systemd/bedrock-bot.service` + `daemon-reload` + `start bedrock-bot.service`), følger `journalctl --user -u bedrock-bot -f` ≥24t. Når grønt → D6.
+  - **Next task: D5-fortsettelse** — bot er live siden 2026-05-01 22:02 CEST, ≥24t-vindu løper. Operatør følger journalctl + UI Datakilder-fane (bot-status panel skal forbli grønn). Når ≥24t passert + ≥1 trade plassert+lukket → D6 (scalp_edge.timer disable + arkiv-tag + retire).
 
 - **Open tech-gjeld for fremtidige sessioner** (oppdatert 2026-05-01 etter sub-fase 12.6 LUKKET):
   - **event_distance full re-harvest** når compute-budsjett tillater (Codespace-quota fornyes neste måned). Smoke-test bekreftet fix virker — venter kun på rader for IC-måling.
@@ -436,6 +437,149 @@ ferdig og 12.6-rebalansering er gjort.
 ---
 
 ## Session log (newest first)
+
+### 2026-05-01 — Session 141: sub-fase 12.9 D5-start (bot live, UI bot-status, horisont-mapping, intra-day cadence)
+
+**Scope:** D5 demo-test. Bot startet på cTrader demo for første gang;
+samtidig ryddet en bunke debt og fikser som dukket opp i live-test.
+
+**Bot-cutover live-test:**
+- Operatør kjørte `systemctl --user link bedrock-bot.service` +
+  `daemon-reload` + `start`. Boten crash-loopet i 4 cycles før vi
+  fikset årsakene:
+  - Bug 1: unit hadde `Requires=bedrock-server.service` mens
+    bedrock-server kjører som **system**-service og bot er **user**-
+    service. User-systemd kan ikke `Requires=` system-units.
+    Fix `9c60dd1`: fjernet Requires (After= også droppet siden den har
+    samme begrensning og kun er hint i user-unit). Ansvar for at
+    server er oppe ligger nå hos operatør.
+  - Bug 2: `CTRADER_ACCOUNT_ID='leifsebastian'` (brukernavn, ikke
+    heltall). Bot's `load_credentials_from_env()` raise-r tidlig.
+    Operatør hentet account-info via Spotware Open API
+    (`api.spotware.com/connect/tradingaccounts?access_token=...`),
+    fikk én demo-konto: `accountId=32290195` /
+    `accountNumber=9248021` / `live=false` / Skilling-broker /
+    NOK 48,430,506 / hedged. Bot bruker `ctidTraderAccountId` =
+    32290195. `sed -i 's/^CTRADER_ACCOUNT_ID=.*/...=32290195/'
+    ~/.bedrock/secrets.env`.
+  - Bug 3: `NameError: CertificateOptions is not defined` i Twisted
+    endpoints — pyOpenSSL manglet i venv. `pip install pyOpenSSL`
+    løste; ctrader-open-api 0.9.2 vil pin'e til 24.1.0, vi har 26.1.0,
+    fungerer men gir warning.
+- Etter fixene: konto 32290195 autentisert, 1340 symboler mottatt,
+  17 trading-symboler + 12 feed-symboler. Alle 17 trading-symboler
+  fikk 39 D1-candles + 50 1H-candles lastet (Corn/Soybean/Wheat/
+  Cotton/Sugar/Coffee/Cocoa/EURUSD/AUDUSD/GBPUSD/USDJPY/GOLD/
+  SILVER/OIL WTI/OIL BRENT/SPX500/US100). RECONCILE: 0 åpne
+  posisjoner. Polling-loop aktiv.
+
+**Sidefunn 1: signals_bot.json regen-cadence (kritisk for SCALP).**
+Operatør oppdaget at boten poller hvert 60s men data regenereres kun
+1×/dag (03:30). For SCALP (minutter–timer per § 20.2) er dette feil
+— vol-ekspansjon rundt FOMC/EIA/NFP, surprise-vs-consensus, og
+calendar_ff-event-distance skifter minutt-for-minutt. Fix `bab3370`:
+ny `bedrock-signals-bot-intraday.{service,timer}` som kjører
+`bedrock signals-all --bot-only --output data/signals_bot.json` hver
+30 min market hours (Mon..Fri 06:00–21:30 Oslo, 32 fyringer/uke). +
+forward-compatible `--horizons {scalp,swing,makro}` multi-flag for
+fremtidig per-horisont-cadence. SCALP-staleness gått fra 24t → ≤30
+min. Aktivert som user-timer (samme mønster som de andre fetch-
+timerne). Tre nye mock-baserte CLI-tester (1.4s i stedet for 8 min
+real-DB).
+
+**Sidefunn 2: signals-all 8 min/run.** Tidsmåling viste at full
+`signals-all --bot-only` for 17 instrumenter tar 8 min 19s
+sequentielt. Det blokker SCALP-cadence <5 min. 30-min-cadence er
+god nok for å si SCALP er aktivt, men cadence <5 min krever
+parallellisering / shared-data-cache. Logget i PLAN § 21.11 Fase 2.
+
+**Sidefunn 3: § 20.2 antyder per-horisont drivere, ikke kun per-
+horisont vekter.** Nåværende YAML lar SCALP/SWING/MAKRO kun re-vekte
+samme drivere via `family_weights`. § 20.2 sier calendar_ff er KJERNE
+for scalp + swing-pre-event men ikke macro-input. Krever YAML-schema-
+utvidelse + scoring-engine-endring + full snapshot-baseline-regen.
+Logget i PLAN § 21.11 Fase 3. Utenfor 12.9-scope.
+
+**UI bot-status panel (`5689618`):** Datakilder-fane fikk nytt
+panel over systemsjekk-banneret som viser:
+- service-state (active/running pill grønn, eller dead/inactive grå,
+  failed rød)
+- daily_loss_state.json snapshot (date + dollar)
+- siste closed trade fra trade_log.jsonl (instrument/dir/horizon
+  /result/pnl, alias-tolerant for symbol/outcome/pnl/ts)
+- signals_bot.json freshness (alder fra mtime, "exists":false hvis
+  fil mangler)
+ServerConfig: `bot_state_dir` (default `~/bedrock/data/bot/`) +
+`bot_service_name` (default `bedrock-bot.service`).
+
+**UI horisont-kolonne (`5689618` + `9c31bd9`):** Pipeline-tabellen
+fikk `HORISONT`-kolonne med fargede chips per § 20.2:
+- M (blå): Macro
+- Sw (lilla): Swing
+- Sc (rosa): Scalp
+Fetcher → horisont-mapping i `_FETCHER_HORIZONS` i ui.py:
+- prices/fundamentals/wasde/eia_inventories: M+Sw+Sc
+- cot_disaggregated/legacy/ice/euronext: M+Sw+Sc (`9c31bd9`
+  oppdatert fra M+Sw — fre-release-event = scalp-trigger)
+- crop_progress: M+Sw+Sc (`9c31bd9` oppdatert fra M+Sw — mandag-
+  release-event)
+- calendar_ff: Sw+Sc (KJERNE scalp + pre-event swing)
+- crypto_sentiment: Sw+Sc (`9c31bd9` oppdatert fra M+Sw — intra-day,
+  ikke macro-regime)
+- comex/weather: M+Sw
+- seismic: M+Sc (real-time M≥6 trigger)
+- news_intel: Sw+Sc
+- conab/unica/shipping/enso: M only
+
+**Cross-uid systemd-spørring (`fc20811`):** bedrock-server kjører som
+root (system) men bedrock-bot kjører som user (uid 1000). `systemctl
+--user show bedrock-bot.service` fra root binder til root's egen
+user-bus (uid bestemmes av getuid(), ikke XDG_RUNTIME_DIR-env). En
+første forsøks-fix `035d2ae` med XDG_RUNTIME_DIR-iterasjon viste
+seg ikke å fungere. Endelig fix `fc20811`: hvis systemctl returnerer
+tomme felter eller "inactive", skann `/proc/<pid>/cmdline` for
+`bedrock.bot --demo`-prosess. /proc er world-readable så root kan
+se prosesser eid av andre brukere. Tap: rik state-info (failed/
+activating) når bot eies av annen bruker; rapporterer kun
+running/dead. Akseptabelt — UI-pillen blir grønn/grå basert på
+prosess-eksistens, journalctl gir detaljer.
+
+**Verifisert end-to-end 22:43 CEST etter siste server-restart:**
+- `/api/ui/bot_status` 200, `state=active sub_state=running`
+- `/bot/signals` 200, JSON-array med entries
+- UI Datakilder-fane: 🟢 KJØRER bedrock-bot pill, alle § 20.2-
+  chips synlige
+- Intra-day timer: aktiv, neste fyring Mon 06:00 CEST
+- bot-prosess: 35+ min uptime, ingen errors/warnings i journal
+
+**Tester:** 6 nye for `/api/ui/bot_status` (test_signal_server_bot_
+status.py, mock-baserte). 3 nye for `signals-all --horizons`
+(test_cli_signals_all.py, monkeypatch-baserte). Alle 1.4-2.6s.
+Eksisterende real-DB-test (`test_signals_all_writes_output`) tar
+8 min og deselectet i scoped-runs.
+
+**Pyright src/bedrock/signal_server/:** 0 errors.
+
+**Commits (8):**
+- `5689618` feat(12.9): UI bot-status panel + horisont-kolonne i
+  Datakilder
+- `9c60dd1` fix(12.9): bedrock-bot unit fjern Requires=bedrock-
+  server.service
+- `035d2ae` fix(12.9): bot_status cross-user systemd-query
+  (XDG_RUNTIME_DIR-forsøk)
+- `fc20811` fix(12.9): bot_status /proc-fallback for cross-uid
+  scenario
+- `bab3370` feat(12.9): intra-day signals_bot.json regen +
+  --horizons-flag
+- `9c31bd9` fix(12.9): horisont-mapping i § 20.2-spesifikk-form
+- `bee3bed` docs(plan): § 21.11 logg follow-ups fra D5-implementasjon
+- (denne) state: session 141 D5-start LANDET, ≥24t-vindu løper
+
+**Next task:** Operatør følger demo-vinduet ≥24t. Når grønt + ≥1
+trade plassert+lukket → session 142 D6 (scalp_edge retire + tag
+`v0.12.9-fase-12.9-LUKKET`).
+
+---
 
 ### 2026-05-01 — Session 140: sub-fase 12.9 D2+D3+D4 (refresh-flyt + bot.yaml + systemd-service)
 
