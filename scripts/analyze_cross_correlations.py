@@ -108,13 +108,19 @@ def _load_targets(db_path: Path) -> pd.DataFrame:
 def _compute_pair_ic(
     pred: pd.Series, target: pd.Series, min_obs: int = MIN_PAIR_OBS
 ) -> tuple[float | None, int]:
-    """Spearman IC på align-by-index. Returnerer (ic, n)."""
+    """Spearman IC på align-by-index. Returnerer (ic, n).
+
+    Spearman = Pearson på rangerte serier — implementert via `Series.rank()`
+    for å unngå scipy-dependency (matematisk ekvivalent).
+    """
     aligned = pd.concat([pred, target], axis=1, join="inner").dropna()
     n = len(aligned)
     if n < min_obs:
         return None, n
     try:
-        ic = float(aligned.iloc[:, 0].corr(aligned.iloc[:, 1], method="spearman"))
+        x = aligned.iloc[:, 0].rank()
+        y = aligned.iloc[:, 1].rank()
+        ic = float(x.corr(y, method="pearson"))
     except Exception:
         return None, n
     return ic, n

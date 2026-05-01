@@ -101,38 +101,37 @@ def _compute_ic_per_combo(df_combo: pd.DataFrame, direction: str) -> dict[str, A
     # Spearman IC: korrelasjon mellom rangert driver_value og forward_return.
     # For SELL-retning vil en bull-of-instrument-driver vise NEGATIV IC,
     # som er korrekt — vi rapporterer rå-verdien så fortegn-tolkning er
-    # explicit.
+    # explicit. Bruker rank+Pearson i stedet for `method="spearman"` for
+    # å unngå scipy-dependency (matematisk ekvivalent).
     try:
-        ic = float(val.corr(fwd, method="spearman"))
+        ic = float(val.rank().corr(fwd.rank(), method="pearson"))
     except Exception:
         ic = None
 
-    # Kvartil-hit-rates: del observasjoner i 4 like store grupper basert
-    # på driver_value, mål hit-rate i hver. For predikiv driver:
-    # BUY → hit_rate stiger fra Q1 til Q4. SELL → faller.
+    # Kvartil-hit-rates: del observasjoner i opptil 4 like store grupper
+    # basert på driver_value, mål hit-rate i hver. For predikiv driver:
+    # BUY → hit_rate stiger fra Q1 til Q4. SELL → faller. Mange drivere
+    # bruker stepped 0.0/0.25/0.5/0.75/1.0-verdier som kollapser til
+    # færre bins; vi tillater 2-4 bins via `duplicates="drop"` uten å
+    # låse antall labels.
+    q1 = q4 = float("nan")
+    monotonic = None
     try:
-        quartiles = pd.qcut(val, 4, labels=["q1", "q2", "q3", "q4"], duplicates="drop")
-        hit_by_q = hits.groupby(quartiles, observed=False).mean() * 100.0
-        q1 = float(hit_by_q.get("q1", float("nan")))
-        q4 = float(hit_by_q.get("q4", float("nan")))
-        # Monotonisitet: 1.0 = perfekt stigende q1<q2<q3<q4 (for BUY)
-        monotonic = None
-        try:
-            seq = [hit_by_q.get(f"q{i}", float("nan")) for i in [1, 2, 3, 4]]
-            seq_clean = [float(x) for x in seq if pd.notna(x)]
-            if len(seq_clean) == 4:
-                # Antall trinn-monotone par
+        quartiles = pd.qcut(val, 4, duplicates="drop")
+        hit_by_q = hits.groupby(quartiles, observed=True).mean() * 100.0
+        if len(hit_by_q) >= 2:
+            q1 = float(hit_by_q.iloc[0])
+            q4 = float(hit_by_q.iloc[-1])
+            seq_clean = [float(x) for x in hit_by_q.values if pd.notna(x)]
+            if len(seq_clean) >= 2:
                 pairs = list(itertools.pairwise(seq_clean))
                 if direction == "buy":
                     mono_pairs = sum(1 for a, b in pairs if b >= a)
                 else:
                     mono_pairs = sum(1 for a, b in pairs if b <= a)
-                monotonic = mono_pairs / 3.0
-        except Exception:
-            pass
+                monotonic = mono_pairs / len(pairs)
     except (ValueError, IndexError):
-        q1 = q4 = float("nan")
-        monotonic = None
+        pass
 
     return {
         "n": n,
@@ -211,29 +210,37 @@ def _render_worst_performers_table(perf: pd.DataFrame, top_n: int = 30) -> str:
 
 
 def _render_per_driver_summary(perf: pd.DataFrame) -> str:
-    """Aggregert per driver: median IC + median monotonisitet over alle (inst, hor, dir)."""
-    qualified = perf[(perf["n"] >= 30) & perf["ic"].notna()]
+    """Aggregert per driver: median |IC| + median monotonisitet over alle (inst, hor, dir).
+
+    Bruker median |IC| (ikke median IC) fordi BUY+SELL-IC-er er
+    speilbilder som kansellerer ut til 0. PLAN § 12.6-tersklene er
+    definert på median |IC| for samme grunn.
+    """
+    qualified = perf[(perf["n"] >= 30) & perf["ic"].notna()].copy()
+    qualified["abs_ic"] = qualified["ic"].abs()
     summary = (
         qualified.groupby("driver")
         .agg(
             n_combos=("instrument", "count"),
-            median_ic=("ic", "median"),
+            median_abs_ic=("abs_ic", "median"),
+            max_abs_ic=("abs_ic", "max"),
             min_ic=("ic", "min"),
             max_ic=("ic", "max"),
             median_mono=("monotonic", "median"),
             avg_n=("n", "mean"),
         )
         .reset_index()
-        .sort_values("median_ic", ascending=False, key=lambda s: s.abs())
+        .sort_values("median_abs_ic", ascending=False)
     )
     lines = [
-        "| Driver | # kombos | Median IC | Min IC | Max IC | Median mono | Avg n |",
-        "|---|---:|---:|---:|---:|---:|---:|",
+        "| Driver | # kombos | Median \\|IC\\| | Max \\|IC\\| | Min IC | Max IC | Median mono | Avg n |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for _, r in summary.iterrows():
         lines.append(
             f"| {r['driver']} | {int(r['n_combos'])} "
-            f"| {_format_optional_float(r['median_ic'])} "
+            f"| {_format_optional_float(r['median_abs_ic'])} "
+            f"| {_format_optional_float(r['max_abs_ic'])} "
             f"| {_format_optional_float(r['min_ic'])} "
             f"| {_format_optional_float(r['max_ic'])} "
             f"| {_format_optional_float(r['median_mono'], '.2f')} "
