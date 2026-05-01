@@ -94,6 +94,9 @@ families:
           countries: [USD, JPY]
           impact_levels: [High]
           min_hours: 4
+        horizons:
+          - SCALP
+          - SWING
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     drivers:
@@ -106,5 +109,5 @@ families:
 
 grade_thresholds:
   A_plus: {min_pct_of_max: 0.75, min_families: 4}
-  A:      {min_pct_of_max: 0.55, min_families: 3}
-  B:      {min_pct_of_max: 0.35, min_families: 2}
+  A: {min_pct_of_max: 0.55, min_families: 3}
+  B: {min_pct_of_max: 0.35, min_families: 2}

@@ -120,6 +120,9 @@ families:
           countries: [USD]
           impact_levels: [High]
           min_hours: 4
+        horizons:
+          - SCALP
+          - SWING
       - name: cot_euronext_mm_pct
         weight: 0.15
         params:

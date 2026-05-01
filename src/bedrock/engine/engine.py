@@ -220,12 +220,19 @@ Rules: TypeAlias = FinancialRules | AgriRules
 
 
 class DriverResult(BaseModel):
-    """En drivers bidrag til familie-score."""
+    """En drivers bidrag til familie-score.
+
+    `horizons` er kopi av DriverSpec.horizons (None hvis driveren gjelder
+    alle 3 horisonter). Brukes av UI for å vise per-driver horisont-
+    badge (sub-fase 12.9 Fase 3). `weight` er effective_weight etter
+    re-normalisering (kan avvike fra DriverSpec.weight når filter aktivt).
+    """
 
     name: str
     value: float
     weight: float
     contribution: float
+    horizons: list[str] | None = None
 
 
 class FamilyResult(BaseModel):
@@ -482,6 +489,7 @@ class Engine:
                         value=value,
                         weight=effective_weight,
                         contribution=contribution,
+                        horizons=driver_spec.horizons,
                     )
                 )
                 family_score += contribution

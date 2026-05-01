@@ -70,6 +70,8 @@ families:
       - name: aaii_extreme
         weight: 0.25
         params: {metric: bullish_pct, lookback_weeks: 52}
+        horizons:
+          - SWING
   macro:
     # Equity-tolkning identisk Nasdaq men med fokus på rente-følsomhet
     # (SP500 er bredere, mindre tech-tung).
@@ -113,6 +115,9 @@ families:
           countries: [USD]
           impact_levels: [High]
           min_hours: 4
+        horizons:
+          - SCALP
+          - SWING
       - name: credit_spread_change
         weight: 0.26
         params: {bull_when: low}
@@ -128,5 +133,5 @@ families:
 
 grade_thresholds:
   A_plus: {min_pct_of_max: 0.75, min_families: 4}
-  A:      {min_pct_of_max: 0.55, min_families: 3}
-  B:      {min_pct_of_max: 0.35, min_families: 2}
+  A: {min_pct_of_max: 0.55, min_families: 3}
+  B: {min_pct_of_max: 0.35, min_families: 2}

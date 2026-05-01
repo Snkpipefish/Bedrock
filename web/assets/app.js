@@ -166,6 +166,33 @@ function _analogHtml(analog) {
     </section>`;
 }
 
+// Sub-fase 12.9 Fase 3: per-driver horisont-chips i modal-driver-tabell.
+// Drivere uten horizons-felt = alle 3 (status quo, ingen chip vist).
+// Drivere med satt felt rendres med M/Sw/Sc-chips (samme palett som
+// pipeline-tabell-chips) for å gjøre filteret synlig for operatør.
+function _driverHorizonChips(horizons) {
+  if (!horizons || !Array.isArray(horizons) || horizons.length === 0) {
+    return '<span class="meta" title="Bidrar til alle horisonter">alle</span>';
+  }
+  // Map full horisont-navn til kort-form. Engine normaliserer til
+  // uppercase, men vær defensiv om lower-case kommer gjennom.
+  const SHORT = {SCALP: 'Sc', SWING: 'Sw', MAKRO: 'M'};
+  const CLS = {SCALP: 'hz-scalp', SWING: 'hz-swing', MAKRO: 'hz-macro'};
+  const TITLE = {
+    SCALP: 'Scalp (minutter–timer)',
+    SWING: 'Swing (dager–uker)',
+    MAKRO: 'Macro (uker–måneder)',
+  };
+  // Bevarer YAML-rekkefølge slik at f.eks. [SCALP, SWING] vises Sc Sw.
+  return horizons.map(h => {
+    const up = String(h).toUpperCase();
+    const cls = CLS[up] || 'hz-none';
+    const short = SHORT[up] || up;
+    const title = TITLE[up] || up;
+    return `<span class="hz-chip ${cls}" title="${title}">${short}</span>`;
+  }).join('');
+}
+
 function _familyHtml(name, fam) {
   const score = fam.score ?? 0;
   const drivers = (fam.drivers || []).slice().sort(
@@ -180,11 +207,12 @@ function _familyHtml(name, fam) {
       </summary>
       ${drivers.length ? `<table class="modal-driver-table">
         <thead>
-          <tr><th>Driver</th><th class="num">Value</th><th class="num">Weight</th><th class="num">Bidrag</th></tr>
+          <tr><th>Driver</th><th>Horisont</th><th class="num">Value</th><th class="num">Weight</th><th class="num">Bidrag</th></tr>
         </thead>
         <tbody>
           ${drivers.map(d => `<tr>
             <td>${d.name}</td>
+            <td>${_driverHorizonChips(d.horizons)}</td>
             <td class="num">${_fmt2(d.value)}</td>
             <td class="num">${_fmt2(d.weight)}</td>
             <td class="num"><strong>${_fmt2(d.contribution)}</strong></td>

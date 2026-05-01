@@ -93,6 +93,8 @@ families:
       - name: aaii_extreme
         weight: 0.25
         params: {metric: bullish_pct, lookback_weeks: 52}
+        horizons:
+          - SWING
   macro:
     # Equity-tolkning: Nasdaq er rente-sensitiv (lange durations i tech),
     # USD-svakhet svakt bull (global liquidity), VIX lavt = risk-on bull.
@@ -147,6 +149,9 @@ families:
           countries: [USD]
           impact_levels: [High]
           min_hours: 4
+        horizons:
+          - SCALP
+          - SWING
       - name: credit_spread_change
         weight: 0.26
         params: {bull_when: low}

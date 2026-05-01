@@ -103,6 +103,9 @@ families:
           countries: [USD]
           impact_levels: [High]
           min_hours: 4
+        horizons:
+          - SCALP
+          - SWING
       - name: fas_exports
         weight: 0.2
         params:
