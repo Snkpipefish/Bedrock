@@ -5,7 +5,7 @@ vurdert per horisont (Macro / Swing / Scalp) basert på § 20.2-mapping.
 Helse-flagg per fetcher basert på cycle-spesifikke terskler (§ 20.4).
 
 Generert av `scripts/report_data_coverage.py` mot `bedrock.db`
-(2026-05-01 14:27 UTC).
+(2026-05-01 14:39 UTC).
 
 ## Legende
 
@@ -79,7 +79,7 @@ Per (instrument × horisont) — ✓ alle primærkilder ferske / ⚠ 1 svikt / �
 
 | Fetcher | Cycle | Cron | Tabell | Rader | Sist obs. | Alder | DB-status | systemd |
 |---|---|---|---|---:|---|---|:---:|---|
-| calendar_ff | 12t (intra-day) | `15 6,18 * * *` | `econ_events` | 41,063 | 2026-04-30 16:15 UTC | 22.2t | ⚠ | active |
+| calendar_ff | 12t (intra-day) | `15 6,18 * * *` | `econ_events` | 41,063 | 2026-04-30 16:15 UTC | 22.4t | ⚠ | active |
 | comex | Daglig (M-F) | `0 22 * * 1-5` | `comex_inventory` | 15 | 2026-04-30 00:00 UTC | 24.0t | ✓ | active |
 | conab | Månedlig | `0 20 15 * *` | `conab_estimates` | 158 | 2026-04-27 00:00 UTC | 4.6d | ✓ | active |
 | cot_disaggregated | Ukentlig (fre) | `0 22 * * 5` | `cot_disaggregated` | 11,283 | 2026-04-21 00:00 UTC | 10.6d | ⚠ | active |
@@ -87,17 +87,17 @@ Per (instrument × horisont) — ✓ alle primærkilder ferske / ⚠ 1 svikt / �
 | cot_ice | Ukentlig (fre) | `30 22 * * 5` | `cot_ice` | 1,601 | 2026-04-22 00:00 UTC | 9.6d | ⚠ | active |
 | cot_legacy | Ukentlig (fre) | `0 22 * * 5` | `cot_legacy` | 5,790 | 2026-04-21 00:00 UTC | 10.6d | ⚠ | active |
 | crop_progress | Ukentlig (sesong apr-nov) | `0 23 * 4-11 1` | `crop_progress` | 3,114 | 2026-04-26 00:00 UTC | 5.6d | ✓ | active |
-| crypto_sentiment | Daglig | `0 7 * * *` | `crypto_sentiment` | 34 | 2026-05-01 00:00 UTC | 14.5t | ✓ | active |
+| crypto_sentiment | Daglig | `0 7 * * *` | `crypto_sentiment` | 34 | 2026-05-01 00:00 UTC | 14.7t | ✓ | active |
 | eia_inventories | Ukentlig (ons) | `30 17 * * 3` | `eia_inventory` | 5,021 | 2026-04-24 00:00 UTC | 7.6d | ✓ | active |
-| enso | Månedlig | `0 6 12 * *` | `fundamentals` | 46,717 | 2026-04-30 00:00 UTC | 38.5t | ✓ | active |
+| enso | Månedlig | `0 6 12 * *` | `fundamentals` | 46,717 | 2026-04-30 00:00 UTC | 38.7t | ✓ | active |
 | fundamentals | Daglig (M-F, T+1 publisering) | `30 2 * * *` | `fundamentals` | 46,717 | 2026-04-30 00:00 UTC | 24.0t | ✓ | active |
-| news_intel | 12t (intra-day) | `30 6,18 * * *` | `news_intel` | 87 | 2026-05-01 14:20 UTC | 7m | ✓ | active |
-| prices | Daglig (M-F) | `40 * * * 1-5` | `prices` | 90,634 | 2026-05-01 13:40 UTC | 47m | ✓ | active |
-| seismic | Daglig (event-basert) | `0 4 * * *` | `seismic_events` | 123,401 | 2026-05-01 09:24 UTC | 5.1t | ✓ | active |
+| news_intel | 12t (intra-day) | `30 6,18 * * *` | `news_intel` | 87 | 2026-05-01 14:20 UTC | 19m | ✓ | active |
+| prices | Daglig (M-F) | `40 * * * 1-5` | `prices` | 90,634 | 2026-05-01 13:40 UTC | 59m | ✓ | active |
+| seismic | Daglig (event-basert) | `0 4 * * *` | `seismic_events` | 123,401 | 2026-05-01 09:24 UTC | 5.3t | ✓ | active |
 | shipping | Daglig (M-F) | `30 23 * * 1-5` | `shipping_indices` | 2,897 | 2026-04-29 00:00 UTC | 2.0d | ✓ | active |
 | unica | Halvmånedlig | `0 21 1,16 * *` | `unica_reports` | 1 | 2026-04-27 00:00 UTC | 4.6d | ✓ | active |
 | wasde | Månedlig | `0 19 13 * *` | `wasde` | 8,703 | 2026-04-10 00:00 UTC | 21.6d | ✓ | active |
-| weather | Daglig | `0 3 * * *` | `weather` | 11,361 | 2026-05-01 00:00 UTC | 14.5t | ✓ | active |
+| weather | Daglig | `0 3 * * *` | `weather` | 11,361 | 2026-05-01 00:00 UTC | 14.7t | ✓ | active |
 
 ## Drill-down per instrument
 
