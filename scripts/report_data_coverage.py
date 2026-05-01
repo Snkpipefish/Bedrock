@@ -62,20 +62,25 @@ DEFAULT_OUT = REPO_ROOT / "docs" / f"data_coverage_{date.today().isoformat()}.md
 # Format: fetcher_name → ("cycle_label", red_threshold_hours)
 # For business-day-aware fetchere brukes business_days (M-F) i stedet for
 # wallclock-timer; se BUSINESS_DAY_FETCHERS-settet.
+#
+# Ukentlig-tersklene er 11d (ikke 9d) for å gi buffer fra publish-dato +
+# 7 dager til neste publish-dato. CFTC publiserer fredag 15:30 ET (= fre
+# 21:30 Oslo) for tirsdag-snapshot; bedrock-cron fyrer fre 22:00 Oslo.
+# Med 11d-terskel forblir flagget ✓ frem til neste mandag morgen.
 CYCLE_PER_FETCHER: dict[str, tuple[str, float]] = {
     "prices": ("Daglig (M-F)", 36),
-    "cot_disaggregated": ("Ukentlig (fre)", 9 * 24),
-    "cot_legacy": ("Ukentlig (fre)", 9 * 24),
-    "cot_ice": ("Ukentlig (fre)", 9 * 24),
-    "cot_euronext": ("Ukentlig (ons)", 9 * 24),
+    "cot_disaggregated": ("Ukentlig (fre)", 11 * 24),
+    "cot_legacy": ("Ukentlig (fre)", 11 * 24),
+    "cot_ice": ("Ukentlig (fre)", 11 * 24),
+    "cot_euronext": ("Ukentlig (ons)", 11 * 24),
     "fundamentals": ("Daglig (M-F, T+1 publisering)", 36),
     "weather": ("Daglig", 36),
     "enso": ("Månedlig", 40 * 24),
     "wasde": ("Månedlig", 40 * 24),
-    "crop_progress": ("Ukentlig (sesong apr-nov)", 9 * 24),
+    "crop_progress": ("Ukentlig (sesong apr-nov)", 11 * 24),
     "shipping": ("Daglig (M-F)", 4 * 24),
     "calendar_ff": ("12t (intra-day)", 30),
-    "eia_inventories": ("Ukentlig (ons)", 9 * 24),
+    "eia_inventories": ("Ukentlig (ons)", 11 * 24),
     "comex": ("Daglig (M-F)", 4 * 24),
     "seismic": ("Daglig (event-basert)", 7 * 24),
     "conab": ("Månedlig", 40 * 24),
