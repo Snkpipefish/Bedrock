@@ -76,6 +76,12 @@ class ServerConfig(BaseModel):
     bot_state_dir: Path = Field(default=DEFAULT_BOT_STATE_DIR)
     bot_service_name: str = "bedrock-bot.service"
 
+    # Demo-konto-flagg: når True sender /bot/signals også entries med
+    # published=False til boten. Brukes for å teste hele setup-
+    # utvalget på demo. På live-konto skal dette være False (default)
+    # slik at kun setups som passerer publish-floor handles.
+    bot_include_unpublished: bool = False
+
     # Feature-flagge (sanity-check for at vi er i bedrock-versjonen,
     # ikke i gammel scalp_edge)
     server_name: str = "bedrock-signal-server"
@@ -105,6 +111,9 @@ def load_from_env(env: dict[str, str] | None = None) -> ServerConfig:
         payload["admin_git_root"] = Path(source["BEDROCK_ADMIN_GIT_ROOT"])
     if "BEDROCK_ADMIN_LOG_PATH" in source:
         payload["admin_log_path"] = Path(source["BEDROCK_ADMIN_LOG_PATH"])
+    if "BEDROCK_BOT_INCLUDE_UNPUBLISHED" in source:
+        val = source["BEDROCK_BOT_INCLUDE_UNPUBLISHED"].strip().lower()
+        payload["bot_include_unpublished"] = val in ("1", "true", "yes", "on")
 
     # `payload` er typet som `dict[str, object]` for å samle blandede typer
     # (str, int, Path) før konstruksjon. Pyright klarer ikke å smal-type

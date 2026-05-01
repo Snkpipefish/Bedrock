@@ -104,12 +104,17 @@ def _entry_zone_from_setup(setup: dict[str, Any]) -> list[float]:
     return [entry - half, entry + half]
 
 
-def _adapt_one(entry: dict[str, Any]) -> dict[str, Any] | None:
+def _adapt_one(
+    entry: dict[str, Any], *, include_unpublished: bool = False
+) -> dict[str, Any] | None:
     """Transformer én bedrock-signals-entry til bot-format.
 
-    Returnerer None hvis entry ikke er publishable eller setup mangler.
+    Returnerer None hvis setup mangler. Hvis include_unpublished=False
+    (default) filtreres entries med published=false ut. På demo-konto
+    ønsker vi ofte alle setups for testing; sett include_unpublished=True
+    via /bot/signals?include_unpublished=1 eller via ServerConfig.
     """
-    if not entry.get("published"):
+    if not include_unpublished and not entry.get("published"):
         return None
 
     setup_outer = entry.get("setup") or {}
@@ -166,6 +171,7 @@ def adapt_to_bot_format(
     valid_until_minutes: int = 60,
     global_state: dict[str, Any] | None = None,
     rules: dict[str, Any] | None = None,
+    include_unpublished: bool = False,
 ) -> dict[str, Any]:
     """Transformer bedrocks signals_bot.json (flat list) til bot-payload.
 
@@ -179,6 +185,10 @@ def adapt_to_bot_format(
             Default: konservativ no-risk, normal-vix.
         rules: optional dict med stop_multiplier / etc. Default: bot's
             interne defaults brukes hvis ikke satt.
+        include_unpublished: hvis True, inkluder også entries med
+            published=False i bot-batchen. Brukes på demo-konto for å
+            la boten teste hele setup-utvalget. Default False (kun
+            publishable entries går til bot på live-konto).
 
     Returns:
         Wrapped payload som bedrock-bot's comms.py forventer.
@@ -191,7 +201,7 @@ def adapt_to_bot_format(
         if not isinstance(raw, dict):
             continue
         try:
-            sig = _adapt_one(raw)
+            sig = _adapt_one(raw, include_unpublished=include_unpublished)
         except (KeyError, ValueError, TypeError) as exc:
             log.warning(
                 "[ADAPTER] skip entry %s/%s: %s",

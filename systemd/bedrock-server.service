@@ -11,6 +11,11 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/home/pc/bedrock
+# Sub-fase 12.9 D5: demo-deployment skal sende ALLE setups til boten,
+# ikke kun published. Settes via env-var; load_from_env i config.py
+# parser true/yes/1/on til bool. Endre til 0/false når live-konto
+# aktiveres for å håndtere kun publishable setups.
+Environment=BEDROCK_BOT_INCLUDE_UNPUBLISHED=true
 ExecStart=/home/pc/bedrock/.venv/bin/bedrock server --host 127.0.0.1 --port 5100
 Restart=on-failure
 RestartSec=5s

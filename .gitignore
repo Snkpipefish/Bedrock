@@ -45,6 +45,15 @@ data/_meta/*.json
 data/_meta/compare_*.md
 data/signal_log.json
 
+# Bedrock-bot runtime state (sub-fase 12.9 D5+): trade-log, daily-loss-
+# state, agri-symbol-info skrives av boten. Persisteres i fil for review,
+# men ikke kildekontrollert.
+data/bot/signal_log.json
+data/bot/trade_log.jsonl
+data/bot/daily_loss_state.json
+data/bot/agri_symbol_info.json
+data/bot/*.tmp
+
 # Men behold mappene (via .gitkeep) + baseline-filer
 !data/parquet/.gitkeep
 !data/latest/.gitkeep
@@ -52,6 +61,7 @@ data/signal_log.json
 !data/_meta/.gitkeep
 !data/_meta/*_baseline_*.json
 !data/_meta/*_baseline_*.md
+!data/bot/.gitkeep
 
 # Test-artefakter
 tests/**/coverage.xml

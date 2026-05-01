@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import logging
 
-from flask import Blueprint, current_app, jsonify
+from flask import Blueprint, current_app, jsonify, request
 
 from bedrock.signal_server.bot_adapter import adapt_to_bot_format
 from bedrock.signal_server.config import ServerConfig
@@ -35,13 +35,30 @@ def get_bot_signals() -> tuple[object, int]:
 
     Tom fil / manglende fil → adapter med tom signals[]-list + 200.
     JSON-parse-feil → 500 (data-problem som bot bør oppdage).
+
+    `include_unpublished`-flagg styrer hvorvidt entries med
+    published=False også sendes:
+    - ServerConfig.bot_include_unpublished = True → alltid alle
+      (typisk demo-deployment)
+    - Query-param `?include_unpublished=1` overstyrer config (operatør-
+      override; eks. for å teste fra browser)
+    Default på live-konto: kun publishable entries går til bot.
     """
     cfg = _get_config()
     path = cfg.signals_bot_path
 
+    # Resolve include_unpublished: query > config-default
+    qp = request.args.get("include_unpublished", "").lower()
+    if qp in ("1", "true", "yes"):
+        include_unpublished = True
+    elif qp in ("0", "false", "no"):
+        include_unpublished = False
+    else:
+        include_unpublished = cfg.bot_include_unpublished
+
     if not path.exists():
         log.warning("[bot/signals] %s mangler — returnerer tom batch", path)
-        payload = adapt_to_bot_format([])
+        payload = adapt_to_bot_format([], include_unpublished=include_unpublished)
         return jsonify(payload), 200
 
     try:
@@ -58,5 +75,5 @@ def get_bot_signals() -> tuple[object, int]:
         log.error("[bot/signals] %s må være JSON-array, fikk %s", path, type(raw).__name__)
         return jsonify({"error": "signals_bot.json must be a JSON array"}), 500
 
-    payload = adapt_to_bot_format(raw)
+    payload = adapt_to_bot_format(raw, include_unpublished=include_unpublished)
     return jsonify(payload), 200
