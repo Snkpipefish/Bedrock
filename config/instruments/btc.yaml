@@ -84,9 +84,13 @@ families:
       - name: net_fed_liq_change
         weight: 0.30
         params: {bull_when: high}
+        horizons:
+          - MAKRO
       - name: nfci_change
         weight: 0.20
         params: {bull_when: low}
+        horizons:
+          - MAKRO
   structure:
     # 20-dagers range-position fungerer bra på BTC også — høy volatilitet
     # gjør range-bredder dynamiske, men relative posisjonen er meningsfull.
@@ -116,15 +120,23 @@ families:
       - name: credit_spread_change
         weight: 0.25
         params: {bull_when: low}
+        horizons:
+          - MAKRO
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     drivers:
       - name: analog_hit_rate
         weight: 0.5
         params: {asset_class: crypto, k: 5, horizon_days: 30, outcome_threshold_pct: 5.0, min_history_days: 365}
+        horizons:
+          - MAKRO
+          - SWING
       - name: analog_avg_return
         weight: 0.5
         params: {asset_class: crypto, k: 5, horizon_days: 30, min_history_days: 365}
+        horizons:
+          - MAKRO
+          - SWING
 
 grade_thresholds:
   A_plus: {min_pct_of_max: 0.75, min_families: 4}

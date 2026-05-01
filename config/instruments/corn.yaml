@@ -28,6 +28,8 @@ families:
       - name: seasonal_stage
         weight: 1.0
         params: {}  # bruker default NH-grain-kalender
+        horizons:
+          - MAKRO
   yield:
     # Yield-forventning drives av weather_stress (månedlig miljø) +
     # crop_progress_stage (ukentlig USDA-rapport, GOOD/EXCELLENT-pct).
@@ -39,11 +41,17 @@ families:
         weight: 0.5
         params:
           lookback_months: 1
+        horizons: &id001
+          - MAKRO
+          - SWING
       - name: crop_progress_stage
         weight: 0.5
         params:
           metric: GOOD_EXCELLENT
           mode: low_is_bull
+        horizons:
+          - MAKRO
+          - SWING
   weather:
     # Sub-fase 12.5 session 72: ekte vær-stress-driver fra weather_monthly.
     # Høy stress (varmt + tørt + vann-underskudd) er bull for Corn (lavere
@@ -58,12 +66,16 @@ families:
         weight: 0.55
         params:
           lookback_months: 1
+        horizons: *id001
       - name: drought_monitor
         weight: 0.45
         params:
           aoi: us
           metric: d2_pct
           bull_when: high
+        horizons:
+          - MAKRO
+          - SWING
   enso:
     # ENSO-regime fra NOAA ONI. La Niña gir typisk US-drought-risk
     # for us_cornbelt → bull for Corn (default-mapping).
@@ -72,6 +84,8 @@ families:
       - name: enso_regime
         weight: 1.0
         params: {}
+        horizons:
+          - MAKRO
   conab:
     # Sub-fase 12.5+ session 86: brukte wasde_s2u_change som placeholder
     # inntil Conab var implementert. Sub-fase 12.5+ session 111: ekte
@@ -83,10 +97,15 @@ families:
         weight: 0.7
         params:
           region: US
+        horizons:
+          - MAKRO
+          - SWING
       - name: conab_yoy
         weight: 0.3
         params:
           commodity: milho
+        horizons:
+          - MAKRO
   cross:
     # Sub-fase 12.5+ session 90: utvidet med bdi_chg30d (shipping-
     # kostnad). USD-svakhet OG BDI ned begge bull for US-eksport-flyt.
@@ -133,6 +152,9 @@ families:
         weight: 0.15
         params:
           bull_when: high
+        horizons:
+          - MAKRO
+          - SWING
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     weight: 2
@@ -147,6 +169,9 @@ families:
           horizon_days: 30
           outcome_threshold_pct: 3.0
           min_history_days: 365
+        horizons:
+          - MAKRO
+          - SWING
       - name: analog_avg_return
         weight: 0.5
         params:
@@ -155,6 +180,9 @@ families:
           horizon_days: 30
           min_history_days: 365
 
+        horizons:
+          - MAKRO
+          - SWING
 grade_thresholds:
   A_plus:
     min_score: 14

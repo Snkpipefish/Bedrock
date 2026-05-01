@@ -94,9 +94,15 @@ families:
       - name: analog_hit_rate
         weight: 0.5
         params: {asset_class: metals, k: 5, horizon_days: 30, outcome_threshold_pct: 3.0, min_history_days: 365}
+        horizons:
+          - MAKRO
+          - SWING
       - name: analog_avg_return
         weight: 0.5
         params: {asset_class: metals, k: 5, horizon_days: 30, min_history_days: 365}
+        horizons:
+          - MAKRO
+          - SWING
 
 grade_thresholds:
   A_plus: {min_pct_of_max: 0.75, min_families: 4}

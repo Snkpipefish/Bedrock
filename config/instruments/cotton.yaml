@@ -33,6 +33,8 @@ families:
         params:
           # Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec
           monthly_scores: [0.3, 0.3, 0.4, 0.5, 0.7, 0.8, 1.0, 1.0, 0.7, 0.5, 0.4, 0.3]
+        horizons:
+          - MAKRO
   yield:
     # Session 98: utvidet med crop_progress_stage (NASS GOOD/EXCELLENT).
     # Vekter: weather 25% + crop_progress 25% (samme yield-domene splittet)
@@ -44,15 +46,24 @@ families:
         weight: 0.25
         params:
           lookback_months: 1
+        horizons: &id001
+          - MAKRO
+          - SWING
       - name: crop_progress_stage
         weight: 0.25
         params:
           metric: GOOD_EXCELLENT
           mode: low_is_bull
+        horizons:
+          - MAKRO
+          - SWING
       - name: wasde_s2u_change
         weight: 0.5
         params:
           region: US
+        horizons:
+          - MAKRO
+          - SWING
   weather:
     # Sub-fase 12.7 D2 session 133 (A9): drought_monitor lagt til @ 0.45.
     # USDM ukentlig D2+ andel co-driver med weather_stress. Sum=1.00 per
@@ -64,12 +75,16 @@ families:
         weight: 0.55
         params:
           lookback_months: 1
+        horizons: *id001
       - name: drought_monitor
         weight: 0.45
         params:
           aoi: us
           metric: d2_pct
           bull_when: high
+        horizons:
+          - MAKRO
+          - SWING
   enso:
     # Cotton i US-delta er ENSO-sensitiv: La Niña gir typisk varmere/
     # tørrere — ulik effekt enn Corn (drought-bull). For Cotton kan
@@ -80,6 +95,8 @@ families:
       - name: enso_regime
         weight: 1.0
         params: {}
+        horizons:
+          - MAKRO
   cross:
     # Cotton-eksport. Session 90: utvidet med bdi_chg30d.
     # Sub-fase 12.5+ session 113: bdi_chg30d → shipping_pressure med
@@ -110,6 +127,9 @@ families:
         weight: 0.2
         params:
           bull_when: high
+        horizons:
+          - MAKRO
+          - SWING
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     weight: 2
@@ -124,6 +144,9 @@ families:
           horizon_days: 30
           outcome_threshold_pct: 3.0
           min_history_days: 365
+        horizons:
+          - MAKRO
+          - SWING
       - name: analog_avg_return
         weight: 0.5
         params:
@@ -132,6 +155,9 @@ families:
           horizon_days: 30
           min_history_days: 365
 
+        horizons:
+          - MAKRO
+          - SWING
 grade_thresholds:
   A_plus:
     min_score: 11        # ~69% av max=16 (matcher Corn-andel ~70%)

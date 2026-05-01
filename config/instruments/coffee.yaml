@@ -32,6 +32,8 @@ families:
           # Nov-Mar (0.7), harvest Apr-Aug (0.4-0.6).
           # Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec
           monthly_scores: [0.7, 0.7, 0.7, 0.4, 0.4, 0.5, 0.5, 0.6, 1.0, 1.0, 0.8, 0.7]
+        horizons:
+          - MAKRO
   yield:
     # Sub-fase 12.5+ session 88: kombinerer vær-stress (70%) +
     # disease_pressure (30%). Coffee rust (Hemileia vastatrix) er
@@ -42,6 +44,9 @@ families:
         weight: 0.7
         params:
           lookback_months: 1
+        horizons: &id001
+          - MAKRO
+          - SWING
       - name: disease_pressure
         weight: 0.3
         params:
@@ -53,6 +58,7 @@ families:
         weight: 1.0
         params:
           lookback_months: 1
+        horizons: *id001
   enso:
     # Coffee i Brasil: La Niña øker frost-risiko + tørke = bull.
     weight: 2
@@ -60,6 +66,8 @@ families:
       - name: enso_regime
         weight: 1.0
         params: {}
+        horizons:
+          - MAKRO
   conab:
     # Sub-fase 12.7 D3 A10 (session 135): A10 Cecafé månedlig kaffe-eksport
     # lagt til som co-driver med CONAB. Brasil er ~40% av global
@@ -73,11 +81,15 @@ families:
         weight: 0.7
         params:
           commodity: cafe_arabica
+        horizons:
+          - MAKRO
       - name: cecafe_export_change
         weight: 0.3
         params:
           coffee_type: sum
           bull_when: low
+        horizons:
+          - MAKRO
   cross:
     # Sub-fase 12.5+ session 80: erstattet DXY-proxy med direkte BRL-
     # måling via DEXBZUS. USDBRL UP = BRL svakhet = bull for
@@ -110,6 +122,9 @@ families:
           horizon_days: 30
           outcome_threshold_pct: 3.0
           min_history_days: 365
+        horizons:
+          - MAKRO
+          - SWING
       - name: analog_avg_return
         weight: 0.5
         params:
@@ -118,6 +133,9 @@ families:
           horizon_days: 30
           min_history_days: 365
 
+        horizons:
+          - MAKRO
+          - SWING
 grade_thresholds:
   A_plus: {min_score: 11, min_families_active: 4}
   A: {min_score: 8, min_families_active: 3}

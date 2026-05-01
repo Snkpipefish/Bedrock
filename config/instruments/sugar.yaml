@@ -39,6 +39,8 @@ families:
           # entressafra Dec-Mar (growing, yield-fokus).
           # Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec
           monthly_scores: [0.7, 0.7, 0.8, 0.9, 1.0, 1.0, 1.0, 1.0, 0.9, 0.7, 0.6, 0.6]
+        horizons:
+          - MAKRO
   yield:
     # Sub-fase 12.5+ session 86: kombinerer vær-stress (50%) + USDA
     # WASDE S2U (50%). US sugar-produksjon er liten globalt, men
@@ -49,10 +51,16 @@ families:
         weight: 0.5
         params:
           lookback_months: 1
+        horizons: &id001
+          - MAKRO
+          - SWING
       - name: wasde_s2u_change
         weight: 0.5
         params:
           region: US
+        horizons:
+          - MAKRO
+          - SWING
   weather:
     weight: 2
     drivers:
@@ -60,6 +68,7 @@ families:
         weight: 1.0
         params:
           lookback_months: 1
+        horizons: *id001
   enso:
     # Sugar/Brasil: La Niña gir typisk våtere SE-Brazil = mindre
     # bra for høst (regnete dager forsinker zafra) = bull.
@@ -68,6 +77,8 @@ families:
       - name: enso_regime
         weight: 1.0
         params: {}
+        horizons:
+          - MAKRO
   unica:
     # Sub-fase 12.5+ session 112: UNICA Centro-Sul halvmånedlig
     # sukker/etanol-rapport. Brazil er ~40% global sukker-produksjon
@@ -117,6 +128,9 @@ families:
           horizon_days: 30
           outcome_threshold_pct: 3.0
           min_history_days: 365
+        horizons:
+          - MAKRO
+          - SWING
       - name: analog_avg_return
         weight: 0.5
         params:
@@ -125,6 +139,9 @@ families:
           horizon_days: 30
           min_history_days: 365
 
+        horizons:
+          - MAKRO
+          - SWING
 grade_thresholds:
   A_plus: {min_score: 11, min_families_active: 4}
   A: {min_score: 8, min_families_active: 3}

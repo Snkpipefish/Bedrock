@@ -77,6 +77,8 @@ families:
       - name: yield_diff_10y
         weight: 0.25
         params: {foreign_series: IRLTLT01AUM156N, bull_when: low}  # Lav diff (AU≥US) = bull AUD
+        horizons:
+          - MAKRO
   structure:
     drivers:
       - name: range_position
@@ -103,9 +105,15 @@ families:
       - name: analog_hit_rate
         weight: 0.5
         params: {asset_class: fx, k: 5, horizon_days: 30, outcome_threshold_pct: 2.0, min_history_days: 365}
+        horizons:
+          - MAKRO
+          - SWING
       - name: analog_avg_return
         weight: 0.5
         params: {asset_class: fx, k: 5, horizon_days: 30, min_history_days: 365}
+        horizons:
+          - MAKRO
+          - SWING
 
 grade_thresholds:
   A_plus: {min_pct_of_max: 0.75, min_families: 4}

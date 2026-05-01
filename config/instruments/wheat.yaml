@@ -32,6 +32,8 @@ families:
           # Jun-Jul.
           # Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec
           monthly_scores: [0.4, 0.4, 0.7, 0.9, 1.0, 0.8, 0.5, 0.3, 0.6, 0.6, 0.5, 0.4]
+        horizons:
+          - MAKRO
   yield:
     # Session 98: utvidet med crop_progress_stage (NASS GOOD/EXCELLENT).
     # Vekter:
@@ -46,15 +48,24 @@ families:
         weight: 0.2
         params:
           lookback_months: 1
+        horizons: &id001
+          - MAKRO
+          - SWING
       - name: crop_progress_stage
         weight: 0.2
         params:
           metric: GOOD_EXCELLENT
           mode: low_is_bull
+        horizons:
+          - MAKRO
+          - SWING
       - name: wasde_s2u_change
         weight: 0.4
         params:
           region: US
+        horizons:
+          - MAKRO
+          - SWING
       - name: disease_pressure
         weight: 0.1
         params:
@@ -74,12 +85,16 @@ families:
         weight: 0.55
         params:
           lookback_months: 1
+        horizons: *id001
       - name: drought_monitor
         weight: 0.45
         params:
           aoi: us
           metric: d2_pct
           bull_when: high
+        horizons:
+          - MAKRO
+          - SWING
   enso:
     # Wheat US-plains: La Niña gir tørrere = bull (lavere yield).
     weight: 2
@@ -87,6 +102,8 @@ families:
       - name: enso_regime
         weight: 1.0
         params: {}
+        horizons:
+          - MAKRO
   cross:
     # Sub-fase 12.5+ session 90: utvidet med bdi_chg30d (shipping).
     # Wheat-eksport (US #2 globalt) er sensitiv til både USD og BDI.
@@ -130,6 +147,9 @@ families:
           # Sub-fase 12.7 D2 session 133 (A3): All Wheat (cc=107)
           # FAS ESR demand-signal. dxy 0.50 → 0.40, shipping 0.20 →
           # 0.15. Sum=1.00 per § 19.5 Del C+ måltilstand.
+        horizons:
+          - MAKRO
+          - SWING
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     weight: 2
@@ -142,6 +162,9 @@ families:
           horizon_days: 30
           outcome_threshold_pct: 3.0
           min_history_days: 365
+        horizons:
+          - MAKRO
+          - SWING
       - name: analog_avg_return
         weight: 0.5
         params:
@@ -150,6 +173,9 @@ families:
           horizon_days: 30
           min_history_days: 365
 
+        horizons:
+          - MAKRO
+          - SWING
 grade_thresholds:
   A_plus: {min_score: 11, min_families_active: 4}
   A: {min_score: 8, min_families_active: 3}

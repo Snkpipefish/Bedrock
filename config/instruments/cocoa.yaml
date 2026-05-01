@@ -32,6 +32,8 @@ families:
           # apr-sep. Pod-development apr-jul = yield-determinerende.
           # Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec
           monthly_scores: [0.6, 0.6, 0.6, 0.7, 0.9, 1.0, 1.0, 0.8, 0.6, 0.7, 0.8, 0.7]
+        horizons:
+          - MAKRO
   yield:
     weight: 3
     drivers:
@@ -39,6 +41,9 @@ families:
         weight: 1.0
         params:
           lookback_months: 1
+        horizons: &id001
+          - MAKRO
+          - SWING
   weather:
     weight: 2
     drivers:
@@ -46,12 +51,15 @@ families:
         weight: 1.0
         params:
           lookback_months: 1
+        horizons: *id001
   enso:
     weight: 2
     drivers:
       - name: enso_regime
         weight: 1.0
         params: {}
+        horizons:
+          - MAKRO
   cross:
     # Sub-fase 12.5+ session 113: bdi_chg30d → shipping_pressure med
     # eksplisitt index=BDI (Baltic-suite-rebrand).
@@ -85,9 +93,15 @@ families:
       - name: analog_hit_rate
         weight: 0.5
         params: {asset_class: softs, k: 5, horizon_days: 30, outcome_threshold_pct: 3.0, min_history_days: 365}
+        horizons:
+          - MAKRO
+          - SWING
       - name: analog_avg_return
         weight: 0.5
         params: {asset_class: softs, k: 5, horizon_days: 30, min_history_days: 365}
+        horizons:
+          - MAKRO
+          - SWING
 
 grade_thresholds:
   A_plus: {min_score: 11, min_families_active: 4}
