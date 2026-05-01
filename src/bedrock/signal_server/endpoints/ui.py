@@ -1151,28 +1151,54 @@ def _systemctl_user_is_active(service: str) -> tuple[str, str]:
     sub_state er sub-state fra systemd ("running", "dead", "failed", etc).
     Ved feil/timeout returneres ("unknown", "unknown") — UI skal ikke
     krasje fordi systemd er midlertidig utilgjengelig.
+
+    Cross-user-tilfelle: bedrock-server kan kjøre som root (system-
+    service) mens bedrock-bot kjører som user (user-service). I den
+    konstellasjonen må vi spesifisere XDG_RUNTIME_DIR til eieren av
+    bot-tjenesten. Vi prøver hver eksisterende `/run/user/<uid>` med
+    en aktiv user-systemd inntil én svarer med ikke-tomme felter.
     """
+    import os
     import subprocess
 
+    candidate_envs: list[dict[str, str] | None] = [None]  # current env first
     try:
-        result = subprocess.run(
-            ["systemctl", "--user", "show", service, "--property=ActiveState,SubState"],
-            capture_output=True,
-            text=True,
-            timeout=2.0,
-            check=False,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        return ("unknown", "unknown")
+        for entry in os.listdir("/run/user"):
+            if not entry.isdigit():
+                continue
+            xdg = f"/run/user/{entry}"
+            if not os.path.isdir(xdg):
+                continue
+            env = os.environ.copy()
+            env["XDG_RUNTIME_DIR"] = xdg
+            candidate_envs.append(env)
+    except OSError:
+        pass
 
-    state = "unknown"
-    sub_state = "unknown"
-    for line in result.stdout.splitlines():
-        if line.startswith("ActiveState="):
-            state = line.split("=", 1)[1].strip() or "unknown"
-        elif line.startswith("SubState="):
-            sub_state = line.split("=", 1)[1].strip() or "unknown"
-    return (state, sub_state)
+    for env in candidate_envs:
+        try:
+            result = subprocess.run(
+                ["systemctl", "--user", "show", service, "--property=ActiveState,SubState"],
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+                check=False,
+                env=env,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            continue
+
+        state = ""
+        sub_state = ""
+        for line in result.stdout.splitlines():
+            if line.startswith("ActiveState="):
+                state = line.split("=", 1)[1].strip()
+            elif line.startswith("SubState="):
+                sub_state = line.split("=", 1)[1].strip()
+        if state and sub_state:
+            return (state, sub_state)
+
+    return ("unknown", "unknown")
 
 
 def _read_daily_loss(state_dir: Path) -> dict[str, Any]:
