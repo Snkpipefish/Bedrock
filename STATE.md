@@ -158,7 +158,7 @@
     6. **YAML-rebalansering**: per `docs/12_6_analyzer_plan.md` thresholds: drop hvis median |IC|<0.05 + monotonisitet<0.4; øk vekt hvis |IC|>0.10 + monotonisitet>0.7; drop lavere-IC ved cross-corr>0.7. 22 instrumenter batch-vis. Snapshot-baseline regenereres som ny anker. Pydantic familie-sum=1.0 hardlås.
     6.5. **Dead-driver-cleanup**: slett `currency_cross_trend` + `igc_stocks_change` fra registry+kode+tester (bekreftet dead via 42/44 harvest-resultat — de 2 manglende driverne er nettopp disse). Klumpes i samme commit-runde som rebalansering-state.
     Stop-criterion: rebalansering-YAMLs på main, snapshot-baseline ny anker, dead drivers ute, sub-fase 12.6 LUKKET-tag (`v0.12.6-fase-12.6-LUKKET`). Estimert 6-8t.
-  - **Open tech-gjeld** (uendret): event_distance trippel-bug PRE-REBALANSERINGS-BLOCKER (lukkes av session 137), FRED-fetcher hard-fail-policy, PPLT SEC EDGAR Plan-S, NOPA WASDE-utvidelse, CONAB Café-PDF-historikk (KRITISK 3), `src/bedrock/fetch/fas_esr.py` L134 stale docstring, AAII bull_bear_spread-bug, setup→bot signal-format-mismatch, schema-drift (3 harvester-tabeller mangler i `schemas.py`).
+  - **Open tech-gjeld** (oppdatert 2026-05-01): ~~event_distance trippel-bug~~ (FIXET av session 137 commits 8003380/78e36c6/e994abe — venter på harvest-completion for full DB-state); FRED-fetcher hard-fail-policy, PPLT SEC EDGAR Plan-S, NOPA WASDE-utvidelse, CONAB Café-PDF-historikk (KRITISK 3), `src/bedrock/fetch/fas_esr.py` L134 stale docstring, AAII bull_bear_spread-bug, setup→bot signal-format-mismatch, schema-drift (3 harvester-tabeller mangler i `schemas.py`).
 - **event_distance trippel-bug (eskalert 2026-04-30 audit-runde 3 → BLOCKER):** Driveren har Type-D kompounded bug i 3 lag: (A) Engine `_now`-propagering mangler — `_score_families` propagerer kun `_direction`+`_horizon` til driver-params, ikke `_now`; driver faller tilbake til wallclock `datetime.now()`. (B) `ingest_forex_factory` setter `fetched_at = event_ts` uten publikasjons-lag → AsOfDateStore filtrerer ut alle samme-dag-events for midnatts-ref_date (verifisert: 4877 underlying events → 0 i AsOfDateStore for ref_date=2010-02-12). (C) Driver-design `min_hours=4` for sjenerøs for backtest-snapshot kl 00:00 UTC. **Konsekvens:** alle 3153 event_distance-rader har value=1.0 (empty_score), driveren vil rapportere IC=0 i analyzer og bli droppet fra YAML — som så må re-introduseres etter fix → dobbel rebalansering. **Må fikses FØR analyzer kjøres.** Fix-spec i `docs/codebase_audit_2026_04_30.md` Sjekk 9.5.
 - **Git-modus:** Nivå 1 aktivt under sub-fase 12.5+ docs/cleanup-pass. Auto-push-hook fra Nivå 1 fungerer fortsatt på enhver branch. PR-flyt valgfri.
 
@@ -409,6 +409,74 @@ ferdig og 12.6-rebalansering er gjort.
 ---
 
 ## Session log (newest first)
+
+### 2026-05-01 — Session 137 (re-purposed): event_distance pre-rebalanserings-fix + detached re-harvest
+
+**Scope:** Audit-runde 5 sub-fase 12.6 fix-spec Steg 1+2+3+4. Fjerne event_distance trippel-bug (Type A engine `_now`-propagering, Type B Forex Factory publikasjons-lag, Type C-resolution harvest noon-shift) og kjøre re-harvest. Session-nummer 137 er gjenbrukt (forrige 137 var UI-refresh 2026-04-30) per audit-runde 5 oppdelingen i `c87e278`.
+
+**Helse ved start:** rød (kjent) — fetch-enso failed + monitor failed + 5 aging fetchers. Påvirker ikke fix-arbeidet (engine + ingest + harvest, ikke fetchers).
+
+**Steg 1 — Type A: Engine `_now`-propagering (commit `8003380`):**
+- `Engine.score(now: datetime | None = None)` ny param.
+- `_score_families` legger `_now=now.isoformat() if now else None` i `params_with_dir` ved siden av eksisterende `_direction`+`_horizon`.
+- `_compute_scores` i orchestrator/signals.py forwarder `run_ts` til `eng.score(..., now=now)`.
+- `risk.py:201-205` wallclock-fallback bevart for live-mode + tester.
+- 2 nye tester i `tests/unit/test_engine_now_propagation.py` (now propagated + wallclock fallback).
+
+**Steg 2 — Type B: Forex Factory publikasjons-lag (commit `78e36c6`):**
+- `ingest_forex_factory(... publication_lag_days: int = 7)` ny param.
+- `filtered["fetched_at"] = filtered["event_ts"] - pd.Timedelta(days=publication_lag_days)` (var `= event_ts`).
+- CLI-arg `--publication-lag-days INT` (default 7).
+- 3 nye tester (default lag, eksplisitt lag=14, lag=0).
+- Re-importert `bedrock manuell data/forex_factory_2007_2025.csv` med `--publication-lag-days 7`. Resultat: 41063 total econ_events, 41027 har `fetched_at < event_ts` (de øvrige 36 er live-fetcher-rader fra apr 2026 hvor `fetched_at = datetime.now(UTC)` er korrekt).
+
+**Steg 3 — Type C-resolution: Harvest noon-shift (commit `e994abe` + audit-doc-patch `b3d3480`):**
+- Smoke-test på Cocoa med A+B fixed + midnatt-snapshot ga 78/78 = 1.0 (alle empty_score). Bekreftet eksakt audit-doc Sjekk 9.5 linje 215-prediksjon ("score=1.0 nesten alltid").
+- Hand-rolled test: scores (1.0/1.0/1.0) ved `_now=ref_date+0h` vs (1.0/0.75/1.0) ved `_now=ref_date+12h`.
+- Tidligere "HOPP OVER"-anbefaling deprecated. Resolution er harvest-side (én linje), ikke driver-side: `now=(ref_ts + pd.Timedelta(hours=12)).to_pydatetime()` i `harvest_one`. Driver beholder `min_hours=4` (intensjonell live-design). Live-mode bruker wallclock-fallback.
+- Audit-doc Sjekk 9.5 patchet med smoke-test-evidence + ny resolution-anbefaling (commit `b3d3480`).
+
+**Steg 4 — Backfill (commits `6659554`, `b97a1eb`):**
+- `DELETE FROM driver_observations WHERE driver_name='event_distance'` slettet 35794 buggy rader.
+- **Resume-skip-bug oppdaget**: `already_done_ref_dates` filtrerte per (instrument, horizon, direction) men ikke per driver. Re-kjøring av harvest skippet alle ref_dates fordi andre drivere fortsatt hadde rader. Fix: `--only-driver NAME`-flag (`6659554`) endrer resume-filteret til å regne en ref_date som "done" KUN hvis akkurat denne driveren har en rad.
+- `BEDROCK_HARVEST_ONLY_DRIVER`-env-var lagt til i `run_parallel_harvest.sh` (`b97a1eb`).
+- Smoke-test på Cocoa + noon-shift: 8 rader, 6 distinct values, range 0.0625-0.7292, avg 0.333. Stop-criterion møtt.
+- Smoke-test-rader cleared før detached harvest startet for å unngå dupliserte writes (var trygt — INSERT OR IGNORE — men cleaner).
+
+**Detached parallel harvest startet 2026-05-01 12:54 CEST:**
+- Wrapper PID 79325, 4 grupper × ~5-6 instrumenter = 22 totalt med per-instrument start_date.
+- Logs: `data/_meta/harvest_137_event_distance.log` (wrapper-summary) + `data/_meta/harvest_g{1..4}.log` (per gruppe).
+- ETA ~20h (Cocoa 1-combo = 36min × 6 combos × 22 instr / 4 paralleller ≈ 19.8h).
+- Tidlig progress (etter 10 min): 7 rader fra 4 instrumenter (Cotton/CrudeOil/Sugar/GBPUSD) med 3 distinct values.
+- `nohup nice -n 10 ionice -c 3` så det overlever shell-exit + ikke stjeler I/O fra andre prosesser.
+
+**Tester:** 2394/2394 grønne (full pytest-suite, 926s/15min). Pyright src/ 0/0/0.
+
+**Commits (alle på main, auto-pushet):**
+- `8003380` feat(engine): propagere _now til driver-params via Engine.score(now=...)
+- `78e36c6` fix(ingest): forex_factory publication_lag_days=7 (look-ahead-fri backtest)
+- `6659554` feat(harvest): --only-driver-flag for målrettet backfill etter bug-fix
+- `e994abe` feat(harvest): noon-shift for backtest now-context (Type C-resolution)
+- `b3d3480` docs(audit): event_distance Type C-resolution — harvest-side noon-shift
+- `b97a1eb` feat(harvest): BEDROCK_HARVEST_ONLY_DRIVER env-var for parallel-wrapper
+
+**Stop-criterion oppfylt:**
+- A+B+C-resolution implementert + tester grønne ✅
+- Pyright src/ 0/0/0 ✅
+- Smoke-test event_distance ≥5 distinct values ✅ (Cocoa 6 distinct fra 8 rader)
+- Forex CSV re-importert ✅ (41027 rader fetched_at < event_ts)
+- STATE-update + commit (denne) ✅
+
+**Session 138 (analyzer + rebalansering) venter på harvest-completion** — sjekk progress med:
+```
+sqlite3 data/bedrock.db "SELECT COUNT(*), COUNT(DISTINCT driver_value), COUNT(DISTINCT instrument) FROM driver_observations WHERE driver_name='event_distance'"
+ps -p 79325 -o etime= 2>/dev/null  # wrapper alive?
+tail -f data/_meta/harvest_g1.log  # per-gruppe progress
+```
+
+**Neste:** Session 138 = analyzer + YAML-rebalansering + dead-driver-cleanup. Forventet harvest-completion ~2026-05-02 ~08:00 CEST.
+
+---
 
 ### 2026-04-30 — Session 138: Bot-rensing + horisont-spesifikk exit-logikk (parallell med harvest-session 136)
 
