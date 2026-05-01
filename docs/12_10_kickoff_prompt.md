@@ -1,7 +1,11 @@
 # Kickoff-prompt for sub-fase 12.10 (ny session-kontekst)
 
-Lim inn følgende i ny Claude Code-session. Forutsetter at sub-fase
-12.9 D6 er lukket først.
+Lim inn følgende i ny Claude Code-session.
+
+**12.10 starter parallelt med 12.9 D5/D6** — ingen avhengighet.
+Bot fortsetter å gå på demo-konto i bakgrunnen mens vi gjør driver-
+rebalansering. D6 (scalp_edge retire) tas senere som egen task når
+operatør sier OK; det blokkerer ikke 12.10.
 
 ---
 

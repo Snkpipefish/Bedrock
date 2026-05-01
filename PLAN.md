@@ -2689,10 +2689,15 @@ systematisk asset-class-bias-flipp. Ny baseline låst som anker.
 
 ---
 
-## 22. Sub-fase 12.10 — driver-rebalansering (PLANLAGT, åpnes etter 12.9 D6)
+## 22. Sub-fase 12.10 — driver-rebalansering (PLANLAGT, parallelt med 12.9 D5/D6)
 
-**Status:** Planlagt 2026-05-02 i parallell med pågående 12.9 D5-vindu.
-Skal startes i ny session-kontekst når 12.9 lukkes med D6.
+**Status:** Planlagt 2026-05-02. Startes i ny session-kontekst når
+operatør vil — uavhengig av D5/D6-status. Bot kjører på demo i
+bakgrunnen; 12.10-arbeid endrer kun signal-generering, ikke
+trade-flyt.
+
+D6 (scalp_edge retire) tas som egen senere task når operatør sier OK;
+ikke gating for 12.10.
 
 **Kjør på demo-konto fortsatt — ingen live-cutover under hele 12.10.**
 
