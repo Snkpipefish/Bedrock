@@ -180,4 +180,14 @@ def test_pipeline_health_includes_horizons(tmp_path: Path) -> None:
                 assert "M" in src["horizons"]
                 assert "Sw" in src["horizons"]
                 assert "Sc" in src["horizons"]
+            # Per § 20.2: COT er primærkilde alle 3 horisonter
+            # (M=percentil, Sw=delta, Sc=fre-release-event)
+            if src["name"] == "cot_disaggregated":
+                assert src["horizons"] == ["M", "Sw", "Sc"]
+            # Crop_progress er mandag-release → scalp-event også
+            if src["name"] == "crop_progress":
+                assert "Sc" in src["horizons"]
+            # Crypto_sentiment: intra-day, ikke macro
+            if src["name"] == "crypto_sentiment":
+                assert src["horizons"] == ["Sw", "Sc"]
     assert found_known, "calendar_ff burde være i fetch.yaml + horisont-mapping"

@@ -579,28 +579,54 @@ _GROUP_ORDER = [
 #   Sc = Scalp (minutter–timer): vol-ekspansjon rundt scheduled
 #        releases + surprise-vs-consensus + real-time triggere
 #
-# Disse er hard-kodet for å matche YAML-driver-wiring + § 20.2 (PLAN
-# sub-fase 12.8). Mismatch mot driver-bruk = bug i ett av dokumentene.
+# § 20.2 nøkkel-innsikt 1: "Samme kilde, helt ulik bruk per horisont".
+# COT er macro-percentil + swing-delta + scalp-mandag-gap-trigger.
+# Wasde/crop_progress/EIA/FAS er macro-data + swing-release-drift +
+# scalp-release-event. Vi merker derfor flere horisonter når det
+# matcher § 20.2 sin "primærkilder per horisont"-liste.
 _FETCHER_HORIZONS: dict[str, list[str]] = {
+    # Cross-asset-ledere + EMA/strukturell teknisk: alle 3 horisonter
     "prices": ["M", "Sw", "Sc"],
+    # FRED-basert: B1 (HY OAS, NFCI, NetFedLiq, VIX-term, yield-diff,
+    # real-yield, AAII, crypto F&G, ETF-holdings). Macro-regime,
+    # swing-mean-reversion, scalp vol-regime-sizing.
     "fundamentals": ["M", "Sw", "Sc"],
+    # Calendar_ff er scalp-KJERNE per § 20.2 + pre-event swing-positioning.
+    # Ikke macro-input (regime ikke bestemt av enkelt-events).
     "calendar_ff": ["Sw", "Sc"],
-    "cot_disaggregated": ["M", "Sw"],
-    "cot_legacy": ["M", "Sw"],
-    "cot_ice": ["M", "Sw"],
-    "cot_euronext": ["M", "Sw"],
+    # COT alle leverandører: M=12m/3y-percentil, Sw=delta-by-week,
+    # Sc=fre-release → man-gap-trigger (§ 20.2 Swing).
+    "cot_disaggregated": ["M", "Sw", "Sc"],
+    "cot_legacy": ["M", "Sw", "Sc"],
+    "cot_ice": ["M", "Sw", "Sc"],
+    "cot_euronext": ["M", "Sw", "Sc"],
+    # USDA WASDE: macro-S/D, swing-release-drift, scalp-release-event.
     "wasde": ["M", "Sw", "Sc"],
-    "crop_progress": ["M", "Sw"],
+    # Crop-progress: mandag-release. Macro-sesong, swing-tirsdag-gap,
+    # scalp-release-event.
+    "crop_progress": ["M", "Sw", "Sc"],
+    # Brasil agri-statistikk: månedlig kadens, kun macro.
     "conab": ["M"],
     "unica": ["M"],
+    # Baltic Dry Index: månedlig regime, macro-only.
     "shipping": ["M"],
+    # Vær: macro-regime + swing-forecast-shifts. Ikke scalp (forecasts
+    # endrer seg ikke minutt-for-minutt på meningsfulle skalaer).
     "weather": ["M", "Sw"],
+    # ENSO: kvartals-regime, kun macro.
     "enso": ["M"],
+    # EIA: ons-release. Macro-S/D, swing-release-drift, scalp-event.
     "eia_inventories": ["M", "Sw", "Sc"],
+    # COMEX warehouse: ukentlig oppdatering, macro-stress + swing-delta.
     "comex": ["M", "Sw"],
+    # USGS seismic: macro-baseline + scalp real-time M≥6 trigger
+    # (§ 20.2 eksplisitt scalp-detektor).
     "seismic": ["M", "Sc"],
+    # News intel: sentiment per dag (swing) + scored-events (scalp).
     "news_intel": ["Sw", "Sc"],
-    "crypto_sentiment": ["M", "Sw"],
+    # Crypto sentiment (F&G + CoinGecko): daglig kadens, swing-trigger
+    # + scalp-real-time crypto-news. Ikke macro-regime-input.
+    "crypto_sentiment": ["Sw", "Sc"],
 }
 
 
