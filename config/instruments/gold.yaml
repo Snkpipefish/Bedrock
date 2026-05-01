@@ -86,8 +86,11 @@ families:
     # real_yield 0.30 + dxy 0.20 + vix 0.10 + comex 0.15 + mining 0.10 +
     # etf 0.15 = 1.00.
     drivers:
+      # Sub-fase 12.6 (session 138): real_yield 0.30→0.35 — sterkest IC i
+      # hele datasettet (median |IC|=0.541 for Gold 90d, mono=1.00 SELL).
+      # vix_regime trimmet 0.10→0.05 for å holde familie-sum=1.00.
       - name: real_yield
-        weight: 0.3
+        weight: 0.35
         params:
           bull_when: low
       - name: dxy_chg5d
@@ -96,7 +99,7 @@ families:
           bull_when: negative
           window: 5
       - name: vix_regime
-        weight: 0.1
+        weight: 0.05
         params:
           invert: true
       - name: comex_stress

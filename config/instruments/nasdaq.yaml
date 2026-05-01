@@ -129,14 +129,14 @@ families:
           mode: continuation
   risk:
     polarity: neutral  # ADR-006: vol_regime trend-friendly begge retninger
-    # B1 D1 (session 129): credit_spread_change@0.25 lagt til.
-    # B2 D2 (session 131): vix_term_ratio@0.20 lagt til som regime-/sizing-
-    # driver. Andre vekter trimmet proporsjonalt fra B1-tilstanden:
-    # vol_regime 0.55→0.45, event_distance 0.20→0.15, credit 0.25→0.20.
-    # Sum = 1.00.
+    # Sub-fase 12.6 (session 138): DROP vix_term_ratio (median |IC|=0.029 +
+    # median monotonisitet=0.00 — eneste driver som feiler begge strict
+    # PLAN § 12.6-tersklene). 0.20-vekten redistribuert proporsjonalt
+    # til vol_regime + credit_spread_change. event_distance uendret pr.
+    # Strategi 3.
     drivers:
       - name: vol_regime
-        weight: 0.45
+        weight: 0.59
         params:
           period: 14
           lookback: 252
@@ -148,11 +148,8 @@ families:
           impact_levels: [High]
           min_hours: 4
       - name: credit_spread_change
-        weight: 0.20
+        weight: 0.26
         params: {bull_when: low}
-      - name: vix_term_ratio
-        weight: 0.20
-        params: {numerator_series: VIX3M, denominator_series: VIXCLS}
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     drivers:

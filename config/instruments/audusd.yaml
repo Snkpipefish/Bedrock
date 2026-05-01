@@ -59,6 +59,11 @@ families:
     # B1 D1 (sub-fase 12.7, session 129): yield_diff_10y@0.30 lagt til.
     # AUD-spesifikt: VIX-vekt litt høyere enn EUR/GBP fordi AUD er
     # commodity-correlated. Sum = 1.00.
+    # Sub-fase 12.6 (session 138): vix_regime 0.20→0.25 — sterk
+    # AUD-spesifikk signal (median |IC|=0.322 for AUDUSD 90d, mono=1.00
+    # SELL — risk-off-regimer slår hardere på AUD enn andre G10).
+    # yield_diff_10y trimmet 0.30→0.25 — borderline-svak (median |IC|=0.052,
+    # median mono=0.25). Sum = 1.00.
     drivers:
       - name: real_yield
         weight: 0.20
@@ -67,10 +72,10 @@ families:
         weight: 0.30
         params: {bull_when: negative, window: 5}
       - name: vix_regime
-        weight: 0.20
+        weight: 0.25
         params: {invert: false}
       - name: yield_diff_10y
-        weight: 0.30
+        weight: 0.25
         params: {foreign_series: IRLTLT01AUM156N, bull_when: low}  # Lav diff (AU≥US) = bull AUD
   structure:
     drivers:

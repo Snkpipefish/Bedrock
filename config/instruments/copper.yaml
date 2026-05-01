@@ -54,15 +54,18 @@ families:
     # copper_handling=skip (CME har fjernet reg/elig-skillet for HG;
     # bruker kun WoW-trend i registered/total). Vekt 0.20 — relativt
     # lavere enn gull/sølv siden kobber-stocks delvis dekkes av LME.
+    # Sub-fase 12.6 (session 138): real_yield 0.20→0.25 — sterk signal
+    # (median |IC|=0.468 for Copper 90d, mono=1.00 SELL). vix_regime
+    # trimmet 0.15→0.10 for å holde familie-sum=1.00.
     drivers:
       - name: real_yield
-        weight: 0.2
+        weight: 0.25
         params: {bull_when: low}
       - name: dxy_chg5d
         weight: 0.3
         params: {bull_when: negative, window: 5}
       - name: vix_regime
-        weight: 0.15
+        weight: 0.10
         params: {invert: false}
       - name: comex_stress
         weight: 0.2

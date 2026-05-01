@@ -58,15 +58,18 @@ families:
     # WoW/MoM-skala). Vekter omfordelt til § 19.5 Del C+ måltilstand:
     # real_yield 0.15 + dxy 0.25 + vix 0.10 + comex 0.20 + mining 0.10 +
     # etf 0.20 = 1.00.
+    # Sub-fase 12.6 (session 138): real_yield 0.15→0.20 — sterk
+    # instrument-spesifikk signal (median |IC|=0.382 for Silver 90d).
+    # vix_regime trimmet 0.10→0.05 for å holde familie-sum=1.00.
     drivers:
       - name: real_yield
-        weight: 0.15
+        weight: 0.20
         params: {bull_when: low}
       - name: dxy_chg5d
         weight: 0.25
         params: {bull_when: negative, window: 5}
       - name: vix_regime
-        weight: 0.1
+        weight: 0.05
         params: {invert: true}
       - name: comex_stress
         weight: 0.2
