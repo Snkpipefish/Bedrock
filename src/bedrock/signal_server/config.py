@@ -18,6 +18,7 @@ DEFAULT_PORT = 5100
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_DATA_ROOT = Path("data")
 DEFAULT_TRADE_LOG_PATH = Path.home() / "bedrock" / "data" / "bot" / "signal_log.json"
+DEFAULT_BOT_STATE_DIR = Path.home() / "bedrock" / "data" / "bot"
 DEFAULT_WEB_ROOT = Path("web")
 
 
@@ -68,6 +69,12 @@ class ServerConfig(BaseModel):
 
     # UI-fane Kartrommet (session 50)
     fetch_config_path: Path = Field(default=Path("config/fetch.yaml"))
+
+    # UI-fane Datakilder bot-status-panel (sub-fase 12.9 D5).
+    # Bot persisterer daily_loss_state.json + trade_log.jsonl her;
+    # UI leser kun, skriver aldri.
+    bot_state_dir: Path = Field(default=DEFAULT_BOT_STATE_DIR)
+    bot_service_name: str = "bedrock-bot.service"
 
     # Feature-flagge (sanity-check for at vi er i bedrock-versjonen,
     # ikke i gammel scalp_edge)

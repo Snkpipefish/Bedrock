@@ -884,6 +884,93 @@ span.status-pill {
 .status-aging { background: var(--c-warn-soft); color: var(--c-warn); }
 .status-stale { background: var(--c-neg-soft); color: var(--c-neg); }
 .status-missing { background: var(--c-border); color: var(--c-ink-muted); }
+.status-ok { color: var(--c-pos); }
+.status-warn { color: var(--c-warn); }
+.status-fail { color: var(--c-neg); }
+
+/* ─── Bot-status panel (sub-fase 12.9 D5) ──────────────── */
+.bot-status {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  box-shadow: var(--shadow-1);
+}
+.bot-status-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-2);
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--c-border);
+}
+.bot-status-pill {
+  display: inline-block;
+  padding: 2px 12px;
+  border-radius: 12px;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.bot-status-pill.ok    { background: var(--c-pos-soft);  color: var(--c-pos); }
+.bot-status-pill.warn  { background: var(--c-warn-soft); color: var(--c-warn); }
+.bot-status-pill.fail  { background: var(--c-neg-soft);  color: var(--c-neg); }
+.bot-status-pill.idle  { background: var(--c-border);    color: var(--c-ink-muted); }
+.bot-status-pill.unknown { background: var(--c-border);  color: var(--c-ink-muted); }
+.bot-status-svc {
+  font-size: var(--fs-xs);
+  color: var(--c-ink-muted);
+}
+.bot-status-sub {
+  font-size: var(--fs-xs);
+  color: var(--c-ink-muted);
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.bot-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--sp-2);
+}
+.bot-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bot-stat-wide { grid-column: 1 / -1; }
+.bot-stat-label {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--c-ink-muted);
+}
+.bot-stat-value {
+  font-size: var(--fs-md);
+  font-variant-numeric: tabular-nums;
+}
+.bot-stat-meta {
+  font-size: var(--fs-xs);
+  color: var(--c-ink-muted);
+}
+
+/* ─── Horisont-chips i pipeline-tabell (per § 20.2) ──────── */
+.hz-chip {
+  display: inline-block;
+  padding: 1px 7px;
+  margin-right: 3px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  vertical-align: middle;
+}
+.hz-macro { background: rgba(96, 165, 250, 0.15); color: #60a5fa; }
+.hz-swing { background: rgba(168, 162, 225, 0.20); color: #c4b5fd; }
+.hz-scalp { background: rgba(244, 114, 182, 0.20); color: #f472b6; }
+.hz-none  { background: var(--c-border); color: var(--c-ink-muted); }
 
 /* ─────────────────────────────────────────────────────────────
    Sentiment-fane (sub-fase 12.5+ session 114)

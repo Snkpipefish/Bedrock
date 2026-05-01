@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -569,6 +569,41 @@ _GROUP_ORDER = [
 ]
 
 
+# Per § 20.2 horisont-bruk-prinsipper. Hver fetcher merkes med
+# horisontene den bidrar feature-input til:
+#
+#   M  = Macro (uker–måneder): regime + posisjonerings-ekstremer +
+#        strukturell S/D, ukentlig–månedlig kadens
+#   Sw = Swing (dager–uker): katalysator + teknisk konfluens +
+#        weekly-release-drift + mean-reversion
+#   Sc = Scalp (minutter–timer): vol-ekspansjon rundt scheduled
+#        releases + surprise-vs-consensus + real-time triggere
+#
+# Disse er hard-kodet for å matche YAML-driver-wiring + § 20.2 (PLAN
+# sub-fase 12.8). Mismatch mot driver-bruk = bug i ett av dokumentene.
+_FETCHER_HORIZONS: dict[str, list[str]] = {
+    "prices": ["M", "Sw", "Sc"],
+    "fundamentals": ["M", "Sw", "Sc"],
+    "calendar_ff": ["Sw", "Sc"],
+    "cot_disaggregated": ["M", "Sw"],
+    "cot_legacy": ["M", "Sw"],
+    "cot_ice": ["M", "Sw"],
+    "cot_euronext": ["M", "Sw"],
+    "wasde": ["M", "Sw", "Sc"],
+    "crop_progress": ["M", "Sw"],
+    "conab": ["M"],
+    "unica": ["M"],
+    "shipping": ["M"],
+    "weather": ["M", "Sw"],
+    "enso": ["M"],
+    "eia_inventories": ["M", "Sw", "Sc"],
+    "comex": ["M", "Sw"],
+    "seismic": ["M", "Sc"],
+    "news_intel": ["Sw", "Sc"],
+    "crypto_sentiment": ["M", "Sw"],
+}
+
+
 def _classify_staleness(has_data: bool, age_hours: float | None, stale_hours: float) -> str:
     """Klassifiser staleness-nivå.
 
@@ -1078,6 +1113,7 @@ def pipeline_health() -> Response:
                 st.latest_observation.isoformat() if st.latest_observation is not None else None
             ),
             "cron": spec.cron if spec else None,
+            "horizons": _FETCHER_HORIZONS.get(st.name, []),
         }
         groups.setdefault(group_name, []).append(source)
 
@@ -1098,6 +1134,143 @@ def pipeline_health() -> Response:
     return jsonify(
         {
             "groups": ordered_groups,
+            "last_check": now.isoformat(),
+        }
+    )
+
+
+# ─────────────────────────────────────────────────────────────
+# Bot-status (sub-fase 12.9 D5)
+# ─────────────────────────────────────────────────────────────
+
+
+def _systemctl_user_is_active(service: str) -> tuple[str, str]:
+    """Returner (state, sub_state) fra `systemctl --user`.
+
+    state ∈ {"active", "inactive", "failed", "activating", "unknown"}.
+    sub_state er sub-state fra systemd ("running", "dead", "failed", etc).
+    Ved feil/timeout returneres ("unknown", "unknown") — UI skal ikke
+    krasje fordi systemd er midlertidig utilgjengelig.
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["systemctl", "--user", "show", service, "--property=ActiveState,SubState"],
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return ("unknown", "unknown")
+
+    state = "unknown"
+    sub_state = "unknown"
+    for line in result.stdout.splitlines():
+        if line.startswith("ActiveState="):
+            state = line.split("=", 1)[1].strip() or "unknown"
+        elif line.startswith("SubState="):
+            sub_state = line.split("=", 1)[1].strip() or "unknown"
+    return (state, sub_state)
+
+
+def _read_daily_loss(state_dir: Path) -> dict[str, Any]:
+    """Les daily_loss_state.json, returner snapshot eller {}."""
+    state_file = state_dir / "daily_loss_state.json"
+    if not state_file.exists():
+        return {}
+    try:
+        raw = json.loads(state_file.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        log.warning("[UI] daily_loss_state.json parse-feil: %s", exc)
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        "date": raw.get("date"),
+        "daily_loss": raw.get("daily_loss"),
+    }
+
+
+def _read_last_trade(state_dir: Path) -> dict[str, Any] | None:
+    """Les siste linje av trade_log.jsonl. None hvis fil mangler/tom."""
+    log_file = state_dir / "trade_log.jsonl"
+    if not log_file.exists():
+        return None
+    try:
+        # Filen er typisk små-til-mellomstore (én linje per closed trade);
+        # les alt og ta siste linje. Ingen seek-back-optimisering nødvendig.
+        text = log_file.read_text(encoding="utf-8")
+    except OSError as exc:
+        log.warning("[UI] trade_log.jsonl read-feil: %s", exc)
+        return None
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        return None
+    try:
+        last = json.loads(lines[-1])
+    except json.JSONDecodeError as exc:
+        log.warning("[UI] trade_log.jsonl siste linje korrupt: %s", exc)
+        return None
+    if not isinstance(last, dict):
+        return None
+    return {
+        "instrument": last.get("instrument") or last.get("symbol"),
+        "direction": last.get("direction"),
+        "horizon": last.get("horizon"),
+        "result": last.get("result") or last.get("outcome"),
+        "pnl_usd": last.get("pnl_usd") or last.get("pnl"),
+        "closed_at": last.get("closed_at") or last.get("timestamp") or last.get("ts"),
+    }
+
+
+def _signals_bot_age(path: Path, now: datetime) -> dict[str, Any]:
+    """Returner alder + mtime for signals_bot.json."""
+    if not path.exists():
+        return {"exists": False, "age_seconds": None, "mtime": None}
+    mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+    return {
+        "exists": True,
+        "age_seconds": round((now - mtime).total_seconds(), 1),
+        "mtime": mtime.isoformat(),
+    }
+
+
+@ui_bp.get("/api/ui/bot_status")
+def bot_status() -> Response:
+    """Bot-runtime-status for Datakilder-fane (sub-fase 12.9 D5).
+
+    Aggregerer:
+    - systemd user-service-state (`bedrock-bot.service`)
+    - daily-loss-state (filinnhold + dato)
+    - siste closed trade (jsonl tail)
+    - signals_bot.json freshness (alder fra mtime)
+
+    Alle delene er tolerante for missing files/services — UI viser
+    fortsatt panelet, men med "–" eller "ukjent". Endepunktet er
+    read-only og krever ingen auth (loopback-server).
+    """
+    from datetime import datetime
+
+    cfg = _config()
+    now = datetime.now(timezone.utc)
+
+    state, sub_state = _systemctl_user_is_active(cfg.bot_service_name)
+    daily = _read_daily_loss(cfg.bot_state_dir)
+    last_trade = _read_last_trade(cfg.bot_state_dir)
+    signals = _signals_bot_age(cfg.signals_bot_path, now)
+
+    return jsonify(
+        {
+            "service": {
+                "name": cfg.bot_service_name,
+                "state": state,
+                "sub_state": sub_state,
+            },
+            "daily_loss": daily,
+            "last_trade": last_trade,
+            "signals_bot": signals,
             "last_check": now.isoformat(),
         }
     )

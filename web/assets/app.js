@@ -735,15 +735,24 @@ function _signedNum(v) {
   return (n >= 0 ? '+' : '') + n.toFixed(2).replace(/\.?0+$/, '');
 }
 
-// ─── Datakilder: pipeline-helse + daglig systemsjekk ──────────
-// Henter både pipeline_health (per-fetcher freshness) og system_health
-// (daglig monitor-rapport: overall_ok + checks). System-health rendres
-// som et banner over fetcher-grupper.
+// ─── Datakilder: bot-status + pipeline-helse + daglig systemsjekk ──────────
+// Henter bot_status (sub-fase 12.9 D5: service-state + daily-loss + last
+// trade + signals_bot.json-alder), pipeline_health (per-fetcher freshness +
+// horisont-bruk per § 20.2) og system_health (daglig monitor-rapport).
 async function loadKartrommet() {
-  const [pipeRes, sysRes] = await Promise.allSettled([
+  const [botRes, pipeRes, sysRes] = await Promise.allSettled([
+    fetch('/api/ui/bot_status').then(r => r.json()),
     fetch('/api/ui/pipeline_health').then(r => r.json()),
     fetch('/api/ui/system_health').then(r => r.json()),
   ]);
+
+  if (botRes.status === 'fulfilled') {
+    renderBotStatus(botRes.value);
+  } else {
+    console.error('Bot-status load feilet:', botRes.reason);
+    const el = document.getElementById('kartrom-bot-status');
+    if (el) el.innerHTML = '';
+  }
 
   if (sysRes.status === 'fulfilled') {
     renderSystemHealth(sysRes.value);
@@ -760,6 +769,84 @@ async function loadKartrommet() {
     const el = document.getElementById('kartrom-groups');
     if (el) el.innerHTML = `<p class="empty">Fetch feilet: ${pipeRes.reason.message}</p>`;
   }
+}
+
+function _formatAge(seconds) {
+  if (seconds === null || seconds === undefined) return '–';
+  if (seconds < 60) return Math.round(seconds) + 's';
+  if (seconds < 3600) return Math.round(seconds / 60) + 'm';
+  if (seconds < 86400) return (seconds / 3600).toFixed(1) + 't';
+  return (seconds / 86400).toFixed(1) + 'd';
+}
+
+function _serviceClass(state) {
+  if (state === 'active') return 'ok';
+  if (state === 'failed') return 'fail';
+  if (state === 'activating' || state === 'reloading') return 'warn';
+  if (state === 'unknown') return 'unknown';
+  return 'idle'; // inactive / dead
+}
+
+function _serviceLabel(state, subState) {
+  if (state === 'unknown') return 'Ukjent';
+  if (state === 'active' && subState === 'running') return 'Kjører';
+  if (state === 'active') return 'Aktiv';
+  if (state === 'inactive') return 'Stoppet';
+  if (state === 'failed') return 'Feilet';
+  if (state === 'activating') return 'Starter';
+  return state;
+}
+
+function renderBotStatus(res) {
+  const root = document.getElementById('kartrom-bot-status');
+  if (!root) return;
+  if (!res || !res.service) {
+    root.innerHTML = '';
+    return;
+  }
+  const svc = res.service;
+  const cls = _serviceClass(svc.state);
+  const label = _serviceLabel(svc.state, svc.sub_state);
+
+  const dl = res.daily_loss || {};
+  const dlVal = (dl.daily_loss !== null && dl.daily_loss !== undefined)
+    ? '$' + Number(dl.daily_loss).toFixed(2) : '–';
+  const dlDate = dl.date || '–';
+
+  const sb = res.signals_bot || {};
+  const sbAge = sb.exists ? _formatAge(sb.age_seconds) : 'mangler';
+  const sbCls = !sb.exists ? 'fail' : (sb.age_seconds > 7200 ? 'warn' : 'ok');
+
+  const t = res.last_trade;
+  const lastTradeHtml = t
+    ? `<strong>${t.instrument || '?'}</strong> ${t.direction || ''} ${t.horizon || ''}
+       → ${t.result || '?'} ${t.pnl_usd !== null && t.pnl_usd !== undefined ? '($' + Number(t.pnl_usd).toFixed(2) + ')' : ''}
+       <span class="bot-stat-meta">${t.closed_at || ''}</span>`
+    : '<span class="bot-stat-meta">Ingen trades logget</span>';
+
+  root.innerHTML = `
+    <div class="bot-status">
+      <div class="bot-status-head">
+        <span class="bot-status-pill ${cls}">${label}</span>
+        <strong>bedrock-bot</strong>
+        <code class="bot-status-svc">${svc.name}</code>
+        <span class="bot-status-sub">${svc.sub_state}</span>
+      </div>
+      <div class="bot-status-grid">
+        <div class="bot-stat">
+          <span class="bot-stat-label">signals_bot.json</span>
+          <span class="bot-stat-value status-${sbCls}">alder ${sbAge}</span>
+        </div>
+        <div class="bot-stat">
+          <span class="bot-stat-label">Daily loss (${dlDate})</span>
+          <span class="bot-stat-value">${dlVal}</span>
+        </div>
+        <div class="bot-stat bot-stat-wide">
+          <span class="bot-stat-label">Siste trade</span>
+          <span class="bot-stat-value">${lastTradeHtml}</span>
+        </div>
+      </div>
+    </div>`;
 }
 
 function renderSystemHealth(res) {
@@ -822,13 +909,14 @@ function renderKartrommet(res) {
       <h3>${grp.name}</h3>
       <table class="pipeline-table">
         <thead>
-          <tr><th>Kilde</th><th>Tabell</th><th>Status</th><th>Alder</th><th>Stale-grense</th><th>Siste obs</th><th>Cron</th></tr>
+          <tr><th>Kilde</th><th>Tabell</th><th>Status</th><th>Horisont</th><th>Alder</th><th>Stale-grense</th><th>Siste obs</th><th>Cron</th></tr>
         </thead>
         <tbody>
           ${grp.sources.map(s => `<tr>
             <td>${s.name}</td>
             <td>${s.table}</td>
             <td><span class="status-pill status-${s.status}">${s.status}</span></td>
+            <td>${renderHorizonChips(s.horizons)}</td>
             <td>${s.age_hours !== null ? s.age_hours.toFixed(1) + ' t' : '–'}</td>
             <td>${s.stale_hours} t</td>
             <td>${s.latest_observation || '–'}</td>
@@ -838,6 +926,16 @@ function renderKartrommet(res) {
       </table>
     </section>
   `).join('');
+}
+
+// Per § 20.2: kilden bidrar til M (Macro), Sw (Swing) og/eller Sc (Scalp).
+function renderHorizonChips(horizons) {
+  if (!horizons || horizons.length === 0) return '<span class="hz-chip hz-none">–</span>';
+  return horizons.map(h => {
+    const cls = h === 'M' ? 'hz-macro' : h === 'Sw' ? 'hz-swing' : h === 'Sc' ? 'hz-scalp' : 'hz-none';
+    const title = h === 'M' ? 'Macro (uker–måneder)' : h === 'Sw' ? 'Swing (dager–uker)' : h === 'Sc' ? 'Scalp (minutter–timer)' : '';
+    return `<span class="hz-chip ${cls}" title="${title}">${h}</span>`;
+  }).join('');
 }
 
 // ─── Markedspuls-fane (sentiment + risk-indikatorer) ────────
