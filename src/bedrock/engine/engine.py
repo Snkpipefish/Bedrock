@@ -27,6 +27,7 @@ om varianten kan ta `Rules` direkte.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -223,6 +224,7 @@ class Engine:
         rules: Rules,
         horizon: str | None = None,
         direction: Direction = Direction.BUY,
+        now: datetime | None = None,
     ) -> GroupResult:
         """Scorer `instrument` mot `rules`.
 
@@ -236,11 +238,18 @@ class Engine:
         ``polarity="neutral"`` er identiske mellom retninger. Default
         BUY bevarer bakoverkompatibilitet med tester som ikke bryr seg
         om retning.
+
+        `now` (audit-runde 5, sub-fase 12.6): "as-of"-tidspunkt for
+        tids-bevisste drivere (i dag kun ``event_distance``). Propageres
+        til driver-laget via ``params["_now"]`` (ISO-streng). ``None`` =
+        driveren faller tilbake til wallclock — kun riktig i live-mode.
+        I backtest skal caller alltid sende ref-date for å unngå
+        look-ahead-bias.
         """
         if isinstance(rules, FinancialRules):
-            return self._score_financial(instrument, store, rules, horizon, direction)
+            return self._score_financial(instrument, store, rules, horizon, direction, now)
         if isinstance(rules, AgriRules):
-            return self._score_agri(instrument, store, rules, direction)
+            return self._score_agri(instrument, store, rules, direction, now)
         raise TypeError(f"Unknown rules type: {type(rules).__name__}")
 
     # -- financial ----------------------------------------------------------
@@ -252,6 +261,7 @@ class Engine:
         rules: FinancialRules,
         horizon: str | None,
         direction: Direction,
+        now: datetime | None,
     ) -> GroupResult:
         if horizon is None:
             raise ValueError("FinancialRules require a `horizon` argument (e.g. 'SWING').")
@@ -262,7 +272,7 @@ class Engine:
             raise KeyError(f"Horizon '{horizon}' not defined in rules. Known: {known}")
 
         family_results, family_scores = self._score_families(
-            store, instrument, rules.families, direction, horizon
+            store, instrument, rules.families, direction, horizon, now
         )
 
         total_score = aggregators.weighted_horizon(family_scores, horizon_spec.family_weights)
@@ -304,9 +314,10 @@ class Engine:
         store: Any,
         rules: AgriRules,
         direction: Direction,
+        now: datetime | None,
     ) -> GroupResult:
         family_results, family_scores = self._score_families(
-            store, instrument, rules.families, direction, horizon=None
+            store, instrument, rules.families, direction, horizon=None, now=now
         )
 
         family_caps = {name: spec.weight for name, spec in rules.families.items()}
@@ -349,6 +360,7 @@ class Engine:
         families: dict[str, _AnyFamilySpec],
         direction: Direction,
         horizon: str | None,
+        now: datetime | None = None,
     ) -> tuple[dict[str, FamilyResult], dict[str, float]]:
         """Kjør alle drivere per familie. Felles for financial og agri.
 
@@ -363,10 +375,15 @@ class Engine:
         er horisont-bevisste leser ``params["_horizon"]`` og velger
         feature; andre ignorerer key-en og scorer som før. ``None`` for
         agri (ADR-010, sub-fase 12.7 R1).
+
+        ``now`` propageres som ``_now``-key (ISO-streng) for tids-bevisste
+        drivere (i dag ``event_distance``). ``None`` = wallclock-fallback
+        i driver. Audit-runde 5 sub-fase 12.6 fix-spec Steg 1.
         """
         family_results: dict[str, FamilyResult] = {}
         family_scores: dict[str, float] = {}
         flip = direction == Direction.SELL
+        now_iso = now.isoformat() if now is not None else None
 
         for family_name, family_spec in families.items():
             driver_results: list[DriverResult] = []
@@ -375,16 +392,17 @@ class Engine:
 
             for driver_spec in family_spec.drivers:
                 fn = drivers.get(driver_spec.name)
-                # Propagér direction + horisont via interne `_direction`/
-                # `_horizon`-keys i en kopi av params. Drivere som er
+                # Propagér direction + horisont + now via interne `_direction`/
+                # `_horizon`/`_now`-keys i en kopi av params. Drivere som er
                 # context-aware (analog_* for direction; multi-horisont-
-                # drivere fra sub-fase 12.7 R3+ for horisont) leser disse;
-                # andre ignorerer dem. Se ADR-006 (direction) og ADR-010
-                # (horisont).
+                # drivere fra sub-fase 12.7 R3+ for horisont; event_distance
+                # for now) leser disse; andre ignorerer dem. Se ADR-006
+                # (direction), ADR-010 (horisont), audit 12.6 Sjekk 9.5 (now).
                 params_with_dir = {
                     **driver_spec.params,
                     "_direction": direction.value,
                     "_horizon": horizon,
+                    "_now": now_iso,
                 }
                 raw_value = fn(store, instrument, params_with_dir)
                 value = (1.0 - raw_value) if do_flip else raw_value

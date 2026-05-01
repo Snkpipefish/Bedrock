@@ -250,7 +250,12 @@ def generate_signals(
     # Pre-compute score per (horisont, retning). Per ADR-006 (session 95b)
     # er score nå direction-bevisst — flippes på familier med
     # polarity="directional" når direction=SELL.
-    scores_by_horizon_dir = _compute_scores(cfg, store, horizons_list, directions_list, engine)
+    # `run_ts` propageres som `_now` til tids-bevisste drivere
+    # (event_distance) for å unngå wallclock-fallback i backtest
+    # (audit 12.6 Sjekk 9.5 Type A).
+    scores_by_horizon_dir = _compute_scores(
+        cfg, store, horizons_list, directions_list, engine, now=run_ts
+    )
 
     # Generer entries
     entries: list[SignalEntry] = []
@@ -362,6 +367,8 @@ def _compute_scores(
     horizons: list[Horizon],
     directions: list[Direction],
     engine: Engine | None,
+    *,
+    now: datetime | None = None,
 ) -> dict[tuple[Horizon, Direction], GroupResult]:
     """Score per (horisont, retning).
 
@@ -369,6 +376,11 @@ def _compute_scores(
     - Financial: én Engine.score-call per (horisont, retning).
     - Agri: én score per retning (agri har ingen horisont-splitt på
       scoring-siden), delt på alle horisonter.
+
+    `now` propageres til Engine.score så tids-bevisste drivere
+    (event_distance) får riktig as-of-tidspunkt i backtest. Default
+    None bevarer bakoverkompatibilitet for direkte call-sites i
+    tester (driver faller tilbake til wallclock).
     """
     eng = engine or Engine()
     out: dict[tuple[Horizon, Direction], GroupResult] = {}
@@ -376,7 +388,12 @@ def _compute_scores(
     if isinstance(cfg.rules, AgriRules):
         for direction in directions:
             single = eng.score(
-                cfg.instrument.id, store, cfg.rules, horizon=None, direction=direction
+                cfg.instrument.id,
+                store,
+                cfg.rules,
+                horizon=None,
+                direction=direction,
+                now=now,
             )
             for h in horizons:
                 out[(h, direction)] = single
@@ -391,6 +408,7 @@ def _compute_scores(
                 cfg.rules,
                 horizon=_yaml_key_from_horizon(h),
                 direction=direction,
+                now=now,
             )
     return out
 
