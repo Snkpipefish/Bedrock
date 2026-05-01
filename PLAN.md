@@ -1,11 +1,20 @@
 # Bedrock — implementasjonsplan
 
 Dato opprettet: 2026-04-23
-Sist oppdatert: 2026-04-28
-Status: Fase 0-11 fullført, Fase 12 åpen (sub-fase 12.6 aktiv + sub-fase 12.7 planlagt — se § 19)
+Sist oppdatert: 2026-05-01
+Status: Fase 0-11 fullført, Fase 12 åpen (sub-fase 12.5+/12.6/12.7 LUKKET — sub-fase 12.8 åpen, se § 20)
 Referanser: `NYTT_PROSJEKT_UTKAST.md` (i cot-explorer), `AGRI_KARTLEGGING.md` (i cot-explorer), fase-1-audit-rapport (i chat-logg).
 
 ## Endringshistorikk (etter initial godkjenning)
+
+**2026-05-01 (planleggings-session, sub-fase 12.8):** Ny § 20 lagt til —
+"Data-gjeld + cron-tuning + whitelist-revisjon". Sub-fase 12.6 LUKKET
+(`v0.12.6-fase-12.6-LUKKET`) med Strategi 3. § 20.2 låser horisont-
+bruk-prinsipper: samme datakilde har ulik bruksverdi per horisont
+(M/S/Sc); coverage-rapport og whitelist-revisjon må kvalifisere per
+(instrument × horisont), ikke aggregat. 4 sub-tasks (A1 kartlegging
+session 139, A2 kode-fixer 140, B cron-tuning 141, C whitelist-
+revisjon 142). Plan-S (§ 19.10) utsatt til 12.8 LUKKET.
 
 **2026-04-30 (UI-refresh, session 137):** § 10 oppdatert fra "4 faner"
 til "5 faner" og fane-navnene rettet for å matche faktisk innhold.
@@ -1572,7 +1581,7 @@ Hver fase avsluttes med testing + commit. Ingen fase starter før forrige er gr�
 | **9** | UI: 4 faner + admin-editor. Erstatter eksisterende HTML. | 1-2 uker | Visuell verifisering + signal-visning-tester |
 | **10** | Analog-matching: K-NN, per asset-klasse, outcome-labels, integrer i scoring + UI | 1 uke | Backtest av analog-driver mot forward-return |
 | **11** | Backtest-rammeverk + 12 måneder historikk-replay (CLI). UI-fane utsatt etter Fase 13 (bruker-beslutning 2026-04-25). | 1 uke | Output: rapport over signal-performance |
-| **12** | Parallell-drift + sub-fase 12.5 debt-rydding (drivere før instrumenter) + sub-fase 12.5+ fetch-port (§ 7.5, sessions 105-117) + sub-fase 12.6 data-driven rebalansering (sessions 118+) | 2 uker observasjon + 14-15 sessions debt + N sessions rebalansering | Cutover-kriterier møtt + sub-fase 12.6-konvergens |
+| **12** | Parallell-drift + sub-fase 12.5 debt-rydding (drivere før instrumenter) + sub-fase 12.5+ fetch-port (§ 7.5, sessions 105-117) + sub-fase 12.6 data-driven rebalansering (sessions 118-138) + sub-fase 12.7 horisont-refactor (§ 19) + sub-fase 12.8 data-gjeld + cron + whitelist (§ 20, sessions 139-142) | 2 uker observasjon + 14-15 sessions debt + N sessions rebalansering + 4 sessions 12.8 | Cutover-kriterier møtt + 12.6/12.7/12.8 LUKKET |
 | **13** | Cutover: skru av gamle timers (cot-explorer + scalp_edge), install systemd-units, gå live | 1 dag | Alt grønt |
 
 Totalt: ~14-18 uker. Kan parallelliseres noe (data-lag og engine kan jobbes samtidig).
@@ -2163,3 +2172,307 @@ plass:
 
 Plan-S er ikke designet ferdig her. Reservert som own-track når Tier 1/2-
 data har akkumulert tilstrekkelig.
+
+---
+
+## 20. Sub-fase 12.8 — Data-gjeld + cron-tuning + whitelist-revisjon
+
+ÅPEN 2026-05-01 etter sub-fase 12.6 LUKKET (`v0.12.6-fase-12.6-LUKKET`).
+Plan-S (§ 19.10) utsatt til 12.8 er ferdig — Plan-S' Tier 1/2-data
+forutsetter at vi vet hva vi har og hva som faktisk oppdateres.
+
+### 20.1 Bakgrunn
+
+Bedrock har akkumulert 19 fetchere + 21 systemd-timere + ~30 SQLite-
+tabeller siden Fase 6. Sub-fase 12.5+ portet 11 nye fetchere.
+Sub-fase 12.6 rebalanserte 41 drivere mot 489k harvested rader. Men
+ingen helhetlig audit av "hvilken data har hvert instrument fersk
+tilgang til, og fungerer oppdaterings-mekanismen?"
+
+Helse-monitor (sub-fase 12.6 § 12) flagger fetcher_freshness men:
+- Aging-tersklene er flat (ikke per-fetcher tunet til faktisk
+  publikasjons-cycle)
+- `bedrock-fetch-enso.service` + `bedrock-monitor.service` failed
+  siden ukjent dato — rødt blir bakgrunnsstøy
+- Ingen oversikt over per-instrument coverage
+
+Sub-fase 12.6 var også IC-aggregat (BUY+SELL × alle horisonter).
+Det maskerer at samme kilde har ulik bruksverdi per horisont — § 20.2
+introduserer horisont-bruk-prinsipper som låses for resten av 12.8.
+
+### 20.2 Horisont-bruk-prinsipper
+
+Datakilder har **ulik bruksverdi per horisont**. Sub-fase 12.8 må
+kvalifisere coverage per (instrument × horisont), ikke bare per
+instrument-aggregat.
+
+**Macro (uker–måneder)** — regime-klassifisering + posisjonerings-
+ekstremer + strukturell tilbud/etterspørsel. Datafrekvens ukentlig–
+månedlig holder. Primærkilder:
+- B1 (HY OAS, NFCI, NetFedLiq, VIX-termstruktur) → kreditt-/
+  likviditetsregime, leder equity 1-4 uker
+- fundamentals (FRED-basis) → yield/real/dollar/vol-regime
+- COT-percentiler 12-mnd / 3-år (alle COT-varianter brukt som
+  percentil) → spec-net ≥95th + commercial ≤5th = klassisk
+  macro-reversal-setup
+- TFF Asset Manager vs Leveraged Funds-divergens (sterkere enn
+  legacy for finansielle)
+- wasde / conab / unica / NOPA / crop_progress (sesong) / shipping
+  (BDI) / AGSI (EU-gass) / Baker Hughes (shale) / ETF-holdings
+  (investment demand) / LME (når implementert)
+- ENSO (kun macro — for treg ellers)
+- yield-differensialer 2Y/10Y, BRL-overlay for Coffee/Sugar
+
+**Swing (dager–uker)** — katalysator + teknisk konfluens + weekly-
+release-drift + mean-reversion ved ekstremer. Datafrekvens daglig–
+ukentlig kritisk. Primærkilder:
+
+Weekly-release-drift er hovedkilden:
+- Mandag 16:00 ET: crop_progress → tirsdag-gap på korn
+- Tirsdag: CFTC TFF/disagg/legacy (officially fre 15:30, dekker tirsdagen)
+- Onsdag 10:30 ET: EIA → energi-direksjon for resten av uken
+- Torsdag 8:30 ET: FAS Export Sales + Drought Monitor + AAII →
+  grain-uka avgjøres her
+- Fredag etter close: Baker Hughes + COT-release → mandag-gap
+
+Pre-event positioning: calendar_ff er ryggraden — vet hvilke events
+som kommer 5d frem. Mean-reversion ved ekstremer: AAII <20% bulls
+eller >55% bulls, F&G ≤25 eller ≥75, COT-percentiler i ekstreme.
+Vær/forecast-shifts: weather (7-14d forecast-update vs realized),
+HDD/CDD for NG. Spread-bevegelse: B5 calendar spreads. Cross-asset-
+divergenser: equity vs HY OAS, gull vs realrente, BRL vs Coffee.
+
+**Scalp (minutter–timer)** — vol-ekspansjon rundt scheduled releases
++ surprise vs consensus + real-time event-detektorer. Trenger ikke
+nye rådata, men release-kalender + forecast-data søkbart per minutt
+rundt release. Primærkilder:
+
+Scheduled releases er kjernen:
+
+| Tid (ET) | Event | Instrumenter |
+|---|---|---|
+| Tir 8:30 | CPI, PPI, retail sales | Alle 22, særlig DXY/indekser/krypto |
+| Ons 8:15 | ADP | Indekser, FX |
+| Ons 10:30 | EIA crude/gas | Brent, CrudeOil, NaturalGas |
+| Ons 14:00 | FOMC (8x/år) | Alle 22 |
+| Tor 8:30 | Initial claims, FAS Export Sales | Indekser, grain |
+| Tor varierer | ECB, BoE, BoJ | Respektiv FX |
+| Fre 8:30 | NFP (1/mnd) | Alle 22 |
+| Fre 12:00 | WASDE (1/mnd) | Alle agri |
+| Mnd ~15. | NOPA Crush | Soybean |
+
+Vol-regime for sizing: B2 VIX9D/VIX-ratio er primær. VIX9D > VIX
+(backwardation) = høy realisert vol = redusere størrelse. VIX9D <<
+VIX = lav vol-forventning = kan øke størrelse. Real-time event-
+detektorer: seismic (USGS GeoJSON streamer M≥4.5), news_intel når
+scored. Surprise vs consensus: calendar_ff har forecast/prev —
+selve scalpen drives av actual vs forecast. Cross-asset-leder:
+BRL leder Coffee/Sugar 1-5 min, DXY leder gull, VIX leder SP500,
+US 10Y-yield leder USDJPY.
+
+**Tre nøkkel-innsikter for 12.8-audit:**
+
+1. **Samme kilde, helt ulik bruk per horisont.** COT er macro-
+   percentil, swing-delta, og scalp-mandag-gap-trigger. Coverage-
+   rapporten må skille mellom "har data" og "har data brukbart for
+   horisont X" — en månedlig-kilde dekker M men ikke Sc selv om
+   feltet er fersk.
+
+2. **Scalp trenger lite ny rådata, men struktur rundt calendar_ff.**
+   Forecast/prev/actual må være søkbart per minutt rundt release.
+   Coverage-rapporten må eksplisitt sjekke om calendar_ff har
+   forecast-felt populert (ikke bare event_ts + impact). calendar_ff
+   er undervurdert i nåværende oppsett.
+
+3. **Macro og swing overlapper i kilder men ikke i features.** Macro
+   tenker percentil/regime, swing tenker delta/ekstrem-reversering.
+   Det betyr at samme fetcher må produsere både rolling-percentile
+   og rolling-z-score-features — ikke bare nivå-tall.
+
+**Kilde × horisont-mapping** (●●● primær / ●● sekundær / ◐ marginal /
+– ikke relevant):
+
+| Kilde | M | S | Sc | Hovedbruk |
+|---|---|---|---|---|
+| prices (EOD OHLC) | ●●● | ●●● | – | M: trend-regime/MA-stack. S: S/R, breakouts. Sc krever intraday (ikke i scope). |
+| cot_disagg/legacy/tff/ice/euronext | ●●● | ●●● | ◐ | M: 12m-percentil, comm/spec-divergens. S: ukentlig delta, ekstrem-reversering. Sc: kun mandag-gap fra fre-release. |
+| fundamentals (FRED-basis) | ●●● | ●● | – | M: regime (yield/real/dollar/vol). S: 5d/20d-divergens. |
+| B1 (HY/IG OAS, NFCI, NetFedLiq) | ●●● | ●● | – | M: kreditt-/likviditetsregime — leder equity 1-4 uker. S: spread-breakout som trigger. |
+| B1 yield-diff (FX) | ●●● | ●● | ◐ | M: strukturell FX-driver. S: 2Y-diff-momentum. Sc: kun rundt CB-events. |
+| B2 VIX-termstruktur (VIX9D/3M/6M) | ●●● | ●●● | ●●● | M: contango/backwardation-regime. S: regime-switch. Sc: VIX9D/VIX-ratio er primær risk-on/off-meter intraday. |
+| weather (Open-Meteo) | ●● | ●●● | ◐ | M: sesong-anomali. S: 7-14d forecast-vs-realized. Sc: weekend-forecast-update → mandag-gap. |
+| enso (NOAA ONI) | ●●● | – | – | M: 6-12 mnd outlook tropisk agri. For treg for swing/scalp. |
+| wasde (mnd, 12pm ET) | ●●● | ●●● | ●●● | M: balance-sheet-trend. S: post-WASDE drift 3-5d. Sc: release-event. |
+| crop_progress (man 16:00 ET) | ●● | ●●● | ●● | M: pace vs 5yr. S: G/E-rating endring. Sc: tirsdag-gap. |
+| shipping (BDI) | ●●● | ●● | – | M: global trade-regime. S: 20-30d trend. |
+| calendar_ff | ◐ | ●●● | ●●● | M: forecast-bias. S: pre-positioning. Sc: KJERNE-DATA. |
+| eia_inventories (ons 10:30 ET) | ●● | ●●● | ●●● | M: storage-trend. S: build/draw vs forventning. Sc: ons-event for crude/NG. |
+| comex inventories | ●●● | ●● | – | M: lager-trend. S: divergens vs pris. |
+| LME-lager (WIP) | ●● | ●●● | ◐ | M: industriell-metaller-balanse. S: cancelled warrants som leading. Sc: kun ved store daglige bevegelser. |
+| seismic (USGS) | – | ●● | ●●● | Real-time event-detector — primær scalp-trigger for Cu/Au/Ag når M≥6 i Chile/Peru. |
+| conab | ●●● | ●● | ◐ | M: Brasil-tilbud. S: revisjons-drift. Sc: release-day på Coffee/Sugar. |
+| unica (halvmnd) | ●● | ●●● | ●●● | M: sukker-balanse. S: bi-weekly surprise. Sc: release-move. |
+| news_intel | ●●● | ●●● | ●●● | M: tematisk-count. S: cluster-deteksjon. Sc: breaking-news-katalysator (når scored). |
+| crypto_sentiment (F&G) | ●●● | ●●● | – | M: regime. S: ≤25/≥75 mean-reversion-edge. |
+| A1 Baker Hughes (fre etter close) | ●●● | ●● | ◐ | M: shale-tilbud. S: 4-8 uker trend. Sc: kun fre-close-tilt. |
+| A2 AGSI (EU gas) daglig | ●●● | ●● | – | M: vinter-balanse. S: % full vs 5yr. |
+| A3 FAS Export Sales (tor 8:30 ET) | ●● | ●●● | ●●● | M: kumulativt vs USDA-target. S: ukentlig surprise. Sc: tor-event for grain. |
+| A4 CFTC TFF | ●●● | ●●● | ◐ | Som COT — Asset Manager vs Leveraged Funds-divergens er sterkeste positioning-signalet for finansielle. |
+| A5-A7 ETF-beholdninger | ●●● | ●● | – | M: investment-demand-trend. S: divergens vs pris. |
+| A8 NOPA Crush (mnd ~15.) | ●●● | ●●● | ●●● | M: crush-pace. S: mnd-surprise. Sc: release-event for soybean. |
+| A9 Drought Monitor (tor 8:30) | ●● | ●●● | – | Som weather, ukentlig D0-D4-klasse. |
+| A10 Cecafé (mnd) | ●●● | ◐ | – | M: Brasil-eksport. |
+| A11 ICE certified stocks | ●●● | ●● | – | M: deliverable-trend. S: lav-lager-pricing-pressure. |
+| A12 AAII Sentiment (tor) | ●●● | ●●● | – | M: kontrarian-regime. S: ekstrem-readings. |
+| A13 BRL=X | ●●● | ●●● | ●● | M: Brasil-overlay Coffee/Sugar. S: 5-20d-move. Sc: leder Coffee/Sugar intraday. |
+| B5 calendar spreads | ●● | ●●● | ●●● | M: strukturell carry. S: spread-tightening/widening. Sc: M1-M2 reaksjon på inventory-event. |
+
+### 20.3 Sub-tasks
+
+| Sub-task | Innhold | Sessions | Estimat |
+|---|---|---|---|
+| **A1** Kartlegging | Per-instrument data-coverage-rapport per horisont | 139 | 4-6t |
+| **A2** Kode-fixer | Plug rimelige gaps (WASDE pre-2019, schema-drift, AAII bug, comex/cafe-ingest, fas_esr docstring, disease_pressure tester) | 140 | 4-6t |
+| **B** Cron-tuning | Per-fetcher refresh-cycle audit + smart-skip-verifisering + helse-rydding + FRED-fail-policy | 141 | 3-5t |
+| **C** Whitelist-revisjon | Per-(instrument × horisont) coverage-score → trim bot-whitelist per-horisont | 142 | 4-6t |
+
+Totalt ~15-23t / 4 sessions. Plan-S åpnes etter C.
+
+### 20.4 Sub-task A1 — Kartleggings-rapport (session 139)
+
+**Mål:** Én Markdown-rapport som per instrument viser:
+1. Hva vi har av data (tabeller, rader, tidsspenn)
+2. Hva som er konfigurert til oppdatering (fetch.yaml + systemd-timer)
+3. Om oppdateringen faktisk fungerer (siste-rad-dato vs forventet)
+4. Per-(instrument × horisont)-coverage-vurdering: kan dette
+   instrumentet handles på horisont X?
+
+**Format:**
+
+- **Sammendragstabell 1 — per-horisont-coverage:** én rad per
+  instrument × tre kolonner (M / S / Sc) med ✓/⚠/✗ flagg basert på
+  primærkilder for hver horisont. Gir umiddelbart svar på "kan
+  dette instrumentet handles på horisont X?"
+- **Sammendragstabell 2 — per-kilde-helse:** én rad per fetcher,
+  cron-tid, sist oppdatert, helse-flagg. Gir oversikt over
+  pipeline-helse uavhengig av instrument.
+- **Drill-down per instrument:** tabell med rader/tidsspenn/
+  cron-konfig/sist-oppdatert/helse-flag per data-kategori, +
+  per-horisont-vurdering (M/S/Sc adekvat?).
+
+**Helse-flagg per kilde-cycle:**
+
+| Cycle | Forventet refresh | Aging-buffer | Rødt hvis |
+|---|---|---|---|
+| Daglig | 24t | +12t | siste rad >36t |
+| Ukentlig | 7d | +2d | siste rad >9d |
+| Månedlig | 30d | +10d | siste rad >40d |
+| Halvmånedlig | 14d | +6d | siste rad >20d |
+| Event-basert | varierer | — | ingen ny rad >7d |
+
+**Per-horisont-kvalifisering:**
+
+| Horisont | Krav for "✓" |
+|---|---|
+| **Macro** | Har ferske COT-percentiler (12mnd) + ferske fundamentals (FRED-makro relevant for asset-klassen) + ferske strukturelle (wasde/conab/etc). Månedlig oppdatering nok. |
+| **Swing** | Har komplett weekly-release-cycle for asset-klassen (e.g. grain: crop_progress + WASDE + FAS + drought + COT alle ferske innen forrige uke). Daglig-ukentlig oppdatering kritisk. |
+| **Scalp** | Har calendar_ff med forecast/prev-felt populert + event-tracker for relevante release-times for asset-klassen. Real-time-data er prioritet. |
+
+**Output:**
+- `scripts/report_data_coverage.py` (nytt verktøy, kan re-kjøres senere)
+- `docs/data_coverage_2026-05-01.md` (rapport + sammendrag)
+- Ingen kode-endringer i `src/`
+
+### 20.5 Sub-task A2 — Kode-fixer (session 140)
+
+Basert på A1-funn, plugge gaps som er innen rekkevidde:
+
+- **WASDE pre-2019**: utvide ESMIS-paginering-walker (~1-2t)
+- **Schema-drift**: 3 manglende harvester-tabeller i `schemas.py`
+- **AAII bull_bear_spread fetcher-bug** (audit Sjekk 9.6): fix
+  formel + backfill 537 rader
+- **Manuell-data ingest-gaps** (audit Sjekk 10):
+  - `comex`-subkommando i `ingest_manual_data.py` (KRITISK 1)
+  - `cafe`-subkommando for CONAB Café-boletins
+  - README i `cafe_boletins/`, `comex data/`, `conab_boletins/`
+- **`fas_esr.py:134`** stale docstring
+- **disease_pressure** test-coverage til ≥7 tester
+- **calendar_ff forecast/prev-felt audit**: hvis A1 viser at felt
+  ikke er populert konsekvent, fix fetcher (kritisk for scalp).
+
+Akseptér og dokumenter (ikke kode-fix denne runden):
+- CFTC Brent/Copper pre-2022 (fundamentalt gap)
+- CONAB Café-PDF historikk (IP-throttled — ny strategi i Plan-S)
+- UNICA archive (ingen public API)
+- PPLT/NOPA droppet
+- LME-lager (WIP — egen Plan-S-task hvis prioritert)
+
+### 20.6 Sub-task B — Cron-tuning + helse-rydding (session 141)
+
+1. **Per-fetcher refresh-cycle audit**: cron-tid vs faktisk
+   publikasjons-tid. Eksempel: comex publiserer T-1 daglig man-fre;
+   nåværende cron `0 22 * * 1-5` Oslo passer; verifiser smart-skip
+   ikke gjør duplicate kall.
+2. **Smart-skip-verifisering**: hver fetcher må sjekke
+   `latest_observation_ts(table, key)` før HTTP-kall. Verifisert i
+   cot_ice + comex + eia; sjekk resten.
+3. **Stale_hours-tuning**: per fetcher i `fetch.yaml` justeres slik
+   at monitor ikke flagger falskt rødt. Tersklene fra § 20.4 er
+   utgangspunkt.
+4. **Helse-rydding**:
+   - `bedrock-fetch-enso.service` failed → diagnose + fix
+   - `bedrock-monitor.service` failed → diagnose + fix
+   - 5 aging fetchers (comex, cot_disaggregated, cot_ice, cot_legacy,
+     fundamentals): sjekk om kilden faktisk er stale eller cron er
+     for streng
+5. **FRED-fetcher hard-fail-policy**: hva skjer hvis API-key revokert
+   eller series fjernet? Default er nå silent silence. Definér
+   policy: hard-fail eller graceful-degrade.
+
+### 20.7 Sub-task C — Whitelist-revisjon (session 142)
+
+1. **Per-(instrument × horisont) coverage-score** (basert på A1):
+   - Macro-score: COT-percentil-coverage + FRED-coverage +
+     asset-strukturell-coverage
+   - Swing-score: weekly-release-cycle-coverage for asset-klassen
+   - Scalp-score: calendar_ff forecast-coverage + real-time-detektorer
+2. **Threshold per horisont:**
+   - Macro krever: ≥3 år CFTC, ≥5 år priser, ≥3 av 5 strukturelle
+     kilder ferske
+   - Swing krever: alle weekly-release-fetchere fungerende for
+     asset-klassen (per horisont-mapping § 20.2)
+   - Scalp krever: calendar_ff forecast-coverage ≥80% for relevante
+     release-typer + asset-klassens primær-real-time-kilder ferske
+3. **Trim-runde**: instrumenter under terskel for HORISONT pauses
+   fra bot-whitelist KUN på den horisonten. Et instrument som
+   kvalifiserer for MAKRO men ikke SCALP fortsetter å scores på
+   MAKRO/SWING. Krever schema-endring i `bot_whitelist.yaml`:
+   per-horisont-flagg istedenfor flat liste.
+4. **Ressursbesparelse**: paused (instrument × horisont)-kombinasjoner
+   ekskluderes fra signals_bot for den horisonten, men beholder
+   pris-fetching + harvest for re-aktivering når historikk
+   akkumuleres.
+
+### 20.8 Stop-criterion sub-fase 12.8
+
+- A1: rapport committet, helse-flagg per (instrument × horisont) er
+  reproduserbar
+- A2: kode-fixer landet, regresjons-tester grønne, schema komplett
+- B: alle 19 fetchere har riktig cron + smart-skip + tunet
+  `stale_hours`; monitor returnerer grønt ved health-check
+- C: per-(instrument × horisont) whitelist-revisjon committet;
+  signal_bot.json kjører kun mot godkjente kombinasjoner
+
+Tag: `v0.12.8-fase-12.8-LUKKET`. Plan-S kan åpnes umiddelbart etter.
+
+### 20.9 Relasjon til andre låser
+
+- **PLAN § 19.3 trading-logikk-låser**: ufravikelige.
+- **ADR-007 sentiment-cap**: paused crypto_sentiment + news_intel
+  påvirkes ikke av 12.8 (de er allerede UI-only inntil scoring).
+- **§ 12.6-snapshot-baseline**: 12.8 endrer ikke YAML-vekter, så
+  snapshot er stabilt.
+- **Plan-S** (§ 19.10): forutsetninger fra Plan-S som overlapper
+  med 12.8 (release-clock-infrastruktur, surprise-vs-consensus-
+  schema, cross-asset-ledere) tilhører Plan-S og adresseres ikke
+  i 12.8 ut over coverage-flagging.
