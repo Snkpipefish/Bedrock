@@ -131,13 +131,28 @@ def already_done_ref_dates(
     instrument: str,
     horizon_days: int,
     direction: str,
+    only_driver: str | None = None,
 ) -> set[str]:
-    """Returner set av ref_date-strings som allerede er populert for kombo."""
-    rows = con.execute(
-        "SELECT DISTINCT ref_date FROM driver_observations "
-        "WHERE instrument = ? AND horizon_days = ? AND direction = ?",
-        (instrument, horizon_days, direction),
-    ).fetchall()
+    """Returner set av ref_date-strings som allerede er populert for kombo.
+
+    ``only_driver`` (audit-runde 5 sub-fase 12.6 fix-spec Steg 4): hvis
+    satt, anses en ref_date kun som "done" hvis akkurat den driveren har
+    en rad. Brukes for målrettet backfill av en enkelt driver etter
+    bug-fix uten å re-harveste alle drivere på nytt.
+    """
+    if only_driver is not None:
+        rows = con.execute(
+            "SELECT DISTINCT ref_date FROM driver_observations "
+            "WHERE instrument = ? AND horizon_days = ? AND direction = ? "
+            "AND driver_name = ?",
+            (instrument, horizon_days, direction, only_driver),
+        ).fetchall()
+    else:
+        rows = con.execute(
+            "SELECT DISTINCT ref_date FROM driver_observations "
+            "WHERE instrument = ? AND horizon_days = ? AND direction = ?",
+            (instrument, horizon_days, direction),
+        ).fetchall()
     return {r[0] for r in rows}
 
 
@@ -210,6 +225,7 @@ def harvest_one(
     instruments_dir: str,
     progress_every: int = 25,
     start_date: pd.Timestamp | None = None,
+    only_driver: str | None = None,
 ) -> int:
     """Harvest én (instrument, horizon, direction)-kombo. Returnerer antall
     nye rader skrevet (0 hvis alt var allerede gjort).
@@ -217,6 +233,11 @@ def harvest_one(
     ``start_date`` filtrerer ut ref_dates før gitt timestamp (per-instrument
     coverage-trimming — sparer kompute på år før instrumentets primære
     drivere har data).
+
+    ``only_driver`` filtrerer resume-logikken til kun å regne en ref_date
+    som "done" når akkurat denne driveren har en rad. INSERT OR IGNORE
+    sørger for at andre drivere i samme entry ikke duplikeres. Brukes for
+    målrettet backfill av en enkelt driver etter bug-fix.
     """
     horizon_name = _HORIZON_DAYS_TO_NAME[horizon_days]
     outcomes = _outcomes_for_instrument(store, instrument, horizon_days)
@@ -246,7 +267,7 @@ def harvest_one(
 
     con = sqlite3.connect(db_path)
     ensure_schema(con)
-    done = already_done_ref_dates(con, instrument, horizon_days, direction)
+    done = already_done_ref_dates(con, instrument, horizon_days, direction, only_driver=only_driver)
     todo = outcomes[~outcomes["ref_date"].dt.strftime("%Y-%m-%d").isin(done)]
     n_total = len(outcomes)
     n_done = len(done)
@@ -387,6 +408,7 @@ def harvest_instrument(
     horizons: list[int] | None = None,
     directions: list[str] | None = None,
     start_date: pd.Timestamp | None = None,
+    only_driver: str | None = None,
 ) -> int:
     """Harvest alle (horizon, direction)-kombinasjoner for ett instrument."""
     horizons = horizons or HORIZONS
@@ -404,6 +426,7 @@ def harvest_instrument(
                 step_days=step_days,
                 instruments_dir=instruments_dir,
                 start_date=start_date,
+                only_driver=only_driver,
             )
             total += n
     return total
@@ -421,6 +444,13 @@ def main() -> int:
         default=None,
         help="ISO-dato (YYYY-MM-DD). Skipper ref_dates før denne — for å unngå "
         "compute-sløsing på år hvor instrumentets primær-drivere mangler data.",
+    )
+    parser.add_argument(
+        "--only-driver",
+        default=None,
+        help="Driver-navn for målrettet backfill etter bug-fix. Resume-logikken "
+        "regner da en ref_date som 'done' kun hvis akkurat denne driveren har "
+        "en rad — andre drivere i samme entry skippes via INSERT OR IGNORE.",
     )
     args = parser.parse_args()
 
@@ -444,6 +474,7 @@ def main() -> int:
         horizons=args.horizon,
         directions=args.direction,
         start_date=start_date,
+        only_driver=args.only_driver,
     )
 
     print(f"\nFerdig: {args.instrument} +{n_total} rows totalt", flush=True)
