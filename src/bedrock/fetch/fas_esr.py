@@ -131,7 +131,9 @@ def fetch_esr_exports(
     """Hent FAS ESR-eksport-data for én commodity × MY (× country, optional).
 
     Args:
-        commodity_code: FAS commodityCode (Corn=401, Soybean=801, Wheat=107, Cotton=501).
+        commodity_code: FAS commodityCode (Corn=401, Soybean=801, Wheat=107,
+            Cotton=1404 — "All Upland Cotton"-aggregat; 501 var den gamle koden
+            men gir kun "Pima Cotton" og var inkomplett, korrigert i session 133).
         market_year: Marketing year (start-året, eks. 2024 = MY24/25).
         country_code: Hvis None, henter ``/allCountries`` (alle countries i én call).
             Hvis spesifisert, henter kun den country-en.

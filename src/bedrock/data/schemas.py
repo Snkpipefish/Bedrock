@@ -1854,3 +1854,70 @@ class CecafeExportRow(BaseModel):
         if norm not in _CECAFE_TYPES:
             raise ValueError(f"coffee_type must be one of {sorted(_CECAFE_TYPES)}, got {v!r}")
         return norm
+
+
+# ---------------------------------------------------------------------------
+# Sub-fase 12.6 harvester-tabeller (session 117 + 118)
+#
+# Disse tabellene er output-only fra `scripts/harvest_*.py` og brukes som
+# datagrunnlag for `analyze_driver_performance.py` + `analyze_cross_correlations.py`
+# (PLAN § 12.6). De er ikke produksjons-data — de regenereres ved hver
+# full-history-harvest. DDL-en er duplikat fra harvester-skriptene; her
+# eksponeres TABLE_*-konstantene slik at andre moduler kan referere dem
+# uten å avhenge av scripts/-katalogen.
+# ---------------------------------------------------------------------------
+
+TABLE_DRIVER_OBSERVATIONS = "driver_observations"
+
+DDL_DRIVER_OBSERVATIONS = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_DRIVER_OBSERVATIONS} (
+    instrument           TEXT    NOT NULL,
+    ref_date             TEXT    NOT NULL,
+    horizon_days         INTEGER NOT NULL,
+    direction            TEXT    NOT NULL,
+    driver_name          TEXT    NOT NULL,
+    family_name          TEXT    NOT NULL,
+    driver_value         REAL,
+    driver_weight        REAL,
+    driver_contribution  REAL,
+    family_score         REAL,
+    group_score          REAL,
+    grade                TEXT,
+    published            INTEGER,
+    forward_return_pct   REAL,
+    max_drawdown_pct     REAL,
+    PRIMARY KEY (instrument, ref_date, horizon_days, direction, driver_name)
+)
+"""
+
+TABLE_FEATURE_SNAPSHOTS = "feature_snapshots"
+
+DDL_FEATURE_SNAPSHOTS = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_FEATURE_SNAPSHOTS} (
+    ref_date    TEXT NOT NULL,
+    feature_key TEXT NOT NULL,
+    value       REAL,
+    PRIMARY KEY (ref_date, feature_key)
+)
+"""
+
+TABLE_SIGNAL_SETUPS = "signal_setups"
+
+DDL_SIGNAL_SETUPS = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_SIGNAL_SETUPS} (
+    instrument         TEXT    NOT NULL,
+    ref_date           TEXT    NOT NULL,
+    horizon_days       INTEGER NOT NULL,
+    direction          TEXT    NOT NULL,
+    score              REAL,
+    grade              TEXT,
+    published          INTEGER,
+    entry              REAL,
+    sl                 REAL,
+    tp                 REAL,
+    rr                 REAL,
+    atr                REAL,
+    forward_return_pct REAL,
+    PRIMARY KEY (instrument, ref_date, horizon_days, direction)
+)
+"""

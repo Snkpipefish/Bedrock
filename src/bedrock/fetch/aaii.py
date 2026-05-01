@@ -100,10 +100,10 @@ def _parse_aaii_excel(blob: bytes) -> pd.DataFrame:
     out["bullish_pct"] = pd.to_numeric(df.get("col1"), errors="coerce")
     out["neutral_pct"] = pd.to_numeric(df.get("col2"), errors="coerce")
     out["bearish_pct"] = pd.to_numeric(df.get("col3"), errors="coerce")
-    if "col4" in df.columns:
-        out["bull_bear_spread"] = pd.to_numeric(df["col4"], errors="coerce")
-    else:
-        out["bull_bear_spread"] = out["bullish_pct"] - out["bearish_pct"]
+    # AAII Excel col4 har vist seg å være "Total" (bull + neutral + bear ≈ 100),
+    # ikke spread. Beregn alltid fra bullish - bearish — det er den canonical
+    # AAII bull-bear-spread-definisjonen. Sub-fase 12.8 fix.
+    out["bull_bear_spread"] = out["bullish_pct"] - out["bearish_pct"]
 
     out = out.dropna(subset=["date", "bullish_pct"])
 
