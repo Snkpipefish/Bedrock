@@ -1,0 +1,35 @@
+# bedrock-signals-bot-intraday: intra-day regen av signals_bot.json
+#
+# Sub-fase 12.9 D5+. Erstatter ikke daglig bedrock-signals-all.timer
+# (som regen full signals.json + agri_signals.json kl 03:30) — kun
+# bot-output regenereres her hyppigere.
+#
+# Kontekst:
+#   SCALP-horisonten (minutter–timer) kan ikke handle på 24t gamle
+#   setups. Daglig 03:30-cadence var trygg for MAKRO/SWING men gjorde
+#   SCALP nytteløs. Denne timeren reduserer SCALP-staleness fra 24t
+#   til ≤30 min ved å regenerere signals_bot.json hver 30. minutt
+#   under market hours. Faktisk kjøretid ~8 min/cycle (sequential per
+#   instrument); ~25 % CPU under market hours.
+#
+# Output:
+#   data/signals_bot.json (overskrives ved hver kjøring)
+#
+# Avhengigheter:
+#   bedrock-server.service serverer /bot/signals fra signals_bot.json
+#   live; ingen restart trengs etter regen. Boten ser ferskest data
+#   ved neste polling-cycle (60s normal / 20s SCALP-active).
+[Unit]
+Description=Bedrock signals-all intra-day (kun signals_bot.json, market hours)
+After=network-online.target bedrock-fetch-prices.service bedrock-fetch-fundamentals.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/pc/bedrock
+ExecStart=/home/pc/bedrock/.venv/bin/bedrock signals-all --bot-only --output data/signals_bot.json
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

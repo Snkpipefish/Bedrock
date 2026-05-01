@@ -1,0 +1,26 @@
+# bedrock-signals-bot-intraday.timer: hver 30 min market hours
+#
+# Sub-fase 12.9 D5+. Reduserer SCALP-staleness fra 24t → ≤30 min.
+#
+# Cadence:
+#   Mon..Fri 06:00..21:30 Oslo (FX/commodities aktive timer; demper
+#   regen-presset utenfor likvide vinduer for å spare CPU + redusere
+#   regen-overlapp-risiko siden hver kjøring tar ~8 min).
+#
+#   AccuracySec=1min (default 1min toleranse; ikke høyere — 30-min-
+#   slot må holdes presist for at SCALP-staleness skal stemme).
+#
+#   Persistent=true: hvis maskinen var av da timeren skulle fyre,
+#   kjør én gang ved oppstart for å få minst én fersk regen.
+[Unit]
+Description=Bedrock signals-bot intra-day timer (hver 30 min, market hours)
+Requires=bedrock-signals-bot-intraday.service
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 06..21:00/30:00
+Persistent=true
+AccuracySec=1min
+Unit=bedrock-signals-bot-intraday.service
+
+[Install]
+WantedBy=timers.target

@@ -177,6 +177,16 @@ def _discover_instrument_ids(instruments_dir: Path) -> list[str]:
     help="Skriv financial → signals.json + agri → agri_signals.json. "
     "Default på, men deaktivert ved --bot-only.",
 )
+@click.option(
+    "--horizons",
+    "horizons_filter",
+    multiple=True,
+    type=click.Choice(["scalp", "swing", "makro"], case_sensitive=False),
+    help="Filtrer output til kun gitte horisonter (kan gjentas). "
+    "Default: alle 3. Brukes av per-horisont-cadence-timere; "
+    "engine kjører fortsatt full beregning per instrument, kun "
+    "skriving filtreres.",
+)
 def signals_all_cmd(
     db_path: Path,
     instruments_dir: Path,
@@ -188,6 +198,7 @@ def signals_all_cmd(
     whitelist_path: Path,
     agri_output_path: Path,
     split_assets: bool,
+    horizons_filter: tuple[str, ...],
 ) -> None:
     """Regenerer signals.json for alle instrumenter i ``instruments_dir``.
 
@@ -251,14 +262,25 @@ def signals_all_cmd(
             yaml_path = instruments_dir / f"{instrument_id.lower()}.yaml"
             asset_class = _read_asset_class(yaml_path) if yaml_path.exists() else None
 
+            horizons_lower = {h.lower() for h in horizons_filter} if horizons_filter else None
+            kept = 0
             for entry in result.entries:
                 e_dict = entry.model_dump(mode="json")
+                if horizons_lower is not None:
+                    if str(e_dict.get("horizon", "")).lower() not in horizons_lower:
+                        continue
                 if bot_name is not None:
                     e_dict["instrument"] = bot_name
                 if asset_class is not None:
                     e_dict["asset_class"] = asset_class
                 all_entries.append(e_dict)
-            click.echo(f"  {instrument_id}: {len(result.entries)} entries")
+                kept += 1
+            if horizons_lower is not None:
+                click.echo(
+                    f"  {instrument_id}: {kept}/{len(result.entries)} entries (horisont-filter)"
+                )
+            else:
+                click.echo(f"  {instrument_id}: {len(result.entries)} entries")
         except (OrchestratorError, Exception) as exc:
             failures.append((instrument_id, str(exc)))
             _log.warning(
