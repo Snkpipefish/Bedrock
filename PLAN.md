@@ -2600,6 +2600,58 @@ Tag: `v0.12.9-fase-12.9-LUKKET`. Etter dette starter Plan-S
 (§ 19.10) eller sub-fase 12.10 (resterende UI-arbeid + WASDE pre-2019
 + comex/cafe ingest hvis prioritert).
 
+### 21.11 Avdekkede follow-ups (logget for Plan-S / 12.10)
+
+Følgende er avdekket under D5-implementasjon 2026-05-01 og er
+**ikke** gating for å lukke 12.9 — de blokker SCALP-ytelse, men
+30-min-cadence (D5+ commit `bab3370`) er en betydelig forbedring
+fra 24t-statusen som var blocker.
+
+**Fase 2 — `signals-all` ytelse (kritisk for SCALP <5 min cadence)**
+
+Måling 2026-05-01: `bedrock signals-all --bot-only` tar 8 min 19s
+sequentielt for 17 instrumenter (~30s/instrument). 30-min-cadence
+fyrer derfor uten overlap, men 5-min eller raskere er ikke mulig
+før dette løses. Mistenkt root cause: gjentatte DB-query per
+instrument for shared data (FRED-serier, calendar_ff, COT). Plan:
+
+1. Profile `generate_signals` med cProfile på 1 instrument
+2. Identifiser repeated DB-loads → cache i in-memory layer
+3. Vurder per-instrument parallellisering (4-8 worker-pool) etter
+   shared-data-cache (sequential cache fill, parallel score-loop)
+4. Mål: <60s for 17 instrumenter → SCALP-cadence kan settes til
+   5 min
+
+Estimat: 1 session.
+
+**Fase 3 — per-horisont drivere (§ 20.2 antyder ikke-overlappende
+driver-bunker)**
+
+Nåværende YAML lar SCALP/SWING/MAKRO **kun re-vekte** samme drivere
+via `family_weights`. § 20.2 antyder at SCALP burde ha helt andre
+primærkilder (calendar_ff KJERNE, surprise-vs-consensus, VIX9D-ratio
+real-time, seismic M≥6) som ikke nødvendigvis bidrar til MAKRO.
+Eksempel: en `event_distance`-driver med tyngre vekt på SCALP enn
+MAKRO krever per-horisont driver-spec eller duplisert YAML-entries.
+
+Forslag: utvid `families.<name>.drivers`-listen til å akseptere
+`horizons: [SCALP, SWING]`-felt på per-driver-basis. Engine filtrerer
+drivere per horisont under score-kall. Bakoverkompatibelt (mangler
+felt = alle 3 horisonter, status quo).
+
+Estimat: 1-2 sessioner inkl. YAML-migrasjon for 22 instrumenter.
+Påvirker scoring-output → krever full snapshot-baseline-regen +
+grade-validering analogt med 12.7 D-spor.
+
+**Mindre debt-poster (kosmetisk)**
+
+- secrets.env har 3 `export `-prefiks-linjer (FRED/NASS/EIA-keys) som
+  systemd ignorerer med warning. Bot trenger ikke disse keys; warning
+  er støy. Trivielt fix: `sed -i 's/^export //' ~/.bedrock/secrets.env`.
+- pyOpenSSL versjons-mismatch: `ctrader-open-api 0.9.2` krever 24.1.0,
+  vi har 26.1.0. Fungerer, men kan pinnes hvis annet pakkearbeid
+  setter det på prøve.
+
 ### 21.10 Hva tas fra scalp_edge
 
 | scalp_edge-fil | bedrock-bot-status |
