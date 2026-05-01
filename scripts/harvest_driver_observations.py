@@ -291,6 +291,14 @@ def harvest_one(
         ref_date_str = ref_ts.strftime("%Y-%m-%d")
         as_of_store = AsOfDateStore(store, ref_ts)
 
+        # Type C-resolution per audit-runde 5: noon-shift for backtest-scoring
+        # slik at driver ser events innen min_hours=4-vindu i markeds-aktiv-tid.
+        # Live trading uses wallclock via risk.py fallback.
+        now_ts = (
+            (ref_ts + pd.Timedelta(hours=12)).to_pydatetime()
+            if hasattr(ref_ts, "to_pydatetime")
+            else None
+        )
         try:
             result = generate_signals(
                 instrument,
@@ -299,7 +307,7 @@ def harvest_one(
                 horizons=[horizon_name],
                 directions=None,
                 write_snapshot=False,
-                now=ref_ts.to_pydatetime() if hasattr(ref_ts, "to_pydatetime") else None,
+                now=now_ts,
             )
         except Exception as exc:
             _log.debug(
