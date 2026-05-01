@@ -243,15 +243,29 @@ Implementasjon:
 2. Re-import `data/manual/forex_factory_2007_2025.csv` med `--publication-lag-days 7`. Krever lokal DB-write; må vente til Codespace-harvest er ferdig OG synkronisert lokalt, eller kjøres i Codespace selv etter harvest.
 3. Tester: oppdater `tests/integration/test_ingest_forex_factory.py` (hvis finnes) til å assert at fetched_at < event_ts.
 
-**Steg 3 — Type C: Driver backtest-mode (valgfri, vurder etter steg 1+2)**
+**Steg 3 — Type C-resolution: harvest-side noon-shift (RESOLVED 2026-05-01 session 137)**
 
 **Presisering audit-runde 4:** Type C er ikke uavhengig bug. `min_hours=4` er intensjonell live-trading-design ("vent 4h før scheduled release"). For backtest-snapshot kl 00:00 UTC er events typisk 8-14h unna (markeds-åpning) så score=1.0 (ingen event imminent) er semantisk korrekt utfall. Det er Type A+B som forhindrer driveren fra å EVER se events i utgangspunktet.
 
-Type C bør derfor IKKE fixes uavhengig — kun re-evalueres etter A+B er live.
+**Smoke-test session 137 (Cocoa, A+B fixet, _now=ref_date midnatt UTC):**
+- 78 rader generert, ALLE driver_value=1.0, 1 distinct verdi
+- Hand-rolled samples 2014-02-18/2014-03-03/2018-03-12: scores (1.0/1.0/1.0) ved `_now=ref_date+0h`, (1.0/0.75/1.0) ved `_now=ref_date+12h`
+- Bekrefter eksakt audit-runde 3-prediksjonen i linje 215: "score=1.0 nesten alltid" ved midnatt-snapshot
 
-1. Etter steg 1+2 er live: kjør event_distance for sample ref_dates med ekte `_now=ref_date+12:00:00` UTC (markeds-tid) og sjekk om variasjon dukker opp. Hvis IC > 0 → bug fixet, ingen Type C-endring nødvendig.
-2. Hvis fortsatt monotone etter A+B: vurder ny param `snapshot_time_offset_hours` (default 0 for live, 12 for backtest) som forskyver `_now` i driver-koden; eller `mode: 'live' | 'snapshot'` der `snapshot`-mode bruker dag-buckets ("event innen 1 dag = score X").
-3. Beslutning om Type C-endring utsettes til etter A+B + IC-måling i analyzer-runde.
+**Resolution-skift (audit-runde 5, session 137):** Type C MÅ resolves for at A+B-fix skal gi variert score. Tidligere "HOPP OVER"-anbefaling deprecated — den var basert på audit-runde 4-presisering om at A+B alene ville lenkje opp driveren, men smoke-testen viser at midnatt-snapshot i kombinasjon med min_hours=4 gjør driver-output deterministisk 1.0 uansett.
+
+**Valg av løsning (session 137 commit `e994abe`):** Harvest-side noon-shift, ikke driver-side endring.
+- `scripts/harvest_driver_observations.py:harvest_one(...)`: `now=(ref_ts + pd.Timedelta(hours=12)).to_pydatetime()`
+- 1 linje + kommentar
+- Driver beholder `min_hours=4` (intensjonell live-design)
+- Live trading bruker wallclock via `risk.py:201-205`-fallback
+- Backtest-snapshot @ noon UTC matcher realistic markeds-aktiv-tid for relevante events (US 12:30-21:00, EU 06:00-15:30, JP 23:30-08:00)
+
+**Ikke valgt (begrunnelse):**
+- Driver-side `snapshot_time_offset_hours`-param: krever YAML-config-endring per instrument + driver-laag-endring. Mer kompleks for samme effekt.
+- `mode: 'live' | 'snapshot'`-bryter med dag-buckets: re-design av semantikk; for stor for fix-runde.
+
+**Status:** RESOLVED — session 137 commit `e994abe` lander noon-shift; backfill via `--only-driver event_distance` (commit `6659554`) kjører detached.
 
 **Steg 4 — Backfill driver_observations**
 1. Slett event_distance-rader for berørte ref_dates: `DELETE FROM driver_observations WHERE driver_name='event_distance';` (3153 rader, alle ugyldige).
@@ -308,13 +322,13 @@ Codespace-harvest fullførte 2026-05-01 morgen (489,026 rader, 22/22 instrumente
 **Ny anbefaling (audit-runde 5): Strategi 2.** Cleanest result — event_distance får ekte verdier i analyzer, ingen "kunstig dropp"-artefakt, ingen dobbel rebalansering.
 
 Konkret implementasjon for session 137 (6 steg):
-1. **Type A** — engine `_now`-propagering (per Steg 1 i fix-spec linje 224-230)
-2. **Type B** — Forex Factory `--publication-lag-days 7` (per Steg 2 linje 232-247)
-3. ~~Type C~~ — **HOPP OVER** inntil A+B er live + IC-måling. Kun re-evaluer hvis IC=0 etter A+B.
-4. Backfill: `DELETE FROM driver_observations WHERE driver_name='event_distance'` + re-harvest
-5. Analyzer: `analyze_driver_performance.py` + `analyze_cross_correlations.py`
-6. YAML-rebalansering per `docs/12_6_analyzer_plan.md`
-6.5. Cleanup: slett dead drivers `currency_cross_trend` + `igc_stocks_change` (bekreftet dead via 42/44-harvest-resultat — 2 manglende drivere er nettopp disse)
+1. **Type A** — engine `_now`-propagering (per Steg 1 i fix-spec linje 224-230). LANDET commit `8003380`.
+2. **Type B** — Forex Factory `--publication-lag-days 7` (per Steg 2 linje 232-247). LANDET commit `78e36c6`.
+3. **Type C-resolution** — harvest-side noon-shift (`now=ref_ts+12h`). Tidligere "HOPP OVER"-anbefaling deprecated etter smoke-test-evidence at midnatt-snapshot gir 1.0 i 78/78 rader. LANDET commit `e994abe`. Se Steg 3-seksjonen over.
+4. Backfill: `DELETE FROM driver_observations WHERE driver_name='event_distance'` + re-harvest med `--only-driver event_distance` (commit `6659554` la til denne flag-en for å bypass resume-skip-bug). Detached parallel harvest, ETA ~20h.
+5. Analyzer: `analyze_driver_performance.py` + `analyze_cross_correlations.py` (session 138 etter harvest-completion)
+6. YAML-rebalansering per `docs/12_6_analyzer_plan.md` (session 138)
+6.5. Cleanup: slett dead drivers `currency_cross_trend` + `igc_stocks_change` (bekreftet dead via 42/44-harvest-resultat — 2 manglende drivere er nettopp disse) (session 138)
 
 Strategi 3 sin filter-snippet beholdes som backup hvis Strategi 2 møter blockers:
 ```python
