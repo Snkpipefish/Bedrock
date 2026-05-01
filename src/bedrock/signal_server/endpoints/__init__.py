@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from bedrock.signal_server.endpoints.alerts import alerts_bp
+from bedrock.signal_server.endpoints.bot import bot_bp
 from bedrock.signal_server.endpoints.kills import kills_bp
 from bedrock.signal_server.endpoints.prices import prices_bp
 from bedrock.signal_server.endpoints.rules import rules_bp
@@ -15,6 +16,7 @@ from bedrock.signal_server.endpoints.uploads import uploads_bp
 
 __all__ = [
     "alerts_bp",
+    "bot_bp",
     "kills_bp",
     "prices_bp",
     "rules_bp",

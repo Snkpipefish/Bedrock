@@ -38,6 +38,7 @@ class ServerConfig(BaseModel):
     data_root: Path = Field(default=DEFAULT_DATA_ROOT)
     signals_path: Path = Field(default=DEFAULT_DATA_ROOT / "signals.json")
     agri_signals_path: Path = Field(default=DEFAULT_DATA_ROOT / "agri_signals.json")
+    signals_bot_path: Path = Field(default=DEFAULT_DATA_ROOT / "signals_bot.json")
     kill_switch_path: Path = Field(default=DEFAULT_DATA_ROOT / "kills.json")
 
     # DataStore (SQLite)

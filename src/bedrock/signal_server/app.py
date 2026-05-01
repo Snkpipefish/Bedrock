@@ -16,6 +16,7 @@ from flask import Flask
 from bedrock.signal_server.config import ServerConfig
 from bedrock.signal_server.endpoints import (
     alerts_bp,
+    bot_bp,
     kills_bp,
     prices_bp,
     rules_bp,
@@ -45,6 +46,7 @@ def create_app(config: ServerConfig | None = None) -> Flask:
     app.register_blueprint(uploads_bp)
     app.register_blueprint(rules_bp)
     app.register_blueprint(ui_bp)
+    app.register_blueprint(bot_bp)  # sub-fase 12.9 D1b — /bot/signals for bedrock-bot
     return app
 
 
