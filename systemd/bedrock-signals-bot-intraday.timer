@@ -1,25 +1,26 @@
-# bedrock-signals-bot-intraday.timer: hver 30 min market hours
+# bedrock-signals-bot-intraday.timer: hver 5 min market hours
 #
-# Sub-fase 12.9 D5+. Reduserer SCALP-staleness fra 24t → ≤30 min.
+# Sub-fase 12.9 D5+ (Fase 2 perf-fix). Etter find_instrument-cache
+# (commit XYZ) tar full bot-only-regen ~1m16s for 17 inst. SCALP-
+# staleness går fra ≤30 min → ≤5 min.
 #
 # Cadence:
-#   Mon..Fri 06:00..21:30 Oslo (FX/commodities aktive timer; demper
-#   regen-presset utenfor likvide vinduer for å spare CPU + redusere
-#   regen-overlapp-risiko siden hver kjøring tar ~8 min).
+#   Mon..Fri 06:00..21:55 Oslo (FX/commodities aktive timer).
+#   192 fyringer/dag × 5 dager = 960/uke × 1.3 min = ~21 t/uke CPU.
 #
-#   AccuracySec=1min (default 1min toleranse; ikke høyere — 30-min-
-#   slot må holdes presist for at SCALP-staleness skal stemme).
+#   AccuracySec=30s (5-min-slot må holdes presist; hver run tar 1.3
+#   min så accuracy må være < margin (3.7 min)).
 #
 #   Persistent=true: hvis maskinen var av da timeren skulle fyre,
 #   kjør én gang ved oppstart for å få minst én fersk regen.
 [Unit]
-Description=Bedrock signals-bot intra-day timer (hver 30 min, market hours)
+Description=Bedrock signals-bot intra-day timer (hver 5 min, market hours)
 Requires=bedrock-signals-bot-intraday.service
 
 [Timer]
-OnCalendar=Mon..Fri *-*-* 06..21:00/30:00
+OnCalendar=Mon..Fri *-*-* 06..21:00/5:00
 Persistent=true
-AccuracySec=1min
+AccuracySec=30s
 Unit=bedrock-signals-bot-intraday.service
 
 [Install]
