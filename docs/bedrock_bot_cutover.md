@@ -58,18 +58,128 @@ Manglende (sub-fase 12.9-arbeid):
    - Verify TP/SL-hit + position-close
    - Verify daily_loss-persistence
 
-## Sub-task-tabell
+## Sub-task-tabell (revidert 2026-05-01 etter audit)
 
 | Task | Innhold | Estimat |
 |---|---|---|
-| **D1** | HTTP `/signals`-endpoint i `bedrock server` | 1-2t |
+| **D1a** | Schema-adapter `signals_bot.json` (bedrock) → bot-signal-format (scalp_edge) | 4-6t |
+| **D1b** | HTTP `/signals`-endpoint i `bedrock server` som returnerer adapter-output | 1-2t |
 | **D2** | Refresh-token-flow i `ctrader_client.py` | 2-3t |
 | **D3** | `bot.yaml`-config + secrets-env-mønster | 30 min |
 | **D4** | Systemd user-service `bedrock-bot.service` | 30 min |
 | **D5** | End-to-end demo-test | 1-2t |
 | **D6** | scalp_edge retire — disable timer + arkiver kode | 30 min |
 
-Totalt 5-9t, sannsynlig 1-2 sessioner.
+Totalt 9-15t, sannsynlig 2-3 sessioner.
+
+## D1a — schema-adapter detail (ny scope etter audit)
+
+Bedrock-bot's `entry.py` venter signal-payload som scalp_edge's
+signal_server.py produserer. Bedrocks `signals_bot.json` har et helt
+annet format. Adapter må bygges.
+
+**Bot-format (input til bot, fra scalp_edge signal_server.py):**
+
+```json
+{
+  "schema_version": "2.1",
+  "signals": [
+    {
+      "id": "<unique-id>",
+      "instrument": "GOLD",
+      "direction": "buy",
+      "horizon": "SWING",
+      "status": "watchlist",
+      "entry_zone": [3380.5, 3382.0],
+      "stop": 3375.0,
+      "t1": 3395.0,
+      "expiry_candles": 96,
+      "horizon_config": {...},
+      "confirmation_candle_limit": 12,
+      "correlation_group": "metals",
+      "created_at": "2026-05-01T01:39:34Z"
+    }
+  ],
+  "valid_until": "2026-05-01T13:00:00Z",
+  "global_state": {"geo_risk_active": false, ...},
+  "rules": {"vix_regime": "normal", ...}
+}
+```
+
+**Bedrock-format (`signals_bot.json` per session 92):**
+
+```json
+[
+  {
+    "instrument": "AUDUSD",
+    "direction": "buy",
+    "horizon": "makro",
+    "score": 4.29,
+    "grade": "A",
+    "max_score": 5.8,
+    "min_score_publish": 3.5,
+    "published": true,
+    "setup": {
+      "setup_id": "8a69313f2fbf",
+      "first_seen": "2026-05-01T01:39:34Z",
+      "setup": {
+        "instrument": "AUDUSD",
+        "direction": "buy",
+        "horizon": "makro",
+        "entry": 0.7178,
+        "sl": 0.7167,
+        "tp": null,
+        "rr": null,
+        "atr": 0.00355,
+        "entry_cluster_price": 0.7178,
+        "entry_cluster_types": ["prior_high", "swing_high"]
+      }
+    },
+    "skip_reason": null,
+    "gates_triggered": [],
+    "families": {...},
+    "active_families": 6,
+    "analog": {...},
+    "asset_class": "fx"
+  }
+]
+```
+
+**Adapter-mapping:**
+
+| Bot-felt | Bedrock-kilde | Transform |
+|---|---|---|
+| `id` | `setup.setup_id` | direkte |
+| `instrument` | `instrument` | bot-mapping (AUDUSD→AUDUSD, Gold→GOLD via `bot_whitelist.yaml`) |
+| `direction` | `direction` | direkte |
+| `horizon` | `horizon` | UPPER (`makro`→`MAKRO`) |
+| `status` | (ny) | "watchlist" alltid (eller "active" om bot fortolkning) |
+| `entry_zone` | `setup.setup.entry` | `[entry - atr*0.5, entry + atr*0.5]` (cluster) |
+| `stop` | `setup.setup.sl` | direkte |
+| `t1` | `setup.setup.tp` | direkte (eller null for MAKRO trailing-only) |
+| `expiry_candles` | (ny) | per-horisont default (SCALP=24, SWING=96, MAKRO=336) |
+| `horizon_config` | (ny) | hard-kodet per horisont |
+| `confirmation_candle_limit` | (ny) | hard-kodet per horisont |
+| `correlation_group` | (ny via mapping) | per asset_class (`fx`, `metals`, `agri`, `indices`, `energy`, `crypto`) |
+| `created_at` | `setup.first_seen` | direkte |
+| `valid_until` (top) | (ny) | now + min(expiry_candles) |
+| `global_state` (top) | (ny) | `{geo_risk_active: false, vix_regime: "normal"}` (eller hentet fra bedrock fundamentals) |
+| `rules` (top) | (ny) | hard-kodet for bot-default |
+
+**Filter:** kun `published: true` entries inkluderes i adapter-output.
+
+**Ny modul:** `src/bedrock/signal_server/bot_adapter.py` med:
+
+```python
+def adapt_to_bot_format(
+    bedrock_signals: list[dict],
+    horizon_defaults: dict,
+    asset_class_map: dict,
+) -> dict:
+    """Transformer bedrocks signals_bot.json til bot-signal-format."""
+```
+
+Test-coverage: én test per (input-felt, horisont, asset-klasse)-kombinasjon.
 
 ## Migrasjons-orden
 
