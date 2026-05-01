@@ -137,7 +137,14 @@
 
 - **Sub-fase 12.8 LUKKET 2026-05-01** (tag `v0.12.8-fase-12.8-LUKKET`). PLAN § 20 lagt til (data-gjeld + cron-tuning + whitelist-revisjon). § 20.2 låser horisont-bruk-prinsipper M/S/Sc. Session 139 leverte A1 (coverage-rapport-verktøy + first rapport) + A2 (paused timers reaktivert, AAII bug + schema-drift + fas_esr docstring) + B (stale_hours tuning + FRED policy) + C (per-(inst × hor) whitelist-kvalifisering dokumentert). Bot-handel default = SWING/MAKRO; SCALP filtreres til Plan-S.
 
-- **Sub-fase 12.9 ÅPEN 2026-05-01** — bedrock-bot cutover. PLAN § 21 lagt til. Scalp_edge retires (auth-failure crash-loop siden 28. apr); bedrock-bot tar over. **D1 LANDET** (`649f429`): adapter `bedrock.signal_server.bot_adapter` + `/bot/signals`-endpoint + 29 tester. **D2-D6 pending:** refresh-token-flow + bot.yaml + systemd-service + demo-test ≥24t + scalp_edge-retire. Full plan: `docs/bedrock_bot_cutover.md`. **cTrader-credentials klare i `~/.bedrock/secrets.env`** (CTRADER_CLIENT_ID/CLIENT_SECRET/ACCESS_TOKEN/REFRESH_TOKEN/ACCOUNT_ID — alle 5 verifisert). **Next task: D2** (refresh-token-flow i ctrader_client.py).
+- **Sub-fase 12.9 ÅPEN 2026-05-01** — bedrock-bot cutover. PLAN § 21 lagt til. Scalp_edge retires (auth-failure crash-loop siden 28. apr); bedrock-bot tar over. **D1+D2+D3+D4 LANDET 2026-05-01:**
+  - **D1** (`649f429`): adapter `bedrock.signal_server.bot_adapter` + `/bot/signals`-endpoint + 29 tester.
+  - **D2** (`f394098`): refresh-token-flow i `ctrader_client.py` — `CtraderCredentials.refresh_token`, `refresh_ctrader_access_token()`-modul-helper mot `connect.spotware.com/apps/token`, `update_secrets_env_var()` atomic+0o600 i `config/secrets.py`, `_on_error_res` engangs-retry før `_fatal_exit(78)`. 28 nye tester (17 refresh + 11 secrets-update). Plus `fa4286f` fix(tests): pre-eksisterende 12.8 stale_hours-asserts → 264h (3 trivielle, urelatert til D2).
+  - **D3** (`4c63ff2`): `config/bot.yaml` `signal_url` → `http://127.0.0.1:5100/bot` (treffer `/bot/signals`-blueprint), `signal_api_key_env` → `null` (lokal/loopback-trafikk uten auth). Pydantic-modell utvidet til `str | None`, `__main__.py` håndterer `None` med INFO ikke WARN. Test-defaults oppdatert + 1 ny null-pathway-test.
+  - **D4** (`5f3de0f`): `systemd/bedrock-bot.service` med `--demo`, `EnvironmentFile=/home/pc/.bedrock/secrets.env`, `Restart=on-failure`, `RestartPreventExitStatus=78 79` (FATAL 78 = refresh-flyt ga opp; 79 = reconnect-budsjett oppbrukt — operatør må intervenere). 7 smoke-tester. `systemd-analyze --user verify` ✓.
+  - **D5+D6 pending:** demo-test ≥24t (operatør-kjørt manuelt) + scalp_edge retire. Tag `v0.12.9-fase-12.9-LUKKET` settes etter D6.
+  - Full plan: `docs/bedrock_bot_cutover.md`. **cTrader-credentials klare i `~/.bedrock/secrets.env`** (CTRADER_CLIENT_ID/CLIENT_SECRET/ACCESS_TOKEN/REFRESH_TOKEN/ACCOUNT_ID — alle 5 verifisert).
+  - **Next task: D5** — operatør lenker unit-fila (`systemctl --user link /home/pc/bedrock/systemd/bedrock-bot.service` + `daemon-reload` + `start bedrock-bot.service`), følger `journalctl --user -u bedrock-bot -f` ≥24t. Når grønt → D6.
 
 - **Open tech-gjeld for fremtidige sessioner** (oppdatert 2026-05-01 etter sub-fase 12.6 LUKKET):
   - **event_distance full re-harvest** når compute-budsjett tillater (Codespace-quota fornyes neste måned). Smoke-test bekreftet fix virker — venter kun på rader for IC-måling.
@@ -429,6 +436,139 @@ ferdig og 12.6-rebalansering er gjort.
 ---
 
 ## Session log (newest first)
+
+### 2026-05-01 — Session 140: sub-fase 12.9 D2+D3+D4 (refresh-flyt + bot.yaml + systemd-service)
+
+**Scope:** Fortsettelse av 12.9-cutover. D2-D4 levert i én session (estimat
+2-3t + 30 min + 30 min); D5 (demo-test ≥24t) er operatør-kjørt og kan ikke
+automatiseres. Helse-blikk RØD ved start (bedrock-monitor.service +
+crypto_sentiment/news_intel missing) — verifisert som bot-ortogonal og
+ikke blocker for D2-D4. Sub-fase 12.6/12.7/12.8 LUKKET; ADR-011 cutoff 10y,
+§ 19.3 trading-logikk-låser, snapshot-baseline ufravikelig.
+
+**D2 levert (`f394098`):** refresh-token-flow.
+
+- `src/bedrock/bot/ctrader_client.py`:
+  - `CtraderCredentials.refresh_token: str | None = None` (back-compat;
+    uten refresh-token oppfører bot seg som før — direkte FATAL ved
+    auth-fail).
+  - `load_credentials_from_env()` leser `CTRADER_REFRESH_TOKEN` valgfri
+    (fraværet logges INFO; ikke hard-fail).
+  - `RefreshTokenError(status_code, body)` modul-exception.
+  - `refresh_ctrader_access_token(creds, *, timeout=15)` modul-helper:
+    POST `application/x-www-form-urlencoded` til
+    `https://connect.spotware.com/apps/token` med `grant_type=refresh_token`
+    + `refresh_token` + `client_id` + `client_secret`. Returnerer parsed
+    JSON `{access_token, refresh_token, expires_in, ...}` ved 200, raise
+    ved alt annet (4xx/5xx/parse-feil/nettverk/manglende `access_token`).
+  - `_refresh_attempted` instans-flagg = engangs-retry-vakt per prosess.
+  - `_authenticate_application()` trekt ut fra `_on_connected` som
+    gjenbrukbar app-auth-helper (samme `ProtoOAApplicationAuthReq` med
+    gjeldende creds).
+  - `_on_error_res` ved AUTH_FATAL_ERROR_CODES: hvis `refresh_token`
+    finnes OG `not _refresh_attempted` → forsøk refresh, persister via
+    `update_secrets_env_var`, oppdater in-memory `_creds`, re-trigg
+    app-auth. Persist-feil eller refresh-feil → fall-through til
+    `_fatal_exit(78)`.
+- `src/bedrock/config/secrets.py`:
+  - `update_secrets_env_var(key, value, path=DEFAULT_SECRETS_PATH)`
+    atomic via `tempfile.mkstemp` + `os.fdopen` + `os.chmod 0o600` +
+    `os.replace`. Erstatter `KEY=...`-linjer in-place uten å berøre
+    kommentar-linjer (`#…`) eller prefix-matchende keys (`FOO_X` matches
+    ikke når key=`FOO`). Append hvis nøkkel mangler. Oppretter ny fil
+    + parent-mkdir hvis nødvendig. Avviser newlines i value + ugyldige
+    nøkler.
+- 28 nye tester:
+  - `tests/unit/bot/test_ctrader_refresh_token.py` (17): HTTP-mock
+    200/4xx/5xx/parse-feil/nettverk/manglende-felt; `_on_error_res`
+    med og uten refresh_token; dobbel-retry-vakt (andre kall →
+    direkte fatal); persist-failure → fatal; non-auth-koder ignorerer
+    refresh-flyt; `CtraderCredentials` default + load-helper med/uten
+    `CTRADER_REFRESH_TOKEN`; `RefreshTokenError`-attrs.
+  - `tests/unit/test_config_secrets.py` (+11): create-når-fil-mangler,
+    replace-eksisterende-key, append, ignorer kommenterte keys, ignorer
+    prefix-match, bevar 0o600, reject newline + ugyldig key, atomic-på-
+    chmod-fail (ingen lekkende tempfile + original urørt), round-trip
+    med `load_secrets`, default-path-bruk.
+
+**Pre-D2 trivial debt-fix (`fa4286f`):** Sub-fase 12.8 sub-task B oppdaterte
+`stale_hours` 168/200 → 264h i `config/fetch.yaml` for cot_euronext, cot_ice,
+eia_inventories, men test-asserts ble ikke oppdatert. 3 testere har feilet
+siden 12.8-LUKKET. Trivial chore-commit; isolert fra D2.
+
+**D3 levert (`4c63ff2`):** bot.yaml peker på /bot-blueprint + null api-key.
+
+- `config/bot.yaml`: `signal_url` → `http://127.0.0.1:5100/bot` (D1
+  blueprint-prefix + comms-internt `/signals`-suffix lander på
+  `/bot/signals`); `signal_api_key_env` → `null` (lokal/loopback
+  trenger ingen auth).
+- `src/bedrock/bot/config.py StartupOnlyConfig`: defaults matcher YAML
+  (regresjons-test `test_bundled_bot_yaml_matches_defaults` krever
+  Pydantic-defaults = bot.yaml-verdier). `signal_api_key_env: str` →
+  `str | None = None`.
+- `src/bedrock/bot/__main__.py build_bot()`: håndterer `None` (api_key
+  = "", logg INFO ikke WARN). Eksisterende WARN-pathway beholdt for
+  remote-server-konfig.
+- Tester: defaults oppdatert i `test_config.py`. `test_main.py` split:
+  (a) eksplisitt env-var-navn i YAML men env-var ikke satt → WARNING
+  (regresjon når brukeren har remote-server), (b) null-pathway → INFO
+  + ingen WARNING + comms får `api_key=""`.
+
+**D4 levert (`5f3de0f`):** systemd user-service `bedrock-bot.service`.
+
+- `systemd/bedrock-bot.service`:
+  - `ExecStart=/home/pc/bedrock/.venv/bin/python -m bedrock.bot --demo`
+    (demo-only i 12.9-cutover; --live aktiveres etter D5+D6 + separat
+    sub-fase-beslutning).
+  - `EnvironmentFile=/home/pc/.bedrock/secrets.env` — D2-refresh-flow
+    persisterer nye tokens hit, så neste service-restart får
+    oppdaterte CTRADER_ACCESS_TOKEN/REFRESH_TOKEN automatisk.
+  - `Restart=on-failure` + `RestartSec=10s`.
+  - `RestartPreventExitStatus=78 79` — kritisk sikkerhetsvakt.
+    78=FATAL refresh-flyten ga opp (operatør må regenerere
+    refresh_token manuelt med scripts/get_token.py); 79=reconnect-
+    budsjett oppbrukt (vedvarende auth/network-feil). Auto-restart
+    ville gått i evig auth-failure-loop = presis crash-loopen på
+    scalp_edge som triggret 12.9.
+  - `Requires=` + `After=bedrock-server.service network-online.target`
+    — `/bot/signals` må svare før første poll.
+- `tests/unit/bot/test_systemd_unit.py` (7 smoke-tester) som regresjons-
+  vakt mot utilsiktet drift på sikkerhets-kritiske felt: After-deps,
+  EnvironmentFile-sti, ExecStart med --demo (ikke --live),
+  RestartPreventExitStatus 78+79, journal-output, default.target.
+- `systemd-analyze --user verify` ✓.
+
+**Test-disiplin notert (bruker-feedback mid-session):** Full pytest-suite
+(897s for 2419 tester) ble kjørt etter D2 og D3. Bruker poengterte at det
+er bortkastet for små changes der relevante test-suites er <100 tester og
+moduler-i-spill er kjent. Nytt mønster fra D4 og fremover: bare kjør pytest
+mot endrede moduler + pyright src/. Full suite reserveres for fase-LUKKING
+eller endringer i delt kode-sti (orchestrator/engine/store).
+
+**Commits (denne sessionen):**
+- `fa4286f` fix(tests): stale_hours-asserts → 264h (12.8 cron-tuning followup)
+- `f394098` feat(12.9): D2 — refresh-token-flow + auto-update av secrets.env
+- `4c63ff2` feat(12.9): D3 — bot.yaml peker på /bot-blueprint + null api-key
+- `5f3de0f` feat(12.9): D4 — systemd user-service bedrock-bot
+- (denne) state: session 140 — D2+D3+D4 LANDET, D5 venter på operatør-kjøring
+
+**Next task: D5 (demo-test ≥24t)** — operatør-kjørt, ikke automatiserbar:
+
+```bash
+systemctl --user link /home/pc/bedrock/systemd/bedrock-bot.service
+systemctl --user daemon-reload
+systemctl --user start bedrock-bot.service
+journalctl --user -u bedrock-bot -f
+```
+
+Verify per § 21.7: auth-flow OK (først direkte, deretter refresh-test ved
+simulert expiry), signal-fetch (parse + schema 2.1 + ingen warnings), ordre-
+plassering på 1 paper-money-trade, TP/SL-hit + position-close, daily_loss-
+persistens etter restart.
+
+Etter ≥24t grønt → **D6** (scalp_edge retire: `systemctl --user disable
+--now scalp_edge.*`, arkiv-tag `scalp-edge-final-2026-05-XX`, behold
+`~/scalp_edge/`-katalog som referanse) → tag `v0.12.9-fase-12.9-LUKKET`.
 
 ### 2026-05-01 — Session 139 fortsettelse: sub-fase 12.9 åpning + D1 (adapter + endpoint)
 
