@@ -2609,20 +2609,25 @@ fra 24t-statusen som var blocker.
 
 **Fase 2 — `signals-all` ytelse (kritisk for SCALP <5 min cadence)**
 
-Måling 2026-05-01: `bedrock signals-all --bot-only` tar 8 min 19s
-sequentielt for 17 instrumenter (~30s/instrument). 30-min-cadence
-fyrer derfor uten overlap, men 5-min eller raskere er ikke mulig
-før dette løses. Mistenkt root cause: gjentatte DB-query per
-instrument for shared data (FRED-serier, calendar_ff, COT). Plan:
+**LEVERT 2026-05-01 (commit `f606ca5`).** Profilering avdekket at
+89 % av tiden gikk i YAML-loading — `find_instrument` ble kalt 24x
+per instrument og hver kall lastet alle 22 YAMLer fra disk.
+`@lru_cache(maxsize=8)` på `_load_all_cached`-wrapper løste dette.
 
-1. Profile `generate_signals` med cProfile på 1 instrument
-2. Identifiser repeated DB-loads → cache i in-memory layer
-3. Vurder per-instrument parallellisering (4-8 worker-pool) etter
-   shared-data-cache (sequential cache fill, parallel score-loop)
-4. Mål: <60s for 17 instrumenter → SCALP-cadence kan settes til
-   5 min
+Effekt:
+- Gold-score (1 inst): 79.3s → 12.4s (6.4x)
+- `bedrock signals-all --bot-only` (17 inst): 8m19s → 1m16s (6.5x)
+- SCALP-staleness: ≤30 min → ≤5 min (intraday-timer satt fra
+  `06..21:00/30:00` til `06..21:00/5:00`, 960 fyringer/uke)
 
-Estimat: 1 session.
+Gjenstående optimalisering (kan utsettes til empirisk behov dukker
+opp; 1m16s møter § 20.2 SCALP-cadence-krav):
+- pandas read_sql 4.5s (247 calls): per-driver DB-cache mulig
+- analog _knn 4s (12 calls): algoritmisk
+- positioning _load_metric_series 3s (12 calls): DB-cache-mulighet
+
+Per-instrument parallellisering var planlagt som backup-strategi
+men er ikke nødvendig.
 
 **Fase 3 — per-horisont drivere (§ 20.2 antyder ikke-overlappende
 driver-bunker)**
