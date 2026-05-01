@@ -161,6 +161,7 @@
   - **`src/bedrock/fetch/fas_esr.py` L134 stale docstring.**
   - **Schema-drift** (3 harvester-tabeller mangler i `schemas.py`).
   - **disease_pressure test-coverage < 7.**
+  - **Fjern `check_signal_diff` fra monitor** når 12.9 D6 lukker. Per 2026-05-02 (12.10 Bunke 1 prep) er sjekken soft-skipped (returnerer ok=True når ingen gamle signal-filer finnes) fordi parallel-drift mot cot-explorer er over. Hele `signal_diff`-grenen i `src/bedrock/parallel/monitor.py` (+ `compare.py` + UI-endpoint i `signal_server/endpoints/ui.py:1020`) kan retires sammen med scalp_edge-arkivering i 12.9 D6.
   - **Vurder gjeninnføring av `vix_term_ratio` for sp500/nasdaq** når mer data akkumuleres (12 obs / instrument × horizon × dir er for lite — målt median |IC|=0.029 men n er for liten til å være konklusiv).
 
 - **Tidligere "Next task"-historikk** (kun for kontekst — ikke aktiv):
