@@ -1,0 +1,37 @@
+# bedrock-bot: cTrader trading-bot (sub-fase 12.9 D4)
+#
+# Erstatter scalp_edge-boten som retires i D6 etter ≥24t grønn demo-test.
+# Bot leser signaler fra bedrock-server `/bot/signals` (bot.yaml signal_url
+# inkluderer `/bot`-prefix etter D3) og plasserer ordre via cTrader Open
+# API. Auth-credentials hentes fra ~/.bedrock/secrets.env (D2 introduserte
+# refresh-token-flyt + auto-update av samme fil).
+#
+# Restart-policy:
+#   on-failure med backoff, MEN aldri ved exit 78 (FATAL =
+#   token-refresh-flyten har gitt opp; operatør må generere ny
+#   refresh_token manuelt med scripts/get_token.py og restarte service).
+#   Exit 79 = reconnect-budsjett oppbrukt (fast auth/network-feil) —
+#   samme behandling: ikke restart automatisk.
+#
+# Avhengighet:
+#   bedrock-server.service må være oppe slik at /bot/signals svarer
+#   før bot prøver å hente første signal.
+[Unit]
+Description=Bedrock trading-bot: cTrader-grensesnitt + signal-konsument
+After=network-online.target bedrock-server.service
+Wants=network-online.target
+Requires=bedrock-server.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pc/bedrock
+EnvironmentFile=/home/pc/.bedrock/secrets.env
+ExecStart=/home/pc/bedrock/.venv/bin/python -m bedrock.bot --demo
+Restart=on-failure
+RestartSec=10s
+RestartPreventExitStatus=78 79
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
