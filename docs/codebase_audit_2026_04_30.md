@@ -293,15 +293,35 @@ Tre alternativer for hvordan event_distance håndteres mens fix-en pågår:
 - **Pro:** Hverken stopp-harvest eller dropp driver permanent. Cleanest.
 - **Con:** Krever 1-2 linjers commit i analyzer-skriptet før session 137 kjører analyzer.
 
-**Anbefaling: Strategi 3.** Strategi 1 forurenser rebalanseringen med "kunstig droppet"-driver. Strategi 2 risikerer kritisk-fase-disruption. Strategi 3 isolerer bug-en uten å forstyrre flyten.
+**Original anbefaling (audit-runde 4, mens harvest aktiv): Strategi 3.** Strategi 1 forurenser rebalanseringen med "kunstig droppet"-driver. Strategi 2 risikerer kritisk-fase-disruption. Strategi 3 isolerer bug-en uten å forstyrre flyten.
 
-Konkret implementasjon for session 137:
+**STRATEGI-SKIFT 2026-05-01 — harvest ferdig: Strategi 2 nå anbefalt.**
+
+Codespace-harvest fullførte 2026-05-01 morgen (489,026 rader, 22/22 instrumenter komplett). Strategi 2's eneste con ("avbryter 24t-harvest") gjelder ikke lenger. Re-evalueringer:
+
+| Strategi | Var-kontekst (harvest aktiv) | Nå-kontekst (harvest ferdig) |
+|---|---|---|
+| 1 (akseptér droppet) | Mid-kvalitet | Mid-kvalitet (uendret) |
+| 2 (fix + re-harvest) | ❌ Disruptiv (24t avbrudd) | ✅ **Beste valg** — kun event_distance re-harvest, ~3153 rader = 1-2t |
+| 3 (filter analyzer) | ✅ Anbefalt da | OK men nest-best (introduserer "kunstig dropp") |
+
+**Ny anbefaling (audit-runde 5): Strategi 2.** Cleanest result — event_distance får ekte verdier i analyzer, ingen "kunstig dropp"-artefakt, ingen dobbel rebalansering.
+
+Konkret implementasjon for session 137 (6 steg):
+1. **Type A** — engine `_now`-propagering (per Steg 1 i fix-spec linje 224-230)
+2. **Type B** — Forex Factory `--publication-lag-days 7` (per Steg 2 linje 232-247)
+3. ~~Type C~~ — **HOPP OVER** inntil A+B er live + IC-måling. Kun re-evaluer hvis IC=0 etter A+B.
+4. Backfill: `DELETE FROM driver_observations WHERE driver_name='event_distance'` + re-harvest
+5. Analyzer: `analyze_driver_performance.py` + `analyze_cross_correlations.py`
+6. YAML-rebalansering per `docs/12_6_analyzer_plan.md`
+6.5. Cleanup: slett dead drivers `currency_cross_trend` + `igc_stocks_change` (bekreftet dead via 42/44-harvest-resultat — 2 manglende drivere er nettopp disse)
+
+Strategi 3 sin filter-snippet beholdes som backup hvis Strategi 2 møter blockers:
 ```python
-# I analyze_driver_performance.py — første action før IC-loop:
-SKIP_DRIVERS = {"event_distance"}  # Buggy per audit 2026-04-30 Sjekk 9.5 — fix pending
-df = df[~df["driver_name"].isin(SKIP_DRIVERS)]
+# Backup-plan: I analyze_driver_performance.py — første action før IC-loop:
+# SKIP_DRIVERS = {"event_distance"}  # Buggy per audit 2026-04-30 Sjekk 9.5 — fix pending
+# df = df[~df["driver_name"].isin(SKIP_DRIVERS)]
 ```
-+ commit-melding som dokumenterer hvorfor: `feat(analyzer): skip event_distance grunnet pre-rebalanserings-blocker (audit-runde 3)`.
 
 ### 9.6 — AAII bull_bear_spread-bug
 
