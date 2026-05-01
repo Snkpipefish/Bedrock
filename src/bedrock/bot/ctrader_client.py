@@ -59,6 +59,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
+import requests
 from ctrader_open_api import Client, EndPoints, Protobuf, TcpProtocol
 from ctrader_open_api.messages.OpenApiCommonMessages_pb2 import (
     ProtoHeartbeatEvent,
@@ -105,6 +106,7 @@ from bedrock.bot.instruments import (
     INSTRUMENT_MAP,
     PRICE_FEED_MAP,
 )
+from bedrock.config.secrets import DEFAULT_SECRETS_PATH, update_secrets_env_var
 
 log = logging.getLogger("bedrock.bot.ctrader")
 
@@ -177,18 +179,91 @@ class CtraderCallbacks:
 
 
 # ─────────────────────────────────────────────────────────────
-# CtraderClient
+# Credentials + OAuth-refresh
 # ─────────────────────────────────────────────────────────────
+
+# cTrader OAuth-token-endpoint (samme på demo og live; per Spotware-dok)
+CTRADER_TOKEN_ENDPOINT = "https://connect.spotware.com/apps/token"
+_REFRESH_HTTP_TIMEOUT_SEC = 15
+
+
+class RefreshTokenError(RuntimeError):
+    """OAuth-refresh-call mot cTrader feilet (4xx/5xx eller nettverk).
+
+    Fanges av `_on_error_res` så bot faller tilbake til `_fatal_exit(78)`
+    når refresh ikke er mulig — operatør må generere ny token manuelt.
+    """
+
+    def __init__(self, status_code: int | None, body: str) -> None:
+        self.status_code = status_code
+        self.body = body
+        super().__init__(f"refresh failed (status={status_code}): {body[:200]}")
 
 
 @dataclass
 class CtraderCredentials:
-    """cTrader OAuth-credentials. Lastes fra env i `bot/__main__.py`."""
+    """cTrader OAuth-credentials. Lastes fra env i `bot/__main__.py`.
+
+    `refresh_token` er valgfri (back-compat med pre-12.9-konfig). Hvis
+    satt, brukes den ved auth-fatal-feil til å hente nye access+refresh
+    tokens før bot faller tilbake til FATAL-exit. Sett `CTRADER_REFRESH_TOKEN`
+    i `~/.bedrock/secrets.env` for å aktivere.
+    """
 
     client_id: str
     client_secret: str
     access_token: str
     account_id: int
+    refresh_token: str | None = None
+
+
+def refresh_ctrader_access_token(
+    creds: CtraderCredentials,
+    *,
+    timeout: float = _REFRESH_HTTP_TIMEOUT_SEC,
+) -> dict[str, Any]:
+    """Bytt refresh_token mot et nytt access_token via Spotware-OAuth.
+
+    POST `application/x-www-form-urlencoded` til `CTRADER_TOKEN_ENDPOINT`
+    med `grant_type=refresh_token`, `refresh_token`, `client_id`,
+    `client_secret`. Spotware roterer både access og refresh ved hvert
+    call, så caller MÅ persistere begge.
+
+    Returnerer parsed JSON `{access_token, refresh_token, expires_in, ...}`
+    ved 200. Raise `RefreshTokenError` ved alt annet (4xx/5xx, parse-feil,
+    nettverk).
+    """
+    if not creds.refresh_token:
+        raise RefreshTokenError(None, "refresh_token mangler i credentials")
+
+    payload = {
+        "grant_type": "refresh_token",
+        "refresh_token": creds.refresh_token,
+        "client_id": creds.client_id,
+        "client_secret": creds.client_secret,
+    }
+    try:
+        resp = requests.post(CTRADER_TOKEN_ENDPOINT, data=payload, timeout=timeout)
+    except requests.RequestException as exc:
+        raise RefreshTokenError(None, f"nettverksfeil: {exc}") from exc
+
+    if resp.status_code != 200:
+        raise RefreshTokenError(resp.status_code, resp.text)
+
+    try:
+        body = resp.json()
+    except ValueError as exc:
+        raise RefreshTokenError(resp.status_code, resp.text) from exc
+
+    if not isinstance(body, dict) or "access_token" not in body:
+        raise RefreshTokenError(resp.status_code, str(body))
+
+    return body
+
+
+# ─────────────────────────────────────────────────────────────
+# CtraderClient
+# ─────────────────────────────────────────────────────────────
 
 
 class CtraderClient:
@@ -248,6 +323,10 @@ class CtraderClient:
         self._pending_requests: dict[str, str] = {}
         self._lock = Lock()
 
+        # Refresh-token-flow: maks ett forsøk per prosess-livsløp.
+        # Hindrer evig retry hvis cTrader rejecter også den nye tokenen.
+        self._refresh_attempted: bool = False
+
     # ─────────────────────────────────────────────────────────
     #  Oppstart
     # ─────────────────────────────────────────────────────────
@@ -288,6 +367,14 @@ class CtraderClient:
         if self._watchdog_loop is None or not self._watchdog_loop.running:
             self._watchdog_loop = task.LoopingCall(self._watchdog_check)
             self._watchdog_loop.start(_WATCHDOG_INTERVAL_SEC, now=False)
+        self._authenticate_application()
+
+    def _authenticate_application(self) -> None:
+        """Send `ProtoOAApplicationAuthReq` med gjeldende credentials.
+
+        Trekt ut fra `_on_connected` slik at refresh-token-flyten kan
+        re-trigge app-auth uten å måtte vente på en ny TCP-tilkobling.
+        """
         req = ProtoOAApplicationAuthReq()
         req.clientId = self._creds.client_id
         req.clientSecret = self._creds.client_secret
@@ -806,9 +893,17 @@ class CtraderClient:
             log.exception("[CALLBACK] on_order_error feilet")
 
     def _on_error_res(self, event: Any) -> None:
-        # Auth-fatal-koder gir umiddelbar exit
+        # Auth-fatal-koder: prøv refresh-flow én gang før FATAL-exit.
         err_code = getattr(event, "errorCode", "")
         if err_code in AUTH_FATAL_ERROR_CODES:
+            if self._creds.refresh_token and not self._refresh_attempted:
+                self._refresh_attempted = True
+                log.warning(
+                    "[AUTH] %s — forsøker token-refresh (engangs-retry).",
+                    err_code,
+                )
+                if self._try_refresh_and_reauth():
+                    return
             log.error(
                 "[FATAL] cTrader auth-feil: %s — token må regenereres og bot restartes",
                 err_code,
@@ -819,6 +914,43 @@ class CtraderClient:
             self._callbacks.on_error_res(event)
         except Exception:
             log.exception("[CALLBACK] on_error_res feilet")
+
+    def _try_refresh_and_reauth(self) -> bool:
+        """Refresh OAuth-tokens og re-trigg app-auth.
+
+        Returnerer True hvis refresh-flyten fullførte uten exception og
+        ny app-auth ble sendt — i så fall skal caller IKKE kalle
+        `_fatal_exit`. False = refresh feilet, fall through til FATAL.
+        """
+        try:
+            payload = refresh_ctrader_access_token(self._creds)
+        except RefreshTokenError as exc:
+            log.error("[AUTH] Refresh-token-call feilet: %s", exc)
+            return False
+
+        new_access = payload.get("access_token")
+        new_refresh = payload.get("refresh_token") or self._creds.refresh_token
+        if not new_access:
+            log.error("[AUTH] Refresh-respons manglet access_token: %r", payload)
+            return False
+
+        # Persist før vi swapper in-memory state — hvis disk-skriv feiler
+        # vil neste prosess-oppstart fortsatt ha gammel token, og vi
+        # exiter via FATAL i stedet for å kjøre videre med en token vi
+        # ikke kan gjenta etter restart.
+        try:
+            update_secrets_env_var("CTRADER_ACCESS_TOKEN", new_access, DEFAULT_SECRETS_PATH)
+            if new_refresh:
+                update_secrets_env_var("CTRADER_REFRESH_TOKEN", new_refresh, DEFAULT_SECRETS_PATH)
+        except Exception:
+            log.exception("[AUTH] Klarte ikke å persistere nye tokens til secrets.env")
+            return False
+
+        self._creds.access_token = new_access
+        self._creds.refresh_token = new_refresh
+        log.info("[AUTH] Tokens refreshet OK — re-autentiserer applikasjon.")
+        self._authenticate_application()
+        return True
 
     def _on_reconcile(self, res: Any) -> None:
         try:
@@ -900,11 +1032,17 @@ class CtraderClient:
 
 
 def load_credentials_from_env() -> CtraderCredentials:
-    """Les cTrader-credentials fra miljøvariabler. Feiler hardt ved manglende."""
+    """Les cTrader-credentials fra miljøvariabler. Feiler hardt ved manglende.
+
+    `CTRADER_REFRESH_TOKEN` er valgfri — fraværet logges, men er ikke en
+    hard feil (back-compat med pre-12.9-konfig). Uten refresh-token vil
+    `_on_error_res` fortsatt FATAL-exit ved auth-fail som før.
+    """
     missing: list[str] = []
     client_id = os.environ.get("CTRADER_CLIENT_ID", "")
     client_secret = os.environ.get("CTRADER_CLIENT_SECRET", "")
     access_token = os.environ.get("CTRADER_ACCESS_TOKEN", "")
+    refresh_token = os.environ.get("CTRADER_REFRESH_TOKEN", "")
     account_id_raw = os.environ.get("CTRADER_ACCOUNT_ID", "")
 
     if not client_id:
@@ -919,6 +1057,13 @@ def load_credentials_from_env() -> CtraderCredentials:
     if missing:
         raise RuntimeError(f"Mangler miljøvariabler: {', '.join(missing)}")
 
+    if not refresh_token:
+        log.info(
+            "[AUTH] CTRADER_REFRESH_TOKEN ikke satt — auto-refresh ved "
+            "token-expiry er deaktivert. Bot vil FATAL-exite ved expiry "
+            "som før."
+        )
+
     try:
         account_id = int(account_id_raw)
     except ValueError as exc:
@@ -929,4 +1074,5 @@ def load_credentials_from_env() -> CtraderCredentials:
         client_secret=client_secret,
         access_token=access_token,
         account_id=account_id,
+        refresh_token=refresh_token or None,
     )

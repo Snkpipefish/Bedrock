@@ -18,6 +18,7 @@ admin-kode, signal_server-key, etc.
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 
 from dotenv import dotenv_values
@@ -72,3 +73,61 @@ def require_secret(name: str, path: Path | None = None) -> str:
             f"Set the env-var or add '{name}=...' to the secrets file."
         )
     return value
+
+
+def update_secrets_env_var(
+    key: str,
+    value: str,
+    path: Path | None = None,
+) -> None:
+    """Sett (eller bytt ut) `KEY=VALUE`-linje i secrets-fila atomisk.
+
+    Skriver først til en `tempfile` i samme mappe og bruker `os.replace`
+    slik at fila aldri er halvskrevet. Permissions settes til 0o600 på
+    tempfilen før replace, så slutt-fila har samme strenge perms uansett
+    om kilde-fila eksisterte eller ikke.
+
+    Hvis fila ikke finnes opprettes den (parent-mkdir om nødvendig). Hvis
+    nøkkelen finnes byttes linja in-place; ellers appendes nederst.
+    Kommentarlinjer (`#…`) som tilfeldigvis starter med `KEY=` etter
+    leading whitespace blir aldri matched.
+
+    Brukes av `bot.ctrader_client` for å persistere nye access/refresh-
+    tokens etter en vellykket OAuth-refresh.
+    """
+    if "\n" in value or "\r" in value:
+        raise ValueError(f"Verdi for {key!r} inneholder newline; ikke støttet")
+    if not key or "=" in key:
+        raise ValueError(f"Ugyldig secrets-nøkkel {key!r}")
+
+    target = path if path is not None else DEFAULT_SECRETS_PATH
+    new_line = f"{key}={value}"
+
+    if target.exists():
+        existing_lines = target.read_text().splitlines()
+        out_lines: list[str] = []
+        replaced = False
+        for line in existing_lines:
+            stripped = line.lstrip()
+            if not stripped.startswith("#") and stripped.startswith(f"{key}="):
+                out_lines.append(new_line)
+                replaced = True
+            else:
+                out_lines.append(line)
+        if not replaced:
+            out_lines.append(new_line)
+        body = "\n".join(out_lines) + "\n"
+    else:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        body = new_line + "\n"
+
+    fd, tmp_str = tempfile.mkstemp(prefix=".secrets-", dir=str(target.parent))
+    tmp_path = Path(tmp_str)
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(body)
+        os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, target)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise

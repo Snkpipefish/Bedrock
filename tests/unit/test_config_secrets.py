@@ -13,6 +13,7 @@ from bedrock.config.secrets import (
     get_secret,
     load_secrets,
     require_secret,
+    update_secrets_env_var,
 )
 
 
@@ -138,3 +139,112 @@ def test_load_secrets_default_path_used_when_none(tmp_path: Path) -> None:
     with patch("bedrock.config.secrets.DEFAULT_SECRETS_PATH", fake_default):
         secrets = load_secrets()
     assert secrets.get("DEFAULT_PATH_TEST") == "worked"
+
+
+# ---------------------------------------------------------------------------
+# update_secrets_env_var (sub-fase 12.9 D2)
+# ---------------------------------------------------------------------------
+
+
+def test_update_creates_file_when_missing(tmp_path: Path) -> None:
+    target = tmp_path / "new.env"
+    update_secrets_env_var("FOO", "bar", path=target)
+    assert target.read_text() == "FOO=bar\n"
+    # 600 i lavest tre bitter (eier=rw, andre=ingen)
+    assert (target.stat().st_mode & 0o777) == 0o600
+
+
+def test_update_replaces_existing_key(tmp_path: Path) -> None:
+    target = tmp_path / "secrets.env"
+    target.write_text("FOO=old\nBAR=keep\n")
+    update_secrets_env_var("FOO", "new", path=target)
+    text = target.read_text()
+    assert "FOO=new\n" in text
+    assert "FOO=old" not in text
+    assert "BAR=keep\n" in text
+
+
+def test_update_appends_when_key_missing(tmp_path: Path) -> None:
+    target = tmp_path / "secrets.env"
+    target.write_text("BAR=keep\n")
+    update_secrets_env_var("FOO", "bar", path=target)
+    text = target.read_text()
+    assert text.endswith("FOO=bar\n")
+    assert "BAR=keep\n" in text
+
+
+def test_update_does_not_match_commented_key(tmp_path: Path) -> None:
+    target = tmp_path / "secrets.env"
+    target.write_text("# FOO=commented_out\nFOO=real\n")
+    update_secrets_env_var("FOO", "new", path=target)
+    text = target.read_text()
+    assert "# FOO=commented_out" in text
+    assert "FOO=new" in text
+    assert "FOO=real" not in text
+
+
+def test_update_does_not_match_prefix_key(tmp_path: Path) -> None:
+    """`FOO_X=...` skal ikke bli matchet når vi oppdaterer `FOO`."""
+    target = tmp_path / "secrets.env"
+    target.write_text("FOO_X=keep\nFOO=old\n")
+    update_secrets_env_var("FOO", "new", path=target)
+    text = target.read_text()
+    assert "FOO_X=keep" in text
+    assert "FOO=new" in text
+
+
+def test_update_preserves_permissions_on_existing_file(tmp_path: Path) -> None:
+    target = tmp_path / "secrets.env"
+    target.write_text("FOO=old\n")
+    os.chmod(target, 0o600)
+    update_secrets_env_var("FOO", "new", path=target)
+    assert (target.stat().st_mode & 0o777) == 0o600
+
+
+def test_update_rejects_newline_in_value(tmp_path: Path) -> None:
+    target = tmp_path / "secrets.env"
+    target.write_text("")
+    with pytest.raises(ValueError, match="newline"):
+        update_secrets_env_var("FOO", "line1\nline2", path=target)
+
+
+def test_update_rejects_invalid_key(tmp_path: Path) -> None:
+    target = tmp_path / "secrets.env"
+    with pytest.raises(ValueError):
+        update_secrets_env_var("BAD=KEY", "v", path=target)
+    with pytest.raises(ValueError):
+        update_secrets_env_var("", "v", path=target)
+
+
+def test_update_atomic_no_partial_file_on_chmod_failure(tmp_path: Path) -> None:
+    """Hvis chmod feiler skal target-fila være urørt (atomic-replace ikke
+    kjørt). Verifiserer at vi ikke etterlater half-skrevet fil."""
+    target = tmp_path / "secrets.env"
+    target.write_text("FOO=old\n")
+    with patch("bedrock.config.secrets.os.chmod", side_effect=OSError("perm denied")):
+        with pytest.raises(OSError):
+            update_secrets_env_var("FOO", "new", path=target)
+    # Original innhold uendret
+    assert target.read_text() == "FOO=old\n"
+    # Ingen .secrets-* tempfile lekket i mappen
+    leftovers = list(tmp_path.glob(".secrets-*"))
+    assert leftovers == []
+
+
+def test_update_round_trip_with_load_secrets(tmp_path: Path) -> None:
+    target = tmp_path / "secrets.env"
+    target.write_text("FOO=v1\nBAR=keep\n")
+    update_secrets_env_var("FOO", "v2", path=target)
+    update_secrets_env_var("BAZ", "v3", path=target)
+    secrets = load_secrets(target)
+    assert secrets["FOO"] == "v2"
+    assert secrets["BAR"] == "keep"
+    assert secrets["BAZ"] == "v3"
+
+
+def test_update_default_path_used_when_none(tmp_path: Path) -> None:
+    fake_default = tmp_path / "secrets.env"
+    fake_default.write_text("FOO=old\n")
+    with patch("bedrock.config.secrets.DEFAULT_SECRETS_PATH", fake_default):
+        update_secrets_env_var("FOO", "new")
+    assert "FOO=new" in fake_default.read_text()
