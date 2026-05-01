@@ -120,16 +120,41 @@ def test_bot_status_empty_trade_log(client) -> None:
     assert resp.get_json()["last_trade"] is None
 
 
-def test_bot_status_systemctl_unavailable(client) -> None:
-    """Hvis systemctl ikke er tilgjengelig (FileNotFoundError) → state=unknown."""
+def test_bot_status_systemctl_unavailable_no_proc(client) -> None:
+    """systemctl + /proc-fallback begge negative → state=inactive."""
     c, _bot_dir, _signals = client
 
-    with patch("subprocess.run", side_effect=FileNotFoundError):
+    with (
+        patch("subprocess.run", side_effect=FileNotFoundError),
+        patch(
+            "bedrock.signal_server.endpoints.ui._bedrock_bot_proc_running",
+            return_value=False,
+        ),
+    ):
         resp = c.get("/api/ui/bot_status")
     assert resp.status_code == 200
     body = resp.get_json()
-    assert body["service"]["state"] == "unknown"
-    assert body["service"]["sub_state"] == "unknown"
+    assert body["service"]["state"] == "inactive"
+    assert body["service"]["sub_state"] == "dead"
+
+
+def test_bot_status_proc_fallback_when_systemctl_silent(client) -> None:
+    """systemctl gir tomme felter → /proc-fallback rapporterer running hvis bot-pid finnes."""
+    c, _bot_dir, _signals = client
+
+    fake_result = type("R", (), {"stdout": "ActiveState=\nSubState=\n", "returncode": 0})()
+    with (
+        patch("subprocess.run", return_value=fake_result),
+        patch(
+            "bedrock.signal_server.endpoints.ui._bedrock_bot_proc_running",
+            return_value=True,
+        ),
+    ):
+        resp = c.get("/api/ui/bot_status")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["service"]["state"] == "active"
+    assert body["service"]["sub_state"] == "running"
 
 
 def test_pipeline_health_includes_horizons(tmp_path: Path) -> None:

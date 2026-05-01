@@ -1145,49 +1145,35 @@ def pipeline_health() -> Response:
 
 
 def _systemctl_user_is_active(service: str) -> tuple[str, str]:
-    """Returner (state, sub_state) fra `systemctl --user`.
+    """Returner (state, sub_state) for `service`.
 
     state ∈ {"active", "inactive", "failed", "activating", "unknown"}.
     sub_state er sub-state fra systemd ("running", "dead", "failed", etc).
     Ved feil/timeout returneres ("unknown", "unknown") — UI skal ikke
     krasje fordi systemd er midlertidig utilgjengelig.
 
-    Cross-user-tilfelle: bedrock-server kan kjøre som root (system-
-    service) mens bedrock-bot kjører som user (user-service). I den
-    konstellasjonen må vi spesifisere XDG_RUNTIME_DIR til eieren av
-    bot-tjenesten. Vi prøver hver eksisterende `/run/user/<uid>` med
-    en aktiv user-systemd inntil én svarer med ikke-tomme felter.
+    Strategi:
+    1. `systemctl --user` direkte (fungerer når server + bot kjører
+       som samme bruker, eller hvis polkit tillater cross-uid-spørring).
+    2. Fallback: skann `/proc` for en bedrock.bot-prosess. systemd
+       gir ikke svar når server kjører som root og bot som user
+       (XDG_RUNTIME_DIR-trikset binder fortsatt til root's egen bus).
+       /proc er world-readable, så vi kan se prosessen uavhengig av
+       hvem som eier server-prosessen. Vi rapporterer da
+       (active, running) eller (inactive, dead) basert på prosess-
+       eksistens — sub_state="running" hvis pid finnes, ellers "dead".
     """
-    import os
     import subprocess
 
-    candidate_envs: list[dict[str, str] | None] = [None]  # current env first
+    # Steg 1: prøv systemctl --user
     try:
-        for entry in os.listdir("/run/user"):
-            if not entry.isdigit():
-                continue
-            xdg = f"/run/user/{entry}"
-            if not os.path.isdir(xdg):
-                continue
-            env = os.environ.copy()
-            env["XDG_RUNTIME_DIR"] = xdg
-            candidate_envs.append(env)
-    except OSError:
-        pass
-
-    for env in candidate_envs:
-        try:
-            result = subprocess.run(
-                ["systemctl", "--user", "show", service, "--property=ActiveState,SubState"],
-                capture_output=True,
-                text=True,
-                timeout=2.0,
-                check=False,
-                env=env,
-            )
-        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-            continue
-
+        result = subprocess.run(
+            ["systemctl", "--user", "show", service, "--property=ActiveState,SubState"],
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+            check=False,
+        )
         state = ""
         sub_state = ""
         for line in result.stdout.splitlines():
@@ -1195,10 +1181,49 @@ def _systemctl_user_is_active(service: str) -> tuple[str, str]:
                 state = line.split("=", 1)[1].strip()
             elif line.startswith("SubState="):
                 sub_state = line.split("=", 1)[1].strip()
-        if state and sub_state:
+        if state and sub_state and state != "inactive":
             return (state, sub_state)
+        # Hvis state er tom, eller "inactive" fra et systemd som ikke
+        # vet om unit-fila i det hele tatt, fortsett til /proc-fallback.
+        systemctl_state = state
+        systemctl_sub = sub_state
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        systemctl_state = ""
+        systemctl_sub = ""
 
-    return ("unknown", "unknown")
+    # Steg 2: /proc-skann etter bedrock.bot-prosess
+    proc_running = _bedrock_bot_proc_running()
+    if proc_running:
+        return ("active", "running")
+    if systemctl_state:
+        return (systemctl_state, systemctl_sub or "dead")
+    return ("inactive", "dead")
+
+
+def _bedrock_bot_proc_running() -> bool:
+    """Sjekk om en `bedrock.bot`-prosess kjører på systemet.
+
+    Leser /proc/<pid>/cmdline (world-readable) og leter etter
+    `bedrock.bot` i kommandolinjen. Tåler at noen pid-er forsvinner
+    mellom dirent og open (typisk under hyppig fork).
+    """
+    import os
+
+    try:
+        entries = os.listdir("/proc")
+    except OSError:
+        return False
+    for entry in entries:
+        if not entry.isdigit():
+            continue
+        try:
+            with open(f"/proc/{entry}/cmdline", "rb") as f:
+                cmdline = f.read().replace(b"\x00", b" ").decode("utf-8", errors="replace")
+        except OSError:
+            continue
+        if "bedrock.bot" in cmdline and "--demo" in cmdline:
+            return True
+    return False
 
 
 def _read_daily_loss(state_dir: Path) -> dict[str, Any]:
