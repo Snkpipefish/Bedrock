@@ -2686,3 +2686,102 @@ systematisk asset-class-bias-flipp. Ny baseline låst som anker.
 | `daily_loss_state.json` | ✓ `state.py` har persistens |
 | `latest_signals.json` | ✓ Bedrock genererer `signals_bot.json` |
 | `live_prices.json` | ✗ Bot fetcher live priser fra cTrader direkte |
+
+---
+
+## 22. Sub-fase 12.10 — driver-rebalansering (PLANLAGT, åpnes etter 12.9 D6)
+
+**Status:** Planlagt 2026-05-02 i parallell med pågående 12.9 D5-vindu.
+Skal startes i ny session-kontekst når 12.9 lukkes med D6.
+
+**Kjør på demo-konto fortsatt — ingen live-cutover under hele 12.10.**
+
+### 22.1 Beslutninger låst (2026-05-02)
+
+- **Ingen familie-restrukturering.** Beholde flat YAML (`trend/positioning/macro/structure/risk/analog/...`). Nye drivere plasseres i eksisterende familier; én ny familie `event` for `*_surprise`-drivere fordi ingen eksisterende familie passer.
+- **Backtest droppet i denne sub-fasen.** ALFRED-vintage-migrasjon utelates (var backtest-relevant). All validering skjer mot live-demo via signals_bot.json + faktiske trades.
+- **GIE-key dekker AGSI+ + ALSI + IIP** (verifisert 2026-05-02). Én key, tre tjenester. Lagret i `~/.bedrock/secrets.env` som `BEDROCK_AGSI_API_KEY`.
+- **Ingen ADR.** Driver-utvidelser uten arkitektonisk skifte (regime-vekting droppet for 12.10).
+- **Alle bug-fixer + alle ~67 nye drivere skal leveres.** Separat commit per driver/endring for enkel revert/bisect.
+- **Snapshot-baseline regen etter hver bunke-leveranse** (uke 1 / uke 2 / uke 3-4 / måned 2).
+
+### 22.2 Bunker (rekkefølge bestemt av Claude per ditt mandat)
+
+**Bunke 1 — Bug-fixer (uke 1, alle 3 sammen):**
+1. COT `released_at`-fix (3-dagers look-ahead) — schema-utvidelse + filter-logikk på 7 drivere
+2. `min_samples`-guards på sparsom-data-drivere: unica_export_change, disease_pressure, export_event_active, comex_stress
+3. `event_distance` future-actual verifisering
+
+**Bunke 2 — Lavt-hengende frukt (uke 1, parallelt):**
+4. `cot_ice_cocoa/coffee/sugar/wheat` — wire 4 drivere mot eksisterende ICE COT-data
+5. `nfp_surprise`, `cpi_surprise`, `gdp_surprise`, `pce_surprise` — calendar_ff har forecast/actual-felt
+6. `news_intel_severity_veto` — veto-driver fra eksisterende news_intel-tabell
+
+**Bunke 3 — FRED-utvidelse (uke 2):**
+7. `t10y3m`, `t_bill_3mo_yield` (yields)
+8. `hy_oas_change` (credit) — `BAMLH0A0HYM2`
+9. `initial_claims_z`, `continuing_claims_z` (labor)
+10. `ism_pmi_level`, `industrial_production_yoy`, `cfnai_3mma`, `umich_sentiment_z`, `jolts_openings_yoy` (growth)
+11. `anfci_z` (erstatter nfci_change), `m2_yoy` (liquidity)
+12. `vix9d_vix_ratio` (volatility)
+13. `dollar_index_breadth` (fx)
+14. `fomc_decision_distance` — calendar_ff under-signal
+
+**Bunke 4 — Yahoo + CBOE + NOAA (uke 3):**
+15. `move_index_z`, `vvix_z`, `gvz_z`, `ovx_z` (Yahoo)
+16. `cboe_skew_z`, `cboe_pcr_total_extreme`, `cboe_pcr_equity_only`, `cboe_vix_term_curve` (CBOE)
+17. `noaa_oni_index` (erstatter `enso_regime`), `noaa_enso_forecast_3mo`, `noaa_pdo_index`
+18. `intraday_atr_h1` — Yahoo 1h candles
+
+**Bunke 5 — USDM per-stat + USDA-utvidelser (uke 3-4):**
+19. `usdm_state_iowa`, `usdm_state_texas`, `usdm_state_california`, `usdm_state_kansas_ndakota`
+20. `nass_yield_corn_yoy`, `nass_yield_soy_yoy`, `nass_grain_stocks_quarterly`
+21. `fas_exports_china`, `fas_exports_eu` (split eksisterende)
+
+**Bunke 6 — EIA-utvidelse (måned 2 uke 1):**
+22. `eia_distillate_change`, `eia_propane_change`, `eia_refinery_utilization_z`, `eia_petroleum_supplied`, `eia_natgas_processing`, `eia_imports_crude`, `eia_gasoline_demand`
+
+**Bunke 7 — GIE-utvidelse + COT-disaggregated (måned 2 uke 2):**
+23. `agsi_germany_pct`, `agsi_netherlands_pct`, `agsi_italy_pct`, `agsi_withdrawal_rate`, `agsi_injection_rate` (AGSI+ per-land)
+24. `alsi_eu_pct`, `alsi_storage_change` (ALSI LNG-terminals — ny driver-kategori)
+25. `iip_supply_unavailability` (IIP REMIT-meldinger — ny driver-kategori)
+26. `cot_oi_change`, `cot_concentration_top4`, `cot_commercial_extreme`, `cot_swap_dealer_skew`
+
+**Bunke 8 — Treasury + USGS + sluttspillet (måned 2 uke 3):**
+27. `treasury_btc_10y`, `treasury_indirect_pct`, `treasury_quarterly_refunding`
+28. `seismic_m6_global_24h`, `seismic_chile_peru_copper`
+29. `crypto_sentiment_extreme` (vent til 100+ rader, ~juli 2026 — kan defer hvis ikke klart)
+
+**Bunke 9 — Endringer på eksisterende (måned 2 uke 4):**
+30. `enso_regime` → erstatt med `noaa_oni_index` (parallelt med #17)
+31. `weather_stress`: lookback 1mnd → 6mnd
+32. `nfci_change` → erstatt med `anfci_z` (parallelt med #11)
+33. `mining_disruption`: M ≥ 5.5-terskel + region-mask
+34. Multi-lookback-konsolidering (~25 drivere): én primær window per driver
+35. `comex_stress`: disable til 6mnd (`min_samples=180`)
+36. `momentum_z`: regime-conditional lookback (20d høy-vol, 100d lav-vol)
+37. `sma200_align`: legg til slope-komponent
+38. `range_position`: ATR-normalisert med 14-20d lookback
+39. `bdi_chg30d`: utvid med 90d-trend + 12mo-MA-regime
+40. `hdd_cdd_anomaly`: per-instrument-vekt
+41. `aaii_extreme`: bytte til 8-uker-MA-divergens
+42. `drought_monitor`: gjør CONUS-aggregat sekundær til state-level
+
+### 22.3 Stop-criterion sub-fase 12.10
+
+- Alle 9 bunker landed
+- Snapshot-baseline regenerert etter hver bunke + grade-distribusjons-rapport per asset-class viser ingen systematisk bias (≤5 grade-flips per asset-class per bunke)
+- 22 instrument-YAMLer wired med relevante nye drivere
+- Pyright src/: 0 errors
+- Alle nye drivere har minst 3 tester (default + edge + horisont-filter hvis applikabel)
+
+Tag: `v0.12.10-fase-12.10-LUKKET`. Etter dette: bruker vurderer **Bedrock-2.0**-cutover etter empirisk demo-resultat.
+
+### 22.4 Hva 12.10 IKKE inkluderer
+
+- Familie-restruktur til 2-nivå-taksonomi (eksplisitt droppet)
+- ALFRED-vintage-migrasjon (backtest-relevant, droppet)
+- Regime-conditional weighting i scoring-aggregator (utsatt — vurderes etter 12.10)
+- Live-cutover (kun demo-konto fra start til slutt)
+- Trade-execution-side (bot.yaml lot-sizing/exit-policies — egen sub-fase)
+- UI-eksponering av 67 nye drivere (incremental etter hver bunke; ingen big-bang UI)
