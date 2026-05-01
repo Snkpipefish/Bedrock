@@ -14,13 +14,16 @@
 #   samme behandling: ikke restart automatisk.
 #
 # Avhengighet:
-#   bedrock-server.service må være oppe slik at /bot/signals svarer
-#   før bot prøver å hente første signal.
+#   bedrock-server.service (system-unit) må være oppe slik at
+#   /bot/signals svarer før bot prøver å hente første signal. Som
+#   user-unit kan vi ikke `Requires=` system-units; bot's egen
+#   fetch-fail-eskalering (safety.py) håndterer midlertidig
+#   server-bortfall, og operatør har ansvaret for at bedrock-server
+#   er oppe før bot startes.
 [Unit]
 Description=Bedrock trading-bot: cTrader-grensesnitt + signal-konsument
-After=network-online.target bedrock-server.service
+After=network-online.target
 Wants=network-online.target
-Requires=bedrock-server.service
 
 [Service]
 Type=simple
