@@ -2629,24 +2629,41 @@ opp; 1m16s møter § 20.2 SCALP-cadence-krav):
 Per-instrument parallellisering var planlagt som backup-strategi
 men er ikke nødvendig.
 
-**Fase 3 — per-horisont drivere (§ 20.2 antyder ikke-overlappende
-driver-bunker)**
+**Fase 3 — per-horisont drivere (§ 20.2)**
 
-Nåværende YAML lar SCALP/SWING/MAKRO **kun re-vekte** samme drivere
-via `family_weights`. § 20.2 antyder at SCALP burde ha helt andre
-primærkilder (calendar_ff KJERNE, surprise-vs-consensus, VIX9D-ratio
-real-time, seismic M≥6) som ikke nødvendigvis bidrar til MAKRO.
-Eksempel: en `event_distance`-driver med tyngre vekt på SCALP enn
-MAKRO krever per-horisont driver-spec eller duplisert YAML-entries.
+**LEVERT 2026-05-01** (commits `c901162`, `9824247`, `4740d51`).
+Schema utvidet med `DriverSpec.horizons: list[str] | None`; engine
+filtrerer drivere før iterasjon og re-normaliserer gjenværende
+vekter slik at familie-summen bevares. Bakoverkompatibelt — drivere
+uten `horizons`-felt gjelder alle 3 horisonter (status quo for 22
+inst utenom de 3 driverne under).
 
-Forslag: utvid `families.<name>.drivers`-listen til å akseptere
-`horizons: [SCALP, SWING]`-felt på per-driver-basis. Engine filtrerer
-drivere per horisont under score-kall. Bakoverkompatibelt (mangler
-felt = alle 3 horisonter, status quo).
+YAML-migrasjon (per § 20.2-eksplisitte drivere):
+- event_distance → [SCALP, SWING] på alle 22 instrumenter
+  (calendar_ff KJERNE for scalp + pre-event swing, ikke macro-input)
+- aaii_extreme → [SWING] på Nasdaq + SP500 (sentiment mean-
+  reversion er swing-fenomen)
+- vix_term_ratio var allerede droppet i session 138 — ikke kandidat
 
-Estimat: 1-2 sessioner inkl. YAML-migrasjon for 22 instrumenter.
-Påvirker scoring-output → krever full snapshot-baseline-regen +
-grade-validering analogt med 12.7 D-spor.
+Engine-renormalisering: når event_distance filtreres ut av MAKRO-risk
+(eks. Gold), skaleres vol_regime fra spec-vekt 0.7 → effective 1.0
+slik at family-summen forblir 1.0. DriverResult.weight rapporterer
+effective_weight (etter renorm), gjenspeiler hva som faktisk teller.
+
+UI-overflate: modal driver-trace fikk ny "HORISONT"-kolonne med
+M/Sw/Sc-chips per driver. Drivere uten filter viser "alle"
+(grå meta-tekst). Live-verifisert i preview at Gold SWING/risk har
+event_distance med Sc+Sw-chips, mens MAKRO-versjonen filtrerer den
+ut helt.
+
+Tester: 7 nye engine-tester (filter-skip, renorm-bevarelse, partial-
+values, empty-family, agri-no-horizon, status-quo-bakoverkomp). Alle
+36 eksisterende engine-tester forblir grønne.
+
+Snapshot-baseline regen + grade-distribusjons-rapport: 26/132
+grade-flips, fordelt fx 11 / metals 10 / energy+crypto+indices 5 /
+agri 0. Innen normal-rekkevidde for skjema-endring + drift; ingen
+systematisk asset-class-bias-flipp. Ny baseline låst som anker.
 
 **Mindre debt-poster (kosmetisk)**
 
