@@ -204,10 +204,15 @@ def test_econ_events_clipped_to_empty(store_with_phase_ac: DataStore) -> None:
 
 
 def test_cot_ice_clipped(store_with_phase_ac: DataStore) -> None:
+    # Sub-fase 12.10 Bunke 1 Bug-1: AsOfDateStore klipper på publiserings-
+    # tidspunkt (report_date + 3d @ 21:00 UTC), ikke report_date selv.
+    # weeks: jan 1, 8, 15, 22, 29, ... — released_at: jan 4, 11, 18, 25,
+    # feb 1 21:00 UTC. Med as_of=feb 1 00:00 UTC er feb-1-publiseringen
+    # ennå ikke ute, så jan 29-raden er skjult.
     view = AsOfDateStore(store_with_phase_ac, date(2026, 2, 1))
     clipped = view.get_cot_ice("ice brent crude")
-    assert len(clipped) == 5  # uker 1-5 (jan 1, 8, 15, 22, 29)
-    assert clipped["report_date"].max() <= pd.Timestamp("2026-02-01")
+    assert len(clipped) == 4  # uker 1-4 (jan 1, 8, 15, 22) — jan 29 publ feb 1 21:00
+    assert clipped["report_date"].max() == pd.Timestamp("2026-01-22")
 
 
 def test_cot_ice_clipped_to_empty_raises(store_with_phase_ac: DataStore) -> None:
@@ -229,10 +234,12 @@ def test_has_cot_ice_returns_false_when_clipped_to_empty(
 
 
 def test_cot_euronext_clipped(store_with_phase_ac: DataStore) -> None:
+    # Sub-fase 12.10 Bunke 1 Bug-1: report_date feb 12 publiseres
+    # feb 15 21:00 UTC — ikke synlig ved as_of=feb 15 00:00 UTC.
     view = AsOfDateStore(store_with_phase_ac, date(2026, 2, 15))
     clipped = view.get_cot_euronext("euronext milling wheat")
-    assert len(clipped) == 7
-    assert clipped["report_date"].max() <= pd.Timestamp("2026-02-15")
+    assert len(clipped) == 6  # uker 1-6 (jan 1..feb 5) — feb 12 publ feb 15 21:00
+    assert clipped["report_date"].max() == pd.Timestamp("2026-02-05")
 
 
 def test_cot_euronext_last_n_after_clip(store_with_phase_ac: DataStore) -> None:

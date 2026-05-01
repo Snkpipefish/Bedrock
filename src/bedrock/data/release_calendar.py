@@ -24,7 +24,7 @@ senere enn faktisk publisering er fortsatt look-ahead-fri.
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 import pandas as pd
 
@@ -46,7 +46,7 @@ def cot_released_at(report_date: date | datetime | pd.Timestamp) -> datetime:
     """
     d = _to_date(report_date)
     released = datetime.combine(d, _COT_RELEASE_TIME_UTC, tzinfo=timezone.utc)
-    released = released + pd.Timedelta(days=_COT_RELEASE_LAG_DAYS)
+    released = released + timedelta(days=_COT_RELEASE_LAG_DAYS)
     # Returnér naive (tz-stripped) for konsistens med AsOfDateStore-internals
     return released.replace(tzinfo=None)
 
@@ -56,7 +56,7 @@ def aaii_released_at(survey_date: date | datetime | pd.Timestamp) -> datetime:
     realistisk var publisert (torsdag ~14:00 UTC = ~10am ET)."""
     d = _to_date(survey_date)
     released = datetime.combine(d, _AAII_RELEASE_TIME_UTC, tzinfo=timezone.utc)
-    released = released + pd.Timedelta(days=_AAII_RELEASE_LAG_DAYS)
+    released = released + timedelta(days=_AAII_RELEASE_LAG_DAYS)
     return released.replace(tzinfo=None)
 
 

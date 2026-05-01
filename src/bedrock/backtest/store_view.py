@@ -19,11 +19,16 @@ jobber mot et clipped view.
 — fordi den representerer fremtidig informasjon (forward_return var
 ikke kjent på `as_of_date`). Dette unngår look-ahead bias i K-NN.
 
+**Publiseringsforsinkelse-clipping** (Sub-fase 12.10 Bunke 1 Bug-1):
+COT-rapporter (CFTC disaggregated/legacy/TFF + ICE + Euronext) og AAII-
+sentiment publiseres typisk 1-3 dager etter ``report_date``-snapshot.
+COT-getterne (``get_cot``, ``get_cot_ice``, ``get_cot_euronext``,
+``get_cot_tff``) og ``get_aaii_sentiment`` clipper på faktisk publiserings-
+tidspunkt beregnet via ``data.release_calendar``-konvensjoner — slik at
+backtest-as-of=Tue ikke ser raden for samme tirsdag (faktisk publisert
+fredag 21:00 UTC).
+
 **Begrensninger** (TODO for senere session):
-- COT-rapporter publiseres med ~3 dagers etterslep (fredag rapport for
-  forrige tirsdag). AsOfDateStore clipper på `report_date`, ikke
-  publiseringsdato. For backtest-strict må vi senere flytte til
-  publiseringsdato + 3d offset.
 - Weather_monthly publiseres typisk månedslutt + ~2 uker. Samme
   publication-lag-problem.
 - Vi clipper IKKE prices ved at vi rev-kalibrerer historiske bars —
@@ -41,6 +46,8 @@ from datetime import date, datetime
 from typing import TYPE_CHECKING, Literal
 
 import pandas as pd
+
+from bedrock.data.release_calendar import aaii_released_at, cot_released_at
 
 if TYPE_CHECKING:
     from bedrock.data.store import DataStore
@@ -131,16 +138,44 @@ class AsOfDateStore:
     # COT
     # ------------------------------------------------------------------
 
+    def _clip_cot_by_release(
+        self, df: pd.DataFrame, *, date_col: str = "report_date"
+    ) -> pd.DataFrame:
+        """Filtrer COT-rader til de som faktisk var publisert ≤ as_of.
+
+        CFTC/ICE/Euronext-rapporter publiseres ~3 dager etter
+        report_date. AsOfDateStore må derfor sammenligne
+        ``cot_released_at(report_date) ≤ as_of``, ikke ``report_date ≤ as_of``,
+        for å unngå look-ahead-bias i backtest.
+        """
+        if df.empty:
+            return df
+        report_dates = pd.to_datetime(df[date_col])
+        # Vektoriser: bygg en parallell Series med release-tidspunkt
+        released_at = report_dates.apply(cot_released_at)
+        return df[released_at <= self._as_of].copy()
+
+    def _clip_aaii_by_release(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Filtrer AAII-rader til de som faktisk var publisert ≤ as_of.
+
+        AAII publiserer torsdag for survey-onsdag — backtest må klippe
+        på publikasjons-tidspunkt, ikke survey-date.
+        """
+        if df.empty:
+            return df
+        survey_dates = pd.to_datetime(df["date"])
+        released_at = survey_dates.apply(aaii_released_at)
+        return df[released_at <= self._as_of].copy()
+
     def get_cot(
         self,
         contract: str,
         report: CotReport = "disaggregated",
         last_n: int | None = None,
     ) -> pd.DataFrame:
-        """Som DataStore.get_cot, men filtrert til report_date ≤ as_of_date."""
+        """Som DataStore.get_cot, men clipped på publikasjons-tidspunkt."""
         full = self._underlying.get_cot(contract, report=report, last_n=None)
-        # report_date er pd.Timestamp etter parse i underlying
-        clipped = full[full["report_date"] <= self._as_of].copy()
+        clipped = self._clip_cot_by_release(full)
         if clipped.empty:
             raise KeyError(
                 f"No COT for contract={contract!r} report={report!r} as of {self._as_of.date()}"
@@ -265,12 +300,12 @@ class AsOfDateStore:
     # COT-ICE — samme mønster som get_cot
 
     def get_cot_ice(self, contract: str, last_n: int | None = None) -> pd.DataFrame:
-        """Som DataStore.get_cot_ice, men clipped på report_date ≤ as_of_date."""
+        """Som DataStore.get_cot_ice, men clipped på publikasjons-tidspunkt."""
         try:
             full = self._underlying.get_cot_ice(contract, last_n=None)
         except KeyError:
             raise
-        clipped = full[full["report_date"] <= self._as_of].copy()
+        clipped = self._clip_cot_by_release(full)
         if clipped.empty:
             raise KeyError(f"No ICE COT for contract={contract!r} as of {self._as_of.date()}")
         if last_n is not None:
@@ -286,12 +321,12 @@ class AsOfDateStore:
     # COT-Euronext
 
     def get_cot_euronext(self, contract: str, last_n: int | None = None) -> pd.DataFrame:
-        """Som DataStore.get_cot_euronext, men clipped på report_date."""
+        """Som DataStore.get_cot_euronext, men clipped på publikasjons-tidspunkt."""
         try:
             full = self._underlying.get_cot_euronext(contract, last_n=None)
         except KeyError:
             raise
-        clipped = full[full["report_date"] <= self._as_of].copy()
+        clipped = self._clip_cot_by_release(full)
         if clipped.empty:
             raise KeyError(f"No Euronext COT for contract={contract!r} as of {self._as_of.date()}")
         if last_n is not None:
@@ -441,9 +476,9 @@ class AsOfDateStore:
     # COT TFF (positioning_lev_funds_pct, positioning_asset_mgr_pct)
 
     def get_cot_tff(self, contract: str, last_n: int | None = None) -> pd.DataFrame:
-        """Som DataStore.get_cot_tff, men clipped på report_date ≤ as_of_date."""
+        """Som DataStore.get_cot_tff, men clipped på publikasjons-tidspunkt."""
         full = self._underlying.get_cot_tff(contract, last_n=None)
-        clipped = full[full["report_date"] <= self._as_of].copy()
+        clipped = self._clip_cot_by_release(full)
         if clipped.empty:
             raise KeyError(f"No TFF COT for contract={contract!r} as of {self._as_of.date()}")
         if last_n is not None:
@@ -565,12 +600,14 @@ class AsOfDateStore:
     # AAII sentiment (aaii_extreme)
 
     def get_aaii_sentiment(self, last_n: int | None = None) -> pd.DataFrame:
-        """Som DataStore.get_aaii_sentiment, men clipped på date."""
+        """Som DataStore.get_aaii_sentiment, men clipped på publikasjons-tidspunkt.
+
+        AAII publiserer torsdag for survey-onsdag — backtest klipper på
+        ``aaii_released_at(survey_date)``, ikke ``date`` selv, for å unngå
+        look-ahead-bias.
+        """
         full = self._underlying.get_aaii_sentiment(last_n=None)
-        if full.empty:
-            return full
-        date_ts = pd.to_datetime(full["date"])
-        clipped = full[date_ts <= self._as_of].reset_index(drop=True)
+        clipped = self._clip_aaii_by_release(full).reset_index(drop=True)
         if last_n is not None and not clipped.empty:
             clipped = clipped.tail(last_n).reset_index(drop=True)
         return clipped
