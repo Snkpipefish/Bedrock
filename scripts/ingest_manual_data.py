@@ -54,9 +54,19 @@ def _parse_ff_impact(raw: str) -> str | None:
     return None
 
 
-def ingest_forex_factory(csv_path: Path, store: DataStore) -> int:
-    """Ingest Forex Factory CSV til econ_events. Filtrerer på High/Medium impact."""
+def ingest_forex_factory(csv_path: Path, store: DataStore, *, publication_lag_days: int = 7) -> int:
+    """Ingest Forex Factory CSV til econ_events. Filtrerer på High/Medium impact.
+
+    `publication_lag_days` (audit-runde 5 sub-fase 12.6 fix-spec Steg 2):
+    Forex Factory publiserer kalenderen ~7 dager før event. Vi setter
+    `fetched_at = event_ts - publication_lag_days` slik at AsOfDateStore-
+    clipping på `fetched_at` gir korrekt look-ahead-fri backtest-semantikk
+    ("hvilke events ville vi vite om på ref_date"). Default 7 er
+    konservativ approximation — Forex Factory faktisk publiserer
+    typisk uker/måneder i forveien for scheduled events.
+    """
     print(f"Forex Factory CSV: {csv_path}")
+    print(f"  publication_lag_days: {publication_lag_days}")
     df = pd.read_csv(csv_path, low_memory=False)
     print(f"  Rader rå: {len(df)}")
 
@@ -88,13 +98,13 @@ def ingest_forex_factory(csv_path: Path, store: DataStore) -> int:
     filtered["previous"] = filtered["Previous"].map(_opt)
     filtered["impact"] = filtered["impact_clean"]
 
-    # fetched_at: sett til event_ts så AsOfDateStore-clipping på fetched_at
-    # gir korrekt visning av "what we would have known then". Forex Factory
-    # publiserer events i forveien så event_ts ≈ fetched_at er rimelig.
-    filtered["fetched_at"] = filtered["event_ts"]  # sett til event_ts så
-    # AsOfDateStore-clipping (på fetched_at) gir korrekt visning av "what we
-    # would have known then". Forex Factory publiserer events i forveien så
-    # event_ts ≈ fetched_at er rimelig tilnærming.
+    # fetched_at = event_ts - publication_lag_days (semantikk (c), audit-
+    # runde 4): Forex Factory publiserer kalenderen ~7 dager før event.
+    # AsOfDateStore-clipping (på fetched_at) gir da korrekt look-ahead-fri
+    # backtest-semantikk. Tidligere `fetched_at = event_ts` var bug — alle
+    # samme-dag-events for ref_date=midnatt UTC ble feilaktig filtrert ut
+    # (jf. event_distance Type B i Sjekk 9.5).
+    filtered["fetched_at"] = filtered["event_ts"] - pd.Timedelta(days=publication_lag_days)
 
     # Dedupe på (event_ts, country, title) — schema-PK
     before = len(filtered)
@@ -429,6 +439,16 @@ def main() -> int:
 
     p_forex = sub.add_parser("forex", help="Forex Factory CSV ingest")
     p_forex.add_argument("--file", type=Path, required=True)
+    p_forex.add_argument(
+        "--publication-lag-days",
+        type=int,
+        default=7,
+        help=(
+            "Antall dager Forex Factory publiserer kalenderen i forveien. "
+            "Brukes som offset: fetched_at = event_ts - publication_lag_days. "
+            "Default 7 (konservativ approximation for look-ahead-fri backtest)."
+        ),
+    )
 
     p_conab = sub.add_parser("conab", help="CONAB Excel-mappe ingest")
     p_conab.add_argument("--dir", type=Path, required=True)
@@ -447,7 +467,7 @@ def main() -> int:
     store = DataStore(cfg.db_path)
 
     if args.source == "forex":
-        n = ingest_forex_factory(args.file, store)
+        n = ingest_forex_factory(args.file, store, publication_lag_days=args.publication_lag_days)
     elif args.source == "conab":
         n = ingest_conab_dir(args.dir, store)
     elif args.source == "bdi":
