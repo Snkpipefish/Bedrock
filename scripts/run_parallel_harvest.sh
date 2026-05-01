@@ -27,6 +27,16 @@ cd "$(dirname "$0")/.." || exit 1
 
 STEP_DAYS="${BEDROCK_HARVEST_STEP_DAYS:-14}"
 
+# Optional --only-driver-flag (audit-runde 5 sub-fase 12.6 fix-spec Steg 4):
+# brukes for målrettet backfill av en enkelt driver etter bug-fix.
+# Eksempel: BEDROCK_HARVEST_ONLY_DRIVER=event_distance ./scripts/run_parallel_harvest.sh
+ONLY_DRIVER="${BEDROCK_HARVEST_ONLY_DRIVER:-}"
+ONLY_DRIVER_ARG=""
+if [[ -n "$ONLY_DRIVER" ]]; then
+    ONLY_DRIVER_ARG="--only-driver $ONLY_DRIVER"
+    echo "[only-driver] målrettet backfill: $ONLY_DRIVER"
+fi
+
 # Auto-resume av paused fetch-timere ved exit (samme som single-tråd-wrapper).
 if [[ "${BEDROCK_HARVEST_RESUME_TIMERS:-1}" == "1" ]]; then
     _resume_timers() {
@@ -93,7 +103,8 @@ run_group() {
             scripts/harvest_driver_observations.py \
             --instrument "${INST}" \
             --step-days "${STEP_DAYS}" \
-            $START_ARG
+            $START_ARG \
+            $ONLY_DRIVER_ARG
         local RC=$?
         if [[ $RC -ne 0 ]]; then
             echo "!!! [${LABEL}] ${INST} feilet med exit-code ${RC}, fortsetter med neste"
