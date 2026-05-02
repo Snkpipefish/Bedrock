@@ -1,0 +1,31 @@
+# bedrock-signals-bot-morning: safety-run av signals_bot.json hver morgen
+#
+# Mål 1 (docs/plan_event_driven_signals_and_ui.md):
+#   Erstatter intraday-timer (192 fyringer/dag) med event-drevet regen
+#   via ExecStartPost på fetch-services. Denne morning-timeren er
+#   safety-net som fanger:
+#     - Manuelle backfills/imports som ikke trigger ExecStartPost
+#     - ExecStartPost-runs som feilet (fetcher OK, signals-all NOT)
+#     - Lengre helger/holidayer der fetchers var av
+#
+# Cadence (se .timer-fil):
+#   Mon..Fri 08:00 Oslo — etter at alle morning-fetchers (00:40 prices,
+#   02:30 fundamentals, 03:00 weather, 04:00 seismic, 06:00 agsi/alsi,
+#   06:30 news_intel, 07:00 crypto_sentiment) har lagt til data.
+#
+# Output:
+#   data/signals_bot.json (cache-skip i _write_if_changed beskytter mot
+#   no-op disk-writes hvis ExecStartPost-regen allerede har dekket alt)
+[Unit]
+Description=Bedrock signals-bot morning safety-run (08:00 Mon-Fri)
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/pc/bedrock
+ExecStart=/home/pc/bedrock/.venv/bin/bedrock signals-all --bot-only --output data/signals_bot.json
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

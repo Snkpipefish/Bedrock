@@ -1,0 +1,24 @@
+# bedrock-signals-bot-morning.timer: én safety-run kl 08:00 Oslo
+#
+# Mål 1 (docs/plan_event_driven_signals_and_ui.md). Erstatter
+# bedrock-signals-bot-intraday.timer som fyrte hvert 5. min (192/dag).
+#
+# Cadence:
+#   Mon..Fri 08:00:00 Oslo — én fyring per virkedag (~5/uke vs 960/uke
+#   for intraday). Etter alle morning-fetchers er ferdig, før markeds-
+#   åpning (FX/commodities Mon 09 CET).
+#
+# Persistent=true: hvis maskinen var av kl 08:00 (helg/feriedag), kjør
+# første gang den starter — sikrer at signals_bot.json er fersk før bot
+# poll'er.
+[Unit]
+Description=Bedrock signals-bot morning safety-run timer
+Requires=bedrock-signals-bot-morning.service
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 08:00:00
+Persistent=true
+Unit=bedrock-signals-bot-morning.service
+
+[Install]
+WantedBy=timers.target
