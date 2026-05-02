@@ -104,6 +104,14 @@ class CotDisaggregatedRow(BaseModel):
     # _append_cot via release_calendar hvis ikke gitt.
     released_at: datetime | None = None
 
+    # Sub-fase 12.10 follow-up Spor F5 (2026-05-02): Swap Dealer-positioning
+    # + concentration-of-largest-N-traders. Optional med default None for
+    # backwards-compat (rader fra før F5 har NULL i disse).
+    swap_long: int | None = Field(default=None, ge=0)
+    swap_short: int | None = Field(default=None, ge=0)
+    conc_net_top4: float | None = Field(default=None)  # % av OI, kan være neg
+    conc_net_top8: float | None = Field(default=None)
+
     model_config = ConfigDict(extra="forbid")
 
 
@@ -211,6 +219,18 @@ COT_DISAGGREGATED_COLS: tuple[str, ...] = (
 
 `released_at` (12.10 Bunke 1 Bug-1) auto-utledes i `_append_cot` hvis
 ikke gitt — callere trenger ikke endre seg.
+"""
+
+COT_DISAGGREGATED_EXTENDED_COLS: tuple[str, ...] = (
+    "swap_long",
+    "swap_short",
+    "conc_net_top4",
+    "conc_net_top8",
+)
+"""Sub-fase 12.10 follow-up Spor F5 (2026-05-02): valgfrie kolonner som
+populeres når fetcheren returnerer dem. ``append_cot_disaggregated``
+oppdaterer disse i en separat UPDATE-pass etter hovedinsert hvis df
+inneholder dem. Backwards-compat: gamle rader har NULL.
 """
 
 COT_LEGACY_COLS: tuple[str, ...] = (

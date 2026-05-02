@@ -89,9 +89,41 @@ def test_cot_disaggregated_append_and_get(store: DataStore) -> None:
         "nonrep_short",
         "open_interest",
         "released_at",  # Sub-fase 12.10 Bunke 1 Bug-1
+        "swap_long",  # Sub-fase 12.10 follow-up Spor F5 (NULL i denne testen)
+        "swap_short",
+        "conc_net_top4",
+        "conc_net_top8",
     ]
     assert df["report_date"].iloc[0] == pd.Timestamp("2024-01-02")
     assert df["mm_long"].iloc[0] == 100_000
+    assert df["swap_long"].isna().all()  # Spor F5: ikke populert i denne testen
+
+
+def test_cot_disaggregated_extended_metadata_roundtrip(store: DataStore) -> None:
+    """Sub-fase 12.10 Spor F5: swap_long/short + conc_net_top4/8 round-trip."""
+    df = _disaggregated_df()
+    df["swap_long"] = [40_000, 41_000, 42_000]
+    df["swap_short"] = [30_000, 30_500, 31_000]
+    df["conc_net_top4"] = [22.5, 23.1, 24.0]
+    df["conc_net_top8"] = [33.4, 33.9, 34.5]
+    store.append_cot_disaggregated(df)
+    out = store.get_cot("GOLD", report="disaggregated")
+    assert list(out["swap_long"]) == [40_000, 41_000, 42_000]
+    assert list(out["swap_short"]) == [30_000, 30_500, 31_000]
+    assert list(out["conc_net_top4"]) == [22.5, 23.1, 24.0]
+    assert list(out["conc_net_top8"]) == [33.4, 33.9, 34.5]
+
+
+def test_cot_disaggregated_extended_metadata_partial(store: DataStore) -> None:
+    """Spor F5: kun swap_long satt; resten NULL i DB."""
+    df = _disaggregated_df()
+    df["swap_long"] = [40_000, 41_000, 42_000]
+    # swap_short og conc_net_*, ikke gitt
+    store.append_cot_disaggregated(df)
+    out = store.get_cot("GOLD", report="disaggregated")
+    assert list(out["swap_long"]) == [40_000, 41_000, 42_000]
+    assert out["swap_short"].isna().all()
+    assert out["conc_net_top4"].isna().all()
 
 
 def test_cot_disaggregated_default_report_type(store: DataStore) -> None:

@@ -40,6 +40,7 @@ from bedrock.data.schemas import (
     COMEX_INVENTORY_COLS,
     CONAB_ESTIMATES_COLS,
     COT_DISAGGREGATED_COLS,
+    COT_DISAGGREGATED_EXTENDED_COLS,
     COT_EURONEXT_COLS,
     COT_ICE_COLS,
     COT_LEGACY_COLS,
@@ -246,7 +247,27 @@ class DataStore:
             # Sub-fase 12.10 Spor B: legg til `actual`-kolonne på econ_events
             # for *_surprise-drivere (cross-source FRED-actual). Idempotent.
             self._migrate_econ_events_actual_column(conn)
+            # Sub-fase 12.10 Spor F5: legg til swap_long/short + conc_net_top4/8
+            # på cot_disaggregated. Idempotent.
+            self._migrate_cot_disaggregated_metadata_columns(conn)
             conn.commit()
+
+    def _migrate_cot_disaggregated_metadata_columns(self, conn: sqlite3.Connection) -> None:
+        """Sub-fase 12.10 Spor F5: legg til Swap Dealer + concentration-kolonner
+        på cot_disaggregated. Idempotent: hopper ALTER hvis kolonnen finnes.
+
+        Eksisterende rader får NULL og populeres via re-backfill
+        (scripts/backfill/cot_disaggregated_metadata.py) som re-fetcher
+        fra CFTC med utvidet field_map.
+        """
+        for col, sql_type in (
+            ("swap_long", "INTEGER"),
+            ("swap_short", "INTEGER"),
+            ("conc_net_top4", "REAL"),
+            ("conc_net_top8", "REAL"),
+        ):
+            if not self._column_exists(conn, TABLE_COT_DISAGGREGATED, col):
+                conn.execute(f"ALTER TABLE {TABLE_COT_DISAGGREGATED} ADD COLUMN {col} {sql_type}")
 
     def _migrate_econ_events_actual_column(self, conn: sqlite3.Connection) -> None:
         """Sub-fase 12.10 Spor B: legg til `actual`-kolonne på econ_events.
@@ -497,8 +518,52 @@ class DataStore:
 
         `df` må ha alle kolonner i `COT_DISAGGREGATED_COLS`. Duplicates på
         (report_date, contract) overskrives via INSERT OR REPLACE (PK).
+
+        Sub-fase 12.10 Spor F5: hvis df har noen av
+        `COT_DISAGGREGATED_EXTENDED_COLS` (swap_long/short, conc_net_top4/8),
+        oppdaterer disse i en separat UPDATE-pass etter hovedinsert.
+        Backwards-compat: gamle callers uten disse kolonnene fungerer som før.
         """
-        return self._append_cot(df, TABLE_COT_DISAGGREGATED, COT_DISAGGREGATED_COLS)
+        n = self._append_cot(df, TABLE_COT_DISAGGREGATED, COT_DISAGGREGATED_COLS)
+        self._update_cot_disaggregated_extended_columns(df)
+        return n
+
+    def _update_cot_disaggregated_extended_columns(self, df: pd.DataFrame) -> None:
+        """Spor F5: skriv valgfrie metadata-kolonner (swap_*, conc_net_*).
+
+        No-op hvis ingen av kolonnene finnes i df. Forventer at de
+        relevante (report_date, contract)-radene allerede er insertet.
+        """
+        present = [c for c in COT_DISAGGREGATED_EXTENDED_COLS if c in df.columns]
+        if not present:
+            return
+
+        prepared = df[["report_date", "contract", *present]].copy()
+        prepared["report_date"] = pd.to_datetime(prepared["report_date"]).dt.strftime("%Y-%m-%d")
+
+        set_clause = ", ".join(f"{c} = ?" for c in present)
+        sql = (
+            f"UPDATE {TABLE_COT_DISAGGREGATED} SET {set_clause} "
+            f"WHERE report_date = ? AND contract = ?"
+        )
+
+        rows: Sequence[tuple] = []
+        for row in prepared.itertuples(index=False):
+            values = []
+            for col in present:
+                v = getattr(row, col)
+                if v is None or pd.isna(v):
+                    values.append(None)
+                elif col in ("swap_long", "swap_short"):
+                    values.append(int(v))
+                else:
+                    values.append(float(v))
+            values.extend([row.report_date, row.contract])
+            rows.append(tuple(values))
+
+        with self._connect() as conn:
+            conn.executemany(sql, rows)
+            conn.commit()
 
     def append_cot_legacy(self, df: pd.DataFrame) -> int:
         """Skriv rader til `cot_legacy`. Returnerer antall rader."""

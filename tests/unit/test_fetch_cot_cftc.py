@@ -95,6 +95,9 @@ def test_fetch_cot_disaggregated_returns_bedrock_schema(tmp_path) -> None:
             "GOLD - COMMODITY EXCHANGE INC.", date(2024, 1, 1), date(2024, 1, 15)
         )
 
+    # Spor F5 (2026-05-02): valgfrie kolonner swap_long/short + conc_net_top4/8
+    # legges til etter de obligatoriske. Mangler i SAMPLE_SOCRATA_ROWS, så
+    # de fylles med NaN.
     assert list(df.columns) == [
         "report_date",
         "contract",
@@ -107,11 +110,18 @@ def test_fetch_cot_disaggregated_returns_bedrock_schema(tmp_path) -> None:
         "nonrep_long",
         "nonrep_short",
         "open_interest",
+        "swap_long",
+        "swap_short",
+        "conc_net_top4",
+        "conc_net_top8",
     ]
     assert len(df) == 2
     assert df["report_date"].iloc[0] == "2024-01-02"
     assert df["mm_long"].iloc[0] == 150000
     assert df["open_interest"].iloc[1] == 510000
+    # Optional-kolonner mangler i sample → NaN/NA
+    assert df["swap_long"].isna().all()
+    assert df["conc_net_top4"].isna().all()
 
 
 def test_fetch_cot_disaggregated_matches_datastore_schema(tmp_path) -> None:

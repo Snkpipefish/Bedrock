@@ -75,6 +75,21 @@ _DISAGG_FIELD_MAP: dict[str, str] = {
     "open_interest_all": "open_interest",
 }
 
+
+# Sub-fase 12.10 follow-up Spor F5 (2026-05-02): Swap Dealer-positioning
+# + concentration-of-largest-N-traders. NB: CFTC har en double-underscore
+# typo i `swap__positions_short_all` (men single-underscore i long).
+# Verifisert via Socrata 2026-05-02. Settes til NaN/NULL hvis felt mangler
+# i respons (tidligere kontrakter / pre-2010-rader). swap_* er INTEGER,
+# conc_* er REAL (% av OI, kan være neg).
+_DISAGG_OPTIONAL_FIELD_MAP: dict[str, str] = {
+    "swap_positions_long_all": "swap_long",
+    "swap__positions_short_all": "swap_short",
+    "conc_net_le_4_tdr_long_all": "conc_net_top4",
+    "conc_net_le_8_tdr_long_all": "conc_net_top8",
+}
+_DISAGG_OPTIONAL_FLOAT_FIELDS: frozenset[str] = frozenset({"conc_net_top4", "conc_net_top8"})
+
 _LEGACY_FIELD_MAP: dict[str, str] = {
     "report_date_as_yyyy_mm_dd": "report_date",
     "market_and_exchange_names": "contract",
@@ -154,6 +169,11 @@ def fetch_cot_disaggregated(
     (kolonner i `schemas.COT_DISAGGREGATED_COLS`). Tom respons = tom
     DataFrame.
 
+    Sub-fase 12.10 Spor F5: returnerer i tillegg valgfrie kolonner fra
+    `_DISAGG_OPTIONAL_FIELD_MAP` (swap_long/short, conc_net_top4/8) når
+    CFTC-responsen inneholder dem; ellers fylles de med NaN/None.
+    `append_cot_disaggregated` håndterer disse via separat UPDATE-pass.
+
     Kaster `CotFetchError` ved HTTP-feil eller malformert JSON.
     """
     return _fetch_cot_socrata(
@@ -163,6 +183,8 @@ def fetch_cot_disaggregated(
         from_date=from_date,
         to_date=to_date,
         report_label="disaggregated",
+        optional_field_map=_DISAGG_OPTIONAL_FIELD_MAP,
+        optional_float_fields=_DISAGG_OPTIONAL_FLOAT_FIELDS,
     )
 
 
@@ -224,11 +246,18 @@ def _fetch_cot_socrata(
     from_date: date,
     to_date: date,
     report_label: str,
+    optional_field_map: dict[str, str] | None = None,
+    optional_float_fields: frozenset[str] | None = None,
 ) -> pd.DataFrame:
     """Felles HTTP + validering + normalisering for begge COT-rapporter.
 
     Forskjellen mellom disaggregated og legacy ligger i `url` og `field_map`
     (Socrata-feltnavn er ulike). Alt annet er likt.
+
+    `optional_field_map` (Spor F5): valgfrie Socrata-felt som mappes til
+    bedrock-kolonner når de finnes i responsen. Manglende felt → NaN/None.
+    `optional_float_fields` markerer hvilke valgfrie kolonner som skal
+    cast'es til float (default integer).
     """
     params = build_socrata_query(contract, from_date, to_date)
     _log.info(
@@ -265,23 +294,37 @@ def _fetch_cot_socrata(
             f"type={type(data).__name__}"
         )
 
-    return _normalize_cot(data, contract, field_map)
+    return _normalize_cot(
+        data,
+        contract,
+        field_map,
+        optional_field_map=optional_field_map,
+        optional_float_fields=optional_float_fields,
+    )
 
 
 def _normalize_cot(
     rows: list[dict],
     contract: str,
     field_map: dict[str, str],
+    optional_field_map: dict[str, str] | None = None,
+    optional_float_fields: frozenset[str] | None = None,
 ) -> pd.DataFrame:
     """Konverter Socrata JSON-rader til Bedrock-schema DataFrame.
 
     Tom liste → tom DataFrame med korrekte kolonner.
-    `field_map` bestemmer skjema (disagg vs legacy).
+    `field_map` bestemmer schema (disagg vs legacy).
+    `optional_field_map` (Spor F5) tilfører valgfrie kolonner — fylles
+    med NaN/None hvis Socrata-feltet mangler i responsen.
     """
     expected_cols = list(field_map.values())
+    optional_cols = list(optional_field_map.values()) if optional_field_map else []
+    float_set = optional_float_fields or frozenset()
+
+    all_cols = expected_cols + optional_cols
 
     if not rows:
-        return pd.DataFrame(columns=expected_cols)
+        return pd.DataFrame(columns=all_cols)
 
     df = pd.DataFrame(rows)
 
@@ -302,4 +345,18 @@ def _normalize_cot(
     # "2024-01-02T00:00:00.000" → "2024-01-02"
     renamed["report_date"] = pd.to_datetime(renamed["report_date"]).dt.strftime("%Y-%m-%d")
 
-    return renamed[expected_cols]
+    if optional_field_map:
+        for src, dest in optional_field_map.items():
+            if src in df.columns:
+                col_series = pd.to_numeric(df[src], errors="coerce")
+                if dest in float_set:
+                    renamed[dest] = col_series.astype("float64")
+                else:
+                    # Nullable int — bevarer NaN per rad
+                    renamed[dest] = col_series.astype("Int64")
+            else:
+                # Felt mangler i denne respons-batchen (sannsynlig pre-2010
+                # eller kontrakt uten swap-kategori). Fill NaN.
+                renamed[dest] = pd.NA
+
+    return renamed[all_cols]
