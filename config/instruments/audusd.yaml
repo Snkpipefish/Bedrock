@@ -64,21 +64,26 @@ families:
     # SELL — risk-off-regimer slår hardere på AUD enn andre G10).
     # yield_diff_10y trimmet 0.30→0.25 — borderline-svak (median |IC|=0.052,
     # median mono=0.25). Sum = 1.00.
+    # Sub-fase 12.10 follow-up A3 (session 142): dollar_index_breadth@0.10
+    # lagt til (bunke3 #13). dxy 0.30→0.25, vix 0.25→0.20 for sum=1.00.
     drivers:
       - name: real_yield
         weight: 0.20
         params: {bull_when: low}
       - name: dxy_chg5d
-        weight: 0.30
+        weight: 0.25
         params: {bull_when: negative, window: 5}
       - name: vix_regime
-        weight: 0.25
+        weight: 0.20
         params: {invert: false}
       - name: yield_diff_10y
         weight: 0.25
         params: {foreign_series: IRLTLT01AUM156N, bull_when: low}  # Lav diff (AU≥US) = bull AUD
         horizons:
           - MAKRO
+      - name: dollar_index_breadth
+        weight: 0.10
+        params: {bull_when: low, window: 5}
   structure:
     drivers:
       - name: range_position
