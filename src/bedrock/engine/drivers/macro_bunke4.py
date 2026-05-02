@@ -20,7 +20,8 @@ Levert per § 22.2 #15-#18:
 
 #17 NOAA ENSO/PDO:
 - noaa_oni_index: ONI level (erstatter `enso_regime`-mapping)
-- noaa_enso_forecast_3mo: DEFERRED (krever IRI-forecast-CSV; egen kilde)
+- noaa_enso_forecast_3mo: IRI ENSO Plumes 3-mnd-forward (Spor F4 2026-05-02 —
+  manuell CSV-fallback per ADR-007 § 4, series_id=IRI_ENSO_FCST_3MO)
 - noaa_pdo_index: PDO level (multi-decade ocean-pattern)
 
 #18 intraday:
@@ -180,6 +181,35 @@ _PDO_THRESHOLDS_DEFAULT: tuple[tuple[float, float], ...] = (
 )
 
 
+@register("noaa_enso_forecast_3mo")
+def noaa_enso_forecast_3mo(store: Any, instrument: str, params: dict) -> float:
+    """IRI ENSO Plumes 3-mnd-forward Niño 3.4 ensemble-mean (Spor F4).
+
+    Reads ``IRI_ENSO_FCST_3MO`` fra fundamentals (manuell CSV-loader per
+    ADR-007 § 4). Mapper med samme step-tabell som ``noaa_oni_index``
+    siden begge representerer Niño 3.4 SST-anomali-nivå (forward vs
+    realisert). Default ``bull_when='low'`` antar La Niña-forecast er
+    bullish for grain/agri (drought-bias i Brazil/W.Afrika).
+
+    Override via YAML hvis instrumentet har omvendt sensitivitet
+    (f.eks. tropisk asia-rice som er våtere under La Niña).
+    """
+    _ = params.get("_horizon")
+    bull_when = str(params.get("bull_when", "low")).lower()
+    min_samples = int(params.get("min_samples", 3))
+    series_id = str(params.get("series_id", "IRI_ENSO_FCST_3MO"))
+
+    s = _get_series(store, series_id)
+    if s is None:
+        return 0.0
+    if len(s) < min_samples:
+        return 0.5
+
+    current = float(s.iloc[-1])
+    score = _step(current, _ONI_THRESHOLDS_DEFAULT)
+    return score if bull_when == "low" else 1.0 - score
+
+
 @register("noaa_pdo_index")
 def noaa_pdo_index(store: Any, instrument: str, params: dict) -> float:
     """NOAA PDO Index level. Multi-decade ocean-pattern."""
@@ -262,6 +292,7 @@ __all__ = [
     "gvz_z",
     "intraday_atr_h1",
     "move_index_z",
+    "noaa_enso_forecast_3mo",
     "noaa_oni_index",
     "noaa_pdo_index",
     "ovx_z",

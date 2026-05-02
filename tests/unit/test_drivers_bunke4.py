@@ -20,6 +20,7 @@ from bedrock.engine.drivers import get, is_registered
         "ovx_z",
         "cboe_skew_z",
         "noaa_oni_index",
+        "noaa_enso_forecast_3mo",
         "noaa_pdo_index",
         "intraday_atr_h1",
     ],
@@ -132,6 +133,40 @@ def test_noaa_oni_strong_el_nino_bear() -> None:
     vals = [2.0] * 24
     store = _MockStore({"ONI": _monthly(vals)})
     assert fn(store, "Corn", {}) == 0.0
+
+
+def test_noaa_enso_forecast_3mo_strong_la_nina_bull() -> None:
+    fn = get("noaa_enso_forecast_3mo")
+    vals = [-1.8] * 6
+    store = _MockStore({"IRI_ENSO_FCST_3MO": _monthly(vals)})
+    assert fn(store, "Sugar", {}) == 1.0
+
+
+def test_noaa_enso_forecast_3mo_strong_el_nino_bear() -> None:
+    fn = get("noaa_enso_forecast_3mo")
+    vals = [1.6] * 6
+    store = _MockStore({"IRI_ENSO_FCST_3MO": _monthly(vals)})
+    assert fn(store, "Sugar", {}) == 0.0
+
+
+def test_noaa_enso_forecast_3mo_neutral_returns_mid() -> None:
+    fn = get("noaa_enso_forecast_3mo")
+    vals = [0.1] * 6
+    store = _MockStore({"IRI_ENSO_FCST_3MO": _monthly(vals)})
+    assert fn(store, "Coffee", {}) == 0.5
+
+
+def test_noaa_enso_forecast_3mo_returns_neutral_when_sparse() -> None:
+    fn = get("noaa_enso_forecast_3mo")
+    vals = [0.5, 0.6]  # under min_samples=3
+    store = _MockStore({"IRI_ENSO_FCST_3MO": _monthly(vals)})
+    assert fn(store, "Cocoa", {}) == 0.5
+
+
+def test_noaa_enso_forecast_3mo_missing_series_returns_zero() -> None:
+    fn = get("noaa_enso_forecast_3mo")
+    store = _MockStore()
+    assert fn(store, "Cocoa", {}) == 0.0
 
 
 def test_noaa_pdo_neutral_phase() -> None:

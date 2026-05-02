@@ -21,6 +21,7 @@ gratis API-tilgang eller er paid-only.
 | `unica_reports.csv` | report_date, position_date, period, crop_year, mix_sugar_pct(+prev), mix_ethanol_pct(+prev), crush_kt(+prev/yoy), sugar_production_kt(+prev/yoy), ethanol_total_ml(+prev/yoy) | https://unicadata.com.br/listagem.php?idMn=63 (halvmånedlig PDF; manuell hvis poppler/pypdf feiler) |
 | `news_intel.csv` | url, event_ts, fetched_at, category (gold/silver/copper/oil/gas/grains/softs/geopolitics/agri_weather), title, source, query_id, sentiment_label (nullable), disruption_score (nullable) | Manuell pre-seeding eller fallback ved RSS-feil. Auto-fetcher (Google News RSS) skal håndtere normal drift. |
 | `crypto_sentiment.csv` | indicator (crypto_fng/btc_dominance/eth_dominance/total_mcap_usd/total_mcap_chg24h_pct), date, value, source | Manuell pre-seeding eller fallback ved alternative.me/CoinGecko-feil. Long-format — én rad per (indicator, date). |
+| `iri_enso_forecast.csv` | issue_date, target_period, nino34_mean_c | https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/ — månedlig (rundt 20.) ensemble-mean Niño 3.4 SST-anomali for ~3 mnd fram. Bruker leser av plume-grafen. Loader: `scripts/backfill/iri_enso_forecast.py` (Spor F4 — driver `noaa_enso_forecast_3mo`, series_id `IRI_ENSO_FCST_3MO` i fundamentals). |
 
 ## Format-eksempler
 
