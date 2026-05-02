@@ -132,6 +132,9 @@ HORIZON_DEFAULTS: dict[str, dict[str, Any]] = {
             "tp_atr_mult": 2.5,
             "sizing_base_risk_usd": 20,
             "exit_trail_atr_mult": TRAIL_MULT_BY_HORIZON_GROUP["SCALP"],
+            # SCALP: MARKET — fart > entry-kvalitet på korte tidsskalaer.
+            # SL-laget (~few hundred ms) er kjent kostnad, akseptert.
+            "use_limit_orders": False,
         },
     },
     "SWING": {
@@ -144,6 +147,9 @@ HORIZON_DEFAULTS: dict[str, dict[str, Any]] = {
             "tp_atr_mult": 3.5,
             "sizing_base_risk_usd": 40,
             "exit_trail_atr_mult": TRAIL_MULT_BY_HORIZON_GROUP["SWING"],
+            # SWING: LIMIT — venter på pris ved alert_level. SL/TP festes
+            # synkront på cTrader-serveren ved fill (ingen amend-lag).
+            "use_limit_orders": True,
         },
     },
     "MAKRO": {
@@ -156,6 +162,8 @@ HORIZON_DEFAULTS: dict[str, dict[str, Any]] = {
             "tp_atr_mult": None,  # MAKRO bruker trailing-only per Fase 4
             "sizing_base_risk_usd": 60,
             "exit_trail_atr_mult": TRAIL_MULT_BY_HORIZON_GROUP["MAKRO"],
+            # MAKRO: LIMIT — entry-kvalitet >> fart på multi-uke tese.
+            "use_limit_orders": True,
         },
     },
 }
@@ -311,7 +319,12 @@ def adapt_to_bot_format(
             "vix_regime": "normal",
             "correlation_config": {
                 "max_per_group": 2,
-                "max_total_open": 6,
+                # Bot leser nøkkelen `max_total` (entry.py:1182). Tidligere
+                # `max_total_open` traff ikke — bot brukte default 6. I
+                # test-fasen ønsker vi mer breddet (3 horisonter × 22
+                # instrumenter = stort signal-univers); 20 lar ~7 instr
+                # være aktive samtidig på tvers av horisonter.
+                "max_total": 20,
             },
         }
     if rules is None:

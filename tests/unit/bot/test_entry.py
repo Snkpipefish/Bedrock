@@ -1110,6 +1110,52 @@ def test_execute_trade_sends_limit_order_when_rule_set(
     assert "expiration_ms" in kwargs
 
 
+def test_execute_trade_uses_horizon_config_use_limit_orders_over_rules(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Per-signal `horizon_config.use_limit_orders` overstyrer global rules.
+
+    Adapter setter SCALP=False, SWING/MAKRO=True i HORIZON_DEFAULTS — bot
+    skal lese hcfg-flagget først så ulike horisonter får ulike order-typer
+    i samme batch.
+    """
+    client = _make_client_stub(
+        symbol_map={"GOLD": 2},
+        last_bid={2: 2050.00},
+        last_ask={2: 2050.50},
+        account_balance=100_000.0,
+    )
+    client.symbol_info = {2: {"lot_size": 100, "min_volume": 1, "step_volume": 1}}
+    client.symbol_price_digits = {2: 2}
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    state = _make_state(signal_id="gold-1", symbol_id=2, instrument="GOLD", stop=2040.0, t1=2070.0)
+    active_states.append(state)
+    sig = _make_signal(
+        sig_id="gold-1", instrument="GOLD", alert=2050.25, stop=2040.0, t1=2070.0, base_risk=40
+    )
+    # hcfg sier MARKET (False), rules sier LIMIT (True) — hcfg vinner
+    sig["horizon_config"]["use_limit_orders"] = False
+    engine.signal_data = {
+        "signals": [],
+        "global_state": {},
+        "rules": {"use_limit_orders": True},
+    }
+    candle = Candle(
+        open=2050.0,
+        high=2050.5,
+        low=2049.9,
+        close=2050.3,
+        volume=1,
+        timestamp=datetime.now(timezone.utc),
+    )
+    engine._execute_trade_impl(sig, state, candle)
+    kwargs = client.send_new_order.call_args.kwargs
+    assert kwargs["order_type"] == "MARKET", "hcfg.use_limit_orders=False skal trumpfe rules=True"
+
+
 def test_execute_trade_blocks_on_zero_risk(
     safety: SafetyMonitor,
     config: ReloadableConfig,

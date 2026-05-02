@@ -1194,8 +1194,11 @@ class EntryEngine:
 
         # ── Ordre-sending ─────────────────────────────────────
         trade_side = "SELL" if sig["direction"] == "sell" else "BUY"
-        use_limit = rules.get("use_limit_orders", False)
         hcfg = sig.get("horizon_config", {})
+        # Per-horisont LIMIT-flagg overstyrer global rules. SCALP→MARKET
+        # (fart > entry-kvalitet), SWING/MAKRO→LIMIT (entry-kvalitet > fart;
+        # SL festes synkront på serveren — ingen unprotected window).
+        use_limit = hcfg.get("use_limit_orders", rules.get("use_limit_orders", False))
         price_digits = self._client.symbol_price_digits.get(state.symbol_id, 5)
 
         order_kwargs: dict[str, Any] = {

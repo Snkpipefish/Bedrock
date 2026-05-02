@@ -277,6 +277,32 @@ def test_rules_default_has_stop_multiplier():
     assert payload["rules"]["stop_multiplier"] == 3.0
 
 
+def test_global_state_correlation_config_uses_max_total_key():
+    """Bot leser `max_total` (entry.py:1182), ikke `max_total_open`. Tidligere
+    mismatch sendte alltid default 6."""
+    payload = adapt_to_bot_format([])
+    corr_cfg = payload["global_state"]["correlation_config"]
+    assert "max_total" in corr_cfg, "Bot leser 'max_total'-nøkkelen — må være eksplisitt satt"
+    assert corr_cfg["max_total"] == 20, "Test-fase: 20 åpne posisjoner totalt"
+
+
+def test_use_limit_orders_per_horizon():
+    """SCALP→MARKET (fart > entry-kvalitet), SWING/MAKRO→LIMIT (entry-kvalitet
+    > fart; SL/TP festes synkront serverside, ingen amend-lag)."""
+    expected = {
+        "scalp": False,  # MARKET
+        "swing": True,  # LIMIT
+        "makro": True,  # LIMIT
+    }
+    for hor_in, want in expected.items():
+        payload = adapt_to_bot_format([_make_entry(horizon=hor_in)])
+        sig = payload["signals"][0]
+        assert sig["horizon_config"]["use_limit_orders"] is want, (
+            f"{hor_in.upper()}: forventet use_limit_orders={want}, "
+            f"fikk {sig['horizon_config']['use_limit_orders']}"
+        )
+
+
 def test_setup_id_used_as_signal_id():
     payload = adapt_to_bot_format([_make_entry(setup_id="my-id-42")])
     assert payload["signals"][0]["id"] == "my-id-42"
