@@ -189,6 +189,7 @@
   - **Død kode:** `enso_regime` driver i `agri.py` brukes fortsatt av analog-dim-extractor — refactor (analog → noaa_oni_index) er egen mini-spor.
 - **Kickoff-prompt for nytt kontekstvindu:** `docs/12_10_followup_spor_b_c_d_e_f_kickoff.md`.
 - **Pre-existing test-failures fixed 2026-05-02:** `test_unit_starts_after_server` (12.9 D4 fjernet bevisst After=bedrock-server.service-relasjon for user→system-unit-isolasjon; test omdøpt til `test_unit_starts_after_network`); `test_min_magnitude_filter` (bunke9 #33 bumpet driver-default 4.5→5.5; test sender nå eksplisitt min_magnitude=4.5 for default-bump-immunitet). Commit: `34bdf36`. **Full Python-suite: 2581/2581 grønne.**
+- **Pre-live audit + pyright-fix 2026-05-02 (session 149):** Pyright-fix `56d328c` (drivers_overview-endepunktet bruker `d.horizons` direkte istedenfor `getattr` for type-narrowing). 3-agent audit på kode/pipeline/configs konkluderte 🟡 GUL — klart for live-testing **etter** 3 fixes: (1) `secrets.env` har `export`-prefiks som systemd ignorerer → bot kjører fortsatt i `--demo`; (2) Corn grade-thresholds A_plus=14 vs soybean/wheat=11 må verifiseres (intentional eller copy-paste); (3) DB-rydding (flere bedrock.db-filer i repo-rot + `data/`, bortvist `bedrock-signals-bot-intraday.timer`, stale `harvest_session_136.pid`). 13 ubrukte drivere registrert men ikke wired (cleanup-kandidat, ikke blokker). Pyright/ruff: 0/0. Tests collected: 2860. Signal-kontrakt v1 låst med `extra="forbid"`, alle 22 instrumenter validerer + er Skilling-mappet. Risk-gates konservative (2% daily / 500 NOK gulv).
 
   - **130:** **D1 LUKKET 2026-04-29 — A2 AGSI levert + A3 deferred + grade-distribusjons-rapport + tag `v0.12.7-d1`.** AGSI-key registrert (32 chars i ~/.bedrock/secrets.env, verifisert via bedrock secrets-loader). **A2 AGSI EU gas storage** levert i 3 commits: (a) `124c3fa` — schemas/store/fetcher/backfill-script. AGSI v2 API: per-land via `?country=<ISO2>`, EU-aggregat via `?type=eu` (verifisert mot live API; `?country=eu` returnerer 0 rader). x-key-header auth. SQLite-tabell `agsi_storage` med PK (country, gas_day_start) + 7 nullable numeriske felt. Live-backfill 18270 rader (5 countries × 3654 dager 2016-04-26..2026-04-27, 10-år rolling per ADR-011). Backfill-skript chunker per 270-dagers vinduer for å omgå AGSI v2 size=300-cap. (b) `adf0a52` — `agsi_storage_pct`-driver i macro.py med default-trapp på rå consumption_full_pct (≤20%→1.0 sterk bull, ≤40%→0.75, ≤60%→0.5, ≤80%→0.25, >80%→0.1) + full R4 mode-suite (pct_12m/pct_36m/delta_5d_z/delta_20d_z/extreme_*). 12 nye driver-tester. Live (EU @ 31.97% full 2026-04-27): default 0.75, pct_36m 0.91 (current på lav-percentil av 36 mnd → strong bull). (c) `ed38c5d` — NaturalGas macro-YAML + ny baseline. **MIDLERTIDIG VEKT** (uten hdd_cdd): real_yield@0.10 + dxy@0.30 + vix@0.10 + eia@0.40 + agsi@0.10 = 1.00. Endelig § 19.5-spec inkluderer hdd_cdd_anomaly@0.20 som B4 leverer i D2; ved B4 oppdateres til real_yield@0.10 + dxy@0.20 + vix@0.10 + eia@0.30 + agsi@0.10 + hdd_cdd@0.20 = 1.00. Snapshot-diff vs pre-A2 baseline: kun 6 NaturalGas-scoringsendringer (3 hor × 2 dir) + 2 grade-flips (NaturalGas SCALP/SWING sell A→B). Andre 21 instrumenter uendret — clean A2-isolasjon. **A3 FAS deferred** (`9a57c09`): bruker har ikke registrert FAS-key innen D1-vinduet; defer til Plan-S der scalp-arkitekturen uansett tar opp surprise-vs-consensus. Cross-familie YAML-vekter for Corn/Soybean/Wheat/Cotton uendret. **Grade-distribusjons-rapport** (`ce6253a`) per § 19.6: pre-D1 (b67fc86, session 127 close) vs post-D1 (post session 130). 1 instrument flagget (CrudeOil A+ 0→1, modest energy-class effekt fra B1 NetFedLiq/NFCI/credit). BTC/SP500/GBPUSD/USDJPY har "B-konvergens" (C→B på SCALP-par). Agri uendret. Skiftet er innenfor forventet for 8 nye drivere på 16+ instrumenter; ingen systematisk grade-inflasjon. **Total drivere registrert: 37** (var 36). Pyright src/: 0/0/0. **D1 ferdig — alle Tier 1-leveranser dekket: A1 dropp, A2 levert, A3 deferred, A4+C1 (session 128), B1 (session 129), B3 (session 128). 5 nye fetchere/utvidelser + 8 nye drivere total.** **Tag `v0.12.7-d1` settes på siste D1-commit. LUKKET 2026-04-29.**
 - **Phase:** 11 **LUKKET 2026-04-25** (tag `v0.11.0-fase-11`). Backtest-rammeverk er funksjonelt fra CLI; UI-fane utsatt til evt. polish-pass etter Fase 13 cutover (bruker-beslutning 2026-04-25).
@@ -572,6 +573,74 @@ ferdig og 12.6-rebalansering er gjort.
 ---
 
 ## Session log (newest first)
+
+### 2026-05-02 — Session 149: pre-live audit + pyright-fix (drivers_overview)
+
+**Scope:** Pre-live audit på tvers av kode-helse, pipeline og config,
++ rydde siste pyright-feil i `ui.py`.
+
+**Endringer:**
+
+1. **Pyright-fix** (commit `56d328c`):
+   - `ui.py:1376` — `getattr(d, "horizons", None)` → `d.horizons` i
+     list-comprehension i `drivers_overview`-endepunktet.
+   - `getattr` blokkerte type-narrowing → pyright klagde på
+     `list[str] | None` ved `list(d.horizons)`. `DriverSpec.horizons`
+     er alltid definert i schema (engine.py:71), så defensiviteten
+     var unødvendig.
+   - Atferd uendret. Pyright på `ui.py`: 1 → 0 feil.
+
+**Pre-live audit-funn (3 parallelle agenter — kun lesing):**
+
+🟢 **Kode-helse:** Pyright 0 feil (etter fix). Ruff 0. 2860 tests
+collected. Ingen `bare except`. Ingen mistenkelige hardkodede
+secrets-strings. 4 TODO/FIXME — alle dokumenterte deferred-oppgaver.
+- 1 kjent defensiv try-except i `bot/exit.py:740` (ProtoOAExecutionType
+  late-import) — pyright kan klage hvis den kjøres på den filen
+  isolert; dekket av try-except, ikke blokker.
+
+🟡 **Pipeline & infrastruktur:**
+- Pipeline-helse: GRØNN (18 friske kilder, 1 aging: comex).
+- **Bot kjører i `--demo`** fordi `EnvironmentFile=/home/pc/.bedrock/secrets.env`
+  har `export`-prefiks som systemd ignorerer → API-nøkler blir aldri
+  satt i prosess-miljøet. Logget gjentatte ganger 1.-2. mai. Må fikses
+  før live: fjern `export` fra secrets.env.
+- Flere DB-filer i repo-rot OG `data/` (bedrock.db i begge + 2 backups
+  i data/) — rydd backup-strategi eller dokumenter.
+- Timer-warning: `bedrock-signals-bot-intraday.timer: Unit to trigger
+  vanished` — timer-fil mangler eller er bortslettet.
+- Stale PID-fil: `data/_meta/harvest_session_136.pid` — ingen levende
+  prosess, kan ryddes.
+
+🟡 **Configs & kontrakter:**
+- 22/22 instrument-YAMLer validerer.
+- 22/22 instrumenter mappet til Skilling/cTrader-symboler i
+  `bot/instruments.py`.
+- Signal-kontrakt v1: versjonert, `extra="forbid"`, forward-compat
+  for {1.0, 2.0, 2.1}. Låst-status holdes.
+- Risk-gates: konservative (2% daily loss, 500 NOK gulv,
+  horizon_min_rr 1.0/1.3/1.5).
+- **13 ubrukte drivere** registrert men ikke wired (cfnai_3mma,
+  continuing_claims_z, cot_commercial_extreme, cot_oi_change,
+  enso_regime, fomc_decision_distance, intraday_atr_h1,
+  news_intel_severity_veto, nfci_change, noaa_pdo_index,
+  t_bill_3mo_yield, umich_sentiment_z, vix_term_ratio). Ikke blokker,
+  men cleanup-kandidat.
+- **Corn grade-thresholds anomali**: A_plus=14, A=10, B=7 vs
+  soybean/wheat A_plus=11, A=8, B=6. Verifiser om intentional
+  (volatility/likviditet) eller copy-paste.
+
+**Topp 3 å fikse før live trading:**
+1. `secrets.env` `export`-prefiks → bot kjører fortsatt i demo nå.
+2. Verifiser corn grade-thresholds (intentional vs copy-paste).
+3. Rydd DB-filer + bortvist timer + stale PID.
+
+**Commits:**
+- `56d328c` fix(types): smalne d.horizons direkte i drivers_overview
+
+**Neste:** Adressere de tre topp-funnene (secrets.env-export, corn-
+grade verifisering, infra-rydding) før live cutover. Hvis bruker
+vil prioritere annerledes — flagg.
 
 ### 2026-05-02 — Session 148: Mål 2 (live UI-oppdateringer via SSE) levert
 
