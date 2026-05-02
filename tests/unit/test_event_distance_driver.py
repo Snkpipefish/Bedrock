@@ -265,15 +265,19 @@ def test_driver_registered() -> None:
 # alarmlydene gå.
 
 
-def test_econ_events_schema_has_no_actual_column() -> None:
-    """Regresjons-vakt: bekrefter at `actual` ikke er i schema-kolonnene."""
+def test_econ_events_schema_has_actual_column_for_surprise_drivers() -> None:
+    """`actual` ble lagt til i schema per ADR-014 (12.10 Spor B) for cross-
+    source *_surprise-drivere (FRED-backfill). Look-ahead-vern er flyttet til
+    driver-laget: event-baserte drivere som event_distance leser KUN
+    pre-event-felter (event_ts/forecast/previous) — sjekkes av
+    `test_event_distance_source_does_not_reference_actual` nedenfor.
+    """
     from bedrock.data.schemas import ECON_EVENTS_COLS
 
-    assert "actual" not in ECON_EVENTS_COLS, (
-        "Sub-fase 12.10 Bunke 1 Bug-3: `actual`-kolonne i econ_events ville "
-        "introdusere look-ahead-bias for event-baserte drivere. Hvis denne "
-        "testen feiler, må driver-laget også oppdateres til å filtrere "
-        "actual-felt på event_ts > now."
+    assert "actual" in ECON_EVENTS_COLS, (
+        "ADR-014: `actual`-kolonnen skal finnes i econ_events-schema for "
+        "*_surprise-drivere. Hvis denne mangler er migrasjonen i "
+        "DataStore.__init__ ikke kjørt eller schemas.py er rullet tilbake."
     )
 
 

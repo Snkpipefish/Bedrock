@@ -21,7 +21,11 @@ def store(tmp_path: Path) -> DataStore:
 
 
 def test_econ_events_init_creates_table(store: DataStore) -> None:
-    """DataStore.__init__ kjører DDL_ECON_EVENTS — tabellen skal eksistere."""
+    """DataStore.__init__ kjører DDL_ECON_EVENTS — tabellen skal eksistere.
+
+    `actual`-kolonnen kom inn i 12.10 Spor B (ADR-014) for cross-source
+    surprise-drivere. Look-ahead-vern håndheves på driver-nivå.
+    """
     df = store.get_econ_events()
     assert df.empty
     # Forventede kolonner
@@ -32,6 +36,7 @@ def test_econ_events_init_creates_table(store: DataStore) -> None:
         "impact",
         "forecast",
         "previous",
+        "actual",
         "fetched_at",
     }
 
