@@ -1151,3 +1151,53 @@ def test_crypto_sentiment_classifies_fng_correctly(client: FlaskClient, db_path:
     # Siste verdi (i=4 → 90 → Extreme Greed)
     assert data["fng"]["latest"] == 90.0
     assert data["fng"]["label"] == "Extreme Greed"
+
+
+# ─────────────────────────────────────────────────────────────
+# SSE: /api/ui/events  (Mål 2)
+# ─────────────────────────────────────────────────────────────
+
+
+def test_events_returns_503_when_broker_not_registered(client: FlaskClient) -> None:
+    """Default app uten broker (test-modus) skal returnere 503 — frontend
+    faller tilbake på safety-poll uten å henge."""
+    response = client.get("/api/ui/events")
+    assert response.status_code == 503
+
+
+def test_events_streams_initial_connected_event(app_with_config) -> None:
+    """Med broker registrert: stream skal starte med 'connected'-event."""
+    from bedrock.signal_server.file_watcher import EventBroker
+
+    broker = EventBroker()
+    app_with_config.extensions["bedrock_event_broker"] = broker
+
+    with app_with_config.test_client() as client:
+        response = client.get("/api/ui/events", buffered=False)
+        assert response.status_code == 200
+        assert response.mimetype == "text/event-stream"
+        assert response.headers["Cache-Control"] == "no-cache"
+
+        # Les første chunk (initial 'connected'-event). iter_encoded() er
+        # generator over bytes; ta én chunk og lukk koblingen.
+        chunks_iter = response.response
+        first_chunk = next(iter(chunks_iter))
+        assert b"event: connected" in first_chunk
+        # Lukk eksplisitt for å unngå hengende generator
+        if hasattr(chunks_iter, "close"):
+            chunks_iter.close()
+
+
+def test_events_format_sse_helper() -> None:
+    """_format_sse skal følge EventSource-spec: event + data + tom linje."""
+    from bedrock.signal_server.endpoints.ui import _format_sse
+    from bedrock.signal_server.file_watcher import FileEvent
+
+    msg = _format_sse(FileEvent(event_type="trade_log_changed", path="/x", mtime=1.5))
+    assert msg.startswith("event: trade_log_changed\n")
+    assert "data: " in msg
+    assert msg.endswith("\n\n")
+    # data skal være valid JSON
+    data_line = next(line for line in msg.split("\n") if line.startswith("data: "))
+    payload = json.loads(data_line[len("data: ") :])
+    assert payload == {"path": "/x", "mtime": 1.5}

@@ -35,6 +35,8 @@ from __future__ import annotations
 
 import json
 import logging
+import queue
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -43,6 +45,7 @@ import pandas as pd
 from flask import Blueprint, Response, abort, current_app, jsonify, send_from_directory
 
 from bedrock.signal_server.config import ServerConfig
+from bedrock.signal_server.file_watcher import EventBroker, FileEvent
 
 log = logging.getLogger("bedrock.signal_server.ui")
 
@@ -1469,3 +1472,71 @@ def bot_status() -> Response:
             "last_check": now.isoformat(),
         }
     )
+
+
+# ─────────────────────────────────────────────────────────────
+# SSE: /api/ui/events  (Mål 2 — live UI-oppdateringer fra bot)
+# ─────────────────────────────────────────────────────────────
+
+
+_SSE_KEEPALIVE_SEC = 25.0
+"""Keepalive-interval for SSE-koblinger.
+
+Sender en SSE-comment hver N. sek slik at proxier (nginx, cloudflare)
+og waitress sin idle-timeout ikke dropper koblingen mellom faktiske
+events. < 30s er trygg margin mot vanlige defaults."""
+
+
+def _format_sse(event: FileEvent) -> str:
+    """Encode FileEvent som SSE-message ihht. EventSource-spec.
+
+    Format: 'event: <type>\\ndata: <json>\\n\\n'. Tom linje markerer
+    slutt på messagen.
+    """
+    payload = json.dumps({"path": event.path, "mtime": event.mtime})
+    return f"event: {event.event_type}\ndata: {payload}\n\n"
+
+
+def _sse_stream(broker: EventBroker) -> Iterator[str]:
+    """Generator som yielder SSE-messages til klient diskonnekterer.
+
+    Sender en initial 'connected'-event slik at klient vet kanalen
+    fungerer. Deretter blocking-get fra broker-kø med timeout slik at
+    keepalive-comments sendes selv ved stille perioder.
+    """
+    yield "event: connected\ndata: {}\n\n"
+    with broker.subscribe() as q:
+        while True:
+            try:
+                event = q.get(timeout=_SSE_KEEPALIVE_SEC)
+            except queue.Empty:
+                yield ": keepalive\n\n"
+                continue
+            yield _format_sse(event)
+
+
+@ui_bp.get("/api/ui/events")
+def events_stream() -> Response:
+    """Server-Sent Events-strøm for live UI-oppdateringer.
+
+    Erstatter UI-ens 30-sek-polling. Klient åpner én EventSource-kobling
+    som holder seg åpen; server pusher messages når relevante filer
+    endrer seg (`signals_bot.json`, `signal_log.json`, ...).
+
+    Krever at server har en aktiv EventBroker — startes av
+    `bedrock server`-CLI-en. Hvis ikke registrert (test-modus uten
+    broker): returner 503 slik at frontend faller tilbake på
+    safety-poll.
+    """
+    broker = current_app.extensions.get("bedrock_event_broker")
+    if broker is None:
+        return Response(
+            "event-broker ikke aktiv (server startet uten file-watcher?)\n",
+            status=503,
+            mimetype="text/plain",
+        )
+
+    response = Response(_sse_stream(broker), mimetype="text/event-stream")
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["X-Accel-Buffering"] = "no"  # disable proxy-buffering
+    return response
