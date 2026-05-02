@@ -48,6 +48,47 @@ DEFAULT_WHITELIST_PATH = Path("config/bot_whitelist.yaml")
 # leser agri_signals_path, /api/ui/setups/financial leser signals_path.
 _AGRI_ASSET_CLASSES = frozenset({"grains", "softs"})
 
+# Felter som bumpes hver kjøring uavhengig av faktisk innholds-endring.
+# Strippes bort før equality-sjekk i `_write_if_changed` slik at intra-day
+# regen-runs som produserer identisk decision-state ikke gir unødig
+# disk-IO eller bot-poll-trigger.
+_VOLATILE_SETUP_FIELDS = frozenset({"first_seen", "last_updated"})
+
+
+def _strip_volatile(entries: list[dict]) -> list[dict]:
+    """Returnerer en kopi av entries med volatile timestamp-felter fjernet."""
+    out = []
+    for e in entries:
+        copy = dict(e)
+        setup = copy.get("setup")
+        if isinstance(setup, dict):
+            copy["setup"] = {k: v for k, v in setup.items() if k not in _VOLATILE_SETUP_FIELDS}
+        out.append(copy)
+    return out
+
+
+def _write_if_changed(path: Path, entries: list[dict]) -> bool:
+    """Skriv `entries` som JSON til `path`. Hopper over skriving hvis filen
+    allerede inneholder identiske decision-relevante felter (volatile
+    timestamps strippes før sammenligning).
+
+    Returnerer True hvis filen ble skrevet, False hvis den ble hoppet over.
+    Ved skip bevares filens mtime — UI-er og bot som leser mtime for å
+    detektere fersk-data trigges ikke unødig.
+    """
+    new_payload = json.dumps(entries, indent=2, default=str)
+    if path.exists():
+        try:
+            existing_entries = json.loads(path.read_text())
+            if isinstance(existing_entries, list) and _strip_volatile(
+                existing_entries
+            ) == _strip_volatile(entries):
+                return False
+        except (json.JSONDecodeError, OSError):
+            pass
+    path.write_text(new_payload)
+    return True
+
 
 def _read_asset_class(yaml_path: Path) -> str | None:
     """Hent asset_class fra en instrument-YAML. Returnerer None ved feil."""
@@ -304,17 +345,20 @@ def signals_all_cmd(
         financial_entries = [
             e for e in all_entries if e.get("asset_class") not in _AGRI_ASSET_CLASSES
         ]
-        output_path.write_text(json.dumps(financial_entries, indent=2, default=str))
+        fin_written = _write_if_changed(output_path, financial_entries)
         agri_output_path.parent.mkdir(parents=True, exist_ok=True)
-        agri_output_path.write_text(json.dumps(agri_entries, indent=2, default=str))
+        agri_written = _write_if_changed(agri_output_path, agri_entries)
         click.echo("")
-        click.echo(f"Wrote {len(financial_entries)} financial entries to {output_path}")
-        click.echo(f"Wrote {len(agri_entries)} agri entries to {agri_output_path}")
+        fin_tag = "Wrote" if fin_written else "Unchanged (skipped)"
+        agri_tag = "Wrote" if agri_written else "Unchanged (skipped)"
+        click.echo(f"{fin_tag} {len(financial_entries)} financial entries to {output_path}")
+        click.echo(f"{agri_tag} {len(agri_entries)} agri entries to {agri_output_path}")
     else:
-        output_path.write_text(json.dumps(all_entries, indent=2, default=str))
+        written = _write_if_changed(output_path, all_entries)
         click.echo("")
+        tag = "Wrote" if written else "Unchanged (skipped)"
         click.echo(
-            f"Wrote {len(all_entries)} entries from "
+            f"{tag} {len(all_entries)} entries from "
             f"{len(instruments) - len(failures)}/{len(instruments)} instruments "
             f"to {output_path}"
         )
