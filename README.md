@@ -35,6 +35,15 @@ Live-tall (per 2026-05-02):
   er av. Conflict-gate i orchestrator demoter svakere retning når både
   BUY og SELL klarerer publish-floor på samme (instrument, horizon) —
   forhindrer whipsaw på range-bound instrumenter.
+- **Dedup per `(instrument, direction, horizon)`** — SCALP/SWING/MAKRO er
+  uavhengige slots. En åpen scalp-buy hindrer ikke ny swing-buy eller
+  makro-buy på samme instrument; samme triplet blokkeres fortsatt.
+- **Trailing-stop per horisont × asset-gruppe.** SCALP bruker M15-ATR med
+  2.5–3.5× mult (rask exit), SWING og MAKRO bruker H1-ATR med 3.5–7.0×
+  mult (MAKRO ≈ 1.2–1.5×ATR-D1 for å overleve normale dagspullbacks).
+  Mer volatile assets (natgas, crypto, edelmetaller, oil) får bredere
+  trail enn FX/indeks. Definert i
+  `src/bedrock/signal_server/bot_adapter.py:TRAIL_MULT_BY_HORIZON_GROUP`.
 
 Se `STATE.md` for løpende sesjonshistorikk og `PLAN.md` for full roadmap.
 
