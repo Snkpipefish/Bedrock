@@ -648,6 +648,55 @@ class AsOfDateStore:
     def has_iip_remit(self) -> bool:
         return not self.get_iip_remit().empty
 
+    # NASS Yield + Grain Stocks (nass_yield_*_yoy, nass_grain_stocks_quarterly)
+
+    def get_nass_yield(
+        self,
+        commodity: str,
+        *,
+        reference_period: str | None = None,
+    ) -> pd.DataFrame:
+        """Som DataStore.get_nass_yield, men clipped på ``load_time`` ≤ as_of.
+
+        ``load_time`` er NASS release-timestamp og brukes som look-ahead-
+        safe truth (når markedet faktisk fikk se rad). Yield-rapporter med
+        manglende load_time inkluderes som best-effort (bakoverkompatibilitet
+        med rader skrevet før Spor D).
+        """
+        full = self._underlying.get_nass_yield(commodity, reference_period=reference_period)
+        if full.empty:
+            return full
+        load_ts = pd.to_datetime(full["load_time"], errors="coerce")
+        # Inkluder rader uten load_time (NaT) — best-effort.
+        clipped = full[load_ts.isna() | (load_ts <= self._as_of)].reset_index(drop=True)
+        return clipped
+
+    def has_nass_yield(self, commodity: str) -> bool:
+        try:
+            return not self.get_nass_yield(commodity).empty
+        except KeyError:
+            return False
+
+    def get_nass_grain_stocks(
+        self,
+        commodity: str,
+        *,
+        category: str = "TOTAL",
+    ) -> pd.DataFrame:
+        """Som DataStore.get_nass_grain_stocks, men clipped på load_time ≤ as_of."""
+        full = self._underlying.get_nass_grain_stocks(commodity, category=category)
+        if full.empty:
+            return full
+        load_ts = pd.to_datetime(full["load_time"], errors="coerce")
+        clipped = full[load_ts.isna() | (load_ts <= self._as_of)].reset_index(drop=True)
+        return clipped
+
+    def has_nass_grain_stocks(self, commodity: str) -> bool:
+        try:
+            return not self.get_nass_grain_stocks(commodity).empty
+        except KeyError:
+            return False
+
     # AAII sentiment (aaii_extreme)
 
     def get_aaii_sentiment(self, last_n: int | None = None) -> pd.DataFrame:

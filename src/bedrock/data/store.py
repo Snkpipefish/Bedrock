@@ -70,6 +70,8 @@ from bedrock.data.schemas import (
     DDL_FUNDAMENTALS,
     DDL_IGC,
     DDL_IIP_REMIT,
+    DDL_NASS_GRAIN_STOCKS,
+    DDL_NASS_YIELD,
     DDL_NEWS_INTEL,
     DDL_PRICES,
     DDL_SEISMIC_EVENTS,
@@ -88,6 +90,8 @@ from bedrock.data.schemas import (
     FUNDAMENTALS_COLS,
     IGC_COLS,
     IIP_REMIT_COLS,
+    NASS_GRAIN_STOCKS_COLS,
+    NASS_YIELD_COLS,
     NEWS_INTEL_COLS,
     SEISMIC_EVENTS_COLS,
     SHIPPING_INDICES_COLS,
@@ -116,6 +120,8 @@ from bedrock.data.schemas import (
     TABLE_FUNDAMENTALS,
     TABLE_IGC,
     TABLE_IIP_REMIT,
+    TABLE_NASS_GRAIN_STOCKS,
+    TABLE_NASS_YIELD,
     TABLE_NEWS_INTEL,
     TABLE_PRICES,
     TABLE_SEISMIC_EVENTS,
@@ -229,6 +235,10 @@ class DataStore:
             # terminal storage + IIP REMIT supply-unavailability.
             conn.execute(DDL_ALSI_STORAGE)
             conn.execute(DDL_IIP_REMIT)
+            # Sub-fase 12.10 follow-up Spor D (session 137): NASS yield
+            # + grain_stocks (årlige + kvartalsvise USDA-rapporter).
+            conn.execute(DDL_NASS_YIELD)
+            conn.execute(DDL_NASS_GRAIN_STOCKS)
             # Sub-fase 12.10 Bunke 1 Bug-1: backfill released_at-kolonnen på
             # COT- + AAII-tabellene for eksisterende rader (ALTER TABLE +
             # konvensjons-basert UPDATE). Idempotent.
@@ -2304,6 +2314,183 @@ class DataStore:
         """Test-hjelper: sjekk om iip_remit har minst én rad."""
         with self._connect() as conn:
             cursor = conn.execute(f"SELECT 1 FROM {TABLE_IIP_REMIT} LIMIT 1")
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # NASS Yield Survey (sub-fase 12.10 follow-up Spor D, session 137)
+    # ------------------------------------------------------------------
+
+    def append_nass_yield(self, df: pd.DataFrame) -> int:
+        """Skriv NASS yield-rader til ``nass_yield``. INSERT OR REPLACE på
+        (commodity, year, reference_period) — NASS reviderer historikk."""
+        missing = [c for c in NASS_YIELD_COLS if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_nass_yield: missing columns {missing}. "
+                f"Required: {list(NASS_YIELD_COLS)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df[list(NASS_YIELD_COLS)].copy()
+
+        def _opt_str(v: object) -> str | None:
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return None
+            s = str(v)
+            return s if s and s.lower() != "nat" else None
+
+        def _opt_float(v: object) -> float | None:
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return None
+            return float(v)  # type: ignore[arg-type]
+
+        prepared["load_time"] = pd.to_datetime(prepared["load_time"], errors="coerce")
+        prepared["load_time"] = prepared["load_time"].dt.strftime("%Y-%m-%d %H:%M:%S")
+
+        rows: Sequence[tuple] = [
+            (
+                str(row.commodity).upper(),
+                int(row.year),
+                str(row.reference_period),
+                _opt_float(row.yield_value),
+                _opt_str(row.yield_units),
+                _opt_str(row.util_practice),
+                _opt_str(row.load_time),
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_NASS_YIELD} "
+                f"({', '.join(NASS_YIELD_COLS)}) "
+                f"VALUES ({', '.join('?' * len(NASS_YIELD_COLS))})",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_nass_yield(
+        self,
+        commodity: str,
+        *,
+        reference_period: str | None = None,
+    ) -> pd.DataFrame:
+        """Returner NASS yield-rader for `commodity`, sortert ASC på
+        (year, reference_period).
+
+        Filterargument:
+            reference_period: f.eks. ``"YEAR"`` for kun final-rader (default
+                hentes alle 5 per år). Eksakt match.
+
+        Returnerer tom DataFrame hvis ingen treff.
+        """
+        clauses: list[str] = ["commodity = ?"]
+        params: list[object] = [commodity.upper()]
+        if reference_period is not None:
+            clauses.append("reference_period = ?")
+            params.append(reference_period)
+        where = "WHERE " + " AND ".join(clauses)
+        query = f"""
+            SELECT * FROM {TABLE_NASS_YIELD}
+            {where}
+            ORDER BY year ASC, reference_period ASC
+        """
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=params)
+
+        if not df.empty:
+            df["load_time"] = pd.to_datetime(df["load_time"], errors="coerce")
+        return df
+
+    def has_nass_yield(self, commodity: str) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"SELECT 1 FROM {TABLE_NASS_YIELD} WHERE commodity = ? LIMIT 1",
+                (commodity.upper(),),
+            )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # NASS Grain Stocks (sub-fase 12.10 follow-up Spor D, session 137)
+    # ------------------------------------------------------------------
+
+    def append_nass_grain_stocks(self, df: pd.DataFrame) -> int:
+        """Skriv NASS grain-stocks-rader til ``nass_grain_stocks``."""
+        missing = [c for c in NASS_GRAIN_STOCKS_COLS if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_nass_grain_stocks: missing columns {missing}. "
+                f"Required: {list(NASS_GRAIN_STOCKS_COLS)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df[list(NASS_GRAIN_STOCKS_COLS)].copy()
+
+        def _opt_str(v: object) -> str | None:
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return None
+            s = str(v)
+            return s if s and s.lower() != "nat" else None
+
+        def _opt_float(v: object) -> float | None:
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return None
+            return float(v)  # type: ignore[arg-type]
+
+        prepared["load_time"] = pd.to_datetime(prepared["load_time"], errors="coerce")
+        prepared["load_time"] = prepared["load_time"].dt.strftime("%Y-%m-%d %H:%M:%S")
+
+        rows: Sequence[tuple] = [
+            (
+                str(row.commodity).upper(),
+                int(row.year),
+                str(row.reference_period),
+                str(row.category).upper(),
+                _opt_float(row.stocks_bu),
+                _opt_str(row.load_time),
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_NASS_GRAIN_STOCKS} "
+                f"({', '.join(NASS_GRAIN_STOCKS_COLS)}) "
+                f"VALUES ({', '.join('?' * len(NASS_GRAIN_STOCKS_COLS))})",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_nass_grain_stocks(
+        self,
+        commodity: str,
+        *,
+        category: str = "TOTAL",
+    ) -> pd.DataFrame:
+        """Returner NASS grain-stocks-rader for `commodity`, sortert ASC
+        på (year, reference_period). Default category=TOTAL (vs ON FARM /
+        OFF FARM som er sub-kategorier av TOTAL).
+        """
+        query = f"""
+            SELECT * FROM {TABLE_NASS_GRAIN_STOCKS}
+            WHERE commodity = ? AND category = ?
+            ORDER BY year ASC, reference_period ASC
+        """
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=(commodity.upper(), category.upper()))
+
+        if not df.empty:
+            df["load_time"] = pd.to_datetime(df["load_time"], errors="coerce")
+        return df
+
+    def has_nass_grain_stocks(self, commodity: str) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"SELECT 1 FROM {TABLE_NASS_GRAIN_STOCKS} WHERE commodity = ? LIMIT 1",
+                (commodity.upper(),),
+            )
             return cursor.fetchone() is not None
 
     # ------------------------------------------------------------------

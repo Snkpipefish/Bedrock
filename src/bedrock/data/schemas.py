@@ -551,6 +551,118 @@ CROP_PROGRESS_COLS: tuple[str, ...] = (
 )
 
 
+# ---------------------------------------------------------------------------
+# USDA NASS Yield Survey (sub-fase 12.10 follow-up Spor D, session 137)
+# ---------------------------------------------------------------------------
+# NASS Crop Production Yield Survey: én årlig YEAR-final + 4 monthly forecasts
+# (AUG/SEP/OCT/NOV) per commodity. BU/ACRE for grains, LB/ACRE for cotton.
+# Brukes av nass_yield_*_yoy-drivere for YoY-vekst-signal: lavere yield i
+# inneværende år = bull (mindre supply enn ifjor).
+#
+# Auto-fetcher: NASS QuickStats API. Samme key som crop_progress
+# (BEDROCK_NASS_API_KEY). PK på (commodity, year, reference_period) — 5
+# rader per commodity-year (én YEAR + 4 forecasts).
+TABLE_NASS_YIELD = "nass_yield"
+
+DDL_NASS_YIELD = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_NASS_YIELD} (
+    commodity         TEXT    NOT NULL,    -- CORN, SOYBEANS, WHEAT, COTTON
+    year              INTEGER NOT NULL,    -- crop-year
+    reference_period  TEXT    NOT NULL,    -- "YEAR", "YEAR - AUG FORECAST", etc.
+    yield_value       REAL,                -- BU/ACRE eller LB/ACRE
+    yield_units       TEXT,                -- "BU / ACRE" eller "LB / ACRE"
+    util_practice     TEXT,                -- "GRAIN", "ALL UTILIZATION PRACTICES" etc.
+    load_time         TEXT,                -- NASS release-timestamp (look-ahead-anker)
+    PRIMARY KEY (commodity, year, reference_period)
+)
+"""
+
+NASS_YIELD_COLS: tuple[str, ...] = (
+    "commodity",
+    "year",
+    "reference_period",
+    "yield_value",
+    "yield_units",
+    "util_practice",
+    "load_time",
+)
+
+
+class NassYieldRow(BaseModel):
+    """Én NASS yield-survey-rad. ``reference_period`` skiller YEAR-final
+    fra månedlige forecasts."""
+
+    commodity: str = Field(min_length=2)
+    year: int = Field(ge=1900, le=2100)
+    reference_period: str = Field(min_length=1)
+    yield_value: float | None = None
+    yield_units: str | None = None
+    util_practice: str | None = None
+    load_time: datetime | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("commodity")
+    @classmethod
+    def _normalize_commodity(cls, v: str) -> str:
+        return v.upper().strip()
+
+
+# ---------------------------------------------------------------------------
+# USDA NASS Grain Stocks (sub-fase 12.10 follow-up Spor D, session 137)
+# ---------------------------------------------------------------------------
+# Quarterly stocks-snapshot (Mar 1 / Jun 1 / Sep 1 / Dec 1). Tre kategorier
+# per quarter: TOTAL, ON FARM, OFF FARM (parsed fra short_desc). BU.
+# Brukes av nass_grain_stocks_quarterly-driver: høyere stocks YoY = bear,
+# lavere stocks YoY = bull.
+TABLE_NASS_GRAIN_STOCKS = "nass_grain_stocks"
+
+DDL_NASS_GRAIN_STOCKS = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_NASS_GRAIN_STOCKS} (
+    commodity         TEXT    NOT NULL,    -- CORN, SOYBEANS, WHEAT
+    year              INTEGER NOT NULL,
+    reference_period  TEXT    NOT NULL,    -- "FIRST OF MAR/JUN/SEP/DEC"
+    category          TEXT    NOT NULL,    -- "TOTAL", "ON FARM", "OFF FARM"
+    stocks_bu         REAL,                -- bushels
+    load_time         TEXT,                -- NASS release-timestamp
+    PRIMARY KEY (commodity, year, reference_period, category)
+)
+"""
+
+NASS_GRAIN_STOCKS_COLS: tuple[str, ...] = (
+    "commodity",
+    "year",
+    "reference_period",
+    "category",
+    "stocks_bu",
+    "load_time",
+)
+
+
+class NassGrainStocksRow(BaseModel):
+    """Én NASS grain-stocks-rad. PK inkluderer ``category`` for å tillate
+    parallelle ON/OFF/TOTAL-rader per kvartal."""
+
+    commodity: str = Field(min_length=2)
+    year: int = Field(ge=1900, le=2100)
+    reference_period: str = Field(min_length=1)
+    category: str = Field(min_length=1)
+    stocks_bu: float | None = None
+    load_time: datetime | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("commodity")
+    @classmethod
+    def _normalize_commodity(cls, v: str) -> str:
+        return v.upper().strip()
+
+    @field_validator("category")
+    @classmethod
+    def _normalize_category(cls, v: str) -> str:
+        return v.upper().strip()
+
+
 # WASDE — månedlige USDA estimater (ending stocks, yield, S2U).
 # Auto-fetcher leser fra USDA's konsoliderte CSV (URL i fetcher).
 # Manuell CSV-fallback i data/manual/wasde.csv.
