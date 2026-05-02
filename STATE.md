@@ -637,6 +637,30 @@ kjørt det.
 - Hev publish-floor for agri (6.0/16 = 37.5 % er lavt) er en alternativ
   vinkel — kunne vurderes når observasjons-data rulles inn.
 
+**6. LIMIT på SWING/MAKRO, MARKET på SCALP + max_total 6→20 (commit `8a0091b`)**
+
+Operatør spurte hvordan boten velger MARKET vs LIMIT, og om max_total
+skulle åpnes opp i test-fasen. Tre fix i én commit:
+
+(a) **Per-horisont order-type.** Adapter setter
+`horizon_config.use_limit_orders` per horisont — SCALP=False (MARKET,
+fart > entry-kvalitet), SWING/MAKRO=True (LIMIT, festes på
+alert_level med SL/TP synkront serverside, ingen amend-lag).
+`entry.py:1197` lar hcfg-flagget overstyre global `rules`-flagg.
+
+(b) **max_total 6 → 20.** Korrigerer samtidig pre-existing
+nøkkel-bug: adapter sendte `max_total_open` men bot leste `max_total`
+(entry.py:1182), så default 6 vant alltid uansett. Nå sender adapter
+`max_total: 20`. Per-gruppe-korrelasjons-tak (`max_per_group`)
+uberørt.
+
+(c) Tre nye tester: max_total-nøkkelen, use_limit per horisont, og at
+hcfg trumpfer rules. 232/232 (adapter+bot+signal_server) tester grønne.
+
+**Krever:** `sudo systemctl restart bedrock-server` for at
+`/bot/signals` skal serve nye flagg + tak. Bot plukker opp ved neste
+poll uten egen restart.
+
 **5. Trailing-stop tunet per horisont × gruppe (commit `31adb5c`)**
 
 Operatør spurte om trailing-stoppen "holder seg langt nok unna eller
@@ -691,6 +715,8 @@ porteføljegrenser, ikke per-setup).
 - `9359ec0` state: session 146 — conflict-gate + bot tilbake til published-only
 - `880a3d6` fix(bot): tillat samme instrument+retning på forskjellige horisonter
 - `31adb5c` fix(bot): per-horisont × per-gruppe trailing-stop-multipliers
+- `1565908` fix(tests): oppdater econ_events-vakttester til ADR-014-kontrakt
+- `8a0091b` fix(bot): LIMIT på SWING/MAKRO + MARKET på SCALP, max_total 6→20
 
 **Next:** Observasjons-vinduet løper videre med published-only. Operatør
 har restartet `bedrock-bot.service` (2026-05-02) — ny dedup-regel er live.

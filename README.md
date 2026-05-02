@@ -44,6 +44,13 @@ Live-tall (per 2026-05-02):
   Mer volatile assets (natgas, crypto, edelmetaller, oil) får bredere
   trail enn FX/indeks. Definert i
   `src/bedrock/signal_server/bot_adapter.py:TRAIL_MULT_BY_HORIZON_GROUP`.
+- **Order-type per horisont.** SCALP→MARKET (fart > entry-kvalitet,
+  smal entry-zone). SWING/MAKRO→LIMIT (festes på alert_level med SL/TP
+  synkront på cTrader-serveren — ingen unprotected window mellom fill
+  og SL-amend).
+- **`max_total=20` åpne posisjoner i test-fase** (var 6, default-bug).
+  Per-gruppe-korrelasjons-tak (`max_per_group`) uberørt så høyt
+  korrelerte par fortsatt blokkeres.
 
 Se `STATE.md` for løpende sesjonshistorikk og `PLAN.md` for full roadmap.
 
