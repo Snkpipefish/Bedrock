@@ -281,6 +281,8 @@ def generate_signals(
             if entry.setup is not None:
                 new_stable_setups.append(entry.setup)
 
+    entries = _resolve_direction_conflicts(entries)
+
     # Skriv ny snapshot hvis angitt
     snapshot_written: Path | None = None
     if snapshot_path is not None and write_snapshot:
@@ -298,6 +300,44 @@ def generate_signals(
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
+
+def _resolve_direction_conflicts(entries: list[SignalEntry]) -> list[SignalEntry]:
+    """Demote svakere retning når begge BUY og SELL er published på samme horisont.
+
+    Agri-scoring (og enkelte financial-tilfeller) er ikke null-sum: nøytrale
+    drivere (verdi=0.5) bidrar likt til begge retninger, slik at både BUY og
+    SELL kan klarere publish-terskelen samtidig. Resultat: bot kan motta
+    motstridende A-grade-setups på samme instrument/horisont og bli whipsaw'a.
+
+    Regel: for hver (instrument, horizon) — hvis både BUY og SELL har
+    `published=True` og setup ≠ None, behold den med høyest score; sett
+    `published=False` + `skip_reason="opposite_direction_dominates"` på den
+    andre. Setup-objektet bevares så hysterese / UI fortsatt ser kandidaten.
+    """
+    by_key: dict[tuple[str, Horizon], list[int]] = {}
+    for idx, e in enumerate(entries):
+        if e.published and e.setup is not None:
+            by_key.setdefault((e.instrument, e.horizon), []).append(idx)
+
+    out = list(entries)
+    for indices in by_key.values():
+        if len(indices) < 2:
+            continue
+        directions_present = {out[i].direction for i in indices}
+        if Direction.BUY not in directions_present or Direction.SELL not in directions_present:
+            continue
+        winner = max(indices, key=lambda i: out[i].score)
+        for i in indices:
+            if i == winner:
+                continue
+            out[i] = out[i].model_copy(
+                update={
+                    "published": False,
+                    "skip_reason": "opposite_direction_dominates",
+                }
+            )
+    return out
 
 
 def _resolve_horizons(cfg: InstrumentConfig, requested: list[str] | None) -> list[Horizon]:
