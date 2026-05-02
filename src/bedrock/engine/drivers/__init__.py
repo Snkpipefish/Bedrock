@@ -103,6 +103,7 @@ from bedrock.engine.drivers import (
     agri,
     agronomy,
     analog,
+    event_surprise,
     macro,
     macro_bunke3,
     macro_bunke4,
