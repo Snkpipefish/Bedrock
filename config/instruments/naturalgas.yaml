@@ -76,18 +76,26 @@ families:
     # (bunke6 #22) — propane stocks. Korrelert med natgas-prising via
     # vinter-heating-mix + petrokjemisk feedstock. hdd_cdd 0.20→0.15 for
     # sum=1.00.
+    # Sub-fase 12.10 follow-up Spor C (session 136): ALSI + IIP REMIT
+    # lagt til som §22.2 #24/#25 LEVERT. alsi_eu_pct@0.05 (MAKRO-only —
+    # parallel til agsi_storage_pct men for LNG-terminaler), alsi_storage_
+    # change@0.05 (LNG drawdown-momentum, alle horisonter), og
+    # iip_supply_unavailability@0.05 (REMIT supply-side event-stress, alle
+    # horisonter). Trim: eia_stock_change 0.25→0.15, dxy_chg5d 0.15→0.10
+    # (-0.15 totalt for å gi plass til 3×0.05 nye drivere). Familie-
+    # sum=1.00 bevart.
     drivers:
       - name: real_yield
         weight: 0.10
         params: {bull_when: low}  # Lav real-yield støtter commodities
       - name: dxy_chg5d
-        weight: 0.15  # A3: 0.20→0.15 for å gi plass til AGSI per-land
+        weight: 0.10  # Spor C: 0.15→0.10 for ALSI/IIP-budsjett
         params: {bull_when: negative, window: 5}
       - name: vix_regime
         weight: 0.10
         params: {invert: true}
       - name: eia_stock_change
-        weight: 0.25  # A9: 0.30→0.25 for å gi plass til AGSI italy + withdrawal
+        weight: 0.15  # Spor C: 0.25→0.15 (fortsatt primær fundamental)
         params: {series_id: NW2_EPG0_SWO_R48_BCF}  # US NG Storage Lower 48
       - name: agsi_storage_pct
         weight: 0.05  # A3: 0.10→0.05; per-land overtar deler av EU-signalet
@@ -134,6 +142,23 @@ families:
         params: {bull_when: low, country: eu}
         horizons:
           - MAKRO
+      # Spor C #24 ALSI EU LNG-terminal (MAKRO-only — daglig fundamental
+      # som matcher AGSI-mønsteret).
+      - name: alsi_eu_pct
+        weight: 0.05
+        params: {country: eu, bull_when: low}  # Lav LNG-buffer = bull NG
+        horizons:
+          - MAKRO
+      # alsi_storage_change: 5d WoW LNG inventory-momentum. Drawdown =
+      # supply consumed = bull NG. Aktiv på alle horisonter.
+      - name: alsi_storage_change
+        weight: 0.05
+        params: {country: eu, lookback_days: 5, bull_when: low}
+      # Spor C #25 IIP REMIT supply-unavailability (event-driven, alle
+      # horisonter). Aktive infrastrukturutfall — supply-side stress.
+      - name: iip_supply_unavailability
+        weight: 0.05
+        params: {mode: active, bull_when: high}
   structure:
     drivers:
       - name: range_position

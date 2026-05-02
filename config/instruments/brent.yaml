@@ -66,12 +66,18 @@ families:
     # Sub-fase 12.10 follow-up A7 (session 142): eia_imports_crude@0.05 +
     # eia_petroleum_supplied@0.05. eia_stock 0.25→0.20, vix 0.15→0.10
     # for sum=1.00.
+    # Sub-fase 12.10 follow-up Spor C (session 136): iip_supply_
+    # unavailability@0.05 lagt til (REMIT supply-side event-stress; gas-
+    # supply-disruption har spillover-effekt til Brent via gas-til-olje-
+    # substitusjon under europeiske kriser). dxy 0.15→0.10 for sum=1.00.
+    # ALSI ikke lagt til (LNG-storage er mindre direkte koblet til Brent-
+    # prising vs EIA crude-rapport).
     drivers:
       - name: real_yield
         weight: 0.10
         params: {bull_when: low}
       - name: dxy_chg5d
-        weight: 0.15
+        weight: 0.10  # Spor C: 0.15→0.10 for IIP-budsjett
         params: {bull_when: negative, window: 5}
       - name: vix_regime
         weight: 0.10
@@ -99,6 +105,13 @@ families:
       - name: eia_gasoline_demand
         weight: 0.05
         params: {bull_when: high}
+      # Spor C #25 IIP REMIT supply-unavailability — event-stress på
+      # europeisk gas-supply-infrastruktur. Aktive infrastrukturutfall
+      # signaliserer geopolitisk/teknisk risk-on for energy-prising
+      # bredere (gas-til-olje-substitusjon, energy-stress-spillover).
+      - name: iip_supply_unavailability
+        weight: 0.05
+        params: {mode: active, bull_when: high}
   structure:
     drivers:
       - name: range_position
