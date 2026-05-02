@@ -23,6 +23,7 @@ import structlog
 
 from bedrock.signal_server.app import create_app
 from bedrock.signal_server.config import ServerConfig, load_from_env
+from bedrock.signal_server.file_watcher import EventBroker, FileWatcher, WatchTarget
 
 _log = structlog.get_logger(__name__)
 
@@ -100,10 +101,27 @@ def server_cmd(
 
     app = create_app(cfg)
 
+    # Mål 2: SSE-broker + file-watcher for live UI-oppdateringer.
+    # Watcher er daemon-tråd så den stopper automatisk med prosessen.
+    broker = EventBroker()
+    watcher = FileWatcher(
+        broker,
+        targets=[
+            WatchTarget(path=cfg.trade_log_path, event_type="trade_log_changed"),
+            WatchTarget(path=cfg.signals_bot_path, event_type="signals_changed"),
+            WatchTarget(path=cfg.signals_path, event_type="signals_changed"),
+        ],
+        poll_interval_sec=1.0,
+    )
+    watcher.start()
+    app.extensions["bedrock_event_broker"] = broker
+    app.extensions["bedrock_file_watcher"] = watcher
+
     click.echo(f"Bedrock signal_server starter på http://{cfg.host}:{cfg.port}/")
     click.echo(f"  data_root:     {cfg.data_root}")
     click.echo(f"  signals_path:  {cfg.signals_path}")
     click.echo(f"  agri_path:     {cfg.agri_signals_path}")
+    click.echo("  SSE-watcher:   3 targets, poll 1s (trade_log + signals_bot + signals)")
 
     if debug:
         # Flask-dev med auto-reload

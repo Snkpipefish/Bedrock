@@ -21,6 +21,17 @@
       "env": {
         "PYTHONPATH": "src"
       }
+    },
+    {
+      "name": "signal-server-cli",
+      "runtimeExecutable": ".venv/bin/bedrock",
+      "runtimeArgs": [
+        "server",
+        "--host", "127.0.0.1",
+        "--port", "8126",
+        "--use-flask-dev"
+      ],
+      "port": 8126
     }
   ]
 }
