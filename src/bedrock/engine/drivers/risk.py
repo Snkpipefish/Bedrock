@@ -265,4 +265,104 @@ def event_distance(store: Any, instrument: str, params: dict) -> float:
     return max(0.0, min(1.0, nearest_h2e / min_hours))
 
 
-__all__ = ["event_distance", "vol_regime"]
+@register("news_intel_severity_veto")
+def news_intel_severity_veto(store: Any, instrument: str, params: dict) -> float:
+    """Veto-driver basert på news_intel-tabellens disruption_score.
+
+    Returnerer 0.0 (full veto) hvis det finnes minst én artikkel med
+    ``disruption_score >= severity_threshold`` i en av de relevante
+    kategoriene innenfor ``lookback_hours``-vinduet. Ellers 0.5 (nøytral).
+
+    Tolkning:
+    - 0.0 = kraftig disruption (geopolitisk hendelse, supply-sjokk,
+      industriell ulykke) som motiverer å ikke åpne ny posisjon.
+    - 0.5 = ingen high-severity disruption rapportert. Driveren fungerer
+      som "venstre-side-trim" — den senker grade ned til neutral, ikke
+      under, slik at den ikke lager falske BUY-signaler ved stille marked.
+
+    Per ADR-006 directional-asymmetry: engine flipper i SELL-retning,
+    så SELL-side får 1.0 ved disruption (= sterk bull-of-SELL = bear).
+    Det gjør driveren til en kontrært "krise-er-bullish-for-shorts"-
+    indikator.
+
+    **Sub-fase 12.10 Bunke 1 Bug-2 mønster:** ``min_samples``-guard
+    returnerer 0.5 hvis news_intel-tabellen har færre enn N rader for
+    relevant kategori. Default 5.
+
+    **Sub-fase 12.10 Bunke 2 #6 (registrert ikke wired):** disruption_score
+    er p.t. NULL for alle eksisterende rader (news_intel er UI-only siden
+    session 114; scoring av artikler er fremtidig arbeid). Driveren
+    returnerer derfor 0.5 (nøytral) for alle instrumenter inntil
+    disruption_score-pipeline er på plass. Ingen YAML-wiring fra start —
+    aktiveres når sentiment-analysen er live.
+
+    Params:
+        categories: list av news_intel-kategorier som teller (default
+            ["geopolitics"]).
+        lookback_hours: hvor langt tilbake i tid (default 72 = 3 dager).
+        severity_threshold: score-terskel for veto (default 0.7).
+        min_samples: total-rad-guard (default 5).
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt.
+
+    Returns:
+        Score 0..1. 0.5 = nøytral; 0.0 = veto.
+    """
+    # ADR-010: les _horizon. Event-basert driver — output uendret.
+    _horizon = params.get("_horizon")
+    from datetime import datetime, timedelta, timezone
+
+    categories = list(params.get("categories", ["geopolitics"]))
+    lookback_hours = float(params.get("lookback_hours", 72.0))
+    severity_threshold = float(params.get("severity_threshold", 0.7))
+    min_samples = int(params.get("min_samples", 5))
+
+    # Tillat injeksjon av "nå" via _now-param (engine propagering)
+    now_ts = params.get("_now")
+    if now_ts is None:
+        now_ts = datetime.now(timezone.utc)
+    elif isinstance(now_ts, str):
+        now_ts = pd.to_datetime(now_ts, utc=True).to_pydatetime()
+
+    from_event_ts = (now_ts - timedelta(hours=lookback_hours)).strftime("%Y-%m-%dT%H:%M:%S")
+
+    total_rows = 0
+    high_severity_found = False
+
+    try:
+        for category in categories:
+            # Sample-count for guard: tell totalt rader i kategori
+            df_total = store.get_news_intel(category=category)
+            total_rows += len(df_total)
+            if df_total.empty:
+                continue
+            # Sjekk vinduet
+            df_recent = store.get_news_intel(category=category, from_event_ts=from_event_ts)
+            if df_recent.empty:
+                continue
+            scored = df_recent[df_recent["disruption_score"].notna()]
+            if scored.empty:
+                continue
+            if (scored["disruption_score"] >= severity_threshold).any():
+                high_severity_found = True
+                break
+    except Exception as exc:
+        _log.warning(
+            "news_intel_severity_veto.fetch_failed",
+            instrument=instrument,
+            error=str(exc),
+        )
+        return 0.5
+
+    if total_rows < min_samples:
+        _log.debug(
+            "news_intel_severity_veto.insufficient_samples",
+            instrument=instrument,
+            n=total_rows,
+            min_samples=min_samples,
+        )
+        return 0.5
+
+    return 0.0 if high_severity_found else 0.5
+
+
+__all__ = ["event_distance", "news_intel_severity_veto", "vol_regime"]
