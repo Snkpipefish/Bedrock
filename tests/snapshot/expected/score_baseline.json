@@ -335,7 +335,7 @@
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
-      "macro": 0.4391,
+      "macro": 0.4265,
       "positioning": 0.8538,
       "risk": 0.119521912351,
       "structure": 0.430378753584,
@@ -344,13 +344,13 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 5.9,
-    "score": 2.391576906672
+    "score": 2.375196906672
   },
   "Copper|MAKRO|sell": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
-      "macro": 0.5609,
+      "macro": 0.5735,
       "positioning": 0.1462,
       "risk": 0.119521912351,
       "structure": 0.569621246416,
@@ -359,13 +359,13 @@
     "gates_triggered": [],
     "grade": "C",
     "max_score": 5.9,
-    "score": 1.699658153089
+    "score": 1.716038153089
   },
   "Copper|SCALP|buy": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
-      "macro": 0.4391,
+      "macro": 0.4265,
       "positioning": 0.8538,
       "risk": 0.383665338645,
       "structure": 0.430378753584,
@@ -374,13 +374,13 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 4.8,
-    "score": 2.200694650575
+    "score": 2.191874650575
   },
   "Copper|SCALP|sell": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
-      "macro": 0.5609,
+      "macro": 0.5735,
       "positioning": 0.1462,
       "risk": 0.383665338645,
       "structure": 0.569621246416,
@@ -389,13 +389,13 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 4.8,
-    "score": 2.113169891257
+    "score": 2.121989891257
   },
   "Copper|SWING|buy": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
-      "macro": 0.4391,
+      "macro": 0.4265,
       "positioning": 0.8538,
       "risk": 0.383665338645,
       "structure": 0.430378753584,
@@ -404,13 +404,13 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 5.8,
-    "score": 2.606944092229
+    "score": 2.594344092229
   },
   "Copper|SWING|sell": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
-      "macro": 0.5609,
+      "macro": 0.5735,
       "positioning": 0.1462,
       "risk": 0.383665338645,
       "structure": 0.569621246416,
@@ -419,7 +419,7 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 5.8,
-    "score": 2.160386585062
+    "score": 2.172986585062
   },
   "Corn|NONE|buy": {
     "active_families": 7,
@@ -847,7 +847,7 @@
     "active_families": 6,
     "family_scores": {
       "analog": 0.1,
-      "macro": 0.28907,
+      "macro": 0.284,
       "positioning": 0.3276,
       "risk": 0.386454183267,
       "structure": 0.493711119495,
@@ -856,13 +856,13 @@
     "gates_triggered": [],
     "grade": "C",
     "max_score": 5.9,
-    "score": 1.997689906361
+    "score": 1.991098906361
   },
   "Gold|MAKRO|sell": {
     "active_families": 6,
     "family_scores": {
       "analog": 0.55,
-      "macro": 0.71093,
+      "macro": 0.716,
       "positioning": 0.6724,
       "risk": 0.386454183267,
       "structure": 0.506288880505,
@@ -871,13 +871,13 @@
     "gates_triggered": [],
     "grade": "A",
     "max_score": 5.9,
-    "score": 3.300636786866
+    "score": 3.307227786866
   },
   "Gold|SCALP|buy": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
-      "macro": 0.28907,
+      "macro": 0.284,
       "positioning": 0.3276,
       "risk": 0.570517928287,
       "structure": 0.493711119495,
@@ -886,13 +886,13 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 4.8,
-    "score": 2.244387797973
+    "score": 2.240838797973
   },
   "Gold|SCALP|sell": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
-      "macro": 0.71093,
+      "macro": 0.716,
       "positioning": 0.6724,
       "risk": 0.570517928287,
       "structure": 0.506288880505,
@@ -901,13 +901,13 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 4.8,
-    "score": 2.368440887286
+    "score": 2.371989887286
   },
   "Gold|SWING|buy": {
     "active_families": 6,
     "family_scores": {
       "analog": 0.1,
-      "macro": 0.28907,
+      "macro": 0.284,
       "positioning": 0.3276,
       "risk": 0.570517928287,
       "structure": 0.493711119495,
@@ -916,13 +916,13 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 5.8,
-    "score": 2.410899047782
+    "score": 2.405829047782
   },
   "Gold|SWING|sell": {
     "active_families": 6,
     "family_scores": {
       "analog": 0.55,
-      "macro": 0.71093,
+      "macro": 0.716,
       "positioning": 0.6724,
       "risk": 0.570517928287,
       "structure": 0.506288880505,
@@ -931,7 +931,7 @@
     "gates_triggered": [],
     "grade": "A",
     "max_score": 5.8,
-    "score": 3.250136808792
+    "score": 3.255206808792
   },
   "Nasdaq|MAKRO|buy": {
     "active_families": 5,
@@ -1117,7 +1117,7 @@
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
-      "macro": 0.26517,
+      "macro": 0.2625,
       "positioning": 0.8772,
       "risk": 0.617529880478,
       "structure": 0.81663386409,
@@ -1126,13 +1126,13 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 5.9,
-    "score": 3.087421836428
+    "score": 3.083950836428
   },
   "Platinum|MAKRO|sell": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
-      "macro": 0.73483,
+      "macro": 0.7375,
       "positioning": 0.1228,
       "risk": 0.617529880478,
       "structure": 0.18336613591,
@@ -1141,13 +1141,13 @@
     "gates_triggered": [],
     "grade": "C",
     "max_score": 5.9,
-    "score": 1.800625972337
+    "score": 1.804096972337
   },
   "Platinum|SCALP|buy": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
-      "macro": 0.26517,
+      "macro": 0.2625,
       "positioning": 0.8772,
       "risk": 0.732270916335,
       "structure": 0.81663386409,
@@ -1156,13 +1156,13 @@
     "gates_triggered": [],
     "grade": "A",
     "max_score": 4.8,
-    "score": 3.321659756385
+    "score": 3.319790756385
   },
   "Platinum|SCALP|sell": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
-      "macro": 0.73483,
+      "macro": 0.7375,
       "positioning": 0.1228,
       "risk": 0.732270916335,
       "structure": 0.18336613591,
@@ -1171,13 +1171,13 @@
     "gates_triggered": [],
     "grade": "C",
     "max_score": 4.8,
-    "score": 1.54997370975
+    "score": 1.55184270975
   },
   "Platinum|SWING|buy": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
-      "macro": 0.26517,
+      "macro": 0.2625,
       "positioning": 0.8772,
       "risk": 0.732270916335,
       "structure": 0.81663386409,
@@ -1186,13 +1186,13 @@
     "gates_triggered": [],
     "grade": "A",
     "max_score": 5.8,
-    "score": 3.566274780425
+    "score": 3.563604780425
   },
   "Platinum|SWING|sell": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
-      "macro": 0.73483,
+      "macro": 0.7375,
       "positioning": 0.1228,
       "risk": 0.732270916335,
       "structure": 0.18336613591,
@@ -1201,7 +1201,7 @@
     "gates_triggered": [],
     "grade": "C",
     "max_score": 5.8,
-    "score": 1.898267052244
+    "score": 1.900937052244
   },
   "SP500|MAKRO|buy": {
     "active_families": 5,
@@ -1297,7 +1297,7 @@
     "active_families": 6,
     "family_scores": {
       "analog": 0.4,
-      "macro": 0.30664,
+      "macro": 0.30203,
       "positioning": 0.3276,
       "risk": 0.621513944223,
       "structure": 0.746234135109,
@@ -1306,13 +1306,13 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 5.9,
-    "score": 2.874840222933
+    "score": 2.868847222933
   },
   "Silver|MAKRO|sell": {
     "active_families": 6,
     "family_scores": {
       "analog": 0.2,
-      "macro": 0.69336,
+      "macro": 0.69797,
       "positioning": 0.6724,
       "risk": 0.621513944223,
       "structure": 0.253765864891,
@@ -1321,13 +1321,13 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 5.9,
-    "score": 2.739582087824
+    "score": 2.745575087824
   },
   "Silver|SCALP|buy": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
-      "macro": 0.30664,
+      "macro": 0.30203,
       "positioning": 0.3276,
       "risk": 0.735059760956,
       "structure": 0.746234135109,
@@ -1336,13 +1336,13 @@
     "gates_triggered": [],
     "grade": "A",
     "max_score": 4.8,
-    "score": 2.986600184407
+    "score": 2.983373184407
   },
   "Silver|SCALP|sell": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
-      "macro": 0.69336,
+      "macro": 0.69797,
       "positioning": 0.6724,
       "risk": 0.735059760956,
       "structure": 0.253765864891,
@@ -1351,13 +1351,13 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 4.8,
-    "score": 1.889495433123
+    "score": 1.892722433123
   },
   "Silver|SWING|buy": {
     "active_families": 6,
     "family_scores": {
       "analog": 0.4,
-      "macro": 0.30664,
+      "macro": 0.30203,
       "positioning": 0.3276,
       "risk": 0.735059760956,
       "structure": 0.746234135109,
@@ -1366,13 +1366,13 @@
     "gates_triggered": [],
     "grade": "A",
     "max_score": 5.8,
-    "score": 3.310533896065
+    "score": 3.305923896065
   },
   "Silver|SWING|sell": {
     "active_families": 6,
     "family_scores": {
       "analog": 0.2,
-      "macro": 0.69336,
+      "macro": 0.69797,
       "positioning": 0.6724,
       "risk": 0.735059760956,
       "structure": 0.253765864891,
@@ -1381,7 +1381,7 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 5.8,
-    "score": 2.639585625847
+    "score": 2.644195625847
   },
   "Soybean|NONE|buy": {
     "active_families": 7,
