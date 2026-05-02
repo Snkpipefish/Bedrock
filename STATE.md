@@ -164,9 +164,16 @@
   - **Snapshot-diff vs pre-Spor-D anker:** 6 score-endringer (Corn/Soybean/Wheat × 2 retninger), **0 grade-flips**. Modest impact (~0.05-0.07 score-Δ) fordi nye drivere er 0.10-0.20 vekt og live-data gir mid-range scores. Andre 6 asset-klasser uendret.
   - **Live driver-verifisering 2026-05-02:** nass_yield_corn_yoy=0.35 (+1.9% YoY mild bear), nass_yield_soy_yoy=0.35, nass_grain_stocks_quarterly Corn/Soy/Wheat=0.15 (+10.7% Mar-2026 YoY = bear). Alle 5 (instrument, driver)-kombinasjoner aktive.
   - 64 nye tester (29 store/proxy + 15 fetcher + 20 driver). Pyright src/: 0 errors. Diff-rapport: `docs/snapshot_diff_2026-05-02_followup_spor_d.md`.
-- **Sub-fase 12.10 follow-up — Spor B/E/F gjenstår** per ny PLAN § 22.6 + § 22.7:
-  - **Spor B** (*_surprise data-arkitektur) — 2-3 sessioner (substantial, ADR-014 kreves).
-  - **Spor F1-F4** (resterende mindre DEFERRED) — 4-6 sessioner totalt.
+- **Sub-fase 12.10 follow-up Spor B LUKKET 2026-05-02** (tag `v0.12.10-followup-spor-b`). § 22.2 #5 — *_surprise data-arkitektur via cross-source FF×FRED. Ny `event`-familie på SP500/Nasdaq/USDJPY/EURUSD. **5 commits + ADR-014:**
+  - `59fd2f6` B1+B2: ADR-014 (cross-source data-arkitektur) + schema-utvidelse `econ_events.actual` (idempotent ALTER TABLE migration) + FRED-backfill PAYEMS/CPIAUCSL/GDP/PCEPI (400 rader 2016-04 → 2026-03 per ADR-011 10-år rolling).
+  - `0b00be6` B3: `scripts/backfill/econ_actuals.py` cross-source-join. Title-pattern + dato-window matching. Live: **468 events fikk actual** (NFP 102, CPI 107, GDP 35, PCE 90 av 41064 totalt).
+  - `9d9fb20` B4: 4 nye drivere i ny modul `event_surprise.py` — `nfp_surprise`, `cpi_surprise`, `gdp_surprise`, `pce_surprise`. Felles `_econ_surprise_score()` med metric_kind-dispatch (NFP/CPI/PCE step-tabeller separat fra GDP). 24 tester. Total drivere registrert: 54 (var 50).
+  - `86ed70f` B5: event-familie wirings. SP500/Nasdaq: nfp(high)+cpi(low)+gdp(high)+pce(low) — Fed-policy-asymmetri. USDJPY: alle bull_when=high (USD↑ = USDJPY↑). EURUSD: alle bull_when=low. Family-vekt 0.3 SCALP/SWING, 0.5 MAKRO. max_score bumpet for grade-pct-invariance.
+  - **Snapshot-diff vs pre-Spor-B anker:** 24 score-endringer (alle 4 instrumenter × 3 hor × 2 dir), **1 grade-flip** (USDJPY MAKRO sell B→A pga event_fam SELL=0.6875 + family-vekt 0.5). Stop-criterion ≤5/asset-class oppfylt (1 fx, 0 indices). Top-Δ +0.41 score (Nasdaq/SP500 MAKRO buy). Andre 5 asset-klasser uendret.
+  - **Live-drivere bekreftet aktive 2026-05-02:** nfp=0.5 (latest 2025-04 NFP -29K miss = neutral), cpi=0.0 (downside surprise), gdp=0.75 (positive), pce=0.0 (downside). For SP500/Nasdaq: event_fam BUY=0.8125 (drevet av cpi/pce-bull_when=low-flips + gdp+0.75). USDJPY SELL=0.6875 (USD-bear-mismatch i denne perioden). EURUSD BUY=0.6875 (USD-bear = EURUSD-bull).
+  - 24 nye tester. Pyright src/: 0 errors. Diff-rapport: `docs/snapshot_diff_2026-05-02_followup_spor_b.md`.
+- **Sub-fase 12.10 follow-up — Spor E/F gjenstår** per ny PLAN § 22.6 + § 22.7:
+  - **Spor F1-F4** (resterende mindre DEFERRED — CBOE pcr, NOAA enso forecast, Treasury auctions, etc.) — 4-6 sessioner totalt.
   - **Spor E** (driver-impl-rewrites #36-#41 + #34 multi-lookback) — 6-7 sessioner. Best etter ~2-4 uker live-demo for empirisk underperform-data.
   - **Død kode:** `enso_regime` driver i `agri.py` brukes fortsatt av analog-dim-extractor — refactor (analog → noaa_oni_index) er egen mini-spor.
 - **Kickoff-prompt for nytt kontekstvindu:** `docs/12_10_followup_spor_b_c_d_e_f_kickoff.md`.
