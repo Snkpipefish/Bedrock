@@ -72,10 +72,18 @@ families:
   enso:
     # Sugar/Brasil: La Niña gir typisk våtere SE-Brazil = mindre
     # bra for høst (regnete dager forsinker zafra) = bull.
+    # Spor F4 (2026-05-02): noaa_enso_forecast_3mo lagt til som
+    # forward-overlay (IRI Plumes 3-mnd-prognose). 0.6/0.4 split —
+    # current ONI primær, forecast som strategisk forward-bias.
     weight: 2
     drivers:
       - name: noaa_oni_index
-        weight: 1.0
+        weight: 0.6
+        params: {}
+        horizons:
+          - MAKRO
+      - name: noaa_enso_forecast_3mo
+        weight: 0.4
         params: {}
         horizons:
           - MAKRO

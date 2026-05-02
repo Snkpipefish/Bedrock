@@ -274,7 +274,7 @@
     "family_scores": {
       "analog": 0.25,
       "cross": 0.478,
-      "enso": 0.5,
+      "enso": 0.4,
       "outlook": 0.9,
       "weather": 0.0903,
       "yield": 0.0903
@@ -282,14 +282,14 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 16.0,
-    "score": 7.4075
+    "score": 7.2075
   },
   "Cocoa|NONE|sell": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
       "cross": 0.522,
-      "enso": 0.5,
+      "enso": 0.6,
       "outlook": 0.1,
       "weather": 0.9097,
       "yield": 0.9097
@@ -297,7 +297,7 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 16.0,
-    "score": 7.0925
+    "score": 7.2925
   },
   "Coffee|NONE|buy": {
     "active_families": 7,
@@ -305,7 +305,7 @@
       "analog": 0.55,
       "conab": 0.105,
       "cross": 0.5885,
-      "enso": 0.5,
+      "enso": 0.4,
       "outlook": 0.4,
       "weather": 0.0903,
       "yield": 0.21321
@@ -313,7 +313,7 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 16.0,
-    "score": 6.30723
+    "score": 6.10723
   },
   "Coffee|NONE|sell": {
     "active_families": 7,
@@ -321,15 +321,15 @@
       "analog": 0.1,
       "conab": 0.895,
       "cross": 0.4115,
-      "enso": 0.5,
+      "enso": 0.6,
       "outlook": 0.6,
       "weather": 0.9097,
       "yield": 0.78679
     },
     "gates_triggered": [],
-    "grade": "A",
+    "grade": "A+",
     "max_score": 16.0,
-    "score": 10.99277
+    "score": 11.19277
   },
   "Copper|MAKRO|buy": {
     "active_families": 5,
@@ -1438,7 +1438,7 @@
     "family_scores": {
       "analog": 0.0,
       "cross": 0.48275,
-      "enso": 0.5,
+      "enso": 0.4,
       "outlook": 1.0,
       "unica": 0.5,
       "weather": 0.0603,
@@ -1447,14 +1447,14 @@
     "gates_triggered": [],
     "grade": "A",
     "max_score": 16.0,
-    "score": 8.92655
+    "score": 8.72655
   },
   "Sugar|NONE|sell": {
     "active_families": 6,
     "family_scores": {
       "analog": 0.8,
       "cross": 0.51725,
-      "enso": 0.5,
+      "enso": 0.6,
       "outlook": 0.0,
       "unica": 0.5,
       "weather": 0.9397,
@@ -1463,7 +1463,7 @@
     "gates_triggered": [],
     "grade": "A",
     "max_score": 16.0,
-    "score": 8.67345
+    "score": 8.87345
   },
   "USDJPY|MAKRO|buy": {
     "active_families": 7,
