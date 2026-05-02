@@ -63,7 +63,7 @@ families:
     # Coffee i Brasil: La Niña øker frost-risiko + tørke = bull.
     weight: 2
     drivers:
-      - name: enso_regime
+      - name: noaa_oni_index
         weight: 1.0
         params: {}
         horizons:

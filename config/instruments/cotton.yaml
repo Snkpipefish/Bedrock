@@ -1,8 +1,11 @@
 # Cotton — agri instrument (softs)
 # Sub-fase 12.5 Block C session 75: første instrument utover Gold + Corn.
-# Bruker eksisterende drivere (seasonal_stage, weather_stress, enso_regime,
+# Bruker eksisterende drivere (seasonal_stage, weather_stress, noaa_oni_index,
 # dxy_chg5d, analog_*) med Cotton-spesifikke params (us_delta_cotton-region,
 # bloom-tid juli-aug, ICE Futures-COT-contract).
+# Sub-fase 12.10 follow-up A4 (session 142): enso_regime erstattet med
+# noaa_oni_index per § 22.2 #30 — direkte NOAA-driver med konsistent
+# z-score-mode-suite (ADR-010), samme underliggende ONI-data.
 
 inherits: family_agri  # ignorert i Fase 5 session 21
 
@@ -92,7 +95,7 @@ families:
     # NOAA-mapping passer.
     weight: 2
     drivers:
-      - name: enso_regime
+      - name: noaa_oni_index
         weight: 1.0
         params: {}
         horizons:

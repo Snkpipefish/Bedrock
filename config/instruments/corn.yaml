@@ -81,7 +81,7 @@ families:
     # for us_cornbelt → bull for Corn (default-mapping).
     weight: 2
     drivers:
-      - name: enso_regime
+      - name: noaa_oni_index
         weight: 1.0
         params: {}
         horizons:
