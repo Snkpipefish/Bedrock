@@ -1593,7 +1593,7 @@
     "active_families": 6,
     "family_scores": {
       "analog": 0.0,
-      "cross": 0.425277777778,
+      "cross": 0.440222222222,
       "enso": 0.4,
       "outlook": 1.0,
       "unica": 0.5,
@@ -1603,13 +1603,13 @@
     "gates_triggered": [],
     "grade": "A",
     "max_score": 18.0,
-    "score": 8.611605555556
+    "score": 8.641494444444
   },
   "Sugar|MAKRO|sell": {
     "active_families": 6,
     "family_scores": {
       "analog": 0.8,
-      "cross": 0.574722222222,
+      "cross": 0.559777777778,
       "enso": 0.6,
       "outlook": 0.0,
       "unica": 0.5,
@@ -1619,13 +1619,13 @@
     "gates_triggered": [],
     "grade": "A",
     "max_score": 18.0,
-    "score": 8.988394444444
+    "score": 8.958505555556
   },
   "Sugar|SWING|buy": {
     "active_families": 4,
     "family_scores": {
       "analog": 0.0,
-      "cross": 0.48275,
+      "cross": 0.4962,
       "enso": 0.0,
       "outlook": 0.0,
       "unica": 0.5,
@@ -1635,13 +1635,13 @@
     "gates_triggered": [],
     "grade": "C",
     "max_score": 11.0,
-    "score": 2.92655
+    "score": 2.95345
   },
   "Sugar|SWING|sell": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.8,
-      "cross": 0.51725,
+      "cross": 0.5038,
       "enso": 0.0,
       "outlook": 0.0,
       "unica": 0.5,
@@ -1651,7 +1651,7 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 11.0,
-    "score": 7.67345
+    "score": 7.64655
   },
   "USDJPY|MAKRO|buy": {
     "active_families": 7,

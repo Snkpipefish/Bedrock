@@ -452,6 +452,11 @@ def momentum_z(store: Any, instrument: str, params: dict) -> float:
         window: rolling-vindu for mean/std (default 20)
         tf: timeframe (default ``D1``)
         mode: feature-velger (default ``None`` = pre-R4-terskel-trapp)
+        instrument: valgfri override — les prices for et annet instrument
+            enn det som scores. Brukstilfelle (sub-fase 12.11): Sugar
+            scorer mot CrudeOil-momentum (Brasil ethanol-mix-katalysator)
+            uten å trenge en ny dedikert oljedriver. Default = scored
+            instrument.
 
     ``params["_horizon"]`` leses per ADR-010 men brukes ikke for default.
 
@@ -461,22 +466,27 @@ def momentum_z(store: Any, instrument: str, params: dict) -> float:
     mode = params.get("mode")
     window = int(params.get("window", _DEFAULT_WINDOW))
     tf = params.get("tf", "D1")
+    target_instrument = params.get("instrument", instrument)
 
     if mode is None:
-        return _momentum_z_default(store, instrument, params)
+        return _momentum_z_default(store, target_instrument, params)
 
     if mode == "pct_12m":
-        series = _load_momentum_z_series(store, instrument, tf, window, _LOOKBACK_PCT_12M)
+        series = _load_momentum_z_series(store, target_instrument, tf, window, _LOOKBACK_PCT_12M)
         if series is None:
             return 0.0
-        result = _mode_pct_from_series(series, instrument, _LOOKBACK_PCT_12M, driver="momentum_z")
+        result = _mode_pct_from_series(
+            series, target_instrument, _LOOKBACK_PCT_12M, driver="momentum_z"
+        )
         return result if result is not None else 0.0
 
     if mode == "pct_36m":
-        series = _load_momentum_z_series(store, instrument, tf, window, _LOOKBACK_PCT_36M)
+        series = _load_momentum_z_series(store, target_instrument, tf, window, _LOOKBACK_PCT_36M)
         if series is None:
             return 0.0
-        result = _mode_pct_from_series(series, instrument, _LOOKBACK_PCT_36M, driver="momentum_z")
+        result = _mode_pct_from_series(
+            series, target_instrument, _LOOKBACK_PCT_36M, driver="momentum_z"
+        )
         if result is None:
             _log.info(
                 "momentum_z.pct_36m_fallback_to_12m",
@@ -493,7 +503,9 @@ def momentum_z(store: Any, instrument: str, params: dict) -> float:
         # delta_5d_z på momentum_z = endring i momentum-z-score-distribusjon
         # over 5d. Tolkning: "akselerasjon av momentum" snarere enn "endring
         # i underliggende prisserie".
-        series = _load_momentum_z_series(store, instrument, tf, window, _DELTA_5D + _LOOKBACK_DELTA)
+        series = _load_momentum_z_series(
+            store, target_instrument, tf, window, _DELTA_5D + _LOOKBACK_DELTA
+        )
         if series is None:
             return 0.0
         result = _mode_delta_z_from_series(
@@ -508,7 +520,7 @@ def momentum_z(store: Any, instrument: str, params: dict) -> float:
     if mode == "delta_20d_z":
         # delta_20d_z på momentum_z: 20d-akselerasjon av momentum.
         series = _load_momentum_z_series(
-            store, instrument, tf, window, _DELTA_20D + _LOOKBACK_DELTA
+            store, target_instrument, tf, window, _DELTA_20D + _LOOKBACK_DELTA
         )
         if series is None:
             return 0.0
@@ -522,10 +534,12 @@ def momentum_z(store: Any, instrument: str, params: dict) -> float:
         return result if result is not None else 0.0
 
     if mode in ("extreme_flag_hard", "extreme_flag_soft"):
-        series = _load_momentum_z_series(store, instrument, tf, window, _LOOKBACK_PCT_12M)
+        series = _load_momentum_z_series(store, target_instrument, tf, window, _LOOKBACK_PCT_12M)
         if series is None:
             return 0.0
-        pct = _mode_pct_from_series(series, instrument, _LOOKBACK_PCT_12M, driver="momentum_z")
+        pct = _mode_pct_from_series(
+            series, target_instrument, _LOOKBACK_PCT_12M, driver="momentum_z"
+        )
         if pct is None:
             return 0.0
         return _extreme_flag(pct, hard=(mode == "extreme_flag_hard"))

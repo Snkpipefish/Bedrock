@@ -112,11 +112,20 @@ families:
     # White Sugar (Europe, refined) MM-positioning gir cross-region-
     # signal til NY Sugar No.11 (raw). White-raw spread er stabil
     # nok til at MM-positioning-retning korrelerer.
-    # brl_chg5d 0.9 → 0.65, event 0.10 uendret. Sum=1.00.
+    # Sub-fase 12.11: crude_oil-momentum lagt til@0.20. Brasil-
+    # sukker har direkte avhengighet til oljepris via ethanol-mix-
+    # ratio (Petrobras-bensin-pris styrer cane-allocation sukker vs
+    # ethanol). Høy oljepris = mer ethanol-attraktivt = mindre
+    # sukker = bullish sukker-pris. Reaktiv mix-respons fanges via
+    # unica.unica_change.mix_sugar_pct, men prediktiv katalysator
+    # mangler. Bruker momentum_z med instrument-override =
+    # CrudeOil (gjenbruk eksisterende driver, ingen ny kode).
+    # brl_chg5d 0.65 → 0.50, cot_ice_mm_pct 0.25 → 0.20, event 0.10
+    # uendret, crude_momentum 0.20. Sum=1.00.
     weight: 2
     drivers:
       - name: brl_chg5d
-        weight: 0.65
+        weight: 0.50
         params:
           bull_when: positive
           window: 5
@@ -129,11 +138,20 @@ families:
         horizons:
           - SWING
       - name: cot_ice_mm_pct
-        weight: 0.25
+        weight: 0.20
         params:
           contract: ice sugar
           metric: mm_net_pct
           lookback_weeks: 52
+      - name: momentum_z
+        weight: 0.20
+        params:
+          instrument: CrudeOil
+          window: 20
+          tf: D1
+        horizons:
+          - SWING
+          - MAKRO
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     weight: 2
