@@ -2905,7 +2905,7 @@ Tag: `v0.12.10-fase-12.10-LUKKET`. Etter dette: bruker vurderer **Bedrock-2.0**-
 
 **Subtasks:**
 - F1: ism_pmi_level alt-kilde (manuell CSV-fallback?)
-- F2: CBOE pcr_total_extreme + pcr_equity_only fra CBOE-direkte (ny fetcher)
+- F2: ~~CBOE pcr_total_extreme + pcr_equity_only~~ — **BLOCKED 2026-05-02 (re-DEFERRED).** Kickoff-spec antok `cdn.cboe.com/api/global/...`-CSV er gratis; verifisert 2026-05-02 at endepunktet returnerer 403. Legacy CBOE-CSV stopper oktober 2019. Yahoo har ikke `^CPC/^CPCE/^CPCI`-tickerne (404). Eneste gjenstående gratis-tilnærming er manuell daily ingest av PCR fra CBOE Daily Market Statistics-HTML — operator-tempo for høyt for daily-published indikator. Re-åpne hvis (a) FRED re-publiserer CBOE-PCR-feed, (b) StockCharts/WSJ-free serveres med direct-link, eller (c) operator-driven manuell daily-CSV-flow blir gjennomførbar. Inntil videre dekker `cboe_skew_z` + `vix_term_ratio` + `vvix_z` mye av samme contrarian/options-positioning-signal-domene.
 - F3: ~~cboe_vix_term_curve~~ — **DROPPED 2026-05-02.** Overlapper `vix_term_ratio` levert i bunke3 (Yahoo VIX/VIX3M/VIX6M); CBOE-direkte gir ikke ekstra signal-verdi. Ingen kode-leveranse.
 - F4: noaa_enso_forecast_3mo fra IRI-CSV
 - F5: cot_concentration_top4 + cot_swap_dealer_skew (schema-utvidelse for Conc_Net + TFF Swap)
@@ -2922,5 +2922,5 @@ Basert på leveranse-verdi vs implementasjons-kompleksitet:
 1. **Spor C** (ALSI/IIP) — **LUKKET 2026-05-02** (`v0.12.10-followup-spor-c`). 0 grade-flips, 95 nye tester. 21924 ALSI + 10628 IIP-rader.
 2. **Spor D** (NASS yield) — **LUKKET 2026-05-02** (`v0.12.10-followup-spor-d`). 0 grade-flips, 64 nye tester. 443 yield + 444 stocks-rader.
 3. **Spor B** (*_surprise) — **LUKKET 2026-05-02** (`v0.12.10-followup-spor-b`). 1 grade-flip (USDJPY MAKRO sell B→A), 24 nye tester, ADR-014 levert. 400 FRED-rader + 468 events fikk actual.
-4. **Spor F** (mindre DEFERRED) — **NESTE.** Lav prioritet; ta opportunistisk. 6-9 sessioner totalt for F1-F2/F4-F6/F8 (F7 utsatt til juli 2026, F3 droppet 2026-05-02 som overlapp). Anbefalt rekkefølge: **F3** (PLAN-only, 0s) → **F8** (eia_natgas_processing, lavest risk) → **F4** (noaa_enso) → **F1** (ism_pmi) → **F2** (CBOE pcr) → **F5** (cot_concentration + swap_skew) → **F6** (Treasury auctions). F7 venter til ≥100 rader (~juli 2026).
+4. **Spor F** (mindre DEFERRED) — **PÅGÅR (2026-05-02).** Status: F3 droppet (overlapp), F8/F4/F1 LUKKET, F2 re-deferred (CBOE data paywalled), F5/F6 venter, F7 utsatt til ~juli 2026. Faktisk levert: 4-5 sessioner. Gjenværende F5+F6: 2-4 sessioner.
 5. **Spor E** (driver-impl-rewrites #36-#41 + #34 multi-lookback) — **VENTER til ~2026-06-01** (~4 uker etter Spor B live-demo-start, slik at vi har empirisk data på hvilke drivere som faktisk underperformer). 6-7 sessioner. Bruker-beslutning 2026-05-02: utsette til empiri foreligger fremfor å refactore på tro.
