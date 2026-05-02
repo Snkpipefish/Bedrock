@@ -46,6 +46,81 @@ SCHEMA_VERSION = "2.1"
 # Manglende felt = default 20 = SCALP-tier; settes derfor eksplisitt
 # her per horisont (sub-fase 12.9 D5+ fix). Verdiene matcher scalp_edge-
 # convention fra trading_bot.py:1551-1569.
+# Per-horisont × per-gruppe trailing-stop-multipliers.
+#
+# `exit_trail_atr_mult[<group>]` overstyrer `group_params.trail_atr` i bot.yaml.
+# `_resolve_trail_mult` i exit.py:529 leter etter denne nøkkelen først, faller
+# tilbake til rules.trail_atr_multiplier og deretter group_params.
+#
+# Designprinsipp:
+# - SCALP bruker M15-ATR → moderat responsiv trail (~2.5–3.5×).
+# - SWING bruker H1-ATR → tåler 1H-støy, gir rom for normale pullbacks (~3.5–5.0×).
+# - MAKRO bruker H1-ATR → multi-uke-tese, må overleve hele D1-pullbacks
+#   (~5.0–7.0× ≈ 1.2–1.5×ATR-D1).
+#
+# Per gruppe er multiplikatorene tunet etter typisk realisert volatilitet:
+# - Mer volatile assets (natgas, crypto, oil, edelmetaller) får bredere trail.
+# - FX/indeks får tightere trail (mindre absolutte støy-bevegelser).
+# - Agri (grains/softs) får mid-range — USDA-events skaper reaksjons-svinger
+#   som tett trail klipper ut feil.
+TRAIL_MULT_BY_HORIZON_GROUP: dict[str, dict[str, float]] = {
+    "SCALP": {
+        "fx": 2.5,
+        "indices": 2.5,
+        "gold": 3.0,
+        "silver": 3.0,
+        "platinum": 3.0,
+        "copper": 3.0,
+        "oil": 3.0,
+        "natgas": 3.5,
+        "crypto": 3.5,
+        "corn": 2.5,
+        "wheat": 2.5,
+        "soybean": 2.5,
+        "coffee": 2.5,
+        "cocoa": 2.5,
+        "sugar": 2.5,
+        "cotton": 2.5,
+    },
+    "SWING": {
+        "fx": 3.5,
+        "indices": 3.5,
+        "gold": 4.0,
+        "silver": 4.5,
+        "platinum": 4.0,
+        "copper": 4.0,
+        "oil": 4.0,
+        "natgas": 4.5,
+        "crypto": 5.0,
+        "corn": 3.5,
+        "wheat": 3.5,
+        "soybean": 3.5,
+        "coffee": 3.5,
+        "cocoa": 3.5,
+        "sugar": 3.5,
+        "cotton": 3.5,
+    },
+    "MAKRO": {
+        "fx": 5.0,
+        "indices": 5.0,
+        "gold": 6.0,
+        "silver": 6.5,
+        "platinum": 6.0,
+        "copper": 5.5,
+        "oil": 6.0,
+        "natgas": 7.0,
+        "crypto": 7.0,
+        "corn": 5.0,
+        "wheat": 5.0,
+        "soybean": 5.0,
+        "coffee": 5.0,
+        "cocoa": 5.0,
+        "sugar": 5.0,
+        "cotton": 5.0,
+    },
+}
+
+
 HORIZON_DEFAULTS: dict[str, dict[str, Any]] = {
     "SCALP": {
         "expiry_candles": 24,
@@ -56,6 +131,7 @@ HORIZON_DEFAULTS: dict[str, dict[str, Any]] = {
             "stop_atr_mult": 1.5,
             "tp_atr_mult": 2.5,
             "sizing_base_risk_usd": 20,
+            "exit_trail_atr_mult": TRAIL_MULT_BY_HORIZON_GROUP["SCALP"],
         },
     },
     "SWING": {
@@ -67,6 +143,7 @@ HORIZON_DEFAULTS: dict[str, dict[str, Any]] = {
             "stop_atr_mult": 2.0,
             "tp_atr_mult": 3.5,
             "sizing_base_risk_usd": 40,
+            "exit_trail_atr_mult": TRAIL_MULT_BY_HORIZON_GROUP["SWING"],
         },
     },
     "MAKRO": {
@@ -78,6 +155,7 @@ HORIZON_DEFAULTS: dict[str, dict[str, Any]] = {
             "stop_atr_mult": 3.0,
             "tp_atr_mult": None,  # MAKRO bruker trailing-only per Fase 4
             "sizing_base_risk_usd": 60,
+            "exit_trail_atr_mult": TRAIL_MULT_BY_HORIZON_GROUP["MAKRO"],
         },
     },
 }

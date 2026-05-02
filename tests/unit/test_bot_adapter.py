@@ -152,6 +152,61 @@ def test_horizon_defaults_for_all_three():
         assert sig["confirmation_candle_limit"] == defaults["confirmation_candle_limit"]
 
 
+def test_exit_trail_atr_mult_present_per_horizon_per_group():
+    """Hver horisont skal ha exit_trail_atr_mult med per-gruppe-multipliers.
+
+    Boten faller tilbake til group_params.trail_atr i bot.yaml hvis denne
+    nøkkelen mangler — vi vil heller eksplisitt diktere trail-distansen
+    så MAKRO ikke blir klippet ut av en normal dagssving og SCALP ikke
+    bruker den (for romslige) MAKRO-distansen.
+    """
+    expected_groups = {
+        "fx",
+        "indices",
+        "gold",
+        "silver",
+        "platinum",
+        "copper",
+        "oil",
+        "natgas",
+        "crypto",
+        "corn",
+        "wheat",
+        "soybean",
+        "coffee",
+        "cocoa",
+        "sugar",
+        "cotton",
+    }
+    for hor_in, hor_out in (("scalp", "SCALP"), ("swing", "SWING"), ("makro", "MAKRO")):
+        payload = adapt_to_bot_format([_make_entry(horizon=hor_in)])
+        sig = payload["signals"][0]
+        trail_map = sig["horizon_config"]["exit_trail_atr_mult"]
+        assert isinstance(trail_map, dict), f"{hor_out}: exit_trail_atr_mult mangler"
+        assert set(trail_map.keys()) == expected_groups, (
+            f"{hor_out}: forventet alle 16 grupper, fikk {sorted(trail_map.keys())}"
+        )
+        # Sanity: alle multipliers er positive floats i fornuftig spenn
+        for grp, mult in trail_map.items():
+            assert isinstance(mult, int | float)
+            assert 1.5 <= mult <= 8.0, f"{hor_out}/{grp}: mult={mult} utenfor [1.5, 8.0]"
+
+
+def test_trail_mult_widens_with_horizon():
+    """MAKRO > SWING > SCALP for hver gruppe — bredere tese krever bredere trail."""
+    payload_scalp = adapt_to_bot_format([_make_entry(horizon="scalp")])
+    payload_swing = adapt_to_bot_format([_make_entry(horizon="swing")])
+    payload_makro = adapt_to_bot_format([_make_entry(horizon="makro")])
+    scalp_map = payload_scalp["signals"][0]["horizon_config"]["exit_trail_atr_mult"]
+    swing_map = payload_swing["signals"][0]["horizon_config"]["exit_trail_atr_mult"]
+    makro_map = payload_makro["signals"][0]["horizon_config"]["exit_trail_atr_mult"]
+    for grp in scalp_map:
+        assert scalp_map[grp] < swing_map[grp] < makro_map[grp], (
+            f"{grp}: scalp={scalp_map[grp]} swing={swing_map[grp]} makro={makro_map[grp]} "
+            f"bryter SCALP < SWING < MAKRO-prinsippet"
+        )
+
+
 def test_correlation_group_per_asset_class():
     cases = [
         ("fx", "fx"),
