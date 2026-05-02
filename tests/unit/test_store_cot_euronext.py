@@ -51,6 +51,7 @@ def test_append_and_get(store: DataStore) -> None:
         "mm_long",
         "mm_short",
         "open_interest",
+        "released_at",  # Sub-fase 12.10 Bunke 1 Bug-1
     ]
     assert df["mm_long"].iloc[0] == 80_000
 

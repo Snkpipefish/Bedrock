@@ -295,14 +295,18 @@ def fetch_cot_ice_manual(csv_path: Path = _MANUAL_CSV) -> pd.DataFrame:
         return pd.DataFrame(columns=list(COT_ICE_COLS))
 
     df = pd.read_csv(csv_path)
-    missing = [c for c in COT_ICE_COLS if c not in df.columns]
+    # Sub-fase 12.10 Bunke 1 Bug-1: `released_at` er valgfri — auto-utledes
+    # av DataStore.append_cot_ice hvis ikke gitt.
+    required = [c for c in COT_ICE_COLS if c != "released_at"]
+    missing = [c for c in required if c not in df.columns]
     if missing:
         raise ValueError(f"cot_ice manual CSV mangler kolonner: {sorted(missing)}")
 
     # Normaliser report_date til ISO-streng (DataStore re-normaliserer
     # uansett, men dette holder dataframen forutsigbar for tester).
     df["report_date"] = pd.to_datetime(df["report_date"]).dt.strftime("%Y-%m-%d")
-    return df[list(COT_ICE_COLS)].copy()
+    cols_present = [c for c in COT_ICE_COLS if c in df.columns]
+    return df[cols_present].copy()
 
 
 # ---------------------------------------------------------------------------

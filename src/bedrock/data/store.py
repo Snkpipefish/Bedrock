@@ -30,6 +30,7 @@ from typing import Any, Literal, Protocol
 
 import pandas as pd
 
+from bedrock.data.release_calendar import aaii_released_at_iso, cot_released_at_iso
 from bedrock.data.schemas import (
     AAII_SENTIMENT_COLS,
     AGSI_STORAGE_COLS,
@@ -218,7 +219,57 @@ class DataStore:
             conn.execute(DDL_DROUGHT_MONITOR)
             # Sub-fase 12.7 D3 A10 (session 135): Cecafé Brasil kaffe-eksport.
             conn.execute(DDL_CECAFE_EXPORTS)
+            # Sub-fase 12.10 Bunke 1 Bug-1: backfill released_at-kolonnen på
+            # COT- + AAII-tabellene for eksisterende rader (ALTER TABLE +
+            # konvensjons-basert UPDATE). Idempotent.
+            self._migrate_released_at_columns(conn)
             conn.commit()
+
+    def _migrate_released_at_columns(self, conn: sqlite3.Connection) -> None:
+        """Sub-fase 12.10 Bunke 1 Bug-1: legg til released_at-kolonnen på
+        eksisterende COT- og AAII-tabeller hvis den mangler, og backfill
+        rader uten verdi via release_calendar-konvensjonen.
+
+        Idempotent: hopper ALTER TABLE hvis kolonnen finnes; UPDATE-
+        kjøringen filtrerer på released_at IS NULL slik at allerede
+        backfilte rader ikke endres.
+
+        SQLite datetime-aritmetikk: ``datetime(report_date, '+3 days',
+        '21:00:00')`` produserer "YYYY-MM-DD HH:MM:SS" UTC-naive — matcher
+        `release_calendar.cot_released_at(...).isoformat(sep=' ', ...)`.
+        """
+        cot_tables = (
+            TABLE_COT_DISAGGREGATED,
+            TABLE_COT_LEGACY,
+            TABLE_COT_TFF,
+            TABLE_COT_ICE,
+            TABLE_COT_EURONEXT,
+        )
+        for table in cot_tables:
+            if not self._column_exists(conn, table, "released_at"):
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN released_at TEXT")
+            conn.execute(
+                f"""
+                UPDATE {table}
+                SET released_at = datetime(report_date, '+3 days', '21:00:00')
+                WHERE released_at IS NULL
+                """
+            )
+
+        if not self._column_exists(conn, TABLE_AAII_SENTIMENT, "released_at"):
+            conn.execute(f"ALTER TABLE {TABLE_AAII_SENTIMENT} ADD COLUMN released_at TEXT")
+        conn.execute(
+            f"""
+            UPDATE {TABLE_AAII_SENTIMENT}
+            SET released_at = datetime(date, '+1 day', '14:00:00')
+            WHERE released_at IS NULL
+            """
+        )
+
+    @staticmethod
+    def _column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
+        cursor = conn.execute(f"PRAGMA table_info({table})")
+        return any(row[1] == column for row in cursor.fetchall())
 
     def _migrate_bdi_to_shipping_indices(self, conn: sqlite3.Connection) -> None:
         """Engangs-migrasjon: kopier alle `bdi`-rader til `shipping_indices`
@@ -477,6 +528,15 @@ class DataStore:
         table: str,
         expected_cols: tuple[str, ...],
     ) -> int:
+        # Sub-fase 12.10 Bunke 1 Bug-1: auto-utled released_at fra report_date
+        # via release_calendar hvis ikke gitt. Slik trenger ikke fetcher-
+        # kallere oppdateres samtidig som schema utvides.
+        if "released_at" in expected_cols and "released_at" not in df.columns:
+            df = df.copy()
+            df["released_at"] = pd.to_datetime(df["report_date"]).apply(
+                lambda d: cot_released_at_iso(d)
+            )
+
         missing = [c for c in expected_cols if c not in df.columns]
         if missing:
             raise ValueError(
@@ -613,7 +673,16 @@ class DataStore:
         `df` må ha kolonnene i ``COT_EURONEXT_COLS`` (report_date,
         contract, mm_long, mm_short, open_interest). Idempotent på
         (report_date, contract) via INSERT OR REPLACE.
+
+        Sub-fase 12.10 Bunke 1 Bug-1: ``released_at`` auto-utledes via
+        release_calendar hvis ikke gitt.
         """
+        if "released_at" not in df.columns:
+            df = df.copy()
+            df["released_at"] = pd.to_datetime(df["report_date"]).apply(
+                lambda d: cot_released_at_iso(d)
+            )
+
         missing = [c for c in COT_EURONEXT_COLS if c not in df.columns]
         if missing:
             raise ValueError(
@@ -631,6 +700,7 @@ class DataStore:
                 int(row.mm_long),
                 int(row.mm_short),
                 int(row.open_interest),
+                row.released_at,
             )
             for row in prepared.itertuples(index=False)
         ]
@@ -638,8 +708,8 @@ class DataStore:
         with self._connect() as conn:
             conn.executemany(
                 f"INSERT OR REPLACE INTO {TABLE_COT_EURONEXT} "
-                f"(report_date, contract, mm_long, mm_short, open_interest) "
-                f"VALUES (?, ?, ?, ?, ?)",
+                f"(report_date, contract, mm_long, mm_short, open_interest, released_at) "
+                f"VALUES (?, ?, ?, ?, ?, ?)",
                 rows,
             )
             conn.commit()
@@ -2007,6 +2077,12 @@ class DataStore:
 
     def append_aaii_sentiment(self, df: pd.DataFrame) -> int:
         """Skriv AAII-rader til ``aaii_sentiment``. Idempotent på date."""
+        # Sub-fase 12.10 Bunke 1 Bug-1: auto-utled released_at via release_calendar
+        # hvis ikke gitt — eldre fetcher-kallere trenger ikke oppdateres.
+        if "released_at" not in df.columns:
+            df = df.copy()
+            df["released_at"] = pd.to_datetime(df["date"]).apply(lambda d: aaii_released_at_iso(d))
+
         missing = [c for c in AAII_SENTIMENT_COLS if c not in df.columns]
         if missing:
             raise ValueError(
@@ -2029,6 +2105,7 @@ class DataStore:
                 _opt(row.neutral_pct),
                 _opt(row.bearish_pct),
                 _opt(row.bull_bear_spread),
+                row.released_at,
             )
             for row in prepared.itertuples(index=False)
         ]
@@ -2036,8 +2113,8 @@ class DataStore:
         with self._connect() as conn:
             conn.executemany(
                 f"INSERT OR REPLACE INTO {TABLE_AAII_SENTIMENT} "
-                f"(date, bullish_pct, neutral_pct, bearish_pct, bull_bear_spread) "
-                f"VALUES (?, ?, ?, ?, ?)",
+                f"(date, bullish_pct, neutral_pct, bearish_pct, bull_bear_spread, released_at) "
+                f"VALUES (?, ?, ?, ?, ?, ?)",
                 rows,
             )
             conn.commit()

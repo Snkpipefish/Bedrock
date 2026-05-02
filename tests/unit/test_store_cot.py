@@ -88,6 +88,7 @@ def test_cot_disaggregated_append_and_get(store: DataStore) -> None:
         "nonrep_long",
         "nonrep_short",
         "open_interest",
+        "released_at",  # Sub-fase 12.10 Bunke 1 Bug-1
     ]
     assert df["report_date"].iloc[0] == pd.Timestamp("2024-01-02")
     assert df["mm_long"].iloc[0] == 100_000

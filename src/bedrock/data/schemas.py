@@ -99,6 +99,11 @@ class CotDisaggregatedRow(BaseModel):
     nonrep_short: int = Field(ge=0)
     open_interest: int = Field(ge=0)
 
+    # Sub-fase 12.10 Bunke 1 Bug-1: faktisk publikasjons-tidspunkt (CFTC fri
+    # 15:30 ET ≈ 21:00 UTC konservativt). Auto-utledes fra report_date i
+    # _append_cot via release_calendar hvis ikke gitt.
+    released_at: datetime | None = None
+
     model_config = ConfigDict(extra="forbid")
 
 
@@ -117,12 +122,15 @@ CREATE TABLE IF NOT EXISTS {TABLE_COT_DISAGGREGATED} (
     nonrep_long    INTEGER NOT NULL,
     nonrep_short   INTEGER NOT NULL,
     open_interest  INTEGER NOT NULL,
+    released_at    TEXT,
     PRIMARY KEY (report_date, contract)
 )
 """
 """DDL for cot_disaggregated-tabellen.
 
 - `report_date` lagres som ISO YYYY-MM-DD TEXT.
+- `released_at` (sub-fase 12.10 Bunke 1 Bug-1) lagres som ISO timestamp
+  TEXT (UTC, naive) — backfylles via migrasjon i `_init_schema`.
 - Primary key (report_date, contract) gir dedupe ved re-runs av fetch.
 """
 
@@ -155,6 +163,8 @@ class CotLegacyRow(BaseModel):
     nonrep_short: int = Field(ge=0)
     open_interest: int = Field(ge=0)
 
+    released_at: datetime | None = None
+
     model_config = ConfigDict(extra="forbid")
 
 
@@ -171,6 +181,7 @@ CREATE TABLE IF NOT EXISTS {TABLE_COT_LEGACY} (
     nonrep_long    INTEGER NOT NULL,
     nonrep_short   INTEGER NOT NULL,
     open_interest  INTEGER NOT NULL,
+    released_at    TEXT,
     PRIMARY KEY (report_date, contract)
 )
 """
@@ -194,8 +205,13 @@ COT_DISAGGREGATED_COLS: tuple[str, ...] = (
     "nonrep_long",
     "nonrep_short",
     "open_interest",
+    "released_at",
 )
-"""Forventet kolonne-rekkefølge for append_cot_disaggregated."""
+"""Forventet kolonne-rekkefølge for append_cot_disaggregated.
+
+`released_at` (12.10 Bunke 1 Bug-1) auto-utledes i `_append_cot` hvis
+ikke gitt — callere trenger ikke endre seg.
+"""
 
 COT_LEGACY_COLS: tuple[str, ...] = (
     "report_date",
@@ -207,6 +223,7 @@ COT_LEGACY_COLS: tuple[str, ...] = (
     "nonrep_long",
     "nonrep_short",
     "open_interest",
+    "released_at",
 )
 """Forventet kolonne-rekkefølge for append_cot_legacy."""
 
@@ -255,6 +272,8 @@ class CotTffRow(BaseModel):
     nonrep_short: int = Field(ge=0)
     open_interest: int = Field(ge=0)
 
+    released_at: datetime | None = None
+
     model_config = ConfigDict(extra="forbid")
 
 
@@ -275,6 +294,7 @@ CREATE TABLE IF NOT EXISTS {TABLE_COT_TFF} (
     nonrep_long     INTEGER NOT NULL,
     nonrep_short    INTEGER NOT NULL,
     open_interest   INTEGER NOT NULL,
+    released_at     TEXT,
     PRIMARY KEY (report_date, contract)
 )
 """
@@ -294,6 +314,7 @@ COT_TFF_COLS: tuple[str, ...] = (
     "nonrep_long",
     "nonrep_short",
     "open_interest",
+    "released_at",
 )
 """Forventet kolonne-rekkefølge for append_cot_tff."""
 
@@ -750,6 +771,7 @@ CREATE TABLE IF NOT EXISTS {TABLE_COT_ICE} (
     nonrep_long    INTEGER NOT NULL,
     nonrep_short   INTEGER NOT NULL,
     open_interest  INTEGER NOT NULL,
+    released_at    TEXT,
     PRIMARY KEY (report_date, contract)
 )
 """
@@ -766,6 +788,7 @@ COT_ICE_COLS: tuple[str, ...] = (
     "nonrep_long",
     "nonrep_short",
     "open_interest",
+    "released_at",
 )
 
 
@@ -793,6 +816,8 @@ class CotIceRow(BaseModel):
     nonrep_long: int = Field(ge=0)
     nonrep_short: int = Field(ge=0)
     open_interest: int = Field(ge=0)
+
+    released_at: datetime | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1006,6 +1031,7 @@ CREATE TABLE IF NOT EXISTS {TABLE_COT_EURONEXT} (
     mm_long      INTEGER NOT NULL,    -- Investment Funds long
     mm_short     INTEGER NOT NULL,    -- Investment Funds short
     open_interest INTEGER NOT NULL,   -- total open interest (alle kategorier)
+    released_at  TEXT,                -- ISO timestamp UTC, sub-fase 12.10 Bunke 1 Bug-1
     PRIMARY KEY (report_date, contract)
 )
 """
@@ -1016,6 +1042,7 @@ COT_EURONEXT_COLS: tuple[str, ...] = (
     "mm_long",
     "mm_short",
     "open_interest",
+    "released_at",
 )
 
 
@@ -1038,6 +1065,8 @@ class CotEuronextRow(BaseModel):
     mm_long: int = Field(ge=0)
     mm_short: int = Field(ge=0)
     open_interest: int = Field(ge=0)
+
+    released_at: datetime | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1549,7 +1578,8 @@ CREATE TABLE IF NOT EXISTS {TABLE_AAII_SENTIMENT} (
     bullish_pct       REAL,
     neutral_pct       REAL,
     bearish_pct       REAL,
-    bull_bear_spread  REAL
+    bull_bear_spread  REAL,
+    released_at       TEXT                              -- sub-fase 12.10 Bunke 1 Bug-1 (publ tor 14:00 UTC)
 )
 """
 
@@ -1559,6 +1589,7 @@ AAII_SENTIMENT_COLS: tuple[str, ...] = (
     "neutral_pct",
     "bearish_pct",
     "bull_bear_spread",
+    "released_at",
 )
 
 
@@ -1574,6 +1605,8 @@ class AaiiSentimentRow(BaseModel):
     neutral_pct: float | None = None
     bearish_pct: float | None = None
     bull_bear_spread: float | None = None
+
+    released_at: datetime | None = None
 
     model_config = ConfigDict(extra="forbid")
 
