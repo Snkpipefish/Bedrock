@@ -34,6 +34,7 @@ from bedrock.data.release_calendar import aaii_released_at_iso, cot_released_at_
 from bedrock.data.schemas import (
     AAII_SENTIMENT_COLS,
     AGSI_STORAGE_COLS,
+    ALSI_STORAGE_COLS,
     ANALOG_OUTCOMES_COLS,
     CECAFE_EXPORTS_COLS,
     COMEX_INVENTORY_COLS,
@@ -47,6 +48,7 @@ from bedrock.data.schemas import (
     CRYPTO_SENTIMENT_COLS,
     DDL_AAII_SENTIMENT,
     DDL_AGSI_STORAGE,
+    DDL_ALSI_STORAGE,
     DDL_ANALOG_OUTCOMES,
     DDL_CECAFE_EXPORTS,
     DDL_COMEX_INVENTORY,
@@ -67,6 +69,7 @@ from bedrock.data.schemas import (
     DDL_FAS_ESR,
     DDL_FUNDAMENTALS,
     DDL_IGC,
+    DDL_IIP_REMIT,
     DDL_NEWS_INTEL,
     DDL_PRICES,
     DDL_SEISMIC_EVENTS,
@@ -84,11 +87,13 @@ from bedrock.data.schemas import (
     FAS_ESR_COLS,
     FUNDAMENTALS_COLS,
     IGC_COLS,
+    IIP_REMIT_COLS,
     NEWS_INTEL_COLS,
     SEISMIC_EVENTS_COLS,
     SHIPPING_INDICES_COLS,
     TABLE_AAII_SENTIMENT,
     TABLE_AGSI_STORAGE,
+    TABLE_ALSI_STORAGE,
     TABLE_ANALOG_OUTCOMES,
     TABLE_BDI,
     TABLE_CECAFE_EXPORTS,
@@ -110,6 +115,7 @@ from bedrock.data.schemas import (
     TABLE_FAS_ESR,
     TABLE_FUNDAMENTALS,
     TABLE_IGC,
+    TABLE_IIP_REMIT,
     TABLE_NEWS_INTEL,
     TABLE_PRICES,
     TABLE_SEISMIC_EVENTS,
@@ -219,6 +225,10 @@ class DataStore:
             conn.execute(DDL_DROUGHT_MONITOR)
             # Sub-fase 12.7 D3 A10 (session 135): Cecafé Brasil kaffe-eksport.
             conn.execute(DDL_CECAFE_EXPORTS)
+            # Sub-fase 12.10 follow-up Spor C (session 136): ALSI EU LNG-
+            # terminal storage + IIP REMIT supply-unavailability.
+            conn.execute(DDL_ALSI_STORAGE)
+            conn.execute(DDL_IIP_REMIT)
             # Sub-fase 12.10 Bunke 1 Bug-1: backfill released_at-kolonnen på
             # COT- + AAII-tabellene for eksisterende rader (ALTER TABLE +
             # konvensjons-basert UPDATE). Idempotent.
@@ -2069,6 +2079,231 @@ class DataStore:
                 f"SELECT 1 FROM {TABLE_AGSI_STORAGE} WHERE country = ? LIMIT 1",
                 (country.lower(),),
             )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # ALSI EU LNG-terminal storage (sub-fase 12.10 follow-up Spor C, s136)
+    # ------------------------------------------------------------------
+
+    def append_alsi_storage(self, df: pd.DataFrame) -> int:
+        """Skriv ALSI-rader til ``alsi_storage``. Returnerer antall rader.
+
+        `df` må ha kolonnene i ``ALSI_STORAGE_COLS``. Idempotent på
+        (country, gas_day_start) via INSERT OR REPLACE.
+        """
+        missing = [c for c in ALSI_STORAGE_COLS if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_alsi_storage: missing columns {missing}. "
+                f"Required: {list(ALSI_STORAGE_COLS)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df[list(ALSI_STORAGE_COLS)].copy()
+        prepared["gas_day_start"] = pd.to_datetime(prepared["gas_day_start"]).dt.strftime(
+            "%Y-%m-%d"
+        )
+
+        def _opt(v: object) -> float | None:
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return None
+            return float(v)  # type: ignore[arg-type]
+
+        rows: Sequence[tuple] = [
+            (
+                str(row.country).lower(),
+                row.gas_day_start,
+                _opt(row.inventory_twh),
+                _opt(row.dtmi_twh),
+                _opt(row.full_pct),
+                _opt(row.send_out_twh),
+                _opt(row.dtrs_twh),
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_ALSI_STORAGE} "
+                f"(country, gas_day_start, inventory_twh, dtmi_twh, "
+                f"full_pct, send_out_twh, dtrs_twh) "
+                f"VALUES (?, ?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_alsi_storage(
+        self,
+        country: str,
+        last_n: int | None = None,
+    ) -> pd.DataFrame:
+        """Returner ALSI-rader for `country`, sortert ASC på gas_day_start.
+
+        `country` er ISO-2 lowercase (``"de"``, ``"nl"``, ``"fr"``, ``"it"``,
+        ``"es"`` etc.) eller ``"eu"`` for aggregat. Returnerer
+        pd.DataFrame med ``gas_day_start`` som pd.Timestamp i en kolonne.
+
+        Kaster `KeyError` hvis ingen rader finnes for `country`.
+        """
+        country_norm = country.lower()
+        query = f"""
+            SELECT * FROM {TABLE_ALSI_STORAGE}
+            WHERE country = ?
+            ORDER BY gas_day_start ASC
+        """
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=(country_norm,))
+
+        if df.empty:
+            raise KeyError(f"No ALSI storage data for country={country_norm!r}")
+
+        df["gas_day_start"] = pd.to_datetime(df["gas_day_start"])
+
+        if last_n is None:
+            return df
+        return df.tail(last_n).reset_index(drop=True)
+
+    def has_alsi_storage(self, country: str) -> bool:
+        """Test-hjelper: sjekk om `country` har minst én rad."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"SELECT 1 FROM {TABLE_ALSI_STORAGE} WHERE country = ? LIMIT 1",
+                (country.lower(),),
+            )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # IIP REMIT supply-unavailability (sub-fase 12.10 follow-up Spor C, s136)
+    # ------------------------------------------------------------------
+
+    def append_iip_remit(self, df: pd.DataFrame) -> int:
+        """Skriv IIP REMIT UMM-rader til ``iip_remit``. Returnerer antall rader.
+
+        `df` må ha kolonnene i ``IIP_REMIT_COLS``. Idempotent på message_id
+        via INSERT OR REPLACE — IIP-meldinger kan revideres.
+        """
+        missing = [c for c in IIP_REMIT_COLS if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_iip_remit: missing columns {missing}. "
+                f"Required: {list(IIP_REMIT_COLS)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df[list(IIP_REMIT_COLS)].copy()
+
+        def _opt_str(v: object) -> str | None:
+            if v is None:
+                return None
+            if isinstance(v, float) and pd.isna(v):
+                return None
+            s = str(v)
+            return s if s and s.lower() != "nat" else None
+
+        def _opt_float(v: object) -> float | None:
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return None
+            return float(v)  # type: ignore[arg-type]
+
+        # ISO-format på datetime-kolonner.
+        for col in (
+            "submitted_ts",
+            "published_ts",
+            "event_from_ts",
+            "event_to_ts",
+        ):
+            prepared[col] = pd.to_datetime(prepared[col], errors="coerce")
+            prepared[col] = prepared[col].dt.strftime("%Y-%m-%d %H:%M:%S")
+
+        rows: Sequence[tuple] = [
+            (
+                str(row.message_id),
+                _opt_str(row.submitted_ts),
+                _opt_str(row.published_ts),
+                _opt_str(row.event_from_ts),
+                _opt_str(row.event_to_ts),
+                _opt_str(row.status),
+                _opt_str(row.message_type),
+                _opt_str(row.unavailability_type),
+                _opt_str(row.unavailability_reason),
+                _opt_float(row.unavailable_capacity_gwhd),
+                _opt_float(row.available_capacity_gwhd),
+                _opt_float(row.technical_capacity_gwhd),
+                _opt_str(row.balancing_zone_code),
+                _opt_str(row.balancing_zone_name),
+                _opt_str(row.direction),
+                _opt_str(row.asset_code),
+                _opt_str(row.asset_name),
+            )
+            for row in prepared.itertuples(index=False)
+        ]
+
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_IIP_REMIT} "
+                f"({', '.join(IIP_REMIT_COLS)}) "
+                f"VALUES ({', '.join('?' * len(IIP_REMIT_COLS))})",
+                rows,
+            )
+            conn.commit()
+
+        return len(rows)
+
+    def get_iip_remit(
+        self,
+        *,
+        balancing_zone_prefix: str | None = None,
+        from_published_ts: str | None = None,
+        last_n: int | None = None,
+    ) -> pd.DataFrame:
+        """Returner IIP REMIT-rader sortert ASC på published_ts.
+
+        Filterargumenter:
+            balancing_zone_prefix: case-insensitive prefix-match mot
+                balancing_zone_code (f.eks. ``"21YNL"`` for nederlandsk TTF).
+            from_published_ts: ISO-streng; kun rader publisert ≥ denne.
+            last_n: behold kun siste `n` rader (etter sortering).
+
+        Returnerer tom DataFrame hvis ingen treff (i motsetning til AGSI/ALSI
+        som kaster — IIP er event-basert med tomme periodevinduer som
+        gyldig tilstand).
+        """
+        clauses: list[str] = []
+        params: list[object] = []
+        if balancing_zone_prefix:
+            clauses.append("UPPER(balancing_zone_code) LIKE ?")
+            params.append(f"{balancing_zone_prefix.upper()}%")
+        if from_published_ts:
+            clauses.append("published_ts >= ?")
+            params.append(from_published_ts)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        query = f"""
+            SELECT * FROM {TABLE_IIP_REMIT}
+            {where}
+            ORDER BY published_ts ASC
+        """
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=params)
+
+        if df.empty:
+            return df
+
+        for col in (
+            "submitted_ts",
+            "published_ts",
+            "event_from_ts",
+            "event_to_ts",
+        ):
+            df[col] = pd.to_datetime(df[col], errors="coerce")
+
+        if last_n is not None:
+            df = df.tail(last_n).reset_index(drop=True)
+        return df
+
+    def has_iip_remit(self) -> bool:
+        """Test-hjelper: sjekk om iip_remit har minst én rad."""
+        with self._connect() as conn:
+            cursor = conn.execute(f"SELECT 1 FROM {TABLE_IIP_REMIT} LIMIT 1")
             return cursor.fetchone() is not None
 
     # ------------------------------------------------------------------

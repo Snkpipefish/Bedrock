@@ -597,6 +597,57 @@ class AsOfDateStore:
         except KeyError:
             return False
 
+    # ALSI LNG-terminal storage (alsi_eu_pct, alsi_storage_change)
+
+    def get_alsi_storage(self, country: str, last_n: int | None = None) -> pd.DataFrame:
+        """Som DataStore.get_alsi_storage, men clipped på gas_day_start."""
+        full = self._underlying.get_alsi_storage(country, last_n=None)
+        if full.empty:
+            return full
+        day_ts = pd.to_datetime(full["gas_day_start"])
+        clipped = full[day_ts <= self._as_of].reset_index(drop=True)
+        if last_n is not None and not clipped.empty:
+            clipped = clipped.tail(last_n).reset_index(drop=True)
+        return clipped
+
+    def has_alsi_storage(self, country: str) -> bool:
+        try:
+            return not self.get_alsi_storage(country).empty
+        except KeyError:
+            return False
+
+    # IIP REMIT supply-unavailability (iip_supply_unavailability)
+
+    def get_iip_remit(
+        self,
+        *,
+        balancing_zone_prefix: str | None = None,
+        from_published_ts: str | None = None,
+        last_n: int | None = None,
+    ) -> pd.DataFrame:
+        """Som DataStore.get_iip_remit, men clipped på published_ts ≤ as_of.
+
+        published_ts er look-ahead-safe truth (når markedet faktisk så
+        meldingen). Vi sender clipping-grensen som ekstra ``from_published_ts``-
+        filter, men det egentlige cap-et settes etter henting siden vi
+        trenger ≤ as_of, ikke ≥.
+        """
+        full = self._underlying.get_iip_remit(
+            balancing_zone_prefix=balancing_zone_prefix,
+            from_published_ts=from_published_ts,
+            last_n=None,
+        )
+        if full.empty:
+            return full
+        pub_ts = pd.to_datetime(full["published_ts"], errors="coerce")
+        clipped = full[pub_ts <= self._as_of].reset_index(drop=True)
+        if last_n is not None and not clipped.empty:
+            clipped = clipped.tail(last_n).reset_index(drop=True)
+        return clipped
+
+    def has_iip_remit(self) -> bool:
+        return not self.get_iip_remit().empty
+
     # AAII sentiment (aaii_extreme)
 
     def get_aaii_sentiment(self, last_n: int | None = None) -> pd.DataFrame:

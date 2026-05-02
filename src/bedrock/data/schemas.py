@@ -1563,6 +1563,169 @@ class AgsiStorageRow(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# ALSI EU LNG-terminal storage (sub-fase 12.10 follow-up Spor C, session 136)
+# ---------------------------------------------------------------------------
+# Aggregated LNG Storage Inventory (ALSI) er GIE's API for daglige EU LNG-
+# terminal-tall — én rad per (country, gas_day_start). Søsken til AGSI;
+# samme x-key auth, parallel JSON-struktur, men ALSI-spesifikke felt.
+#
+# Tolkning: lavt LNG-inventory = bull NG-pris (mindre LNG-buffer betyr
+# lavere flexibility i gas-importer). full_pct beregnes som
+# inventory_twh / dtmi_twh * 100 (ingen rå "full"-felt fra API).
+#
+# API: https://alsi.gie.eu/api?country={code}&from=...&to=...
+# EU-aggregat: ?type=eu (samme mønster som AGSI v2).
+# Header: x-key: $AGSI_API_KEY (samme nøkkel som AGSI/IIP per § 22.1).
+# Tidligste data: ~2012 for store terminaler (DE/NL/IT/FR/ES).
+
+TABLE_ALSI_STORAGE = "alsi_storage"
+
+DDL_ALSI_STORAGE = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_ALSI_STORAGE} (
+    country         TEXT    NOT NULL,    -- ISO-2 lowercase eller "eu"
+    gas_day_start   TEXT    NOT NULL,    -- ISO YYYY-MM-DD
+    inventory_twh   REAL,                -- LNG i lager (TWh, fra inventory.gwh/1000)
+    dtmi_twh        REAL,                -- Daily Total Maximum Inventory (TWh)
+    full_pct        REAL,                -- inventory_twh / dtmi_twh * 100
+    send_out_twh    REAL,                -- Daglig utsending til grid (TWh, fra GWh/1000)
+    dtrs_twh        REAL,                -- Daily Total Reference Sendout (TWh)
+    PRIMARY KEY (country, gas_day_start)
+)
+"""
+
+ALSI_STORAGE_COLS: tuple[str, ...] = (
+    "country",
+    "gas_day_start",
+    "inventory_twh",
+    "dtmi_twh",
+    "full_pct",
+    "send_out_twh",
+    "dtrs_twh",
+)
+
+
+class AlsiStorageRow(BaseModel):
+    """Én daglig observasjon fra ALSI EU LNG-terminal API.
+
+    `country` er ISO-2 lowercase (``"de"``, ``"nl"``, ``"fr"``, ``"it"``,
+    ``"es"``, etc.) eller ``"eu"`` for aggregat. ``full_pct`` beregnes
+    fetcher-side som ``inventory_twh / dtmi_twh * 100`` siden ALSI ikke
+    returnerer rå %-felt. Alle numeriske felt unntatt PK er nullable for
+    å tåle delvis API-respons.
+    """
+
+    country: str = Field(min_length=2, max_length=3)
+    gas_day_start: date
+    inventory_twh: float | None = None
+    dtmi_twh: float | None = None
+    full_pct: float | None = None
+    send_out_twh: float | None = None
+    dtrs_twh: float | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("country")
+    @classmethod
+    def _validate_country(cls, v: str) -> str:
+        return v.lower().strip()
+
+
+# ---------------------------------------------------------------------------
+# IIP REMIT supply-unavailability (sub-fase 12.10 follow-up Spor C, session 136)
+# ---------------------------------------------------------------------------
+# GIE Inside Information Platform (IIP) publiserer REMIT Urgent Market
+# Messages (UMM) om uavailability av gas-supply-infrastruktur (storage,
+# pipelines, processing plants, LNG-terminals). Hver UMM beskriver et
+# event med start/end-tidspunkt + kapasitet (GWh/d) og publiserings-
+# tidspunkt (`published`) som er look-ahead-safe truth.
+#
+# API: https://iip.gie.eu/api/ (paginert, ?page=N&size=...)
+# Header: x-key: $AGSI_API_KEY (samme nøkkel).
+#
+# Driver `iip_supply_unavailability` aggregerer aktive eller nylig-
+# publiserte unavailable-kapasiteter (GWh/d) i et lookback-vindu og
+# mapper til 0..1 score (høy stress = bull NG/Brent).
+
+TABLE_IIP_REMIT = "iip_remit"
+
+DDL_IIP_REMIT = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_IIP_REMIT} (
+    message_id                TEXT    NOT NULL PRIMARY KEY,
+    submitted_ts              TEXT,                              -- ISO datetime
+    published_ts              TEXT,                              -- look-ahead-safe truth
+    event_from_ts             TEXT,                              -- event start
+    event_to_ts               TEXT,                              -- event end
+    status                    TEXT,                              -- Active/Inactive
+    message_type              TEXT,                              -- e.g. "Gas storage facility unavailability"
+    unavailability_type       TEXT,                              -- Planned/Unplanned
+    unavailability_reason     TEXT,
+    unavailable_capacity_gwhd REAL,                              -- GWh/d
+    available_capacity_gwhd   REAL,                              -- GWh/d
+    technical_capacity_gwhd   REAL,                              -- GWh/d (total)
+    balancing_zone_code       TEXT,                              -- e.g. "21YNL----TTF---1"
+    balancing_zone_name       TEXT,
+    direction                 TEXT,                              -- Entry/Exit/Both
+    asset_code                TEXT,
+    asset_name                TEXT
+)
+"""
+
+IIP_REMIT_COLS: tuple[str, ...] = (
+    "message_id",
+    "submitted_ts",
+    "published_ts",
+    "event_from_ts",
+    "event_to_ts",
+    "status",
+    "message_type",
+    "unavailability_type",
+    "unavailability_reason",
+    "unavailable_capacity_gwhd",
+    "available_capacity_gwhd",
+    "technical_capacity_gwhd",
+    "balancing_zone_code",
+    "balancing_zone_name",
+    "direction",
+    "asset_code",
+    "asset_name",
+)
+
+
+class IipRemitRow(BaseModel):
+    """Én REMIT UMM (Urgent Market Message) om gas-supply-unavailability.
+
+    `message_id` er IIP-kanonisk PK. `published_ts` er look-ahead-safe
+    truth (når markedet faktisk så meldingen) og brukes av
+    AsOfDateStore.get_iip_remit() for clipping. `event_from_ts` /
+    `event_to_ts` definerer event-vinduet og brukes av drivere for
+    "aktiv nå?"-filtrering.
+
+    Kapasiteter er i GWh/d (REMIT-konvensjon). Schema er additivt; nye
+    felt kan legges til uten å bryte eksisterende rader.
+    """
+
+    message_id: str = Field(min_length=1)
+    submitted_ts: datetime | None = None
+    published_ts: datetime | None = None
+    event_from_ts: datetime | None = None
+    event_to_ts: datetime | None = None
+    status: str | None = None
+    message_type: str | None = None
+    unavailability_type: str | None = None
+    unavailability_reason: str | None = None
+    unavailable_capacity_gwhd: float | None = None
+    available_capacity_gwhd: float | None = None
+    technical_capacity_gwhd: float | None = None
+    balancing_zone_code: str | None = None
+    balancing_zone_name: str | None = None
+    direction: str | None = None
+    asset_code: str | None = None
+    asset_name: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+# ---------------------------------------------------------------------------
 # AAII Sentiment Survey (sub-fase 12.7 D2 A12, session 131)
 # ---------------------------------------------------------------------------
 # AAII publiserer ukentlig (tor) investor-sentiment-survey som .xls.
