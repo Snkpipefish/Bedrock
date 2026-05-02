@@ -637,10 +637,30 @@ kjørt det.
 - Hev publish-floor for agri (6.0/16 = 37.5 % er lavt) er en alternativ
   vinkel — kunne vurderes når observasjons-data rulles inn.
 
+**4. Bot-dedup horisont-aware (commit `880a3d6`)**
+
+Operatør spurte om bot-ens duplikat-regel skiller på horisont. Det gjorde
+den ikke: `_process_watchlist_signal` blokkerte alle nye signaler på
+`(instrument, direction)` uavhengig av om eksisterende posisjon var SCALP,
+SWING eller MAKRO. Operatør vil at scalp/swing/makro skal være uavhengige
+slots — mange scalps skal kunne kjøre parallelt med en åpen swing eller
+makro på samme instrument og retning.
+
+Fix i `src/bedrock/bot/entry.py:605`: dedup-blokken sammenligner nå
+`(instrument, direction, horizon)`. Eksisterende test omdøpt
+(`..._direction_horizon_blocked`), preload-state får eksplisitt
+horizon=SCALP. Ny test `..._different_horizon_..._allowed` verifiserer
+SCALP+SWING ko-eksistens på samme (EURUSD, buy). 288/288 bot-tester grønne.
+Korrelasjons-gating + agri max_concurrent/subgroup uberørt (count-baserte
+porteføljegrenser, ikke per-setup).
+
 **Commits:**
 - `ba28fed` fix(orchestrator): demote svakere retning når BUY+SELL begge published på samme horisont
+- `9359ec0` state: session 146 — conflict-gate + bot tilbake til published-only
+- `880a3d6` fix(bot): tillat samme instrument+retning på forskjellige horisonter
 
-**Next:** Observasjons-vinduet løper videre med published-only. Vurder
+**Next:** Observasjons-vinduet løper videre med published-only. Operatør
+restarter bedrock-bot.service for å aktivere ny dedup-regel. Vurder
 ADR-006 follow-up (score-asymmetri) når neste runde rebalansering startes.
 
 ---
