@@ -22,17 +22,18 @@ instrument:
 aggregation: weighted_horizon
 
 horizons:
+  # Sub-fase 12.10 follow-up Spor B (session 138): event-familie lagt til.
   SCALP:
-    family_weights: {trend: 1.2, positioning: 0.5, macro: 1.0, structure: 1.3, risk: 0.6, analog: 0.3}
-    max_score: 4.9
+    family_weights: {trend: 1.2, positioning: 0.5, macro: 1.0, structure: 1.3, risk: 0.6, analog: 0.3, event: 0.3}
+    max_score: 5.2
     min_score_publish: 1.5
   SWING:
-    family_weights: {trend: 1.0, positioning: 1.0, macro: 1.2, structure: 1.0, risk: 0.8, analog: 0.8}
-    max_score: 5.8
+    family_weights: {trend: 1.0, positioning: 1.0, macro: 1.2, structure: 1.0, risk: 0.8, analog: 0.8, event: 0.3}
+    max_score: 6.1
     min_score_publish: 2.5
   MAKRO:
-    family_weights: {trend: 0.8, positioning: 1.2, macro: 1.5, structure: 0.5, risk: 0.6, analog: 1.2}
-    max_score: 5.8
+    family_weights: {trend: 0.8, positioning: 1.2, macro: 1.5, structure: 0.5, risk: 0.6, analog: 1.2, event: 0.5}
+    max_score: 6.3
     min_score_publish: 3.5
 
 families:
@@ -119,6 +120,24 @@ families:
         horizons:
           - MAKRO
           - SWING
+  # Sub-fase 12.10 follow-up Spor B (session 138): event-familie. EURUSD
+  # er strukturelt USD-negativt: alle 4 USD-surprises positive = bear (USD
+  # opp = EURUSD ned). Polarity directional.
+  event:
+    polarity: directional
+    drivers:
+      - name: nfp_surprise
+        weight: 0.25
+        params: {bull_when: low}
+      - name: cpi_surprise
+        weight: 0.25
+        params: {bull_when: low}
+      - name: gdp_surprise
+        weight: 0.25
+        params: {bull_when: low}
+      - name: pce_surprise
+        weight: 0.25
+        params: {bull_when: low}
 
 grade_thresholds:
   A_plus: {min_pct_of_max: 0.75, min_families: 4}

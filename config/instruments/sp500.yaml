@@ -33,17 +33,21 @@ horizons:
   # SP500 BUY-hit-rate 50.5% vs SELL 11.0% (90d) — equity-premium-bias.
   # BUY-floor lavere (lett å oppnå); SELL-floor høyere (krever sterkt
   # signal for å publishere mot trenden).
+  # Sub-fase 12.10 follow-up Spor B (session 138): event-familie lagt til
+  # for *_surprise-drivere (NFP/CPI/GDP/PCE). Vekt 0.3 i SCALP/SWING (event-
+  # responsivt korte horisonter), 0.5 i MAKRO (regime-makro-fokus). max_score
+  # bumpet tilsvarende for å holde grade-pct-skalering invariant.
   SCALP:
-    family_weights: {trend: 1.2, positioning: 0.5, macro: 0.8, structure: 1.3, risk: 0.8, analog: 0.3}
-    max_score: 4.9
+    family_weights: {trend: 1.2, positioning: 0.5, macro: 0.8, structure: 1.3, risk: 0.8, analog: 0.3, event: 0.3}
+    max_score: 5.2
     min_score_publish: {buy: 1.3, sell: 2.0}
   SWING:
-    family_weights: {trend: 1.0, positioning: 1.0, macro: 1.0, structure: 1.0, risk: 1.0, analog: 0.8}
-    max_score: 5.8
+    family_weights: {trend: 1.0, positioning: 1.0, macro: 1.0, structure: 1.0, risk: 1.0, analog: 0.8, event: 0.3}
+    max_score: 6.1
     min_score_publish: {buy: 2.0, sell: 3.2}
   MAKRO:
-    family_weights: {trend: 0.8, positioning: 1.2, macro: 1.4, structure: 0.5, risk: 0.8, analog: 1.2}
-    max_score: 5.9
+    family_weights: {trend: 0.8, positioning: 1.2, macro: 1.4, structure: 0.5, risk: 0.8, analog: 1.2, event: 0.5}
+    max_score: 6.4
     min_score_publish: {buy: 3.0, sell: 4.5}
 
 families:
@@ -223,6 +227,25 @@ families:
         horizons:
           - MAKRO
           - SWING
+  # Sub-fase 12.10 follow-up Spor B (session 138): event-familie. NFP/GDP
+  # positiv surprise = bull stocks (vekst); CPI/PCE positiv surprise =
+  # bear stocks (Fed hawkish). Per ADR-014. Polarity directional — engine
+  # flipper for SELL.
+  event:
+    polarity: directional
+    drivers:
+      - name: nfp_surprise
+        weight: 0.25
+        params: {bull_when: high}
+      - name: cpi_surprise
+        weight: 0.25
+        params: {bull_when: low}  # CPI↑ = bear stocks (Fed hawkish)
+      - name: gdp_surprise
+        weight: 0.25
+        params: {bull_when: high}
+      - name: pce_surprise
+        weight: 0.25
+        params: {bull_when: low}
 
 grade_thresholds:
   A_plus: {min_pct_of_max: 0.75, min_families: 4}

@@ -25,17 +25,18 @@ horizons:
   # Session 102: asymmetrisk publish-floor. Backtest (session 99): USDJPY
   # BUY-hr 22.7% vs SELL-hr 12.0% (90d) — +10.7pp BUY-bias (USD-styrke
   # via rente-spread + carry-trade). Mildere enn equity-indekser.
+  # Sub-fase 12.10 follow-up Spor B (session 138): event-familie lagt til.
   SCALP:
-    family_weights: {trend: 1.2, positioning: 0.5, macro: 1.0, structure: 1.3, risk: 0.6, analog: 0.3}
-    max_score: 4.9
+    family_weights: {trend: 1.2, positioning: 0.5, macro: 1.0, structure: 1.3, risk: 0.6, analog: 0.3, event: 0.3}
+    max_score: 5.2
     min_score_publish: {buy: 1.3, sell: 1.8}
   SWING:
-    family_weights: {trend: 1.0, positioning: 1.0, macro: 1.2, structure: 1.0, risk: 0.8, analog: 0.8}
-    max_score: 5.8
+    family_weights: {trend: 1.0, positioning: 1.0, macro: 1.2, structure: 1.0, risk: 0.8, analog: 0.8, event: 0.3}
+    max_score: 6.1
     min_score_publish: {buy: 2.2, sell: 2.9}
   MAKRO:
-    family_weights: {trend: 0.8, positioning: 1.2, macro: 1.5, structure: 0.5, risk: 0.6, analog: 1.2}
-    max_score: 5.8
+    family_weights: {trend: 0.8, positioning: 1.2, macro: 1.5, structure: 0.5, risk: 0.6, analog: 1.2, event: 0.5}
+    max_score: 6.3
     min_score_publish: {buy: 3.1, sell: 3.9}
 
 families:
@@ -121,6 +122,24 @@ families:
         horizons:
           - MAKRO
           - SWING
+  # Sub-fase 12.10 follow-up Spor B (session 138): event-familie. USDJPY
+  # er strukturelt USD-positivt: alle 4 surprises positive = bull (USD
+  # styrker seg = USDJPY opp). Polarity directional.
+  event:
+    polarity: directional
+    drivers:
+      - name: nfp_surprise
+        weight: 0.25
+        params: {bull_when: high}
+      - name: cpi_surprise
+        weight: 0.25
+        params: {bull_when: high}
+      - name: gdp_surprise
+        weight: 0.25
+        params: {bull_when: high}
+      - name: pce_surprise
+        weight: 0.25
+        params: {bull_when: high}
 
 grade_thresholds:
   A_plus: {min_pct_of_max: 0.75, min_families: 4}

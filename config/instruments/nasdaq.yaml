@@ -32,6 +32,9 @@ aggregation: weighted_horizon
 # nivåer), MAKRO foretrekker positioning + macro (regime). Equity-
 # spesifikt: macro-vekt litt høyere enn metals fordi rente-følsomheten
 # er sterkere på indekser.
+# Sub-fase 12.10 follow-up Spor B (session 138): event-familie lagt til
+# for *_surprise-drivere (NFP/CPI/GDP/PCE). Vekt 0.3 SCALP/SWING, 0.5
+# MAKRO. max_score bumpet tilsvarende.
 horizons:
   SCALP:
     family_weights:
@@ -41,7 +44,8 @@ horizons:
       structure: 1.3
       risk: 0.8
       analog: 0.3
-    max_score: 4.9
+      event: 0.3
+    max_score: 5.2
     # Session 101: asymmetrisk floor. Backtest (session 99): Nasdaq
     # BUY-hit-rate 59.7% vs SELL 11.5% (90d) — sterkeste BUY-bias av
     # alle whitelist-instrumenter. Strenger SELL-floor enn SP500.
@@ -54,7 +58,8 @@ horizons:
       structure: 1.0
       risk: 1.0
       analog: 0.8
-    max_score: 5.8
+      event: 0.3
+    max_score: 6.1
     min_score_publish: {buy: 2.0, sell: 3.4}
   MAKRO:
     family_weights:
@@ -64,7 +69,8 @@ horizons:
       structure: 0.5
       risk: 0.8
       analog: 1.2
-    max_score: 5.9
+      event: 0.5
+    max_score: 6.4
     min_score_publish: {buy: 3.0, sell: 4.7}
 
 families:
@@ -259,6 +265,24 @@ families:
         horizons:
           - MAKRO
           - SWING
+  # Sub-fase 12.10 follow-up Spor B (session 138): event-familie. NFP/GDP
+  # positive surprise = bull stocks; CPI/PCE positive surprise = bear
+  # (Fed hawkish). Polarity directional.
+  event:
+    polarity: directional
+    drivers:
+      - name: nfp_surprise
+        weight: 0.25
+        params: {bull_when: high}
+      - name: cpi_surprise
+        weight: 0.25
+        params: {bull_when: low}
+      - name: gdp_surprise
+        weight: 0.25
+        params: {bull_when: high}
+      - name: pce_surprise
+        weight: 0.25
+        params: {bull_when: low}
 grade_thresholds:
   A_plus:
     min_pct_of_max: 0.75
