@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import pandas as pd
 import structlog
 
 from bedrock.engine.drivers import register
@@ -1401,6 +1402,268 @@ def _cecafe_export_change_default(series: Any, bull_when: str, params: dict) -> 
     return round(score, 4)
 
 
+# ---------------------------------------------------------------------------
+# NASS yield_yoy + grain_stocks (sub-fase 12.10 follow-up Spor D, session 137)
+# ---------------------------------------------------------------------------
+
+
+_NASS_YIELD_FORECAST_ORDER: tuple[str, ...] = (
+    "YEAR",  # final, publisert januar året etter
+    "YEAR - NOV FORECAST",
+    "YEAR - OCT FORECAST",
+    "YEAR - SEP FORECAST",
+    "YEAR - AUG FORECAST",
+)
+
+
+def _nass_yield_latest(store: Any, commodity: str) -> tuple[int, float] | None:
+    """Returner (year, yield_value) for siste tilgjengelige NASS yield-rapport
+    for ``commodity``. Bruker reference_period-prioritet: YEAR > NOV > OCT >
+    SEP > AUG, og innenfor samme reference_period vinner høyeste år.
+
+    Returnerer ``None`` hvis ingen data finnes.
+    """
+    try:
+        df = store.get_nass_yield(commodity)
+    except Exception:
+        return None
+
+    if df is None or df.empty:
+        return None
+
+    # Filtrér til kun reference_periods vi støtter (ignorer YEAR PROJECTED osv.)
+    df = df[df["reference_period"].isin(_NASS_YIELD_FORECAST_ORDER)].copy()
+    if df.empty:
+        return None
+
+    # Sortér slik at høyeste år vinner først, og innen samme år velger vi
+    # beste reference_period (YEAR > NOV > OCT > SEP > AUG).
+    priority = {rp: i for i, rp in enumerate(_NASS_YIELD_FORECAST_ORDER)}
+    df["_priority"] = df["reference_period"].map(priority)
+    df = df.sort_values(by=["year", "_priority"], ascending=[False, True])
+    top = df.iloc[0]
+    if top["yield_value"] is None or pd.isna(top["yield_value"]):
+        return None
+    return int(top["year"]), float(top["yield_value"])
+
+
+def _nass_yield_for_year(store: Any, commodity: str, year: int) -> float | None:
+    """Returner endelig (YEAR-final) yield for et spesifikt år, eller None
+    hvis raden ikke finnes (eller verdi er null)."""
+    try:
+        df = store.get_nass_yield(commodity, reference_period="YEAR")
+    except Exception:
+        return None
+    if df is None or df.empty:
+        return None
+    match = df[df["year"] == year]
+    if match.empty:
+        return None
+    val = match["yield_value"].iloc[0]
+    if val is None or pd.isna(val):
+        return None
+    return float(val)
+
+
+_NASS_YIELD_YOY_THRESHOLDS_LOW: tuple[tuple[float, float], ...] = (
+    # bull_when='low': lavere yield i år vs ifjor = bull (mindre supply).
+    (-10.0, 1.00),  # ≤-10% YoY = sterk supply-shortfall
+    (-5.0, 0.85),
+    (-2.0, 0.65),
+    (0.0, 0.50),  # flat
+    (5.0, 0.35),
+    (float("inf"), 0.15),  # > +5% = supply-vekst, bear
+)
+
+
+def _nass_yield_yoy_driver(store: Any, instrument: str, params: dict, *, commodity: str) -> float:
+    """Felles helper for nass_yield_corn_yoy + nass_yield_soy_yoy.
+
+    Sammenligner siste tilgjengelige yield (fra forecasts eller final) med
+    forrige års endelige yield. Step-trapp default bull_when='low'.
+
+    Defensive 0.0 ved manglende data; 0.5 hvis vi har current men ikke
+    forrige år (umulig å beregne YoY).
+    """
+    _ = params.get("_horizon")
+    bull_when = str(params.get("bull_when", "low")).lower()
+
+    latest = _nass_yield_latest(store, commodity)
+    if latest is None:
+        return 0.0
+    year, current = latest
+
+    prev_value = _nass_yield_for_year(store, commodity, year - 1)
+    if prev_value is None or prev_value == 0.0:
+        return 0.5  # mangler ifjorår-anker → nøytral
+
+    yoy_pct = (current - prev_value) / prev_value * 100.0
+
+    user_thresholds = params.get("thresholds")
+    if user_thresholds is None:
+        steps = _NASS_YIELD_YOY_THRESHOLDS_LOW
+    else:
+        steps = tuple((float(t), float(s)) for t, s in user_thresholds)
+
+    score = 0.15
+    for threshold, s in sorted(steps, key=lambda t: t[0]):
+        if yoy_pct <= threshold:
+            score = float(s)
+            break
+
+    if bull_when == "high":
+        return round(1.0 - score, 4)
+    return round(score, 4)
+
+
+@register("nass_yield_corn_yoy")
+def nass_yield_corn_yoy(store: Any, instrument: str, params: dict) -> float:
+    """NASS Corn yield YoY %-endring → 0..1 score.
+
+    Sammenligner siste tilgjengelige corn-yield-estimat (final eller
+    seneste forecast) med forrige års endelige yield. Lavere yield i år =
+    bull (mindre supply). Default bull_when='low'.
+    """
+    return _nass_yield_yoy_driver(store, instrument, params, commodity="CORN")
+
+
+@register("nass_yield_soy_yoy")
+def nass_yield_soy_yoy(store: Any, instrument: str, params: dict) -> float:
+    """NASS Soybean yield YoY %-endring → 0..1 score. Default bull_when='low'."""
+    return _nass_yield_yoy_driver(store, instrument, params, commodity="SOYBEANS")
+
+
+# Stocks-driver: sammenlign siste quarterly stocks-snapshot med samme
+# quarter ifjor (YoY på stock-level).
+
+_NASS_STOCKS_QUARTER_ORDER: tuple[str, ...] = (
+    "FIRST OF MAR",
+    "FIRST OF JUN",
+    "FIRST OF SEP",
+    "FIRST OF DEC",
+)
+
+
+def _nass_stocks_latest(
+    store: Any, commodity: str, *, category: str = "TOTAL"
+) -> tuple[int, str, float] | None:
+    """Returner (year, reference_period, stocks_bu) for siste tilgjengelige
+    quarterly stocks-rapport. Sortering: høyere år vinner; innen samme år
+    velges siste reference_period i kalenderorden (DEC > SEP > JUN > MAR)."""
+    try:
+        df = store.get_nass_grain_stocks(commodity, category=category)
+    except Exception:
+        return None
+
+    if df is None or df.empty:
+        return None
+
+    df = df[df["reference_period"].isin(_NASS_STOCKS_QUARTER_ORDER)].copy()
+    if df.empty:
+        return None
+
+    quarter_priority = {rp: i for i, rp in enumerate(_NASS_STOCKS_QUARTER_ORDER)}
+    df["_q_idx"] = df["reference_period"].map(quarter_priority)
+    df = df.sort_values(by=["year", "_q_idx"], ascending=[False, False])
+    top = df.iloc[0]
+    if top["stocks_bu"] is None or pd.isna(top["stocks_bu"]):
+        return None
+    return int(top["year"]), str(top["reference_period"]), float(top["stocks_bu"])
+
+
+def _nass_stocks_for_quarter(
+    store: Any,
+    commodity: str,
+    *,
+    year: int,
+    quarter: str,
+    category: str = "TOTAL",
+) -> float | None:
+    try:
+        df = store.get_nass_grain_stocks(commodity, category=category)
+    except Exception:
+        return None
+    if df is None or df.empty:
+        return None
+    match = df[(df["year"] == year) & (df["reference_period"] == quarter)]
+    if match.empty:
+        return None
+    val = match["stocks_bu"].iloc[0]
+    if val is None or pd.isna(val):
+        return None
+    return float(val)
+
+
+_NASS_STOCKS_YOY_THRESHOLDS_LOW: tuple[tuple[float, float], ...] = (
+    # bull_when='low': lavere stocks YoY = bull (supply tight).
+    (-15.0, 1.00),  # ≤-15% = sterk drawdown
+    (-7.5, 0.85),
+    (-2.5, 0.65),
+    (0.0, 0.50),
+    (5.0, 0.35),
+    (float("inf"), 0.15),
+)
+
+
+@register("nass_grain_stocks_quarterly")
+def nass_grain_stocks_quarterly(store: Any, instrument: str, params: dict) -> float:
+    """NASS quarterly grain-stocks YoY-sammenligning → 0..1 score.
+
+    Sammenligner siste tilgjengelige quarterly stocks-snapshot med samme
+    quarter ifjor. Lavere stocks YoY = supply tight = bull. Default
+    bull_when='low'.
+
+    Params:
+        commodity (REQUIRED): "CORN", "SOYBEANS", eller "WHEAT".
+        category: "TOTAL" (default), "ON FARM", "OFF FARM".
+        bull_when: "low" (default) eller "high".
+        thresholds: optional override.
+
+    Defensive 0.0 ved manglende commodity-param eller data; 0.5 hvis
+    siste rad finnes men ifjor-anker mangler.
+    """
+    _ = params.get("_horizon")
+    commodity = params.get("commodity")
+    if not commodity:
+        _log.warning("nass_grain_stocks_quarterly.no_commodity_param", instrument=instrument)
+        return 0.0
+    category = str(params.get("category", "TOTAL")).upper()
+    bull_when = str(params.get("bull_when", "low")).lower()
+
+    latest = _nass_stocks_latest(store, str(commodity), category=category)
+    if latest is None:
+        return 0.0
+    year, quarter, current = latest
+
+    prev_value = _nass_stocks_for_quarter(
+        store,
+        str(commodity),
+        year=year - 1,
+        quarter=quarter,
+        category=category,
+    )
+    if prev_value is None or prev_value == 0.0:
+        return 0.5
+
+    yoy_pct = (current - prev_value) / prev_value * 100.0
+
+    user_thresholds = params.get("thresholds")
+    if user_thresholds is None:
+        steps = _NASS_STOCKS_YOY_THRESHOLDS_LOW
+    else:
+        steps = tuple((float(t), float(s)) for t, s in user_thresholds)
+
+    score = 0.15
+    for threshold, s in sorted(steps, key=lambda t: t[0]):
+        if yoy_pct <= threshold:
+            score = float(s)
+            break
+
+    if bull_when == "high":
+        return round(1.0 - score, 4)
+    return round(score, 4)
+
+
 __all__ = [
     "cecafe_export_change",
     "conab_yoy",
@@ -1409,6 +1672,9 @@ __all__ = [
     "drought_monitor",
     "export_event_active",
     "fas_exports",
+    "nass_grain_stocks_quarterly",
+    "nass_yield_corn_yoy",
+    "nass_yield_soy_yoy",
     "shipping_pressure",
     "unica_change",
     "wasde_s2u_change",
