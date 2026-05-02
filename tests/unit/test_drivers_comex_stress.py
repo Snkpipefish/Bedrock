@@ -28,7 +28,7 @@ class _MockComexStore:
 
 def _build_df(
     *,
-    n_days: int = 25,  # Sub-fase 12.10 Bunke 1 Bug-2: ≥ default min_samples=20
+    n_days: int = 200,  # Sub-fase 12.10 Bunke 1 Bug-2: ≥ default min_samples=20
     metal: str = "gold",
     base_reg: float = 15_000_000.0,
     base_total: float = 25_000_000.0,
@@ -68,7 +68,7 @@ def test_registered() -> None:
 
 def test_low_coverage_high_stress() -> None:
     """registered=2M / total=25M = 8% coverage → base = 0.92*0.8 = 0.736."""
-    df = _build_df(base_reg=2_000_000, base_total=25_000_000, n_days=25)
+    df = _build_df(base_reg=2_000_000, base_total=25_000_000, n_days=200)
     store = _MockComexStore({"gold": df})
     fn = get("comex_stress")
     score = fn(store, "Gold", {"metal": "gold"})
@@ -77,7 +77,7 @@ def test_low_coverage_high_stress() -> None:
 
 def test_high_coverage_low_stress() -> None:
     """registered=23M / total=25M = 92% coverage → base = 0.08*0.8 = 0.064."""
-    df = _build_df(base_reg=23_000_000, base_total=25_000_000, n_days=25)
+    df = _build_df(base_reg=23_000_000, base_total=25_000_000, n_days=200)
     store = _MockComexStore({"gold": df})
     fn = get("comex_stress")
     score = fn(store, "Gold", {"metal": "gold"})
@@ -86,13 +86,13 @@ def test_high_coverage_low_stress() -> None:
 
 def test_falling_registered_adds_stress() -> None:
     """5d WoW < -5% → +0.15 bonus."""
-    df = _build_df(base_reg=20_000_000, base_total=25_000_000, reg_step=-200_000, n_days=25)
+    df = _build_df(base_reg=20_000_000, base_total=25_000_000, reg_step=-200_000, n_days=200)
     store = _MockComexStore({"gold": df})
     fn = get("comex_stress")
     score_with_drop = fn(store, "Gold", {"metal": "gold", "wow_window": 5})
 
     # Sammenlign med flat scenario
-    df_flat = _build_df(base_reg=20_000_000, base_total=25_000_000, reg_step=0, n_days=25)
+    df_flat = _build_df(base_reg=20_000_000, base_total=25_000_000, reg_step=0, n_days=200)
     store_flat = _MockComexStore({"gold": df_flat})
     score_flat = fn(store_flat, "Gold", {"metal": "gold", "wow_window": 5})
 
@@ -101,12 +101,12 @@ def test_falling_registered_adds_stress() -> None:
 
 def test_rising_registered_reduces_stress() -> None:
     """5d WoW > +5% → -0.05 bonus."""
-    df = _build_df(base_reg=15_000_000, base_total=25_000_000, reg_step=200_000, n_days=25)
+    df = _build_df(base_reg=15_000_000, base_total=25_000_000, reg_step=200_000, n_days=200)
     store = _MockComexStore({"gold": df})
     fn = get("comex_stress")
     score_rising = fn(store, "Gold", {"metal": "gold", "wow_window": 5})
 
-    df_flat = _build_df(base_reg=15_000_000, base_total=25_000_000, reg_step=0, n_days=25)
+    df_flat = _build_df(base_reg=15_000_000, base_total=25_000_000, reg_step=0, n_days=200)
     store_flat = _MockComexStore({"gold": df_flat})
     score_flat = fn(store_flat, "Gold", {"metal": "gold", "wow_window": 5})
 
@@ -120,7 +120,7 @@ def test_rising_registered_reduces_stress() -> None:
 
 def test_copper_skip_default_returns_neutral_when_flat() -> None:
     """Kobber med flat registered → 0.5 (neutral) pga skip."""
-    n = 25  # ≥ default min_samples=20
+    n = 200  # Bunke 9 #35: ≥ default min_samples=180
     df = pd.DataFrame(
         {
             "metal": ["copper"] * n,
@@ -140,14 +140,14 @@ def test_copper_skip_default_returns_neutral_when_flat() -> None:
 
 def test_copper_with_falling_inventory_picks_up_stress() -> None:
     """Kobber med synkende registered får WoW-bonus selv om base = 0.5."""
-    n = 25
+    n = 200
     df = pd.DataFrame(
         {
             "metal": ["copper"] * n,
             "date": pd.date_range("2024-01-01", periods=n),
-            "registered": [50_000.0 - 1000 * i for i in range(n)],
+            "registered": [50_000.0 - 100 * i for i in range(n)],
             "eligible": [0.0] * n,
-            "total": [50_000.0 - 1000 * i for i in range(n)],
+            "total": [50_000.0 - 100 * i for i in range(n)],
             "units": ["st"] * n,
         }
     )
@@ -160,14 +160,14 @@ def test_copper_with_falling_inventory_picks_up_stress() -> None:
 
 def test_copper_handling_trend_only_uses_coverage_anyway() -> None:
     """trend_only-mode skipper coverage-base og bruker kun WoW (= 0 base)."""
-    n = 25
+    n = 200
     df = pd.DataFrame(
         {
             "metal": ["copper"] * n,
             "date": pd.date_range("2024-01-01", periods=n),
-            "registered": [50_000.0 - 1000 * i for i in range(n)],
+            "registered": [50_000.0 - 100 * i for i in range(n)],
             "eligible": [0.0] * n,
-            "total": [50_000.0 - 1000 * i for i in range(n)],
+            "total": [50_000.0 - 100 * i for i in range(n)],
             "units": ["st"] * n,
         }
     )
@@ -231,8 +231,8 @@ def test_returns_neutral_when_total_is_zero() -> None:
 
 def test_different_metals_resolve_independently() -> None:
     """Gull med low coverage, sølv med high coverage → forskjellige scores."""
-    gold_df = _build_df(base_reg=2_000_000, base_total=25_000_000, n_days=25, metal="gold")
-    silver_df = _build_df(base_reg=380_000_000, base_total=400_000_000, n_days=25, metal="silver")
+    gold_df = _build_df(base_reg=2_000_000, base_total=25_000_000, n_days=200, metal="gold")
+    silver_df = _build_df(base_reg=380_000_000, base_total=400_000_000, n_days=200, metal="silver")
     store = _MockComexStore({"gold": gold_df, "silver": silver_df})
     fn = get("comex_stress")
 
@@ -271,7 +271,7 @@ def test_min_samples_guard_overridable_via_param() -> None:
 
 def test_score_clamped_to_unit_interval() -> None:
     """Eksterm WoW + lav coverage skal ikke gå over 1.0."""
-    n = 25
+    n = 200
     df = pd.DataFrame(
         {
             "metal": ["gold"] * n,

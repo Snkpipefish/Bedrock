@@ -2481,11 +2481,12 @@ def comex_stress(store: Any, instrument: str, params: dict) -> float:
     wow_window = int(params.get("wow_window", 5))
     copper_handling = str(params.get("copper_handling", "skip"))
     # Sub-fase 12.10 Bunke 1 Bug-2: returner 0.5 hvis comex_inventory har
-    # færre rader enn min_samples for metallet. COMEX rapporterer daglig
-    # T-1 → 20 rader ≈ 4 uker. Default lavere enn for andre Bug-2-drivere
-    # fordi WoW-bonus-logikken trenger minst wow_window+1 rader; vi setter
-    # min_samples > det for å unngå at en uke med data kvalifiserer.
-    min_samples = int(params.get("min_samples", 20))
+    # færre rader enn min_samples for metallet.
+    # Sub-fase 12.10 Bunke 9 #35: bumpet fra 20 til 180 (~6 mnd daglig).
+    # Rationale: WoW-stress-logikken trenger lengre baseline for stabil
+    # rolling-std; 6 mnd matcher metals-vol-syklusen og gir tydeligere
+    # signal enn 4 ukers vindu.
+    min_samples = int(params.get("min_samples", 180))
 
     try:
         df = store.get_comex_inventory(metal)
@@ -2613,8 +2614,9 @@ def mining_disruption(store: Any, instrument: str, params: dict) -> float:
         metal (REQUIRED): "gold" | "silver" | "copper" | "platinum".
             Bestemmer region-vektene.
         lookback_days: vindu i antall dager (default 7).
-        min_magnitude: filtrer events under denne (default 4.5 — matcher
-            USGS-feed-grense).
+        min_magnitude: filtrer events under denne (default 5.5 per
+            sub-fase 12.10 Bunke 9 #33 — M < 5.5 har historisk lite
+            mining-impact; bumpet fra 4.5 for å redusere støy).
         regions: optional override av default region-vekter for metallet.
         _horizon: engine-injisert per ADR-010. Lest, ikke brukt.
 
@@ -2629,7 +2631,7 @@ def mining_disruption(store: Any, instrument: str, params: dict) -> float:
         return 0.0
 
     lookback_days = int(params.get("lookback_days", 7))
-    min_magnitude = float(params.get("min_magnitude", 4.5))
+    min_magnitude = float(params.get("min_magnitude", 5.5))
 
     custom_regions = params.get("regions")
     if isinstance(custom_regions, dict):
