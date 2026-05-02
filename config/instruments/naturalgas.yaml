@@ -72,6 +72,10 @@ families:
     # reagerer på enkeltland-stress når TTF/NCG basis oppstår).
     # agsi_storage_pct (EU-aggregate) trimmet 0.10→0.05; dxy 0.20→0.15
     # for å holde familie-sum=1.00.
+    # Sub-fase 12.10 follow-up A7 (session 142): eia_propane_change@0.05
+    # (bunke6 #22) — propane stocks. Korrelert med natgas-prising via
+    # vinter-heating-mix + petrokjemisk feedstock. hdd_cdd 0.20→0.15 for
+    # sum=1.00.
     drivers:
       - name: real_yield
         weight: 0.10
@@ -91,7 +95,7 @@ families:
         horizons:
           - MAKRO
       - name: hdd_cdd_anomaly
-        weight: 0.20
+        weight: 0.15  # A7: 0.20→0.15 for å gi plass til eia_propane
         params: {lookback_days: 30}  # 30d rolling = MAKRO-vindu
       - name: agsi_germany_pct
         weight: 0.05
@@ -103,6 +107,9 @@ families:
         params: {bull_when: low}
         horizons:
           - MAKRO
+      - name: eia_propane_change
+        weight: 0.05
+        params: {invert: true}  # build = bear (varmesenken eldes hurtig)
   structure:
     drivers:
       - name: range_position
