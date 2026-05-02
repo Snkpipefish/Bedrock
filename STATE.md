@@ -172,9 +172,20 @@
   - **Snapshot-diff vs pre-Spor-B anker:** 24 score-endringer (alle 4 instrumenter × 3 hor × 2 dir), **1 grade-flip** (USDJPY MAKRO sell B→A pga event_fam SELL=0.6875 + family-vekt 0.5). Stop-criterion ≤5/asset-class oppfylt (1 fx, 0 indices). Top-Δ +0.41 score (Nasdaq/SP500 MAKRO buy). Andre 5 asset-klasser uendret.
   - **Live-drivere bekreftet aktive 2026-05-02:** nfp=0.5 (latest 2025-04 NFP -29K miss = neutral), cpi=0.0 (downside surprise), gdp=0.75 (positive), pce=0.0 (downside). For SP500/Nasdaq: event_fam BUY=0.8125 (drevet av cpi/pce-bull_when=low-flips + gdp+0.75). USDJPY SELL=0.6875 (USD-bear-mismatch i denne perioden). EURUSD BUY=0.6875 (USD-bear = EURUSD-bull).
   - 24 nye tester. Pyright src/: 0 errors. Diff-rapport: `docs/snapshot_diff_2026-05-02_followup_spor_b.md`.
-- **Sub-fase 12.10 follow-up — Spor E/F gjenstår** per ny PLAN § 22.6 + § 22.7:
-  - **Spor F1-F4** (resterende mindre DEFERRED — CBOE pcr, NOAA enso forecast, Treasury auctions, etc.) — 4-6 sessioner totalt. **NESTE.** Kickoff-prompt: `docs/12_10_followup_spor_f_kickoff.md`.
-  - **Spor E** (driver-impl-rewrites #36-#41 + #34 multi-lookback) — 6-7 sessioner. **UTSATT til ~2026-06-01** (~4 uker etter Spor B live-demo-start). Bruker-beslutning 2026-05-02: vente på empirisk underperform-data fremfor å refactore på tro. Ikke åpne før observasjonsvinduet har gått minst 2 uker.
+- **Sub-fase 12.10 follow-up Spor F LUKKET 2026-05-02** (tag `v0.12.10-followup-spor-f`). Resterende mindre DEFERRED levert i 1 session (estimat var 6-9). § 22.6 + § 22.7 oppdatert. **12 commits + 7 sub-spor-tags:**
+  - F3 (`7b64d73`, tag `f3`): cboe_vix_term_curve DROPPED som overlapp med vix_term_ratio.
+  - F8 (`55afebe`+`b166429`, tag `f8`): eia_natgas_processing wrapper-driver + N9060US2 monthly NGPL Production backfill (638 rader). NaturalGas macro: eia_stock 0.15→0.10 + natgas_processing@0.05.
+  - F4 (`1584c5c`+`02c73f2`, tag `f4`): noaa_enso_forecast_3mo via IRI Plumes manuell CSV (6 mnd seed). cocoa/coffee/sugar enso-familie split 0.6/0.4 (ONI/forecast).
+  - F1 (`cdaccb9`+`a5feb49`, tag `f1`): ism_pmi_level via ISM Manufacturing PMI manuell CSV (6 mnd seed). SP500/Nasdaq macro: cfnai_3mma → ism_pmi_level (substitusjon).
+  - F2 RE-DEFERRED (`3729501`, tag `f2-DEFERRED`): CBOE pcr-data paywalled (DataShop). Yahoo har ikke ^CPC*. Inntil videre dekker cboe_skew_z + vix_term_ratio + vvix_z samme signal-domene.
+  - F5 (`0f83978`+`faa7e62`, tag `f5`): cot_concentration_top4 + cot_swap_dealer_skew. Schema-ALTER på cot_disaggregated (4 nullable kolonner). Fetcher-utvidelse med graceful degradation. Re-backfill: 14/15 contracts × 5 år = 3494 rader. Wiring: Gold + CrudeOil positioning (cot_z_score 0.4→0.3 + 2×0.05 nye).
+  - F6 (`670c3f6`, tag `f6`): treasury_auction_demand + ny treasury_auctions-tabell + TreasuryDirect-fetcher (gratis API). Backfill 250 rader. SP500/Nasdaq macro: umich_sentiment_z → treasury_auction_demand (substitusjon).
+  - F7 utsatt til ~juli 2026 (≥100 crypto_sentiment-rader, ~3 mnd akkumulering siden harvest-start). 1 session estimert da.
+  - **Akkumulert resultat F:** 1 ny tabell (treasury_auctions) + 4 nye nullable kolonner (cot_disaggregated metadata) + 2 nye fetchere (treasury_auctions, IRI manuell loader) + 5 nye drivere wired + 35+ nye tester + ~4400 nye datarader.
+  - **Stop-criterion ≤5 grade-flips/asset-class:** RESPEKTERT. Maks 1 flip per klasse (softs Coffee A→A+, energy CrudeOil B→A); 0 metals/indices/grains. Pyright src/: 0 errors (etter `5f0d66d` type-narrowing-fixes).
+  - **F2/F7-status (åpne fra 12.10-followup-løpet etter Spor F):** F2 venter på alternativ gratis CBOE-PCR-kilde; F7 venter på data-akkumulering ~juli 2026.
+- **Sub-fase 12.10 follow-up — Spor E gjenstår** per ny PLAN § 22.6 + § 22.7:
+  - **Spor E** (driver-impl-rewrites #36-#41 + #34 multi-lookback) — 6-7 sessioner. **UTSATT til ~2026-06-01** (~4 uker etter Spor B live-demo-start 2026-05-02). Bruker-beslutning 2026-05-02: vente på empirisk underperform-data fremfor å refactore på tro. Ikke åpne før operatør godkjenner.
   - **Død kode:** `enso_regime` driver i `agri.py` brukes fortsatt av analog-dim-extractor — refactor (analog → noaa_oni_index) er egen mini-spor.
 - **Kickoff-prompt for nytt kontekstvindu:** `docs/12_10_followup_spor_b_c_d_e_f_kickoff.md`.
 - **Pre-existing test-failures fixed 2026-05-02:** `test_unit_starts_after_server` (12.9 D4 fjernet bevisst After=bedrock-server.service-relasjon for user→system-unit-isolasjon; test omdøpt til `test_unit_starts_after_network`); `test_min_magnitude_filter` (bunke9 #33 bumpet driver-default 4.5→5.5; test sender nå eksplisitt min_magnitude=4.5 for default-bump-immunitet). Commit: `34bdf36`. **Full Python-suite: 2581/2581 grønne.**
@@ -558,6 +569,139 @@ ferdig og 12.6-rebalansering er gjort.
 ---
 
 ## Session log (newest first)
+
+### 2026-05-02 — Session 143: sub-fase 12.10 follow-up Spor F LUKKET
+
+**Scope:** Spor F (mindre DEFERRED) — siste av 5 follow-up-spor for
+sub-fase 12.10. Originalspec estimerte 6-9 sessioner; faktisk levert
+i 1 session (komprimering via sammenslått driver+backfill+wiring per
+sub-leveranse, samt deferral av blokkerte sub-spor).
+
+**Status før session:** Spor A (A1-A11), C (ALSI/IIP), D (NASS yield),
+B (*_surprise + ADR-014) LUKKET 2026-05-02. Helse: gul (FRED transient
+HTTP 500 på 5/14 serier — ortogonalt).
+
+**Per sub-spor:**
+
+- **F3 (cboe_vix_term_curve):** DROPPED (PLAN-cleanup, 0 sessioner).
+  Overlapper `vix_term_ratio` (Yahoo VIX/VIX3M/VIX6M, levert i bunke3).
+  Tag: `v0.12.10-followup-f3` (commit `7b64d73`).
+
+- **F8 (eia_natgas_processing):** LEVERT. Wrapper-driver rundt
+  `eia_stock_change` med `series_id="N9060US2"` (US NGPL Production,
+  monthly, route `natural-gas/prod/sum`). Math cadence-agnostisk:
+  pct_change = MoM% i stedet for WoW%, z-score mot ~52 mnd historikk.
+  Default invert=True korrekt (extraction-build = bear NG, samme
+  polaritet som petroleum-stocks). Backfill: 638 rader (1973-01..
+  2026-02). Wiring: NaturalGas macro (eia_stock_change 0.15→0.10 +
+  eia_natgas_processing@0.05). Snapshot: 6 score-endringer på
+  NaturalGas, 0 grade-flips. Tag: `v0.12.10-followup-f8` (commit
+  `b166429`).
+
+- **F4 (noaa_enso_forecast_3mo):** LEVERT. Driver leser IRI ENSO
+  Plumes 3-mnd-forward Niño 3.4 ensemble-mean fra fundamentals
+  (series_id `IRI_ENSO_FCST_3MO`, manuell CSV-fallback per ADR-007 §4
+  siden IRI ikke har gratis API). Step-mapping = identisk med
+  `noaa_oni_index`. Default `bull_when='low'` (La Niña-forecast =
+  bullish for grain/agri). Backfill: 6 rader seed (2025-11..2026-04),
+  latest +1.42°C JAS 2026 (strong El Niño). Wiring: Cocoa/Coffee/Sugar
+  enso-familie split 0.6/0.4 (ONI/forecast). Snapshot: 6 score-
+  endringer (3 instrumenter × 2 retninger), 1 grade-flip (Coffee
+  NONE sell A→A+ marginalt over A+ threshold 11.0). Softs ≤5 grade-
+  flips OK. Tag: `v0.12.10-followup-f4` (commit `02c73f2`).
+
+- **F1 (ism_pmi_level):** LEVERT. Re-åpnet bunke3 DEFERRED-driver via
+  manuell CSV-fallback (FRED NAPMPMI fortsatt 404 — ISM trakk gratis-
+  feeden). Step-mapping forsterket rundt 50-linjen (markedet diskonterer
+  cross-overs aggressivt). Backfill: 6 mnd seed (2025-11..2026-04),
+  latest 2026-04 = 52.7 (mild expansion). Wiring: SP500/Nasdaq macro
+  (cfnai_3mma 0.05 → 0.0 erstattet av ism_pmi_level@0.05). Snapshot:
+  4 score-endringer (SP500/Nasdaq × MAKRO × 2 retninger), **0 grade-
+  flips**. Tag: `v0.12.10-followup-f1` (commit `a5feb49`).
+
+- **F2 (CBOE pcr_total_extreme + pcr_equity_only):** RE-DEFERRED.
+  Verifisert 2026-05-02 at kickoff-spec'ens `cdn.cboe.com/api/global/
+  ...`-CSV returnerer 403 (paywalled via DataShop). Yahoo har ikke
+  `^CPC/^CPCE/^CPCI` (404). Eneste gjenstående gratis-tilnærming er
+  manuell daily ingest fra CBOE Daily Market Statistics-HTML — for
+  høy operator-tempo for daily-published indikator. Re-åpne hvis
+  alternativ kilde dukker opp. Inntil videre dekker `cboe_skew_z` +
+  `vix_term_ratio` + `vvix_z` mye av samme contrarian/options-
+  positioning-domene. Tag: `v0.12.10-followup-f2-DEFERRED` (commit
+  `3729501`).
+
+- **F5 (cot_concentration_top4 + cot_swap_dealer_skew):** LEVERT.
+  Schema-ALTER på `cot_disaggregated`: 4 nye nullable-kolonner
+  (swap_long/short, conc_net_top4/8). Idempotent migration. Fetcher
+  utvidet med `_DISAGG_OPTIONAL_FIELD_MAP` (graceful degradation —
+  manglende felt → NaN/NA, IKKE feil). Spec-korreksjon: opprinnelig
+  spec sa "TFF Swap" men Swap Dealer er i Disaggregated, ikke TFF
+  (TFF har Dealer/Asset Mgr/Lev Funds). Re-backfill: 14 av 15
+  contracts populert (5 år hver), 3494 rader oppdatert. Wiring: Gold
+  + CrudeOil positioning-familie (cot_z_score 0.4→0.3 + 2×0.05 nye).
+  Snapshot: 12 score-endringer, 1 grade-flip (CrudeOil SWING sell
+  B→A — score 3.147→3.194). Energy ≤5 OK. Tag: `v0.12.10-followup-f5`
+  (commit `faa7e62`).
+
+- **F6 (treasury_auction_demand):** LEVERT. Ny `treasury_auctions`-
+  tabell (PK auction_date+security_type+security_term). Fetcher mot
+  TreasuryDirect-API (gratis, ingen API-key, camelCase→snake_case).
+  Driver: z-score av bid_to_cover_ratio for valgt (security_type,
+  security_term)-par. Default `bull_when='low'` (sterk Treasury-
+  demand = risk-off = bear equity). Backfill: 250 nyeste auksjoner
+  (2024-11..2026-04). Wiring: SP500/Nasdaq macro (umich_sentiment_z
+  0.05 → 0.0 erstattet av treasury_auction_demand@0.05 med 2-Year
+  Note). Snapshot: 0 forskjeller (coincidence at både umich_sentiment
+  _z og treasury 2-Year scorer 0.0 ved baseline-regen). Future
+  scoring vil divergere. Tag: `v0.12.10-followup-f6` (commit
+  `670c3f6`).
+
+- **F7 (crypto_sentiment_extreme):** UTSATT til ~juli 2026 (~3 mnd
+  for ≥100 rader akkumulering siden harvest-start 2026-04-27).
+  Estimat ~70 rader nå.
+
+**Pyright src/:** 0 errors etter Spor F-leveranser (commit `5f0d66d`
+fikset 65 nye type-issues i F5/F6 ved å wrappe `pd.to_numeric(df[col],
+errors='coerce')` i `pd.Series(...)` + pyright-pragma på treasury
+fetcher).
+
+**Akkumulert resultat per sub-fase 12.10 follow-up (A+B+C+D+F):**
+- 12 nye tabeller/kolonne-utvidelser
+- 10+ nye fetchere/extensions
+- ~30 nye drivere wired
+- 285+ nye tester
+- ~82500 nye datarader (78000 fra A-D + ~4400 fra F)
+- pyright src/ 0 errors
+
+**Stop-criterion (≤5 grade-flips per asset-class):** RESPEKTERT.
+Akkumulert per asset-class i Spor F: softs +1 (Coffee A→A+), energy
++1 (CrudeOil B→A), metals/indices/grains 0. Maks 1 per klasse — godt
+innenfor 5-grensen.
+
+**Anomalier:** ingen kritiske. Operasjonelle merknader:
+- WTI-PHYSICAL-contract i CFTC har 5y aktiv historikk; legacy "CRUDE
+  OIL, LIGHT SWEET-WTI" returnerer 0 rader (CFTC rename, ortogonalt).
+- ISM/IRI seed-data populert manuelt 6 mnd hver; operatør må
+  fortsette månedlig manuell ingest fram til alternative datakilder
+  finnes.
+- Treasury auctions API capper på 250 rader — full 10y-historikk
+  krever paginering eller batch-vinduer (ikke kritisk; 250 dekker
+  ~1.5 år som er nok for de korteste maturitiene som allerede har
+  bra coverage).
+
+**Klar-meld for Spor E:** ETTER 4 uker (~2026-06-01) gitt Spor B
+LUKKET 2026-05-02. Spor E (driver-impl-rewrites #36-#41 + #34) krever
+empirisk live-demo-data om hvilke drivere underperformer, og er ikke
+åpnet før operatør godkjenner.
+
+**Commits (16):** 7b64d73 (F3), 55afebe (F8a), b166429 (F8b), 1584c5c
+(F4a), 02c73f2 (F4b), cdaccb9 (F1a), a5feb49 (F1b), 3729501 (F2-DEF),
+0f83978 (F5a), faa7e62 (F5b), 670c3f6 (F6), 5f0d66d (F7+pyright),
++ denne state-commit.
+
+**Next:** Vent på operatør-godkjenning før Spor E åpnes (~2026-06-01).
+
+---
 
 ### 2026-05-01 — Session 141: sub-fase 12.9 D5-start (bot live, UI bot-status, horisont-mapping, intra-day cadence)
 
