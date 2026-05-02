@@ -63,16 +63,30 @@ families:
     drivers:
       # Sub-fase 12.5 session 70: ekte positioning-drivere fra COT.
       # Bruker MM net % av OI for å unngå scale-bias når OI varierer.
+      # Sub-fase 12.10 follow-up Spor F5 (2026-05-02): cot_concentration_top4
+      # + cot_swap_dealer_skew lagt til (CFTC-disaggregated metadata-utvidelse).
+      # Konsentrasjon-signal komplementerer cot_z_score (samme z-score-kjerne
+      # men på annen kategori); swap-skew gir institusjonell bias-overlay.
+      # Trim: cot_z_score 0.4→0.3 — to nye 0.05-drivere deler vekt-budsjett.
+      # Sum=1.00 bevart.
       - name: positioning_mm_pct
         weight: 0.6
         params:
           metric: mm_net_pct
           lookback_weeks: 52
       - name: cot_z_score
-        weight: 0.4
+        weight: 0.3
         params:
           metric: mm_net_pct
           lookback_weeks: 52
+      - name: cot_concentration_top4
+        weight: 0.05
+        params:
+          contract: "GOLD - COMMODITY EXCHANGE INC."
+      - name: cot_swap_dealer_skew
+        weight: 0.05
+        params:
+          contract: "GOLD - COMMODITY EXCHANGE INC."
   macro:
     # Sub-fase 12.5 session 71 + 108 + 109: ekte macro-drivere.
     # Gold som ikke-rentebærende metall får støtte når real-yield faller,

@@ -15,11 +15,13 @@ Per § 22.2 #23-#26.
 #25 IIP REMIT: levert i sub-fase 12.10 follow-up Spor C (session 136):
 - iip_supply_unavailability: aggregert capacity unavailable nå/nylig.
 
-#26 COT-disaggregated utvidelser (2 av 4):
+#26 COT-disaggregated utvidelser (4 av 4 etter Spor F5 2026-05-02):
 - cot_oi_change: open_interest WoW-change z-score
 - cot_commercial_extreme: Commercial-positioning ekstrem (kontrært)
-- cot_concentration_top4: DEFERRED (Conc_Net-kolonner ikke i schema)
-- cot_swap_dealer_skew: DEFERRED (Swap Dealer kun i TFF, ikke disaggregated)
+- cot_concentration_top4: Spor F5 — top-4-traders net concentration (% av OI)
+- cot_swap_dealer_skew: Spor F5 — Swap Dealer net skew vs OI (Disaggregated
+  har Swap Dealer-kolonner; spec mente opprinnelig TFF, korrigert per
+  CFTC-domenekunnskap — TFF har Dealer/Asset Mgr/Lev Funds men ikke Swap)
 """
 
 from __future__ import annotations
@@ -398,7 +400,7 @@ def iip_supply_unavailability(store: Any, instrument: str, params: dict) -> floa
 
 
 # ---------------------------------------------------------------------------
-# #26 COT utvidelser (2 av 4)
+# #26 COT utvidelser (4 av 4 etter Spor F5 — fra 2 til 4 ved 2026-05-02)
 # ---------------------------------------------------------------------------
 
 
@@ -509,6 +511,118 @@ def cot_commercial_extreme(store: Any, instrument: str, params: dict) -> float:
     return max(0.0, min(1.0, score))
 
 
+# ---------------------------------------------------------------------------
+# Spor F5 (2026-05-02): cot_concentration_top4 + cot_swap_dealer_skew
+# ---------------------------------------------------------------------------
+
+
+@register("cot_concentration_top4")
+def cot_concentration_top4(store: Any, instrument: str, params: dict) -> float:
+    """Konsentrasjon-av-største-4-traders i COT-disaggregated (Spor F5).
+
+    Reads `conc_net_top4` (% av OI holdt netto av top-4-largest-traders, long
+    side) fra cot_disaggregated. Høy konsentrasjon = tynn likviditet =
+    volatilitets-risiko = risk-off-bias. Default ``bull_when='low'`` antar
+    sunn breddebalanse er bullish; flip til 'high' for instrumenter hvor
+    institusjonell konsentrasjon korrelerer positivt med pris-momentum.
+
+    Returnerer 0..1 via percentile-mapping mot `lookback_weeks` historikk
+    (default 156 = 3 år). Returns 0.0 hvis kontrakt mangler i DB; 0.5 hvis
+    historikk for kort eller `conc_net_top4`-kolonnen er NULL for alle
+    nylige rader (typisk pre-Spor-F5-backfill-tilstand).
+
+    Konfigurerbar via ``params["top"] = 8`` for å lese ``conc_net_top8``
+    i stedet (top-8-konsentrasjonen er ofte mer stabil).
+    """
+    _ = params.get("_horizon")
+    bull_when = str(params.get("bull_when", "low")).lower()
+    contract = str(params.get("contract", ""))
+    report = str(params.get("report", "disaggregated"))
+    lookback_weeks = int(params.get("lookback_weeks", 156))
+    min_samples = int(params.get("min_samples", 26))
+    top = int(params.get("top", 4))
+    col = "conc_net_top4" if top == 4 else "conc_net_top8"
+
+    if not contract:
+        return 0.0
+
+    try:
+        df = store.get_cot(contract, report=report)
+    except Exception:
+        return 0.0
+
+    if df is None or df.empty or col not in df.columns:
+        return 0.0
+
+    s = pd.to_numeric(df[col], errors="coerce").dropna()
+    if len(s) < min_samples:
+        return 0.5
+
+    window = s.tail(lookback_weeks + 1).dropna()
+    if len(window) < 10:
+        return 0.5
+    current = float(window.iloc[-1])
+    history = window.iloc[:-1]
+    rank = float((history < current).sum()) / float(len(history))
+
+    score = rank if bull_when == "high" else 1.0 - rank
+    return max(0.0, min(1.0, score))
+
+
+@register("cot_swap_dealer_skew")
+def cot_swap_dealer_skew(store: Any, instrument: str, params: dict) -> float:
+    """Swap Dealer net-positioning-skew vs OI (Spor F5).
+
+    Reads `swap_long` + `swap_short` fra cot_disaggregated. Beregner
+    `(swap_long - swap_short) / open_interest * 100` og percentile-mapper
+    mot `lookback_weeks` historikk. Default ``bull_when='high'``: stort
+    swap-net-long = institusjonelle dealere posisjonerer for høyere priser
+    = bullish (også typisk markeds-leder for sentiment).
+
+    Som med kommersielle: tolkning kan flippes ('low') for kontrarian-
+    instrumenter hvor dealer-positioning er hedge-driven motstrøms.
+
+    Returnerer 0..1 via percentile-rank (samme pattern som cot_commercial_
+    extreme). Returns 0.0 hvis kontrakt/kolonne mangler; 0.5 hvis historikk
+    for kort.
+    """
+    _ = params.get("_horizon")
+    bull_when = str(params.get("bull_when", "high")).lower()
+    contract = str(params.get("contract", ""))
+    report = str(params.get("report", "disaggregated"))
+    lookback_weeks = int(params.get("lookback_weeks", 156))
+    min_samples = int(params.get("min_samples", 26))
+
+    if not contract:
+        return 0.0
+
+    try:
+        df = store.get_cot(contract, report=report)
+    except Exception:
+        return 0.0
+
+    if df is None or df.empty or "swap_long" not in df.columns or "swap_short" not in df.columns:
+        return 0.0
+
+    long_s = pd.to_numeric(df["swap_long"], errors="coerce")
+    short_s = pd.to_numeric(df["swap_short"], errors="coerce")
+    oi = pd.to_numeric(df["open_interest"], errors="coerce").replace(0, float("nan"))
+    skew = ((long_s - short_s) / oi).dropna() * 100.0
+
+    if len(skew) < min_samples:
+        return 0.5
+
+    window = skew.tail(lookback_weeks + 1).dropna()
+    if len(window) < 10:
+        return 0.5
+    current = float(window.iloc[-1])
+    history = window.iloc[:-1]
+    rank = float((history < current).sum()) / float(len(history))
+
+    score = rank if bull_when == "high" else 1.0 - rank
+    return max(0.0, min(1.0, score))
+
+
 __all__ = [
     "agsi_germany_pct",
     "agsi_injection_rate",
@@ -518,6 +632,8 @@ __all__ = [
     "alsi_eu_pct",
     "alsi_storage_change",
     "cot_commercial_extreme",
+    "cot_concentration_top4",
     "cot_oi_change",
+    "cot_swap_dealer_skew",
     "iip_supply_unavailability",
 ]

@@ -43,13 +43,23 @@ families:
       - {name: momentum_z, weight: 0.5, params: {window: 20}}
   positioning:
     # Crude COT: managed money er primær spec-driver.
+    # Spor F5 (2026-05-02): cot_concentration_top4 + cot_swap_dealer_skew
+    # lagt til. cot_z_score 0.4→0.3 — to nye 0.05-drivere deler vekt-budsjett.
+    # CRUDE OIL har historisk høy konsentrasjon (få store kommersielle hedgers
+    # dominerer); top-4-konsentrasjons-spike signalerer ofte vol-regime-skift.
     drivers:
       - name: positioning_mm_pct
         weight: 0.6
         params: {metric: mm_net_pct, lookback_weeks: 52}
       - name: cot_z_score
-        weight: 0.4
+        weight: 0.3
         params: {metric: mm_net_pct, lookback_weeks: 52}
+      - name: cot_concentration_top4
+        weight: 0.05
+        params: {contract: "WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE"}
+      - name: cot_swap_dealer_skew
+        weight: 0.05
+        params: {contract: "WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE"}
   macro:
     # Crude: USD-priset (negativ DXY = bull). Real-yield mindre direkte.
     # VIX = geopolitisk premium → invert (høy VIX = bull pga supply-risk).
