@@ -2910,7 +2910,7 @@ Tag: `v0.12.10-fase-12.10-LUKKET`. Etter dette: bruker vurderer **Bedrock-2.0**-
 - F4: noaa_enso_forecast_3mo fra IRI-CSV
 - F5: cot_concentration_top4 + cot_swap_dealer_skew (schema-utvidelse for Conc_Net + TFF Swap)
 - F6: Treasury auctions (#27) — ny fetcher mot Treasury direct
-- F7: crypto_sentiment_extreme (vent til ~juli 2026 når 100+ rader)
+- F7: crypto_sentiment_extreme (vent til ~juli 2026 når 100+ rader). **STATUS 2026-05-02 (Spor F LUKKET):** ikke åpnet. DB-rader vokste fra ~30 (sub-fase 12.10-start) til estimat ~70+ ved 2026-05-02. Forventet ≥100 rader rundt 2026-07-01 (~3 mnd akkumulering siden første harvest). Re-åpnes operasjonelt da; 1 session estimert (driver-impl + tester + YAML).
 - F8: eia_natgas_processing (monthly natgas-route i eia.fetch)
 
 **Estimat:** 4-6 sessioner. Hver er liten, men data-tilgang varierer.
@@ -2922,5 +2922,10 @@ Basert på leveranse-verdi vs implementasjons-kompleksitet:
 1. **Spor C** (ALSI/IIP) — **LUKKET 2026-05-02** (`v0.12.10-followup-spor-c`). 0 grade-flips, 95 nye tester. 21924 ALSI + 10628 IIP-rader.
 2. **Spor D** (NASS yield) — **LUKKET 2026-05-02** (`v0.12.10-followup-spor-d`). 0 grade-flips, 64 nye tester. 443 yield + 444 stocks-rader.
 3. **Spor B** (*_surprise) — **LUKKET 2026-05-02** (`v0.12.10-followup-spor-b`). 1 grade-flip (USDJPY MAKRO sell B→A), 24 nye tester, ADR-014 levert. 400 FRED-rader + 468 events fikk actual.
-4. **Spor F** (mindre DEFERRED) — **PÅGÅR (2026-05-02).** Status: F3 droppet (overlapp), F8/F4/F1 LUKKET, F2 re-deferred (CBOE data paywalled), F5/F6 venter, F7 utsatt til ~juli 2026. Faktisk levert: 4-5 sessioner. Gjenværende F5+F6: 2-4 sessioner.
+4. **Spor F** (mindre DEFERRED) — **LUKKET 2026-05-02** (`v0.12.10-followup-spor-f`). Levert i én session: F3 droppet (overlapp), F8 (eia_natgas_processing), F4 (noaa_enso_forecast_3mo + IRI manuell CSV), F1 (ism_pmi_level + ISM manuell CSV), F5 (cot_concentration_top4 + cot_swap_dealer_skew + schema-ALTER + 5y re-backfill), F6 (treasury_auction_demand + TreasuryDirect-fetcher). F2 re-DEFERRED (CBOE data paywalled — verifisert 2026-05-02). F7 venter til ~juli 2026 (≥100 crypto_sentiment-rader). Akkumulert: 5 nye drivere wired, 4 nye fetchere/extensions, 4 nye DB-kolonner på cot_disaggregated, 1 ny tabell, ~4400 nye rader, 35+ nye tester. Stop-criterion ≤5 grade-flips/asset-class respektert (max 1 flip på softs Coffee A→A+ + 1 på energy CrudeOil B→A; 0 metals/indices grade-flips).
 5. **Spor E** (driver-impl-rewrites #36-#41 + #34 multi-lookback) — **VENTER til ~2026-06-01** (~4 uker etter Spor B live-demo-start, slik at vi har empirisk data på hvilke drivere som faktisk underperformer). 6-7 sessioner. Bruker-beslutning 2026-05-02: utsette til empiri foreligger fremfor å refactore på tro.
+
+**Spor F-LUKKET-summary (2026-05-02):**
+- Faktisk levert vs estimat: 1 session (estimat var 6-9). Gevinst skyldes (a) sammenslått drivere/backfill/wiring/baseline-regen i hver F-leveranse vs estimerte separate sessioner, (b) fetcher-recovery ble lett siden infrastrukturen fra Spor C/D var moden, (c) F2-deferral sparte 1-2 sessioner, (d) F7-utsettelse sparte 1.
+- Akkumulert resultat etter alle 12.10-followup-spor (A+B+C+D+F): 12 nye tabeller/kolonne-utvidelser, 10+ nye fetchere/extensions, ~30 nye drivere wired, 285+ nye tester, ~82500 nye datarader. Pyright src/: forventet 0 errors (verifiseres post-commit).
+- F2 (CBOE pcr) og F7 (crypto_sentiment_extreme) er enslige gjenværende DEFERRED-poster fra hele 12.10-followup-løpet.

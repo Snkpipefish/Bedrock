@@ -554,7 +554,7 @@ def cot_concentration_top4(store: Any, instrument: str, params: dict) -> float:
     if df is None or df.empty or col not in df.columns:
         return 0.0
 
-    s = pd.to_numeric(df[col], errors="coerce").dropna()
+    s = pd.Series(pd.to_numeric(df[col], errors="coerce")).dropna()
     if len(s) < min_samples:
         return 0.5
 
@@ -604,9 +604,9 @@ def cot_swap_dealer_skew(store: Any, instrument: str, params: dict) -> float:
     if df is None or df.empty or "swap_long" not in df.columns or "swap_short" not in df.columns:
         return 0.0
 
-    long_s = pd.to_numeric(df["swap_long"], errors="coerce")
-    short_s = pd.to_numeric(df["swap_short"], errors="coerce")
-    oi = pd.to_numeric(df["open_interest"], errors="coerce").replace(0, float("nan"))
+    long_s = pd.Series(pd.to_numeric(df["swap_long"], errors="coerce"))
+    short_s = pd.Series(pd.to_numeric(df["swap_short"], errors="coerce"))
+    oi = pd.Series(pd.to_numeric(df["open_interest"], errors="coerce")).replace(0, float("nan"))
     skew = ((long_s - short_s) / oi).dropna() * 100.0
 
     if len(skew) < min_samples:

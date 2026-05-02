@@ -1,3 +1,6 @@
+# pyright: reportArgumentType=false, reportReturnType=false
+# pandas-stubs har dårlig dekning av DataFrame(columns=list[str]).
+
 """US Treasury auction-results fetcher (Spor F6 — sub-fase 12.10 follow-up).
 
 Henter US Treasury auction-results fra TreasuryDirect's offentlige API.

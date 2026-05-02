@@ -498,7 +498,7 @@ def treasury_auction_demand(store: Any, instrument: str, params: dict) -> float:
     if df is None or df.empty or "bid_to_cover_ratio" not in df.columns:
         return 0.0
 
-    s = pd.to_numeric(df["bid_to_cover_ratio"], errors="coerce").dropna()
+    s = pd.Series(pd.to_numeric(df["bid_to_cover_ratio"], errors="coerce")).dropna()
     if len(s) < min_samples:
         return 0.5
 
