@@ -40,7 +40,11 @@ import requests
 import structlog
 
 from bedrock.config.secrets import get_secret
-from bedrock.data.schemas import CROP_PROGRESS_COLS
+from bedrock.data.schemas import (
+    CROP_PROGRESS_COLS,
+    NASS_GRAIN_STOCKS_COLS,
+    NASS_YIELD_COLS,
+)
 
 NASS_API_KEY_ENV = "BEDROCK_NASS_API_KEY"
 
@@ -250,9 +254,234 @@ def fetch_crop_progress(
     return fetch_crop_progress_manual(csv_path)
 
 
+# ---------------------------------------------------------------------------
+# Yield Survey (sub-fase 12.10 follow-up Spor D, session 137)
+# ---------------------------------------------------------------------------
+#
+# QuickStats-route:
+#   commodity_desc=CORN/SOYBEANS/WHEAT/COTTON
+#   statisticcat_desc=YIELD
+#   unit_desc=BU / ACRE  (CORN/SOY/WHEAT) eller LB / ACRE (COTTON)
+#   agg_level_desc=NATIONAL
+#   year=YYYY
+#
+# Returnerer 5 rader per (commodity, year): ``YEAR`` (final, publisert
+# januar året etter) + 4 monthly forecasts (``YEAR - AUG/SEP/OCT/NOV
+# FORECAST``, publisert 12. den måneden via NASS Crop Production-rapport).
+
+# unit_desc per commodity. NASS aksepterer kun den eksakte enheten — feil
+# enhet → 400 Bad Request.
+_YIELD_UNIT_PER_COMMODITY: dict[str, str] = {
+    "CORN": "BU / ACRE",
+    "SOYBEANS": "BU / ACRE",
+    "WHEAT": "BU / ACRE",
+    "COTTON": "LB / ACRE",
+}
+
+
+def fetch_nass_yield_api(
+    *,
+    commodities: Iterable[str],
+    years: Iterable[int],
+    api_key: str | None = None,
+    timeout: int = _DEFAULT_TIMEOUT,
+) -> pd.DataFrame:
+    """Hent NASS yield-survey-data fra QuickStats API.
+
+    Args:
+        commodities: NASS-koder ("CORN", "SOYBEANS", "WHEAT", "COTTON").
+        years: List av crop-years.
+        api_key: Override env-var.
+        timeout: HTTP-timeout per kall.
+
+    Returns:
+        DataFrame med kolonner = ``NASS_YIELD_COLS``. 5 rader per (commodity,
+        year) fra NASS — én per reference_period.
+
+    Raises:
+        ValueError: hvis api_key ikke er gitt og BEDROCK_NASS_API_KEY mangler.
+    """
+    api_key = api_key or get_secret(NASS_API_KEY_ENV)
+    if not api_key:
+        raise ValueError(
+            "BEDROCK_NASS_API_KEY er ikke satt. Registrer gratis på "
+            "https://quickstats.nass.usda.gov/api og eksporter env-var."
+        )
+
+    rows: list[dict] = []
+    for commodity in commodities:
+        unit = _YIELD_UNIT_PER_COMMODITY.get(commodity.upper())
+        if unit is None:
+            _log.warning("nass.yield.unknown_unit_for_commodity", commodity=commodity)
+            continue
+        for year in years:
+            params = {
+                "key": api_key,
+                "format": "JSON",
+                "commodity_desc": commodity,
+                "statisticcat_desc": "YIELD",
+                "unit_desc": unit,
+                "agg_level_desc": "NATIONAL",
+                "year": str(year),
+            }
+            try:
+                resp = requests.get(_NASS_BASE, params=params, timeout=timeout)
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception as exc:
+                _log.warning(
+                    "nass.yield.fetch_failed",
+                    commodity=commodity,
+                    year=year,
+                    error=str(exc),
+                )
+                continue
+
+            for item in data.get("data", []):
+                value = item.get("Value", "")
+                if not value or value == "(NA)":
+                    continue
+                try:
+                    yv = float(value.replace(",", ""))
+                except ValueError:
+                    continue
+                rows.append(
+                    {
+                        "commodity": commodity.upper(),
+                        "year": int(item.get("year", year)),
+                        "reference_period": item.get("reference_period_desc", "YEAR"),
+                        "yield_value": yv,
+                        "yield_units": item.get("unit_desc", unit),
+                        "util_practice": item.get("util_practice_desc"),
+                        "load_time": item.get("load_time"),
+                    }
+                )
+
+    df = pd.DataFrame(rows, columns=list(NASS_YIELD_COLS))
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Grain Stocks (sub-fase 12.10 follow-up Spor D, session 137)
+# ---------------------------------------------------------------------------
+#
+# QuickStats-route:
+#   commodity_desc=CORN/SOYBEANS/WHEAT
+#   statisticcat_desc=STOCKS
+#   unit_desc=BU
+#   agg_level_desc=NATIONAL
+#   year=YYYY
+#
+# Returnerer 12 rader per (commodity, year): 4 quartals × 3 categories
+# (TOTAL = "CORN, GRAIN - STOCKS, MEASURED IN BU", ON FARM, OFF FARM).
+# Kategorier parses fra ``short_desc`` siden NASS API ikke har eget
+# domain-felt for ON/OFF FARM-skille.
+
+_STOCKS_VALID_COMMODITIES: frozenset[str] = frozenset({"CORN", "SOYBEANS", "WHEAT"})
+
+
+def _parse_stocks_category(short_desc: str) -> str:
+    """Parse ON FARM / OFF FARM / TOTAL fra short_desc.
+
+    NASS-konvensjon:
+    - "CORN, GRAIN - STOCKS, MEASURED IN BU" → TOTAL
+    - "CORN, ON FARM, GRAIN - STOCKS, MEASURED IN BU" → ON FARM
+    - "CORN, OFF FARM, GRAIN - STOCKS, MEASURED IN BU" → OFF FARM
+    """
+    upper = short_desc.upper()
+    if "ON FARM" in upper:
+        return "ON FARM"
+    if "OFF FARM" in upper:
+        return "OFF FARM"
+    return "TOTAL"
+
+
+def fetch_nass_grain_stocks_api(
+    *,
+    commodities: Iterable[str],
+    years: Iterable[int],
+    api_key: str | None = None,
+    timeout: int = _DEFAULT_TIMEOUT,
+) -> pd.DataFrame:
+    """Hent NASS grain-stocks (quarterly) fra QuickStats API.
+
+    Args:
+        commodities: NASS-koder ("CORN", "SOYBEANS", "WHEAT").
+        years: List av crop-years.
+        api_key: Override env-var.
+        timeout: HTTP-timeout per kall.
+
+    Returns:
+        DataFrame med kolonner = ``NASS_GRAIN_STOCKS_COLS``. ~12 rader per
+        (commodity, year) — 4 quartals × 3 categories.
+    """
+    api_key = api_key or get_secret(NASS_API_KEY_ENV)
+    if not api_key:
+        raise ValueError(
+            "BEDROCK_NASS_API_KEY er ikke satt. Registrer gratis på "
+            "https://quickstats.nass.usda.gov/api og eksporter env-var."
+        )
+
+    rows: list[dict] = []
+    for commodity in commodities:
+        commodity_norm = commodity.upper()
+        if commodity_norm not in _STOCKS_VALID_COMMODITIES:
+            _log.warning("nass.stocks.unsupported_commodity", commodity=commodity)
+            continue
+        for year in years:
+            params = {
+                "key": api_key,
+                "format": "JSON",
+                "commodity_desc": commodity_norm,
+                "statisticcat_desc": "STOCKS",
+                "unit_desc": "BU",
+                "agg_level_desc": "NATIONAL",
+                "year": str(year),
+            }
+            try:
+                resp = requests.get(_NASS_BASE, params=params, timeout=timeout)
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception as exc:
+                _log.warning(
+                    "nass.stocks.fetch_failed",
+                    commodity=commodity,
+                    year=year,
+                    error=str(exc),
+                )
+                continue
+
+            for item in data.get("data", []):
+                value = item.get("Value", "")
+                if not value or value == "(NA)":
+                    continue
+                try:
+                    sv = float(value.replace(",", ""))
+                except ValueError:
+                    continue
+                ref = item.get("reference_period_desc", "")
+                if not ref.startswith("FIRST OF "):
+                    continue  # filtrer eventuelle non-quarterly rows
+                rows.append(
+                    {
+                        "commodity": commodity_norm,
+                        "year": int(item.get("year", year)),
+                        "reference_period": ref,
+                        "category": _parse_stocks_category(item.get("short_desc", "")),
+                        "stocks_bu": sv,
+                        "load_time": item.get("load_time"),
+                    }
+                )
+
+    df = pd.DataFrame(rows, columns=list(NASS_GRAIN_STOCKS_COLS))
+    return df
+
+
 __all__ = [
     "NASS_API_KEY_ENV",
     "fetch_crop_progress",
     "fetch_crop_progress_api",
     "fetch_crop_progress_manual",
+    "fetch_nass_grain_stocks_api",
+    "fetch_nass_yield_api",
 ]
