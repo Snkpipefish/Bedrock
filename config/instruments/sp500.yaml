@@ -98,7 +98,11 @@ families:
         params: {bull_when: high}
         horizons:
           - MAKRO
-      - name: nfci_change
+      # Sub-fase 12.10 follow-up A10 (session 142): nfci_change → anfci_z
+      # (§ 22.2 #11). ANFCI er Adjusted NFCI — risiko-justert for at finansielle
+      # conditions skal måle "stress utover det som forventes ved gitt
+      # business-cycle". Samme weight + bull_when som nfci_change.
+      - name: anfci_z
         weight: 0.20
         params: {bull_when: low}
         horizons:

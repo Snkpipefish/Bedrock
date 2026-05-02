@@ -83,7 +83,9 @@ families:
         params: {bull_when: high}
         horizons:
           - MAKRO
-      - name: nfci_change
+      # Sub-fase 12.10 follow-up A10 (session 142): nfci_change → anfci_z
+      # (§ 22.2 #11). Samme weight + bull_when.
+      - name: anfci_z
         weight: 0.20
         params: {bull_when: low}
         horizons:
