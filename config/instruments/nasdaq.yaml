@@ -109,7 +109,7 @@ families:
       # industrial_production_yoy lagt til (bunke3 #9/#10). real_yield 0.20→
       # 0.15, net_fed_liq 0.25→0.20 for sum=1.00.
       - name: real_yield
-        weight: 0.15
+        weight: 0.10
         params:
           bull_when: low
       - name: dxy_chg5d
@@ -151,6 +151,11 @@ families:
         params: {bull_when: high}
         horizons:
           - MAKRO
+      - name: umich_sentiment_z
+        weight: 0.05
+        params: {bull_when: high}
+        horizons:
+          - MAKRO
   structure:
     drivers:
       - name: range_position
@@ -174,7 +179,7 @@ families:
     # først rammet ved spread-utvidelse). credit_spread_change 0.26→0.21.
     drivers:
       - name: vol_regime
-        weight: 0.34
+        weight: 0.29
         params:
           period: 14
           lookback: 252
@@ -210,6 +215,11 @@ families:
         params: {bull_when: low}
         horizons:
           - MAKRO
+      # Sub-fase 12.10 follow-up A9 (session 142): move_index_z@0.05
+      # (bunke4 #15) — bond-vol cross-check. vol_regime 0.34→0.29.
+      - name: move_index_z
+        weight: 0.05
+        params: {bull_when: low, lookback_days: 252}
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     drivers:

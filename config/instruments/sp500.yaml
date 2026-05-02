@@ -85,7 +85,7 @@ families:
     # growth-tempo. vix 0.15→0.10, net_fed_liq 0.25→0.20 for sum=1.00.
     drivers:
       - name: real_yield
-        weight: 0.15
+        weight: 0.10
         params: {bull_when: low}
       - name: dxy_chg5d
         weight: 0.15
@@ -123,6 +123,11 @@ families:
         params: {bull_when: high}
         horizons:
           - MAKRO
+      - name: umich_sentiment_z
+        weight: 0.05
+        params: {bull_when: high}  # høy sentiment = bull consumer = bull eq
+        horizons:
+          - MAKRO
   structure:
     drivers:
       - name: range_position
@@ -146,7 +151,7 @@ families:
     # for sum=1.00.
     drivers:
       - name: vol_regime
-        weight: 0.34
+        weight: 0.29
         params: {period: 14, lookback: 252, mode: high_is_bull}
       - name: event_distance
         weight: 0.15
@@ -179,6 +184,12 @@ families:
         params: {bull_when: low}  # narrowing = risk-on
         horizons:
           - MAKRO
+      # Sub-fase 12.10 follow-up A9 (session 142): move_index_z@0.05
+      # (bunke4 #15) — ICE BofA US Treasury MOVE Index z-score. Bond-vol
+      # cross-check; lav MOVE = bull risk-on. vol_regime 0.34→0.29.
+      - name: move_index_z
+        weight: 0.05
+        params: {bull_when: low, lookback_days: 252}
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     drivers:
