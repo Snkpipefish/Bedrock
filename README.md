@@ -30,6 +30,11 @@ Live-tall (per 2026-05-02):
 - **2814 tester** grønne, pyright `src/` 0 errors
 - Web-UI live på `127.0.0.1:5100/` (faner: Setups financial / agri /
   Skipsloggen / Kartrommet / Drivere / Admin)
+- **Bot mottar kun `published=True`** (score ≥ publish-floor). Demo-flagget
+  som tidligere sendte alle entries (`BEDROCK_BOT_INCLUDE_UNPUBLISHED`)
+  er av. Conflict-gate i orchestrator demoter svakere retning når både
+  BUY og SELL klarerer publish-floor på samme (instrument, horizon) —
+  forhindrer whipsaw på range-bound instrumenter.
 
 Se `STATE.md` for løpende sesjonshistorikk og `PLAN.md` for full roadmap.
 

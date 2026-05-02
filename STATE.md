@@ -270,6 +270,7 @@
   - **D5-start (session 141, 2026-05-01 22:00–22:45):** Bot live på cTrader demo. Underveis-fix-bunke: 8 commits. **`5689618`** UI bot-status panel + horisont-kolonne i Datakilder-fane (per-fetcher M/Sw/Sc-chips per § 20.2). **`9c60dd1`** unit Requires=bedrock-server.service fjernet (user-units kan ikke kreve system-units). **`fc20811`** bot_status /proc-fallback for cross-uid-scenario (root-server kan ikke spørre user-systemd direkte; vi scanner /proc/<pid>/cmdline i stedet). **`bab3370`** intra-day signals_bot regen-timer + `--horizons`-CLI-flag (mocked-tester). **`9c31bd9`** § 20.2-mapping-oppdatering (COT×4 + crop_progress → M+Sw+Sc; crypto_sentiment → Sw+Sc). **`bee3bed`** PLAN § 21.11 follow-up-logg (Fase 2 signals-all-ytelse, Fase 3 per-horisont drivere, secrets.env+pyOpenSSL kosmetikk). Ad-hoc fixer ikke i git: `CTRADER_ACCOUNT_ID` byttet fra brukernavn → `32290195` (numerisk ctidTraderAccountId fra Spotware Open API), `pip install pyOpenSSL` (manglet i venv → Twisted SSL `NameError: CertificateOptions`). Bot-instans bekreftet kjørende: konto 32290195, balanse 484k NOK, 1340 symboler, 17 trading-instruments, alle 17 har 39+50 candles lastet. Intra-day timer (`bedrock-signals-bot-intraday.timer`) aktivert som user-systemd, neste fyring Mon 06:00 CEST. SCALP-staleness gått fra 24t → ≤30 min market hours. Endepunkter live: `/bot/signals` 200 + `/api/ui/bot_status` 200 viser `state=active sub_state=running`.
   - **D5-fortsettelse session 142 (2026-05-01 23:00–23:25, helg-vindu):** Bot stoppet for trygg kode-endring (operatør-godkjent: helg, ingen marked aktivt). **Fase 2 perf-fix LEVERT** (commits `f606ca5`, `62bf120`): cProfile avdekket 89% YAML-load-bottleneck → `@lru_cache` på find_instrument. signals-all 8m19s → 1m16s (6.5x). Intraday-timer cadence bumpet 30 min → **5 min** (Mon..Fri 06..21:00/5:00, 960 fyringer/uke). SCALP-staleness ≤5 min, første gang § 20.2 møtt. **Fase 3 per-horisont drivere LEVERT** (commits `c901162`, `9824247`, `4740d51`): DriverSpec.horizons-felt + engine-filter + renormalisering. YAML-migrasjon: event_distance → [SCALP, SWING] (22 inst), aaii_extreme → [SWING] (Nasdaq+SP500). UI: modal driver-trace fikk ny HORISONT-kolonne med M/Sw/Sc-chips. 7 nye engine-tester + 6 cache-regression-tester. Snapshot-baseline regen, 26/132 grade-flips fordelt på asset-klasser uten systematisk bias. PLAN § 21.11 oppdatert med Fase 2+3 LEVERT-status. Bot restartet etter siste commit.
   - **D5-fortsettelse session 142 fortsatt (2026-05-02 00:00–00:30):** Utvidet horisont-migrasjon (commit `031fcac`) + sizing-fix (commit `8bdb3c8`) + demo-flagg `BEDROCK_BOT_INCLUDE_UNPUBLISHED=true` (commit `c49307f`). 17 drivere har nå horisont-filter (var 2). Bot ser nå 78 setups (var 52). Sizing per horisont: SCALP=0.01, SWING=0.02, MAKRO=0.03 lot. Driver-balanse-rapport + data-utnyttelse-rapport generert (commits `b41b9bc`, `7ab7e9d`) for å forberede 12.10-rebalansering. Bot live på cTrader demo siden 2026-05-01 22:02 CEST.
+  - **Bot tilbake til published-only (session 146, 2026-05-02):** Demo-flagg `BEDROCK_BOT_INCLUDE_UNPUBLISHED` rullet fra `true` → `false` i `bedrock-server.service`. Observasjons-vinduets "alle setups til bot"-modus avsluttet — bot mottar heretter kun `published=True`-entries. Samtidig: ny **conflict-gate** i orchestrator demoter svakere retning når både BUY og SELL klarerer publish-floor på samme `(instrument, horizon)` (whipsaw-vern; rotårsak er score-asymmetri i agri som bidrar 0.5 til begge sider for nøytrale drivere — egen ADR-006-follow-up). Commit `ba28fed`.
   - **Sub-fase 12.10 PLANLAGT 2026-05-02** (PLAN § 22) — driver-rebalansering, åpnes når operatør vil (parallelt med D5/D6, ingen avhengighet). 9 bunker, ~67 nye drivere + 13 endringer på eksisterende, ~3-6 uker estimat. Kjører på demo-konto hele veien. GIE-key (BEDROCK_AGSI_API_KEY) verifisert å dekke AGSI+/ALSI/IIP. Ingen familie-restruktur, ingen ALFRED-vintage, ingen ADR. Kickoff-prompt: `docs/12_10_kickoff_prompt.md`.
   - **D5/D6 senere:** scalp_edge.timer disable + tag `v0.12.9-fase-12.9-LUKKET` tas som egen task når operatør sier OK. Ikke gating for 12.10.
   - Full plan: `docs/bedrock_bot_cutover.md`. **cTrader-credentials klare i `~/.bedrock/secrets.env`** (CTRADER_CLIENT_ID/CLIENT_SECRET/ACCESS_TOKEN/REFRESH_TOKEN/ACCOUNT_ID — alle 5 verifisert).
@@ -569,6 +570,80 @@ ferdig og 12.6-rebalansering er gjort.
 ---
 
 ## Session log (newest first)
+
+### 2026-05-02 — Session 146: conflict-gate (BUY+SELL samme horisont) + bot tilbake til published-only
+
+**Scope:** Bruker oppdaget at Soybean hadde **A-grade på BOTH buy og sell**
+på alle 3 horisonter samtidig — bot ville bli whipsaw'a i en range
+(BUY @ 1200.25 / SELL @ 1211.00). Rotårsak + fix landet, og demo-flagget
+fra session 142 (`BEDROCK_BOT_INCLUDE_UNPUBLISHED=true`) er rullet
+tilbake — observasjons-vinduets "alle setups"-modus ferdig, vi kjører
+heretter kun published-setups til bot.
+
+**1. Hvorfor begge retninger ble published samtidig**
+
+Agri-scoring er **ikke null-sum**. For retnings-bevisste familier
+flippes verdier ved SELL (`value = 1 - raw`), så outlook 0.7 (bull) blir
+0.3 (bear). Men flere familier er nøytrale eller har drivere som
+returnerer 0.5 ("usikker"):
+
+- `noaa_oni_index` (enso) = 0.5 → bidrar 0.5 til **både** buy og sell
+- `dxy_chg5d` = 0.5 → 0.225 til begge
+- `wasde_s2u_change` = 0.5 → 0.2 til begge
+- `analog`-familien flipper ikke alle drivere rent
+
+Når retnings-driverne er svake (som i dag for Soybean), løfter de
+nøytrale 0.5-bidragene **begge sider** over publish-terskelen 6.0/16
+(37.5 %). Resultat: BUY 8.39 og SELL 9.01, begge grade A.
+
+**2. Conflict-gate i orchestrator (commit `ba28fed`)**
+
+Ny privat helper `_resolve_direction_conflicts(entries)` i
+`src/bedrock/orchestrator/signals.py:303` kjører **etter** `_build_entry`-
+loopen:
+
+- For hver `(instrument, horizon)`-nøkkel: hvis både BUY og SELL har
+  `published=True` med setup ≠ None → behold høyeste score, demoter
+  den andre med `published=False` + `skip_reason="opposite_direction_dominates"`.
+- Setup-objektet bevares så hysterese-snapshot og UI fortsatt ser
+  kandidaten (vi gjør det ikke usynlig — vi flagger det).
+- Buy/sell på **forskjellige** horisonter er fortsatt lovlig (scalp
+  opp + makro ned er en legitim multi-horisont-tese).
+
+**3. Demo-flagget av (commit `ba28fed`, samme commit)**
+
+`systemd/bedrock-server.service`: `BEDROCK_BOT_INCLUDE_UNPUBLISHED=true`
+→ `false`. Kommentar oppdatert. Krever `sudo systemctl daemon-reload &&
+sudo systemctl restart bedrock-server` for å ta effekt — bruker har
+kjørt det.
+
+**Verifikasjon:**
+- 109 scoped tester (`-k "signals or orchestrator"`) grønne, ingen
+  regresjoner.
+- Regenerert `data/signals_bot.json`: **26 entries demoteres** av
+  conflict-gate. Soybean: SELL (9.01) vinner alle 3 horisonter, BUY
+  (8.39) får skip_reason. Andre demote-instrumenter: Sugar, Cocoa,
+  Coffee, Gold, Silver, Copper, Platinum, NaturalGas, OIL BRENT/WTI,
+  EURUSD, GBPUSD, BTC.
+- Bot mottar nå kun published — Soybean-konflikten kan ikke skje, og
+  generelt vil bot ikke se entries under publish-floor.
+
+**Følgefeil ikke fikset her:**
+- **Score-asymmetri-rota** er ikke løst — gaten plastrer symptomet.
+  Riktig fix er ADR-006-territorium: enten mark flere drivere som
+  direction-bevisste, eller la nøytrale drivere (verdi=0.5) bidra 0
+  istedenfor 0.5 til begge sider. Tas i egen session når operatøren
+  vil — gaten holder boten trygg i mellomtiden.
+- Hev publish-floor for agri (6.0/16 = 37.5 % er lavt) er en alternativ
+  vinkel — kunne vurderes når observasjons-data rulles inn.
+
+**Commits:**
+- `ba28fed` fix(orchestrator): demote svakere retning når BUY+SELL begge published på samme horisont
+
+**Next:** Observasjons-vinduet løper videre med published-only. Vurder
+ADR-006 follow-up (score-asymmetri) når neste runde rebalansering startes.
+
+---
 
 ### 2026-05-02 — Session 145: bot-whitelist 17→22 + helsefall-rydding
 
