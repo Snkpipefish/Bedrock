@@ -84,6 +84,12 @@ families:
     # horisonter). Trim: eia_stock_change 0.25→0.15, dxy_chg5d 0.15→0.10
     # (-0.15 totalt for å gi plass til 3×0.05 nye drivere). Familie-
     # sum=1.00 bevart.
+    # Sub-fase 12.10 follow-up Spor F8 (2026-05-02): eia_natgas_processing
+    # @0.05 (bunke6 #22 — siste DEFERRED). N9060US2 monthly NGPL Production.
+    # Default invert=True (build=bear): høy MoM% NGPL-extraction = mer
+    # wet-gas-drilling = mer associated-gas → mer dry-gas til pipeline =
+    # bearish NG (samme polaritet som petroleum-stocks). Trim: eia_stock_
+    # change 0.15→0.10 — to EIA-fundamentaler deler vekt-budsjett.
     drivers:
       - name: real_yield
         weight: 0.10
@@ -95,8 +101,11 @@ families:
         weight: 0.10
         params: {invert: true}
       - name: eia_stock_change
-        weight: 0.15  # Spor C: 0.25→0.15 (fortsatt primær fundamental)
+        weight: 0.10  # Spor F8: 0.15→0.10 (deler vekt med eia_natgas_processing)
         params: {series_id: NW2_EPG0_SWO_R48_BCF}  # US NG Storage Lower 48
+      - name: eia_natgas_processing
+        weight: 0.05  # Spor F8: monthly NGPL Production (N9060US2)
+        params: {}  # default invert=True korrekt (extraction-build = bear NG)
       - name: agsi_storage_pct
         weight: 0.05  # A3: 0.10→0.05; per-land overtar deler av EU-signalet
         params: {country: eu, bull_when: low}  # Lav fyllingsgrad = bull NG

@@ -16,9 +16,9 @@ Backfill: 11180 rader på 6 weekly serier (2026-05-02 bunke6) +
 Spor F8 (2026-05-02): ``eia_natgas_processing`` LEVERT. Bruker monthly
 N9060US2 (NGPL Production, route ``natural-gas/prod/sum``). Math er
 cadence-agnostisk: pct_change blir MoM% i stedet for WoW%, z-score mot
-~52 mnd (~4.3 år) historikk. YAML må sette ``invert: false`` siden
-semantikken er flipped (høy MoM% i NGPL-extraction = mer wet-gas-
-prosessering = mindre dry-gas til pipeline = bull NG).
+~52 mnd (~4.3 år) historikk. Default invert=True er korrekt: høy MoM%
+NGPL-extraction = mer wet-gas-drilling = mer associated-gas → mer dry-
+gas til pipeline = bearish NG (samme polaritet som petroleum-stocks).
 """
 
 from __future__ import annotations
@@ -85,11 +85,11 @@ def eia_natgas_processing(store: Any, instrument: str, params: dict) -> float:
     MoM% pct-change vs ~52 mnd historikk (samme math som default
     eia_stock_change-banen — cadence-agnostisk).
 
-    Default invert-semantikk er flipped: høy MoM% NGPL-extraction =
-    mer wet-gas-prosessering = mindre dry-gas til Henry-Hub-pipeline =
-    bull NG. YAML må sette ``invert: false`` for å overstyre default
-    invert=True. Eksisterende `eia_stock_change`-modes (pct_12m, etc)
-    fungerer på samme MoM%-serie.
+    Default invert=True er korrekt: høy MoM% NGPL-extraction = mer
+    wet-gas-drilling-aktivitet = mer associated-gas → mer dry-gas til
+    Henry-Hub-pipeline = bearish NG. Samme polaritet som petroleum-
+    stocks (build = bear). Eksisterende `eia_stock_change`-modes
+    (pct_12m, etc) fungerer på samme MoM%-serie.
     """
     return _eia_wrapper(store, instrument, params, series_id="N9060US2")
 
