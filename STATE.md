@@ -637,6 +637,28 @@ kjørt det.
 - Hev publish-floor for agri (6.0/16 = 37.5 % er lavt) er en alternativ
   vinkel — kunne vurderes når observasjons-data rulles inn.
 
+**7. Cache-skip i signals-all (commit `52f5a0a`)**
+
+Operatør spurte hvorfor scriptet sender signaler hvert 5. min når
+boten har prisene selv. Audit avdekket: ~95 % av intra-day-runs
+produserer DECISION-identiske entries (kun `setup.first_seen` /
+`last_updated` bumpes). Likevel skrev scriptet filen hver gang —
+unødig disk-IO + falske bot-poll-triggere + UI-mtime-banner som
+viste "fersk data" uten faktisk endring.
+
+Fix i `src/bedrock/cli/signals_all.py`: ny `_write_if_changed(path,
+entries)` strippes volatile timestamps og sammenligner mot
+eksisterende fil. Hvis identisk → ingen skriving, mtime bevart.
+Brukes i begge skrive-stedene (split-mode + samlet-mode).
+Live-verifisert: andre kjøring rett etter første loggar "Unchanged
+(skipped) 132 entries" og mtime uendret. 8 nye tester (21/21 i scoped
+suite grønne).
+
+Forventet effekt: ~95 % av 192 daglige runs blir no-ops på disk-nivå.
+Sparer IO + bot-poll-trigger; UI-banner reflekterer faktisk
+last-change i stedet for last-script-run. Ingen krav til server- eller
+bot-restart — endringen er kun i CLI-en som kjører via systemd-timer.
+
 **6. LIMIT på SWING/MAKRO, MARKET på SCALP + max_total 6→20 (commit `8a0091b`)**
 
 Operatør spurte hvordan boten velger MARKET vs LIMIT, og om max_total
@@ -717,6 +739,7 @@ porteføljegrenser, ikke per-setup).
 - `31adb5c` fix(bot): per-horisont × per-gruppe trailing-stop-multipliers
 - `1565908` fix(tests): oppdater econ_events-vakttester til ADR-014-kontrakt
 - `8a0091b` fix(bot): LIMIT på SWING/MAKRO + MARKET på SCALP, max_total 6→20
+- `52f5a0a` feat(cli): cache-skip i signals-all når output er identisk
 
 **Next:** Observasjons-vinduet løper videre med published-only. Operatør
 har restartet `bedrock-bot.service` (2026-05-02) — ny dedup-regel er live.
