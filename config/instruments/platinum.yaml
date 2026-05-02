@@ -55,19 +55,26 @@ families:
     # Sør-Afrika står for ~70% global PGM-produksjon (Bushveld
     # Complex). Et seriøst skjelv der vil dramatisk påvirke
     # platinum-prising. Tyngst vekt blant metals.
+    # Sub-fase 12.10 follow-up A3 (session 142): gvz_z@0.10 lagt til
+    # (bunke4 #15) — CBOE Gold-ETF VIX z-score. Platinum tracker gull-
+    # vol-syklus moderat (PGM-rotasjon ↔ gull/sølv). dxy 0.35→0.30,
+    # mining_disruption 0.30→0.25 for sum=1.00.
     drivers:
       - name: real_yield
         weight: 0.2
         params: {bull_when: low}
       - name: dxy_chg5d
-        weight: 0.35
+        weight: 0.30
         params: {bull_when: negative, window: 5}
       - name: vix_regime
         weight: 0.15
         params: {invert: true}  # mild safe-haven-like
       - name: mining_disruption
-        weight: 0.3  # tyngst vekt — Sør-Afrika 70% global PGM-supply
+        weight: 0.25  # tyngst vekt — Sør-Afrika 70% global PGM-supply
         params: {metal: platinum, lookback_days: 7}
+      - name: gvz_z
+        weight: 0.10
+        params: {bull_when: low, lookback_days: 252}
   structure:
     drivers:
       - name: range_position
