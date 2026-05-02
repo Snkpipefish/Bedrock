@@ -2919,8 +2919,8 @@ Tag: `v0.12.10-fase-12.10-LUKKET`. Etter dette: bruker vurderer **Bedrock-2.0**-
 
 Basert på leveranse-verdi vs implementasjons-kompleksitet:
 
-1. **Spor C** (ALSI/IIP) — bygger direkte på AGSI-mønster, GIE-key allerede registrert. Lavest risk for høy verdi. **Anbefalt først.**
-2. **Spor D** (NASS yield) — bygger på Crop Progress-fetcher; klar verdi for agri.
-3. **Spor B** (*_surprise) — substantial arkitektur-arbeid; ADR kreves; men leverer 4 nye drivere som er sterkt etterspurt.
-4. **Spor F1-F4** (mindre DEFERRED) — lav prioritet; ta opportunistisk.
-5. **Spor E** (driver-impl-rewrites) — substantial refactor med behov for empirisk validering. Best etter at A-spor har rullet ~2-4 uker på live-demo og vi har data på hva som faktisk underperformer.
+1. **Spor C** (ALSI/IIP) — **LUKKET 2026-05-02** (`v0.12.10-followup-spor-c`). 0 grade-flips, 95 nye tester. 21924 ALSI + 10628 IIP-rader.
+2. **Spor D** (NASS yield) — **LUKKET 2026-05-02** (`v0.12.10-followup-spor-d`). 0 grade-flips, 64 nye tester. 443 yield + 444 stocks-rader.
+3. **Spor B** (*_surprise) — **LUKKET 2026-05-02** (`v0.12.10-followup-spor-b`). 1 grade-flip (USDJPY MAKRO sell B→A), 24 nye tester, ADR-014 levert. 400 FRED-rader + 468 events fikk actual.
+4. **Spor F1-F4** (mindre DEFERRED) — **NESTE.** Lav prioritet; ta opportunistisk. 4-6 sessioner totalt.
+5. **Spor E** (driver-impl-rewrites #36-#41 + #34 multi-lookback) — **VENTER til ~2026-06-01** (~4 uker etter Spor B live-demo-start, slik at vi har empirisk data på hvilke drivere som faktisk underperformer). 6-7 sessioner. Bruker-beslutning 2026-05-02: utsette til empiri foreligger fremfor å refactore på tro.

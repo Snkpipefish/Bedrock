@@ -173,8 +173,8 @@
   - **Live-drivere bekreftet aktive 2026-05-02:** nfp=0.5 (latest 2025-04 NFP -29K miss = neutral), cpi=0.0 (downside surprise), gdp=0.75 (positive), pce=0.0 (downside). For SP500/Nasdaq: event_fam BUY=0.8125 (drevet av cpi/pce-bull_when=low-flips + gdp+0.75). USDJPY SELL=0.6875 (USD-bear-mismatch i denne perioden). EURUSD BUY=0.6875 (USD-bear = EURUSD-bull).
   - 24 nye tester. Pyright src/: 0 errors. Diff-rapport: `docs/snapshot_diff_2026-05-02_followup_spor_b.md`.
 - **Sub-fase 12.10 follow-up — Spor E/F gjenstår** per ny PLAN § 22.6 + § 22.7:
-  - **Spor F1-F4** (resterende mindre DEFERRED — CBOE pcr, NOAA enso forecast, Treasury auctions, etc.) — 4-6 sessioner totalt.
-  - **Spor E** (driver-impl-rewrites #36-#41 + #34 multi-lookback) — 6-7 sessioner. Best etter ~2-4 uker live-demo for empirisk underperform-data.
+  - **Spor F1-F4** (resterende mindre DEFERRED — CBOE pcr, NOAA enso forecast, Treasury auctions, etc.) — 4-6 sessioner totalt. **NESTE.** Kickoff-prompt: `docs/12_10_followup_spor_f_kickoff.md`.
+  - **Spor E** (driver-impl-rewrites #36-#41 + #34 multi-lookback) — 6-7 sessioner. **UTSATT til ~2026-06-01** (~4 uker etter Spor B live-demo-start). Bruker-beslutning 2026-05-02: vente på empirisk underperform-data fremfor å refactore på tro. Ikke åpne før observasjonsvinduet har gått minst 2 uker.
   - **Død kode:** `enso_regime` driver i `agri.py` brukes fortsatt av analog-dim-extractor — refactor (analog → noaa_oni_index) er egen mini-spor.
 - **Kickoff-prompt for nytt kontekstvindu:** `docs/12_10_followup_spor_b_c_d_e_f_kickoff.md`.
 - **Pre-existing test-failures fixed 2026-05-02:** `test_unit_starts_after_server` (12.9 D4 fjernet bevisst After=bedrock-server.service-relasjon for user→system-unit-isolasjon; test omdøpt til `test_unit_starts_after_network`); `test_min_magnitude_filter` (bunke9 #33 bumpet driver-default 4.5→5.5; test sender nå eksplisitt min_magnitude=4.5 for default-bump-immunitet). Commit: `34bdf36`. **Full Python-suite: 2581/2581 grønne.**
