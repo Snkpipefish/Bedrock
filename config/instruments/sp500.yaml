@@ -104,14 +104,14 @@ families:
         params: {window: 20, mode: continuation}
   risk:
     polarity: neutral  # ADR-006: vol_regime trend-friendly begge retninger
-    # Sub-fase 12.6 (session 138): DROP vix_term_ratio (median |IC|=0.029 +
-    # median monotonisitet=0.00 — eneste driver som feiler begge strict
-    # PLAN § 12.6-tersklene). 0.20-vekten redistribuert proporsjonalt
-    # til vol_regime + credit_spread_change. event_distance uendret pr.
-    # Strategi 3 (event_distance YAML-vekter låst denne runden).
+    # Sub-fase 12.10 follow-up A1 (session 140): cboe_skew_z + vix9d_vix_ratio
+    # lagt til (bunke4 + bunke3 fra 12.10). Skew = options-tail-priced
+    # bekymring (alle horisonter); VIX9D/VIX = front-end vol-curve mean-
+    # revert (SCALP/SWING). vol_regime trimmet 0.59→0.39 for å holde
+    # familie-sum=1.00.
     drivers:
       - name: vol_regime
-        weight: 0.59
+        weight: 0.39
         params: {period: 14, lookback: 252, mode: high_is_bull}
       - name: event_distance
         weight: 0.15
@@ -127,6 +127,15 @@ families:
         params: {bull_when: low}
         horizons:
           - MAKRO
+      - name: cboe_skew_z
+        weight: 0.10
+        params: {bull_when: low, lookback_days: 252}
+      - name: vix9d_vix_ratio
+        weight: 0.10
+        params: {bull_when: low}
+        horizons:
+          - SCALP
+          - SWING
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     drivers:
