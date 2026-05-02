@@ -1,8 +1,12 @@
 // Bedrock UI — Fase 9 runde 1 session 47: Skipsloggen
 // Runde 2 session 51: filter-bar (horizon/grade/instrument/direction).
+// Session 148 (Mål 2): event-driven via SSE; safety-poll erstatter
+// gammel 30-sek-polling.
 // Vanilla JS (per PLAN § 15).
 
-const REFRESH_INTERVAL_MS = 30_000;
+// Safety-poll: hver 5. min lastes alt på nytt selv uten SSE-events.
+// Fanger SSE-disconnect, server-restart, eller event-tap.
+const SAFETY_POLL_INTERVAL_MS = 5 * 60_000;
 
 // ─── Tab-navigasjon ───────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(btn => {
@@ -1403,5 +1407,46 @@ _wireModalDelegation();
 
 loadSkipsloggen();
 loadServerStatus();
-setInterval(loadSkipsloggen, REFRESH_INTERVAL_MS);
-setInterval(loadServerStatus, REFRESH_INTERVAL_MS);
+
+// ─── Live updates via SSE (Mål 2) ─────────────────────────────
+// Server pusher events når relevante filer endrer seg. UI re-laster
+// kun det som faktisk er endret. Ingen 30-sek-polling.
+//
+// Safety-poll under (5 min) fanger:
+//   - SSE-kobling som dør silent (proxy-timeout, server-restart)
+//   - Event-tap mellom server og browser
+//   - Server som ikke har broker registrert (returnerer 503)
+function _setupLiveEvents() {
+  let es;
+  try {
+    es = new EventSource('/api/ui/events');
+  } catch (e) {
+    console.warn('[live-events] EventSource ikke tilgjengelig:', e);
+    return;
+  }
+  es.addEventListener('connected', () => {
+    console.info('[live-events] SSE-kobling opp');
+  });
+  es.addEventListener('trade_log_changed', () => {
+    loadSkipsloggen();
+  });
+  es.addEventListener('signals_changed', () => {
+    // Re-last bare faner som faktisk leser signals*.json. Lazy-load
+    // håndterer at brukere som er på andre faner ikke fetcher unødig.
+    const activeTab = document.querySelector('.tab.active')?.dataset.tab;
+    if (activeTab === 'financial')      loadFinancialSetups();
+    else if (activeTab === 'agri')      loadAgriSetups();
+    else if (activeTab === 'skipsloggen') loadSkipsloggen();
+  });
+  es.onerror = () => {
+    // EventSource reconnecter selv. Logger kun for synlighet i devtools.
+    if (es.readyState === EventSource.CLOSED) {
+      console.warn('[live-events] SSE-kobling lukket, browser reconnecter');
+    }
+  };
+}
+_setupLiveEvents();
+
+// Safety-poll: re-last alt på en lavere kadens uavhengig av SSE-state.
+setInterval(loadSkipsloggen, SAFETY_POLL_INTERVAL_MS);
+setInterval(loadServerStatus, SAFETY_POLL_INTERVAL_MS);
