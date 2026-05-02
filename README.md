@@ -22,8 +22,9 @@ på tvers av FX, metals, energy, indices, crypto og soft commodities.
 Cot-explorer (forgjenger) kjøres parallelt inntil cutover i Fase 13.
 
 Live-tall (per 2026-05-02):
-- **22 instrumenter** scoret hver 5. min (market hours), 132 setup-entries
-  per syklus (3 horisonter × 2 retninger × 22 instrumenter)
+- **22 instrumenter** scoret event-drevet (regen ved hver fetcher-completion +
+  én safety-run kl 08:00 Mon-Fri), 132 setup-entries per syklus
+  (3 horisonter × 2 retninger × 22 instrumenter)
 - **96 registrerte drivere**, 83 wired i instrument-YAMLer
 - **19 fetch-runners** (FRED, CFTC COT, ICE COT, EIA, COMEX, NASS, WASDE,
   AGSI/ALSI, BDI, USGS seismic, NOAA ENSO, Forex Factory calendar, ...)
@@ -191,7 +192,9 @@ bedrock-fetch-alsi.timer              (daglig 06:05)
 bedrock-monitor-alert.timer           (daglig 06:40)
 bedrock-fetch-crypto_sentiment.timer  (daglig 07:00)
 bedrock-fetch-news_intel.timer        (2× daglig 06:30/18:30)
-bedrock-signals-bot-intraday.timer    (Mon-Fri *5min 06-21 Oslo)
+bedrock-signals-bot-morning.timer     (Mon-Fri 08:00 Oslo, safety-run)
+                                       — primær regen via ExecStartPost på
+                                         hver bedrock-fetch-*.service
 + wasde / nass-crop-progress / bdi / cot_ice / eia_inventories / comex /
   calendar_ff / enso / outcomes-roll
 ```
