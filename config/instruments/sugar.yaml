@@ -100,15 +100,20 @@ families:
     # Sub-fase 12.5+ session 80: erstattet DXY-proxy med direkte BRL-
     # måling via DEXBZUS. USDBRL UP = BRL svakhet = bull for sukker-
     # eksport (Brasil ~40% global sukker-produksjon).
+    # Sub-fase 12.10 Bunke 2 #4: cot_ice_mm_pct@0.25 lagt til. ICE
+    # White Sugar (Europe, refined) MM-positioning gir cross-region-
+    # signal til NY Sugar No.11 (raw). White-raw spread er stabil
+    # nok til at MM-positioning-retning korrelerer.
+    # brl_chg5d 0.9 → 0.65, event 0.10 uendret. Sum=1.00.
     weight: 2
     drivers:
       - name: brl_chg5d
-        weight: 0.9
+        weight: 0.65
         params:
           bull_when: positive
           window: 5
       - name: event_distance
-        weight: 0.1
+        weight: 0.10
         params:
           countries: [USD]
           impact_levels: [High]
@@ -116,6 +121,12 @@ families:
         horizons:
           - SCALP
           - SWING
+      - name: cot_ice_mm_pct
+        weight: 0.25
+        params:
+          contract: ice sugar
+          metric: mm_net_pct
+          lookback_weeks: 52
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     weight: 2
