@@ -272,6 +272,7 @@
   - **D5-fortsettelse session 142 fortsatt (2026-05-02 00:00–00:30):** Utvidet horisont-migrasjon (commit `031fcac`) + sizing-fix (commit `8bdb3c8`) + demo-flagg `BEDROCK_BOT_INCLUDE_UNPUBLISHED=true` (commit `c49307f`). 17 drivere har nå horisont-filter (var 2). Bot ser nå 78 setups (var 52). Sizing per horisont: SCALP=0.01, SWING=0.02, MAKRO=0.03 lot. Driver-balanse-rapport + data-utnyttelse-rapport generert (commits `b41b9bc`, `7ab7e9d`) for å forberede 12.10-rebalansering. Bot live på cTrader demo siden 2026-05-01 22:02 CEST.
   - **Bot tilbake til published-only (session 146, 2026-05-02):** Demo-flagg `BEDROCK_BOT_INCLUDE_UNPUBLISHED` rullet fra `true` → `false` i `bedrock-server.service`. Observasjons-vinduets "alle setups til bot"-modus avsluttet — bot mottar heretter kun `published=True`-entries. Samtidig: ny **conflict-gate** i orchestrator demoter svakere retning når både BUY og SELL klarerer publish-floor på samme `(instrument, horizon)` (whipsaw-vern; rotårsak er score-asymmetri i agri som bidrar 0.5 til begge sider for nøytrale drivere — egen ADR-006-follow-up). Commit `ba28fed`.
   - **Sub-fase 12.10 PLANLAGT 2026-05-02** (PLAN § 22) — driver-rebalansering, åpnes når operatør vil (parallelt med D5/D6, ingen avhengighet). 9 bunker, ~67 nye drivere + 13 endringer på eksisterende, ~3-6 uker estimat. Kjører på demo-konto hele veien. GIE-key (BEDROCK_AGSI_API_KEY) verifisert å dekke AGSI+/ALSI/IIP. Ingen familie-restruktur, ingen ALFRED-vintage, ingen ADR. Kickoff-prompt: `docs/12_10_kickoff_prompt.md`.
+  - **Mål 1 (event-driven signal-runs) LANDET 2026-05-02 — session 147** (commits `74441af` + `5cda13c` + `f654544`). Erstatter `bedrock-signals-bot-intraday.timer` (192 fyringer/dag, ~21 t CPU/uke) med `ExecStartPost`-trigger på hver `bedrock-fetch-*.service`. systemd kjører ExecStartPost kun ved exit-code 0, så fetch-failures blokkerer regen automatisk. Ny `bedrock-signals-bot-morning.timer` (Mon-Fri 08:00) er safety-net for manuelle backfills + ExecStartPost-feil. Generator-endring (`generate_service_unit(signals_bot_regen=True)`) + 3 nye pytester (én lader real `config/fetch.yaml` som regression-guard mot at noen fetcher dropper default). Operator-swap utført live (helg, ingen marked åpent): linket morning-units, daemon-reload, disable intraday + enable morning. Neste planlagte regen Sun 02:30 (fundamentals-fetcher) blir første live-prøve. Plan: `docs/plan_event_driven_signals_and_ui.md`.
   - **D5/D6 senere:** scalp_edge.timer disable + tag `v0.12.9-fase-12.9-LUKKET` tas som egen task når operatør sier OK. Ikke gating for 12.10.
   - Full plan: `docs/bedrock_bot_cutover.md`. **cTrader-credentials klare i `~/.bedrock/secrets.env`** (CTRADER_CLIENT_ID/CLIENT_SECRET/ACCESS_TOKEN/REFRESH_TOKEN/ACCOUNT_ID — alle 5 verifisert).
   - **Next task: D5-fortsettelse** — bot er live siden 2026-05-01 22:02 CEST, ≥24t-vindu løper. Operatør følger journalctl + UI Datakilder-fane (bot-status panel skal forbli grønn). Når ≥24t passert + ≥1 trade plassert+lukket → D6 (scalp_edge.timer disable + arkiv-tag + retire).
@@ -570,6 +571,73 @@ ferdig og 12.6-rebalansering er gjort.
 ---
 
 ## Session log (newest first)
+
+### 2026-05-02 — Session 147: Mål 1 (event-driven signal-runs) levert
+
+**Scope:** Mål 1 i `docs/plan_event_driven_signals_and_ui.md` (skrevet i
+session 146). Erstatter polling-basert `bedrock-signals-bot-intraday.timer`
+(hvert 5. min = 192/dag) med event-drevet regen via `ExecStartPost` på hver
+fetch-service. Cadence faller fra 192/dag → ~10/dag (når fetchers faktisk
+kjører) + én safety-run kl 08:00 Mon-Fri.
+
+**Endringer:**
+
+1. **Generator** (`src/bedrock/systemd/generator.py`): `generate_service_unit`
+   får ny `signals_bot_regen=True` default-param. Når True: legger
+   `ExecStartPost=<bedrock> signals-all --bot-only --output data/signals_bot.json`
+   i [Service]-seksjonen. systemd kjører ExecStartPost kun hvis ExecStart
+   exited 0 (`Type=oneshot`-semantikk), så fetch-failures blokkerer regen
+   automatisk uten ekstra logikk.
+
+2. **Tester** (3 nye i `tests/unit/test_systemd_generator.py`):
+   - `test_generate_service_includes_signals_bot_regen_by_default`
+   - `test_generate_service_signals_bot_regen_can_be_disabled`
+   - `test_generate_units_every_fetcher_has_signals_bot_regen` (laster real
+     `config/fetch.yaml` — regression-guard mot at noen fetcher en dag
+     dropper default)
+
+3. **Re-generering** av alle fetcher-services via `bedrock systemd generate`.
+   16 av 21 service-filer er gitignored (lokal-spesifikke paths); 5 er
+   historisk-trackede og fikk diff'en synlig i commit.
+
+4. **Morning safety-timer** (nye filer i `systemd/`):
+   - `bedrock-signals-bot-morning.service`
+   - `bedrock-signals-bot-morning.timer` (`OnCalendar=Mon..Fri *-*-* 08:00:00`,
+     `Persistent=true`). Fyrer etter siste morning-fetcher (crypto_sentiment
+     07:00) og før FX-marked åpner Mon 09 CET. Cache-skip beskytter mot no-op
+     disk-IO hvis ExecStartPost-regen allerede har dekket alt.
+
+5. **README.md** Status-blokken: "scoret hver 5. min" → "scoret event-drevet
+   (regen ved hver fetcher-completion + én safety-run kl 08:00 Mon-Fri)".
+   Systemd-tabellen oppdatert: intraday-timer-linjen byttet med morning-
+   timer + ExecStartPost-mekanisme.
+
+**Operator-swap utført live (helg-vindu, intet marked åpent):**
+
+```
+systemctl --user link .../bedrock-signals-bot-morning.{service,timer}
+systemctl --user daemon-reload
+systemctl --user disable --now bedrock-signals-bot-intraday.timer
+systemctl --user enable --now bedrock-signals-bot-morning.timer
+systemctl --user reset-failed bedrock-signals-bot-intraday.timer  # rydder kosmetisk failed-state
+```
+
+Etter swap: `systemctl --user list-timers` viser morning.timer aktiv
+(neste Mon 2026-05-04 08:00); intraday.timer borte; `systemctl --user cat
+bedrock-fetch-prices.service` viser `ExecStartPost`-linjen live i systemd.
+
+**Verifikasjon (full live-prøve kommer Sun 02:30 når fundamentals-timer fyrer):**
+- Generator-tester: 38/38 grønne i `tests/unit/test_systemd_generator.py`.
+- Live systemd-view bekreftet ExecStartPost via `systemctl --user cat
+  bedrock-fetch-prices.service`.
+
+**Commits:**
+- `74441af` feat(systemd): event-driven signals-bot regen via ExecStartPost
+- `5cda13c` feat(systemd): legg til signals-bot morning safety-timer (08:00 Mon-Fri)
+- `f654544` docs(readme): oppdater status-blokk for event-drevet signals-regen
+
+**Neste:** Mål 2 (live UI-oppdateringer fra bot via SSE) — egen sub-session.
+Plan: `docs/plan_event_driven_signals_and_ui.md` § "Mål 2".
 
 ### 2026-05-02 — Session 146: conflict-gate (BUY+SELL samme horisont) + bot tilbake til published-only
 
