@@ -824,16 +824,19 @@ Pipeline-runner leser yaml, orkestrerer. Ingen shell-if-else.
 
 Alle viktige per dine ord. Implementeres i faser (se § 13).
 
-**Status etter session 110:** 6 av 8 har auto-fetcher (live), 1 manuell CSV
-sample, 1 betalt/manuell import. ICE softs COT er live via `cot_disaggregated`-
-runneren; ICE Brent/Gasoil/TTF har egen full COT-fetcher fra session 106 — se § 7.5.
+**Status etter session 149-audit (2026-05-02):** 21 fetchere live i fetch.yaml,
+alle med systemd-timer aktivt installert. Kun 2 manuell CSV-kilder (eksport-
+events, disease_alerts) + 1 deferred (IGC PDF). ICE softs COT er live via
+`cot_disaggregated`-runneren; ICE Brent/Gasoil har egen full COT-fetcher fra
+session 106 — se § 7.5.
 
 `Auto-fetcher?`-kolonnen markerer om vi har en `register_runner`-implementasjon
 (kode-nivå). `systemd-timer?`-kolonnen markerer om timer-unit faktisk er
 installert (system-nivå). Audit i session 107 avdekket at session 105's audit
 var ufullstendig — den så kun i `/etc/systemd/system/` og misset 8 user-timers
-i `~/.config/systemd/user/`. Korrigert status under viser at alle timers er
-installert (system eller user); se § 7.4.3 for full splittstatus.
+i `~/.config/systemd/user/`. Session 149-audit oppdaterer tabellen med 7 fetchere
+fra sub-fase 12.5+/12.7-løpet som var lagt til siden session 110-snapshot;
+se § 7.4.3 for full splittstatus.
 
 | Kilde | Hva | Implementering | Fase | Auto-fetcher? | systemd-timer? |
 |---|---|---|---|---|---|
@@ -841,17 +844,23 @@ installert (system eller user); se § 7.4.3 for full splittstatus.
 | USDA Crop Progress | % planted/silked/harvested ukentlig | NASS QuickStats API (session 97-98) | 4 | Ja (`crop_progress`-runner, session 103) | ✅ installert (user-timer) |
 | Eksport-policy-tracker | India/Indonesia/Ivory Coast-hendelser | Manuell CSV (`export_events`) | 5 | Nei (manuell CSV) | N/A (manuell) |
 | BRL/USD aktivt drivet | Pris-feed + som driver for softs | DEXBZUS via FRED (session 80) | 4 | Ja (gjennom `fundamentals`-runner) | ✅ installert (user-timer) |
-| Baltic Dry til agri | Kobling BDI → grain-eksport-pris | BDRY ETF via Yahoo (session 89) | 5 | Ja (`bdi`-runner, session 103) | ✅ installert (user-timer) |
+| Baltic Dry til agri | Kobling BDI → grain-eksport-pris (rebrandet til `shipping` session 113 — full Baltic-suite BDI+BCI+BPI+BSI) | BDRY ETF via Yahoo (session 89) + manuell CSV for andre | 5 | Ja (`shipping`-runner) | ✅ installert (user-timer) |
 | Disease/pest-varsling | Coffee rust, wheat stripe rust | Manuell CSV (`disease_alerts`) | 6 | Nei (manuell CSV) | N/A (manuell) |
 | ICE softs COT | Sukker/kaffe-spesifikk via CFTC | Finnes via `cot_disaggregated` | 4 | Ja (gjennom `cot_disaggregated`) | ✅ installert (user-timer) |
-| ICE Brent/Gasoil/TTF COT | EU-basert energy-COT | ICE COTHist*.csv (session 106) | 12.5+ | Ja (`cot_ice`-runner, session 106) | ✅ installert (system-timer) |
+| ICE Brent/Gasoil/TTF COT | EU-basert energy-COT | ICE COTHist*.csv (session 106) | 12.5+ | Ja (`cot_ice`-runner, session 106) | ⚠️ DOBBEL-installert (både system + user — se § 7.4.3) |
 | IGC rapporter | International Grains Council | Månedlig PDF-parse (session 84) | 5 | Nei (manuell import) | N/A (manuell) |
 | NOAA ONI (ENSO) | El Niño / La Niña-regime | NOAA-ASCII (session 57) | 4 | Ja (`enso`-runner, session 103) | ✅ installert (user-timer) |
-| Forex Factory kalender | High/medium-impact econ events | JSON via faireconomy.media (session 105) | 12.5+ | Ja (`calendar_ff`-runner, session 105) | ✅ installert (system-timer) |
+| Forex Factory kalender | High/medium-impact econ events | JSON via faireconomy.media (session 105) | 12.5+ | Ja (`calendar_ff`-runner, session 105) | ⚠️ DOBBEL-installert (både system + user — se § 7.4.3) |
 | EIA weekly inventories | Crude/Gasoline/Nat Gas Storage | EIA Open Data v2 (session 107) | 12.5+ | Ja (`eia_inventories`-runner, session 107) | ✅ installert (user-timer) |
 | COMEX warehouse | Gold/Silver/Copper supply-stress | metalcharts.org JSON (session 108) | 12.5+ | Ja (`comex`-runner, session 108) | ✅ installert (user-timer) |
 | USGS seismic | M≥4.5 events i mining-regions | USGS GeoJSON feed (session 109) | 12.5+ | Ja (`seismic`-runner, session 109) | ✅ installert (user-timer) |
 | Euronext MiFID II COT | Wheat/Corn EU-positioning-overlay | Euronext HTML-parser (session 110) | 12.5+ | Ja (`cot_euronext`-runner, session 110) | ✅ installert (user-timer) |
+| AGSI EU gas storage | Per-land + EU-aggregat gas-fyllingsgrad | GIE AGSI v2 API (session 130 D1) | 12.7 | Ja (`agsi`-runner) | ✅ installert (user-timer) |
+| ALSI EU LNG-terminal | LNG-terminal-storage på EU-nivå | GIE ALSI API (Spor C) | 12.10-followup | Ja (`alsi`-runner) | ✅ installert (user-timer) |
+| Conab Brasil crops | Soja/Milho/Trigo/Algodão/Café estimater | PDF via poppler+pypdf (session 111) | 12.5+ | Ja (`conab`-runner) | ✅ installert (user-timer) |
+| UNICA Brasil sugar | Centro-Sul halvmånedlige sukker/etanol-rapporter | PDF via poppler+pypdf (session 112) | 12.5+ | Ja (`unica`-runner) | ✅ installert (user-timer) |
+| News intel (RSS) | Google News per kategori (UI-only foreløpig) | RSS-parser per bedrock-kategori (session 114) | 12.5+ | Ja (`news_intel`-runner) | ✅ installert (user-timer) |
+| Crypto sentiment | F&G + CoinGecko global market (UI-only foreløpig) | alternative.me + CoinGecko API (session 115) | 12.5+ | Ja (`crypto_sentiment`-runner) | ✅ installert (user-timer) |
 
 ### 7.4 Runner-registry og fetch-schedule
 
@@ -925,7 +934,7 @@ fetching koster nettverk uten verdi.
   (calendar_ff).
 - DOW-felt med navngitte dager (`MON-FRI`) → systemd `Mon-Fri`-prefix.
 
-Gjeldende fetcher-liste (etter session 110, 15 totalt):
+Gjeldende fetcher-liste (etter session 149-audit, 21 totalt):
 
 | Fetcher | Cadence | OnCalendar | Stale_hours | Source |
 |---|---|---|---|---|
@@ -934,16 +943,22 @@ Gjeldende fetcher-liste (etter session 110, 15 totalt):
 | cot_legacy | ukentlig | `Fri *-*-* 22:00:00` | 168 | CFTC |
 | fundamentals | daglig | `*-*-* 02:30:00` | 48 | FRED |
 | weather | daglig | `*-*-* 03:00:00` | 30 | ERA5 |
+| agsi | daglig | `*-*-* 06:00:00` | 36 | GIE AGSI v2 |
+| alsi | daglig | `*-*-* 06:05:00` | 36 | GIE ALSI |
 | enso | månedlig | `*-*-12 06:00:00` | 720 | NOAA ONI |
 | wasde | månedlig | `*-*-13 19:00:00` | 840 | USDA ESMIS |
 | crop_progress | ukentlig (apr-nov) | `Mon *-04..11-* 23:00:00` | 200 | NASS API |
-| bdi | hverdager | `Mon-Fri *-*-* 23:30:00` | 30 | BDRY ETF (Yahoo) |
+| shipping | hverdager | `Mon-Fri *-*-* 23:30:00` | 30 | BDRY ETF (Yahoo) + manuell CSV (Baltic-suite) |
 | calendar_ff | daglig 2× | `*-*-* 06,18:15:00` | 14 | Forex Factory |
-| cot_ice | ukentlig | `Fri *-*-* 22:30:00` | 168 | ICE COTHist*.csv |
-| eia_inventories | ukentlig (ons) | `Wed *-*-* 17:30:00` | 200 | EIA Open Data v2 |
+| cot_ice | ukentlig | `Fri *-*-* 22:30:00` | 264 | ICE COTHist*.csv |
+| eia_inventories | ukentlig (ons) | `Wed *-*-* 17:30:00` | 264 | EIA Open Data v2 |
 | comex | hverdager | `Mon-Fri *-*-* 22:00:00` | 30 | metalcharts.org |
 | seismic | daglig | `*-*-* 04:00:00` | 30 | USGS GeoJSON |
-| cot_euronext | ukentlig (ons) | `Wed *-*-* 18:00:00` | 168 | Euronext HTML |
+| cot_euronext | ukentlig (ons) | `Wed *-*-* 18:00:00` | 264 | Euronext HTML |
+| conab | månedlig (15.) | `*-*-15 20:00:00` | 720 | Conab PDF (poppler+pypdf) |
+| unica | halvmånedlig | `*-*-1,16 21:00:00` | 360 | UNICA PDF (poppler+pypdf) |
+| news_intel | daglig 2× | `*-*-* 06,18:30:00` | 14 | Google News RSS |
+| crypto_sentiment | daglig | `*-*-* 07:00:00` | 30 | alternative.me F&G + CoinGecko |
 
 #### 7.4.3 Generert vs systemd-installert (audit korrigert session 107)
 
@@ -959,33 +974,57 @@ Gjeldende fetcher-liste (etter session 110, 15 totalt):
 Audit-funn fra session 105 var **ufullstendig** — det listet 9 fetchere som
 "generert, ikke installert" fordi det kun så i `/etc/systemd/system/`. Audit
 korrigert i session 107: 8 av disse var allerede installert som user-timers
-i `~/.config/systemd/user/` siden tidligere sessioner. Korrekt status etter
-session 110 (alle 15 fetchere er aktivt installert):
+i `~/.config/systemd/user/` siden tidligere sessioner. **Session 149-audit
+korrigerer videre** — siden session 110 har 7 nye fetchere kommet til, og
+calendar_ff + cot_ice er endt opp dobbel-installert (både system OG user).
+
+Korrekt status etter session 149-audit (21 fetchere aktivt installert):
 
 | Lag | Fetchere |
 |---|---|
-| ✅ System-installert | calendar_ff (105), cot_ice (106) |
-| ✅ User-installert | prices, cot_disaggregated, cot_legacy, fundamentals, weather, enso, wasde, crop_progress, bdi (alle pre-session 105), eia_inventories (107), comex (108), seismic (109), cot_euronext (110) |
+| ✅ System-installert (kun) | (ingen — alle system-fetchere har også user-versjon, se ⚠️ under) |
+| ⚠️ DOBBEL-installert (system + user, samme OnCalendar) | calendar_ff (system 105 + user senere), cot_ice (system 106 + user senere) |
+| ✅ User-installert | prices, cot_disaggregated, cot_legacy, fundamentals, weather, enso, wasde, crop_progress (alle pre-session 105), eia_inventories (107), comex (108), seismic (109), cot_euronext (110), agsi (130), alsi (Spor C), conab (111), unica (112), news_intel (114), crypto_sentiment (115), shipping (113, rebranded fra `bdi`) |
+
+**⚠️ Dobbel-install av calendar_ff + cot_ice (oppdaget session 149):**
+Både `/etc/systemd/system/bedrock-fetch-{calendar_ff,cot_ice}.timer` OG
+`~/.config/systemd/user/bedrock-fetch-{calendar_ff,cot_ice}.timer` er
+`enabled` med identisk OnCalendar. Konsekvens: hver fyring skjer 2× per
+cycle (system-fetcheren kjører som root, user-fetcheren som pc). For
+calendar_ff: 4 redundante Forex Factory-kall per dag (2 fyrings-tider × 2
+nivåer). For cot_ice: 2 redundante ICE-kall per uke. **Ikke katastrofalt**
+(API-er aksepterer begge, smart-skip i runners hopper HTTP når data
+finnes), men sløsing. **Fix før live:** disable system-versjonen, behold
+user-versjonen for konsistens med øvrige 19 user-timers.
 
 **Hvorfor begge nivåer i bruk?** Tidligere fetchere ble installert som user-
 timers i et tidlig dev-stadium. Sessions 105-106 brukte system-timers fordi
-NOPASSWD-sudo var aktivt. Sessions 107-110 falt tilbake på user-timers fordi
-NOPASSWD-sudo ikke lenger var konfigurert; user-timer er pragmatisk og
-fungerer godt for dev/single-user-systemet.
+NOPASSWD-sudo var aktivt. Sessions 107-115 og 130/Spor-C falt tilbake på
+user-timers fordi NOPASSWD-sudo ikke lenger var konfigurert; user-timer er
+pragmatisk og fungerer godt for dev/single-user-systemet. Calendar_ff +
+cot_ice fikk user-versjonen lagt til UTEN at system-versjonen ble disabled.
 
 **Aksjonsplan før Fase 13 cutover (ADR-009 audit i session 117):**
-1. Bestemme om alle skal være system- eller user-timers (preferanse: system
-   for prod, fordi `loginctl enable-linger` er ekstra steg). Konvertere
-   etter behov.
+1. Bestemme om alle skal være system- eller user-timers (preferanse: user
+   for konsistens, siden 19 av 21 allerede er user; konvertere calendar_ff
+   + cot_ice ved å disable system-versjonen).
 2. Verifisere at alle aktivt fyrer (sjekke `LAST` + `NEXT`-kolonnene mot
    forventet cron).
 3. Inkludere systemd-status i `bedrock-monitor`-rapporten (per-timer
    "last run age" + "next run").
 
-Service-relaterte units som ER installert (system-nivå):
-`bedrock-server.service` (24/7 UI), `bedrock-signals-all.timer`
-(daglig signal-generering), `bedrock-monitor.timer` (06:30 pipeline-
-helse), `bedrock-compare.timer` (06:35 signal-diff vs cot-explorer).
+**Service-relaterte units som ER installert (system-nivå):**
+- `bedrock-server.service` — 24/7 UI på port 5100
+- `bedrock-signals-all.timer` — daglig signal-generering
+- `bedrock-monitor.timer` — 06:30 pipeline-helse
+- `bedrock-compare.timer` — 06:35 signal-diff vs cot-explorer
+
+**Service-relaterte units (user-nivå):**
+- `bedrock-bot.service` — cTrader trading-bot (sub-fase 12.9 D5; kjører i `--demo` per dato 2026-05-02)
+- `bedrock-monitor-alert.timer` — 06:40 separat alert-kanal
+- `bedrock-signals-bot-morning.timer` — 08:00 Mon morning bot-signal-snapshot
+- `bedrock-notify@.service` — template (param: kanal-navn) for alert-utsending
+- ⚠️ `bedrock-signals-bot-intraday.service` — service-fil eksisterer men **uten timer** (oppdaget session 149: `Unit to trigger vanished`-warning i journal). Enten installer manglende timer eller fjern orphan-service.
 
 ### 7.5 Ikke-portede fetchere fra cot-explorer (sub-fase 12.5+ roadmap)
 
