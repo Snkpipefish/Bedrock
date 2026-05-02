@@ -164,22 +164,37 @@ def test_wasde_s2u_short_history_returns_neutral() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _export_padded(severity: int, bull_bear: str = "BULL") -> pd.DataFrame:
+    """Bygg 5+ export-events for WHEAT slik at min_samples-guarden ikke
+    trigges. Siste rad har den severity som testes; de andre er svake
+    historiske rader."""
+    rows = [
+        {
+            "commodity": "WHEAT",
+            "event_date": date.today() - timedelta(days=120 + i * 60),
+            "country": "RUSSIA",
+            "event_type": "QUOTA",
+            "severity": 1,
+            "bull_bear": "BULL",
+        }
+        for i in range(1, 5)
+    ]
+    rows.append(
+        {
+            "commodity": "WHEAT",
+            "event_date": date.today() - timedelta(days=10),
+            "country": "INDIA",
+            "event_type": "EXPORT_BAN",
+            "severity": severity,
+            "bull_bear": bull_bear,
+        }
+    )
+    return pd.DataFrame(rows)
+
+
 def test_export_event_severity_5_bull() -> None:
     fn = get("export_event_active")
-    df = pd.DataFrame(
-        [
-            {
-                "commodity": "RICE",
-                "event_date": date.today() - timedelta(days=10),
-                "country": "INDIA",
-                "event_type": "EXPORT_BAN",
-                "severity": 5,
-                "bull_bear": "BULL",
-            }
-        ]
-    )
-    # Note: instrument map har ikke "Rice" — bruk Wheat istedenfor for test.
-    df["commodity"] = "WHEAT"
+    df = _export_padded(severity=5)
     score = fn(_DummyStore(export_events=df), "Wheat", {"lookback_days": 60})
     assert score == 1.0
 
@@ -193,6 +208,26 @@ def test_export_event_no_events_returns_neutral() -> None:
 def test_export_event_unknown_instrument_returns_neutral() -> None:
     fn = get("export_event_active")
     score = fn(_DummyStore(), "BTC", {})
+    assert score == 0.5
+
+
+def test_export_event_min_samples_guard_returns_neutral() -> None:
+    """Sub-fase 12.10 Bunke 1 Bug-2: tabell med < min_samples → 0.5."""
+    fn = get("export_event_active")
+    df = pd.DataFrame(
+        [
+            {
+                "commodity": "WHEAT",
+                "event_date": date.today() - timedelta(days=10),
+                "country": "INDIA",
+                "event_type": "EXPORT_BAN",
+                "severity": 5,
+                "bull_bear": "BULL",
+            }
+        ]
+    )
+    score = fn(_DummyStore(export_events=df), "Wheat", {})
+    # Default min_samples=5; 1 rad → 0.5 (selv om severity ellers ville gi 1.0)
     assert score == 0.5
 
 

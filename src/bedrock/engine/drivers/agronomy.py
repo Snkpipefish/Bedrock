@@ -231,6 +231,11 @@ def export_event_active(store: Any, instrument: str, params: dict) -> float:
 
     lookback_days = int(params.get("lookback_days", 60))
     target_bull_bear = str(params.get("bull_bear", "BULL")).upper()
+    # Sub-fase 12.10 Bunke 1 Bug-2: returner 0.5 hvis tabellen er for sparsom
+    # for commodity. Default 5 — historiske eksport-policy-events er typisk
+    # i 100+-størrelse for hoved-commodities. Tom backfill betyr at vi ikke
+    # har grunnlag for å se en isolert sample-rad som signal.
+    min_samples = int(params.get("min_samples", 5))
 
     # Hent commodity-mapping (samme USDA-koder som NASS, med ekstensjoner
     # for softs som ikke er i NASS).
@@ -244,6 +249,22 @@ def export_event_active(store: Any, instrument: str, params: dict) -> float:
     }
     commodity = commodity_map.get(instrument)
     if commodity is None:
+        return 0.5
+
+    # Tell totalt antall events for commodity (ikke filtrert på lookback).
+    try:
+        df_total = store.get_export_events(commodity=commodity)
+    except Exception as exc:
+        _log.warning("export_event.fetch_failed", instrument=instrument, error=str(exc))
+        return 0.5
+
+    if len(df_total) < min_samples:
+        _log.debug(
+            "export_event.insufficient_samples",
+            instrument=instrument,
+            n=len(df_total),
+            min_samples=min_samples,
+        )
         return 0.5
 
     from_date = (date.today() - timedelta(days=lookback_days)).isoformat()
