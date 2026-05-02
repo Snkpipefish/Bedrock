@@ -301,11 +301,12 @@ def test_generate_signals_no_setup_found_keeps_entry_with_skip_reason(
 # ---------------------------------------------------------------------------
 
 
-def test_generate_signals_agri_uses_three_horizons(
+def test_generate_signals_agri_uses_default_horizons(
     store_with_wavy_prices: DataStore,
     minimal_defaults: Path,
     instruments_dir: Path,
 ) -> None:
+    """Sub-fase 12.11: agri default = SWING + MAKRO (SCALP fjernet)."""
     _write_corn(instruments_dir)
 
     result = generate_signals(
@@ -315,18 +316,21 @@ def test_generate_signals_agri_uses_three_horizons(
         defaults_dir=minimal_defaults,
     )
 
-    # Agri default: 3 horisonter × 2 retninger = 6 entries
-    assert len(result.entries) == 6
+    # Agri default: 2 horisonter × 2 retninger = 4 entries
+    assert len(result.entries) == 4
     horizons = {e.horizon for e in result.entries}
-    assert horizons == {Horizon.SCALP, Horizon.SWING, Horizon.MAKRO}
+    assert horizons == {Horizon.SWING, Horizon.MAKRO}
 
 
-def test_generate_signals_agri_score_same_across_horizons(
+def test_generate_signals_agri_score_per_horizon(
     store_with_wavy_prices: DataStore,
     minimal_defaults: Path,
     instruments_dir: Path,
 ) -> None:
-    """Agri scorer én gang; samme score deles av alle horisonter."""
+    """Sub-fase 12.11: agri scorer 1× per horisont. Test-YAML har ingen
+    horisont-tagger på drivere → samme score på SWING og MAKRO (alle
+    drivere matcher begge horisontene). Real-world YAML med horisont-
+    tagger vil produsere ulik score per horisont."""
     _write_corn(instruments_dir)
 
     result = generate_signals(
@@ -336,9 +340,10 @@ def test_generate_signals_agri_score_same_across_horizons(
         defaults_dir=minimal_defaults,
     )
 
-    # Grupper etter retning: alle 3 horisont-entries skal ha samme score
     buys = [e for e in result.entries if e.direction == Direction.BUY]
     sells = [e for e in result.entries if e.direction == Direction.SELL]
+    # Test-YAML uten driver-tagger: alle drivere applicable for begge
+    # horisonter → samme score. Real-YAML får ulik score etter filter.
     assert len({e.score for e in buys}) == 1
     assert len({e.score for e in sells}) == 1
 

@@ -125,12 +125,15 @@ def _validate_horizon_arg(cfg: InstrumentConfig, horizon: str | None) -> None:
         return
 
     if isinstance(cfg.rules, AgriRules):
+        # Sub-fase 12.11: agri tar nå horisont (filtrerer drivere via
+        # DriverSpec.horizons). None = bakoverkompatibel "alle drivere".
         if horizon is not None:
-            raise OrchestratorError(
-                f"Instrument {cfg.instrument.id!r} uses additive_sum — "
-                f"horizon argument must be None (got {horizon!r}). "
-                f"Horisont bestemmes senere av setup-generator."
-            )
+            valid = {"SCALP", "SWING", "MAKRO"}
+            if horizon.upper() not in valid:
+                raise OrchestratorError(
+                    f"Horizon {horizon!r} not valid for agri instrument "
+                    f"{cfg.instrument.id!r}. Valid: {sorted(valid)}"
+                )
         return
 
     raise OrchestratorError(f"Unknown rules type: {type(cfg.rules).__name__}")

@@ -61,7 +61,9 @@ def _build_combos() -> list[tuple[str, str | None]]:
     """Returner (instrument_id, horizon)-par for alle YAMLs.
 
     For financial: tre rader per instrument (SCALP/SWING/MAKRO).
-    For agri: én rad per instrument med horizon=None.
+    For agri (sub-fase 12.11): SWING + MAKRO per instrument. SCALP
+    droppet — agri-fundamenta har ikke datafrekvens for scalp, og
+    SCALP-tagger fjernet fra alle 7 agri-YAMLs samtidig.
     """
     combos: list[tuple[str, str | None]] = []
     for yaml_path in sorted(INSTRUMENTS_DIR.glob("*.yaml")):
@@ -71,7 +73,8 @@ def _build_combos() -> list[tuple[str, str | None]]:
             for h in sorted(cfg.rules.horizons.keys()):
                 combos.append((inst_id, h))
         elif isinstance(cfg.rules, AgriRules):
-            combos.append((inst_id, None))
+            for h in ("SWING", "MAKRO"):
+                combos.append((inst_id, h))
     return combos
 
 

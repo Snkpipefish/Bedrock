@@ -156,9 +156,14 @@ class OrchestratorResult(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-# Default horisont-sett for agri (som ikke har horisont i Engine-scoring).
+# Default horisont-sett for agri. Sub-fase 12.11 (2026-05-02): SCALP
+# fjernet — agri-fundamenta (COT ukentlig, WASDE månedlig, weather/USDM
+# daglig–ukentlig) har ikke datafrekvens som rettferdiggjør scalping.
+# § 20.2 sier scalp-horisonten krever real-time-kilder (calendar_ff
+# KJERNE) som agri ikke har. SCALP-tagger fjernet samtidig fra alle 7
+# agri-YAMLs. Hvis caller eksplisitt ber om SCALP for agri vil filteret
+# produsere score=0 (alle familier dropper drivere), så ingen publish.
 _DEFAULT_AGRI_HORIZONS: tuple[Horizon, ...] = (
-    Horizon.SCALP,
     Horizon.SWING,
     Horizon.MAKRO,
 )
@@ -413,9 +418,10 @@ def _compute_scores(
     """Score per (horisont, retning).
 
     Per ADR-006 (session 95b) er Engine.score direction-bevisst.
-    - Financial: én Engine.score-call per (horisont, retning).
-    - Agri: én score per retning (agri har ingen horisont-splitt på
-      scoring-siden), delt på alle horisonter.
+    Sub-fase 12.11 (2026-05-02): agri er nå horisont-bevisst (samme som
+    financial). Begge typer kalles 1× per (horisont, retning); filteret
+    i `_score_families` dropper drivere som ikke matcher horisonten og
+    `_score_agri` reduserer effective_max_score tilsvarende.
 
     `now` propageres til Engine.score så tids-bevisste drivere
     (event_distance) får riktig as-of-tidspunkt i backtest. Default
@@ -425,21 +431,6 @@ def _compute_scores(
     eng = engine or Engine()
     out: dict[tuple[Horizon, Direction], GroupResult] = {}
 
-    if isinstance(cfg.rules, AgriRules):
-        for direction in directions:
-            single = eng.score(
-                cfg.instrument.id,
-                store,
-                cfg.rules,
-                horizon=None,
-                direction=direction,
-                now=now,
-            )
-            for h in horizons:
-                out[(h, direction)] = single
-        return out
-
-    assert isinstance(cfg.rules, FinancialRules)  # nosec B101
     for h in horizons:
         for direction in directions:
             out[(h, direction)] = eng.score(

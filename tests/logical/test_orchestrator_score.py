@@ -211,21 +211,40 @@ def test_score_agri_instrument_end_to_end(
         defaults_dir=minimal_defaults,
     )
     assert result.instrument == "Corn"
-    assert result.horizon is None  # agri har ingen horisont på scoring-siden
+    # Sub-fase 12.11: agri uten horizon-arg → bakoverkompatibel (alle drivere)
+    assert result.horizon is None
     assert result.aggregation == "additive_sum"
     assert result.score > 0
     assert "outlook" in result.families
 
 
-def test_score_agri_with_horizon_arg_errors(
+def test_score_agri_with_horizon_arg_propagates(
+    store_with_prices: DataStore, minimal_defaults: Path, instruments_dir: Path
+) -> None:
+    """Sub-fase 12.11: agri tar nå horisont-arg og filtrerer drivere
+    via DriverSpec.horizons. Test-YAML har ingen horisont-tagger →
+    alle drivere matcher → score uendret vs no-horizon-call."""
+    _write_agri_yaml(instruments_dir)
+    result = score_instrument(
+        "Corn",
+        store_with_prices,
+        horizon="SWING",
+        instruments_dir=instruments_dir,
+        defaults_dir=minimal_defaults,
+    )
+    assert result.horizon == "SWING"
+    assert result.aggregation == "additive_sum"
+
+
+def test_score_agri_with_invalid_horizon_errors(
     store_with_prices: DataStore, minimal_defaults: Path, instruments_dir: Path
 ) -> None:
     _write_agri_yaml(instruments_dir)
-    with pytest.raises(OrchestratorError, match="horizon argument must be None"):
+    with pytest.raises(OrchestratorError, match="not valid for agri"):
         score_instrument(
             "Corn",
             store_with_prices,
-            horizon="SWING",
+            horizon="HOURLY",
             instruments_dir=instruments_dir,
             defaults_dir=minimal_defaults,
         )

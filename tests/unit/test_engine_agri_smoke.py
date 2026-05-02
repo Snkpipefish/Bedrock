@@ -103,8 +103,12 @@ def test_engine_agri_partial_scores_scale_by_family_cap(corn_rules: AgriRules) -
     assert result.grade == "B"
 
 
-def test_engine_agri_horizon_argument_ignored(corn_rules: AgriRules) -> None:
-    """AgriRules skal ignorere `horizon`-argumentet (ingen feil heller)."""
+def test_engine_agri_horizon_argument_propagates(corn_rules: AgriRules) -> None:
+    """Sub-fase 12.11: AgriRules tar `horizon`-arg og propagerer til
+    DriverSpec.applies_to. Drivere uten `horizons:`-tag matcher alle
+    horisonter (default), så scoringen er identisk med uten-horisont-
+    kallet for dette mock-tilfellet. `result.horizon` reflekterer
+    arg-en (ikke None lenger)."""
 
     @drivers.register("agri_outlook_mock")
     def _o(store: object, instrument: str, params: dict) -> float:
@@ -118,9 +122,11 @@ def test_engine_agri_horizon_argument_ignored(corn_rules: AgriRules) -> None:
     def _w(store: object, instrument: str, params: dict) -> float:
         return 1.0
 
-    # Skal ikke kaste selv om horizon settes.
     result = Engine().score("Corn", None, corn_rules, horizon="SWING")
-    assert result.horizon is None
+    assert result.horizon == "SWING"
+    # Drivere uten horizons-tag = alle horisonter → score uendret vs no-horizon-call
+    result_no_h = Engine().score("Corn", None, corn_rules)
+    assert result.score == pytest.approx(result_no_h.score)
 
 
 def test_engine_agri_explain_trace_has_per_driver_contributions(

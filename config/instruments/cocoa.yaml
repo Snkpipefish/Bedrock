@@ -97,7 +97,6 @@ families:
           impact_levels: [High]
           min_hours: 4
         horizons:
-          - SCALP
           - SWING
       - name: cot_ice_mm_pct
         weight: 0.25

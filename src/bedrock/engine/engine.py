@@ -283,9 +283,12 @@ class Engine:
     ) -> GroupResult:
         """Scorer `instrument` mot `rules`.
 
-        For `FinancialRules` må `horizon` oppgis. For `AgriRules` ignoreres
-        `horizon` (agri har ikke horisont-splitt på scoring-siden — det
-        bestemmes senere av setup-generator).
+        For `FinancialRules` må `horizon` oppgis. For `AgriRules` propageres
+        `horizon` til driver-filteret (sub-fase 12.11): drivere uten match
+        på horisonten droppes, og familier uten gjenværende drivere bidrar
+        0 til total-score. Effektiv `max_score` per kall = sum av familier
+        som har minst én applicable driver. `horizon=None` på agri =
+        bakoverkompatibel "alle drivere kjører" (status quo før 12.11).
 
         `direction` (ADR-006 session 95b): ``BUY`` (default) bruker driver-
         verdier as-is. ``SELL`` flipper hver drivers value til ``1 - value``
@@ -304,7 +307,7 @@ class Engine:
         if isinstance(rules, FinancialRules):
             return self._score_financial(instrument, store, rules, horizon, direction, now)
         if isinstance(rules, AgriRules):
-            return self._score_agri(instrument, store, rules, direction, now)
+            return self._score_agri(instrument, store, rules, horizon, direction, now)
         raise TypeError(f"Unknown rules type: {type(rules).__name__}")
 
     # -- financial ----------------------------------------------------------
@@ -368,16 +371,39 @@ class Engine:
         instrument: str,
         store: Any,
         rules: AgriRules,
+        horizon: str | None,
         direction: Direction,
         now: datetime | None,
     ) -> GroupResult:
+        """Sub-fase 12.11: agri-engine respekterer DriverSpec.horizons.
+
+        Når `horizon` er angitt filtreres drivere via DriverSpec.applies_to.
+        Familier hvor alle drivere droppes bidrar 0 til total-score OG
+        ekskluderes fra effective_max_score for kallet — slik at en SWING-
+        score på 9 av 9 mulige (Soybean) vurderes mot 9, ikke 16. Dette
+        unngår at MAKRO-only-familier (eks. enso, conab) leaker score-
+        rom til SWING/SCALP-vurderingen. `horizon=None` = bakover-
+        kompatibel atferd (alle familier teller, max_score = rules.max_score).
+        """
         family_results, family_scores = self._score_families(
-            store, instrument, rules.families, direction, horizon=None, now=now
+            store, instrument, rules.families, direction, horizon=horizon, now=now
         )
 
         family_caps = {name: spec.weight for name, spec in rules.families.items()}
         total_score = aggregators.additive_sum(family_scores, family_caps)
         active_families = self._count_active(family_scores)
+
+        if horizon is None:
+            effective_max = rules.max_score
+        else:
+            effective_max = sum(
+                spec.weight
+                for name, spec in rules.families.items()
+                if any(d.applies_to(horizon) for d in spec.drivers)
+            )
+            if effective_max <= 0:
+                effective_max = rules.max_score
+
         g = grade.grade_agri(
             total_score=total_score,
             active_families=active_families,
@@ -387,7 +413,7 @@ class Engine:
         ctx = GateContext(
             instrument=instrument,
             score=total_score,
-            max_score=rules.max_score,
+            max_score=effective_max,
             active_families=active_families,
             family_scores=dict(family_scores),
         )
@@ -396,11 +422,11 @@ class Engine:
 
         return GroupResult(
             instrument=instrument,
-            horizon=None,
+            horizon=horizon,
             aggregation=rules.aggregation,
             score=total_score,
             grade=g,
-            max_score=rules.max_score,
+            max_score=effective_max,
             active_families=active_families,
             families=family_results,
             gates_triggered=triggered,

@@ -269,11 +269,11 @@
     "max_score": 5.8,
     "score": 2.984449627866
   },
-  "Cocoa|NONE|buy": {
+  "Cocoa|MAKRO|buy": {
     "active_families": 6,
     "family_scores": {
       "analog": 0.25,
-      "cross": 0.478,
+      "cross": 0.42,
       "enso": 0.4,
       "outlook": 0.9,
       "weather": 0.0903,
@@ -282,13 +282,13 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 16.0,
-    "score": 7.2075
+    "score": 7.0915
   },
-  "Cocoa|NONE|sell": {
+  "Cocoa|MAKRO|sell": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
-      "cross": 0.522,
+      "cross": 0.58,
       "enso": 0.6,
       "outlook": 0.1,
       "weather": 0.9097,
@@ -297,14 +297,44 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 16.0,
-    "score": 7.2925
+    "score": 7.4085
   },
-  "Coffee|NONE|buy": {
+  "Cocoa|SWING|buy": {
+    "active_families": 4,
+    "family_scores": {
+      "analog": 0.25,
+      "cross": 0.478,
+      "enso": 0.0,
+      "outlook": 0.0,
+      "weather": 0.0903,
+      "yield": 0.0903
+    },
+    "gates_triggered": [],
+    "grade": "C",
+    "max_score": 9.0,
+    "score": 1.9075
+  },
+  "Cocoa|SWING|sell": {
+    "active_families": 3,
+    "family_scores": {
+      "analog": 0.0,
+      "cross": 0.522,
+      "enso": 0.0,
+      "outlook": 0.0,
+      "weather": 0.9097,
+      "yield": 0.9097
+    },
+    "gates_triggered": [],
+    "grade": "C",
+    "max_score": 9.0,
+    "score": 5.5925
+  },
+  "Coffee|MAKRO|buy": {
     "active_families": 7,
     "family_scores": {
       "analog": 0.55,
       "conab": 0.105,
-      "cross": 0.5885,
+      "cross": 0.542777777778,
       "enso": 0.4,
       "outlook": 0.4,
       "weather": 0.0903,
@@ -312,15 +342,15 @@
     },
     "gates_triggered": [],
     "grade": "B",
-    "max_score": 16.0,
-    "score": 6.10723
+    "max_score": 18.0,
+    "score": 6.015785555556
   },
-  "Coffee|NONE|sell": {
+  "Coffee|MAKRO|sell": {
     "active_families": 7,
     "family_scores": {
       "analog": 0.1,
       "conab": 0.895,
-      "cross": 0.4115,
+      "cross": 0.457222222222,
       "enso": 0.6,
       "outlook": 0.6,
       "weather": 0.9097,
@@ -328,8 +358,40 @@
     },
     "gates_triggered": [],
     "grade": "A+",
-    "max_score": 16.0,
-    "score": 11.19277
+    "max_score": 18.0,
+    "score": 11.284214444444
+  },
+  "Coffee|SWING|buy": {
+    "active_families": 4,
+    "family_scores": {
+      "analog": 0.55,
+      "conab": 0.0,
+      "cross": 0.5885,
+      "enso": 0.0,
+      "outlook": 0.0,
+      "weather": 0.0903,
+      "yield": 0.21321
+    },
+    "gates_triggered": [],
+    "grade": "C",
+    "max_score": 9.0,
+    "score": 3.09723
+  },
+  "Coffee|SWING|sell": {
+    "active_families": 4,
+    "family_scores": {
+      "analog": 0.1,
+      "conab": 0.0,
+      "cross": 0.4115,
+      "enso": 0.0,
+      "outlook": 0.0,
+      "weather": 0.9097,
+      "yield": 0.78679
+    },
+    "gates_triggered": [],
+    "grade": "C",
+    "max_score": 9.0,
+    "score": 5.20277
   },
   "Copper|MAKRO|buy": {
     "active_families": 5,
@@ -421,12 +483,12 @@
     "max_score": 5.8,
     "score": 2.174928690325
   },
-  "Corn|NONE|buy": {
+  "Corn|MAKRO|buy": {
     "active_families": 7,
     "family_scores": {
       "analog": 0.1,
       "conab": 0.5,
-      "cross": 0.60845,
+      "cross": 0.564944444444,
       "enso": 0.5,
       "outlook": 0.7,
       "weather": 0.39426,
@@ -434,15 +496,15 @@
     },
     "gates_triggered": [],
     "grade": "B",
-    "max_score": 20.0,
-    "score": 8.681863550296
+    "max_score": 18.0,
+    "score": 8.594852439185
   },
-  "Corn|NONE|sell": {
+  "Corn|MAKRO|sell": {
     "active_families": 7,
     "family_scores": {
       "analog": 0.8,
       "conab": 0.5,
-      "cross": 0.39155,
+      "cross": 0.435055555556,
       "enso": 0.5,
       "outlook": 0.3,
       "weather": 0.60574,
@@ -450,14 +512,46 @@
     },
     "gates_triggered": [],
     "grade": "B",
-    "max_score": 20.0,
-    "score": 9.118136449704
+    "max_score": 18.0,
+    "score": 9.205147560815
   },
-  "Cotton|NONE|buy": {
+  "Corn|SWING|buy": {
+    "active_families": 5,
+    "family_scores": {
+      "analog": 0.1,
+      "conab": 0.5,
+      "cross": 0.60845,
+      "enso": 0.0,
+      "outlook": 0.0,
+      "weather": 0.39426,
+      "yield": 0.325481183432
+    },
+    "gates_triggered": [],
+    "grade": "C",
+    "max_score": 11.0,
+    "score": 4.181863550296
+  },
+  "Corn|SWING|sell": {
+    "active_families": 5,
+    "family_scores": {
+      "analog": 0.8,
+      "conab": 0.5,
+      "cross": 0.39155,
+      "enso": 0.0,
+      "outlook": 0.0,
+      "weather": 0.60574,
+      "yield": 0.674518816568
+    },
+    "gates_triggered": [],
+    "grade": "C",
+    "max_score": 11.0,
+    "score": 6.618136449704
+  },
+  "Cotton|MAKRO|buy": {
     "active_families": 6,
     "family_scores": {
       "analog": 0.8,
-      "cross": 0.575,
+      "cross": 0.5,
       "enso": 0.5,
       "outlook": 0.7,
       "weather": 0.465815,
@@ -466,13 +560,13 @@
     "gates_triggered": [],
     "grade": "A",
     "max_score": 16.0,
-    "score": 9.499767393162
+    "score": 9.349767393162
   },
-  "Cotton|NONE|sell": {
+  "Cotton|MAKRO|sell": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
-      "cross": 0.425,
+      "cross": 0.5,
       "enso": 0.5,
       "outlook": 0.3,
       "weather": 0.534185,
@@ -481,7 +575,37 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 16.0,
-    "score": 6.100232606838
+    "score": 6.250232606838
+  },
+  "Cotton|SWING|buy": {
+    "active_families": 4,
+    "family_scores": {
+      "analog": 0.8,
+      "cross": 0.575,
+      "enso": 0.0,
+      "outlook": 0.0,
+      "weather": 0.465815,
+      "yield": 0.439379131054
+    },
+    "gates_triggered": [],
+    "grade": "C",
+    "max_score": 9.0,
+    "score": 4.999767393162
+  },
+  "Cotton|SWING|sell": {
+    "active_families": 3,
+    "family_scores": {
+      "analog": 0.0,
+      "cross": 0.425,
+      "enso": 0.0,
+      "outlook": 0.0,
+      "weather": 0.534185,
+      "yield": 0.560620868946
+    },
+    "gates_triggered": [],
+    "grade": "C",
+    "max_score": 9.0,
+    "score": 3.600232606838
   },
   "CrudeOil|MAKRO|buy": {
     "active_families": 6,
@@ -1401,12 +1525,12 @@
     "max_score": 5.8,
     "score": 2.636895625847
   },
-  "Soybean|NONE|buy": {
+  "Soybean|MAKRO|buy": {
     "active_families": 7,
     "family_scores": {
       "analog": 0.2,
       "conab": 0.35,
-      "cross": 0.47,
+      "cross": 0.411111111111,
       "enso": 0.5,
       "outlook": 0.7,
       "weather": 0.39426,
@@ -1414,15 +1538,15 @@
     },
     "gates_triggered": [],
     "grade": "A",
-    "max_score": 16.0,
-    "score": 8.389670769231
+    "max_score": 18.0,
+    "score": 8.271892991453
   },
-  "Soybean|NONE|sell": {
+  "Soybean|MAKRO|sell": {
     "active_families": 7,
     "family_scores": {
       "analog": 0.5,
       "conab": 0.65,
-      "cross": 0.53,
+      "cross": 0.588888888889,
       "enso": 0.5,
       "outlook": 0.3,
       "weather": 0.60574,
@@ -1430,14 +1554,46 @@
     },
     "gates_triggered": [],
     "grade": "A",
-    "max_score": 16.0,
-    "score": 9.010329230769
+    "max_score": 18.0,
+    "score": 9.128107008547
   },
-  "Sugar|NONE|buy": {
+  "Soybean|SWING|buy": {
+    "active_families": 4,
+    "family_scores": {
+      "analog": 0.2,
+      "conab": 0.0,
+      "cross": 0.47,
+      "enso": 0.0,
+      "outlook": 0.0,
+      "weather": 0.39426,
+      "yield": 0.353716923077
+    },
+    "gates_triggered": [],
+    "grade": "C",
+    "max_score": 9.0,
+    "score": 3.189670769231
+  },
+  "Soybean|SWING|sell": {
+    "active_families": 4,
+    "family_scores": {
+      "analog": 0.5,
+      "conab": 0.0,
+      "cross": 0.53,
+      "enso": 0.0,
+      "outlook": 0.0,
+      "weather": 0.60574,
+      "yield": 0.646283076923
+    },
+    "gates_triggered": [],
+    "grade": "C",
+    "max_score": 9.0,
+    "score": 5.210329230769
+  },
+  "Sugar|MAKRO|buy": {
     "active_families": 6,
     "family_scores": {
       "analog": 0.0,
-      "cross": 0.48275,
+      "cross": 0.425277777778,
       "enso": 0.4,
       "outlook": 1.0,
       "unica": 0.5,
@@ -1446,14 +1602,14 @@
     },
     "gates_triggered": [],
     "grade": "A",
-    "max_score": 16.0,
-    "score": 8.72655
+    "max_score": 18.0,
+    "score": 8.611605555556
   },
-  "Sugar|NONE|sell": {
+  "Sugar|MAKRO|sell": {
     "active_families": 6,
     "family_scores": {
       "analog": 0.8,
-      "cross": 0.51725,
+      "cross": 0.574722222222,
       "enso": 0.6,
       "outlook": 0.0,
       "unica": 0.5,
@@ -1462,8 +1618,40 @@
     },
     "gates_triggered": [],
     "grade": "A",
-    "max_score": 16.0,
-    "score": 8.87345
+    "max_score": 18.0,
+    "score": 8.988394444444
+  },
+  "Sugar|SWING|buy": {
+    "active_families": 4,
+    "family_scores": {
+      "analog": 0.0,
+      "cross": 0.48275,
+      "enso": 0.0,
+      "outlook": 0.0,
+      "unica": 0.5,
+      "weather": 0.0603,
+      "yield": 0.28015
+    },
+    "gates_triggered": [],
+    "grade": "C",
+    "max_score": 11.0,
+    "score": 2.92655
+  },
+  "Sugar|SWING|sell": {
+    "active_families": 5,
+    "family_scores": {
+      "analog": 0.8,
+      "cross": 0.51725,
+      "enso": 0.0,
+      "outlook": 0.0,
+      "unica": 0.5,
+      "weather": 0.9397,
+      "yield": 0.71985
+    },
+    "gates_triggered": [],
+    "grade": "B",
+    "max_score": 11.0,
+    "score": 7.67345
   },
   "USDJPY|MAKRO|buy": {
     "active_families": 7,
@@ -1561,11 +1749,11 @@
     "max_score": 6.1,
     "score": 3.844885802778
   },
-  "Wheat|NONE|buy": {
+  "Wheat|MAKRO|buy": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
-      "cross": 0.7196,
+      "cross": 0.688444444444,
       "enso": 0.5,
       "outlook": 1.0,
       "weather": 0.46785,
@@ -1574,13 +1762,13 @@
     "gates_triggered": [],
     "grade": "A",
     "max_score": 16.0,
-    "score": 9.988067741935
+    "score": 9.925756630824
   },
-  "Wheat|NONE|sell": {
+  "Wheat|MAKRO|sell": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.3,
-      "cross": 0.2804,
+      "cross": 0.311555555556,
       "enso": 0.5,
       "outlook": 0.0,
       "weather": 0.53215,
@@ -1589,6 +1777,36 @@
     "gates_triggered": [],
     "grade": "C",
     "max_score": 16.0,
-    "score": 4.611932258065
+    "score": 4.674243369176
+  },
+  "Wheat|SWING|buy": {
+    "active_families": 3,
+    "family_scores": {
+      "analog": 0.0,
+      "cross": 0.7196,
+      "enso": 0.0,
+      "outlook": 0.0,
+      "weather": 0.46785,
+      "yield": 0.537722580645
+    },
+    "gates_triggered": [],
+    "grade": "C",
+    "max_score": 9.0,
+    "score": 3.988067741935
+  },
+  "Wheat|SWING|sell": {
+    "active_families": 4,
+    "family_scores": {
+      "analog": 0.3,
+      "cross": 0.2804,
+      "enso": 0.0,
+      "outlook": 0.0,
+      "weather": 0.53215,
+      "yield": 0.462277419355
+    },
+    "gates_triggered": [],
+    "grade": "C",
+    "max_score": 9.0,
+    "score": 3.611932258065
   }
 }
