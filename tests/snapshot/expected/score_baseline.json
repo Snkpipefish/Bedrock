@@ -944,7 +944,7 @@
     "family_scores": {
       "analog": 0.0,
       "event": 0.8125,
-      "macro": 0.4775,
+      "macro": 0.49,
       "positioning": 0.2422,
       "risk": 0.58962815405,
       "structure": 0.85261707989,
@@ -953,14 +953,14 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 6.4,
-    "score": 3.063401063185
+    "score": 3.080901063185
   },
   "Nasdaq|MAKRO|sell": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
       "event": 0.1875,
-      "macro": 0.5225,
+      "macro": 0.51,
       "positioning": 0.7578,
       "risk": 0.58962815405,
       "structure": 0.14738292011,
@@ -969,7 +969,7 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 6.4,
-    "score": 2.280003983295
+    "score": 2.262503983295
   },
   "Nasdaq|SCALP|buy": {
     "active_families": 6,
@@ -1220,7 +1220,7 @@
     "family_scores": {
       "analog": 0.0,
       "event": 0.8125,
-      "macro": 0.4775,
+      "macro": 0.49,
       "positioning": 0.5784,
       "risk": 0.504900398406,
       "structure": 0.687315634218,
@@ -1229,14 +1229,14 @@
     "gates_triggered": [],
     "grade": "B",
     "max_score": 6.4,
-    "score": 3.316408135834
+    "score": 3.333908135834
   },
   "SP500|MAKRO|sell": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
       "event": 0.1875,
-      "macro": 0.5225,
+      "macro": 0.51,
       "positioning": 0.4216,
       "risk": 0.504900398406,
       "structure": 0.312684365782,
@@ -1245,7 +1245,7 @@
     "gates_triggered": [],
     "grade": "C",
     "max_score": 6.4,
-    "score": 1.891432501616
+    "score": 1.873932501616
   },
   "SP500|SCALP|buy": {
     "active_families": 6,

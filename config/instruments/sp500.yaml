@@ -140,7 +140,12 @@ families:
       # _yoy (bunke3 #10). CFNAI 3-mnd MA = trend-vekst-indikator; JOLTS
       # job-openings YoY = labor-demand. real_yield 0.10→0.05, dxy 0.15→0.10
       # for sum=1.00.
-      - name: cfnai_3mma
+      # Sub-fase 12.10 follow-up Spor F1 (2026-05-02): cfnai_3mma byttet ut
+      # med ism_pmi_level (Bunke3 DEFERRED-driver re-åpnet via manuell CSV).
+      # Begge er diffusion-indeks-style growth-indikatorer; ISM Manufacturing
+      # PMI er den mest-fulgte i markedet og gir tighter step-mapping rundt
+      # 50-linjen. Vekt 0.05 bevart, sum=1.00.
+      - name: ism_pmi_level
         weight: 0.05
         params: {bull_when: high}
         horizons:
