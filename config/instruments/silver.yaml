@@ -61,9 +61,13 @@ families:
     # Sub-fase 12.6 (session 138): real_yield 0.15→0.20 — sterk
     # instrument-spesifikk signal (median |IC|=0.382 for Silver 90d).
     # vix_regime trimmet 0.10→0.05 for å holde familie-sum=1.00.
+    # Sub-fase 12.10 follow-up A2 (session 141): gvz_z@0.10 lagt til
+    # (bunke4 #15) — CBOE Gold-ETF VIX z-score. Sølv tracker gull-vol
+    # (samme safe-haven-flow + industriell risiko-on/off-syklus).
+    # real_yield 0.20→0.15, etf_holdings_change 0.20→0.15 for sum=1.00.
     drivers:
       - name: real_yield
-        weight: 0.20
+        weight: 0.15
         params: {bull_when: low}
       - name: dxy_chg5d
         weight: 0.25
@@ -78,8 +82,11 @@ families:
         weight: 0.1
         params: {metal: silver, lookback_days: 7}
       - name: etf_holdings_change
-        weight: 0.2
+        weight: 0.15
         params: {ticker: slv, bull_when: high, wow_window: 5}
+      - name: gvz_z
+        weight: 0.10
+        params: {bull_when: low, lookback_days: 252}
   structure:
     drivers:
       - name: range_position
