@@ -10,6 +10,7 @@ OnFailure=bedrock-notify@%N.service
 Type=oneshot
 WorkingDirectory=/home/pc/bedrock
 ExecStart=/home/pc/bedrock/.venv/bin/bedrock fetch run weather
+ExecStartPost=/home/pc/bedrock/.venv/bin/bedrock signals-all --bot-only --output data/signals_bot.json
 StandardOutput=journal
 StandardError=journal
 

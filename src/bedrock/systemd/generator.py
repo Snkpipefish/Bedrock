@@ -182,6 +182,7 @@ def generate_service_unit(
     bedrock_executable: str,
     module_hint: str = "",
     fail_tolerance_pct: float | None = None,
+    signals_bot_regen: bool = True,
 ) -> str:
     """Bygg .service-innhold for én fetcher.
 
@@ -193,6 +194,13 @@ def generate_service_unit(
     med kjente transient ekstern-API-issues (f.eks. FRED returnerer 5xx
     på sub-sett av serier) slik at exit-code ikke blir 1 ved tolerable
     feil-rater.
+
+    `signals_bot_regen` (Mål 1, plan_event_driven_signals_and_ui.md):
+    legg til `ExecStartPost=... signals-all --bot-only` slik at
+    `data/signals_bot.json` regenereres umiddelbart når fetcher har lagt
+    til ny data. systemd kjører ExecStartPost kun hvis ExecStart exited
+    0, så fail-runs blokkerer regen automatisk. Cache-skip i
+    `_write_if_changed` beskytter mot disk-IO på no-op runs.
     """
     description = f"Bedrock fetch: {fetcher_name}"
     if module_hint:
@@ -201,6 +209,13 @@ def generate_service_unit(
     exec_args = f"fetch run {fetcher_name}"
     if fail_tolerance_pct is not None:
         exec_args += f" --fail-tolerance-pct {fail_tolerance_pct:g}"
+
+    post_line = ""
+    if signals_bot_regen:
+        post_line = (
+            f"ExecStartPost={bedrock_executable} signals-all "
+            "--bot-only --output data/signals_bot.json\n"
+        )
 
     return (
         "# Auto-generert av `bedrock systemd generate`.\n"
@@ -215,6 +230,7 @@ def generate_service_unit(
         "Type=oneshot\n"
         f"WorkingDirectory={working_dir}\n"
         f"ExecStart={bedrock_executable} {exec_args}\n"
+        f"{post_line}"
         "StandardOutput=journal\n"
         "StandardError=journal\n"
         "\n"

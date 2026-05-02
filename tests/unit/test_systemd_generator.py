@@ -165,6 +165,33 @@ def test_generate_service_without_fail_tolerance_default() -> None:
     assert "--fail-tolerance-pct" not in content
 
 
+def test_generate_service_includes_signals_bot_regen_by_default() -> None:
+    """Mål 1: ExecStartPost regenererer signals_bot.json etter fetcher."""
+    content = generate_service_unit(
+        "prices",
+        working_dir=Path("/repo"),
+        bedrock_executable="/bin/bedrock",
+    )
+    assert (
+        "ExecStartPost=/bin/bedrock signals-all --bot-only --output data/signals_bot.json"
+        in content
+    )
+    # Må ligge i [Service]-seksjonen, ikke [Unit]
+    service_section = content.split("[Service]", 1)[1]
+    assert "ExecStartPost=" in service_section
+
+
+def test_generate_service_signals_bot_regen_can_be_disabled() -> None:
+    """signals_bot_regen=False utelater ExecStartPost (escape hatch for unit-tests/fremtid)."""
+    content = generate_service_unit(
+        "prices",
+        working_dir=Path("/repo"),
+        bedrock_executable="/bin/bedrock",
+        signals_bot_regen=False,
+    )
+    assert "ExecStartPost=" not in content
+
+
 def test_generate_service_with_module_hint() -> None:
     content = generate_service_unit(
         "prices",
@@ -182,6 +209,33 @@ def test_generate_timer_unit_contains_required_fields() -> None:
     assert "Persistent=true" in content
     assert "Requires=bedrock-fetch-prices.service" in content
     assert "WantedBy=timers.target" in content
+
+
+def test_generate_units_every_fetcher_has_signals_bot_regen() -> None:
+    """Mål 1 regression-guard: real fetch.yaml → alle services må trigge signals-bot regen.
+
+    Hvis noen fetcher genererer en .service uten ExecStartPost (f.eks. ved
+    framtidig refactor som dropper default), faller denne. Erstatter
+    dagens 5-min intraday-timer-oppførsel.
+    """
+    from bedrock.config.fetch import DEFAULT_FETCH_CONFIG_PATH, load_fetch_config
+
+    config = load_fetch_config(DEFAULT_FETCH_CONFIG_PATH)
+    assert config.fetchers, "config/fetch.yaml er tom — sjekk lasting"
+
+    units = generate_units(
+        config,
+        working_dir=Path("/home/pc/bedrock"),
+        bedrock_executable="/home/pc/bedrock/.venv/bin/bedrock",
+    )
+
+    services = {name: content for name, content in units.items() if name.endswith(".service")}
+    expected_post = (
+        "ExecStartPost=/home/pc/bedrock/.venv/bin/bedrock signals-all "
+        "--bot-only --output data/signals_bot.json"
+    )
+    missing = [name for name, content in services.items() if expected_post not in content]
+    assert not missing, f"Disse fetcher-services mangler ExecStartPost: {missing}"
 
 
 def test_generate_units_produces_pair_per_fetcher() -> None:
