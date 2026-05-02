@@ -116,10 +116,12 @@ families:
     # Futures (UK Feed Wheat, ICE Europe) gir et tredje cross-region
     # positioning-signal (US CFTC + EU Euronext + UK ICE).
     # dxy 0.40 → 0.30, shipping 0.15 → 0.10. Sum=1.00.
+    # Sub-fase 12.10 follow-up Spor D (session 137): nass_grain_stocks_
+    # quarterly@0.10 lagt til. dxy 0.30→0.20 for sum=1.00.
     weight: 2
     drivers:
       - name: dxy_chg5d
-        weight: 0.30
+        weight: 0.20
         params:
           bull_when: negative
           window: 5
@@ -154,6 +156,15 @@ families:
         weight: 0.15
         params:
           bull_when: high
+        horizons:
+          - MAKRO
+          - SWING
+      - name: nass_grain_stocks_quarterly
+        weight: 0.1
+        params:
+          commodity: WHEAT
+          category: TOTAL
+          bull_when: low
         horizons:
           - MAKRO
           - SWING

@@ -35,20 +35,32 @@ families:
     # crop_progress_stage (ukentlig USDA-rapport, GOOD/EXCELLENT-pct).
     # Session 98: NASS-data live etter session 97. Lav GOOD_EXCELLENT
     # er bullish (yield-risk) per default-mode `low_is_bull`.
+    # Sub-fase 12.10 follow-up Spor D (session 137): nass_yield_corn_yoy
+    # @0.20 lagt til. NASS årlig yield-survey (final + monthly forecasts)
+    # gir YoY %-endring vs ifjor — komplementær til weather (forward-
+    # looking) og crop_progress (real-time observert). weather + crop_
+    # progress trimmet 0.50→0.40 hver for sum=1.00.
     weight: 3
     drivers:
       - name: weather_stress
-        weight: 0.5
+        weight: 0.4
         params:
           lookback_months: 1
         horizons: &id001
           - MAKRO
           - SWING
       - name: crop_progress_stage
-        weight: 0.5
+        weight: 0.4
         params:
           metric: GOOD_EXCELLENT
           mode: low_is_bull
+        horizons:
+          - MAKRO
+          - SWING
+      - name: nass_yield_corn_yoy
+        weight: 0.2
+        params:
+          bull_when: low
         horizons:
           - MAKRO
           - SWING
@@ -120,10 +132,14 @@ families:
     # USDA FAS ESR ukentlig us-eksport-demand-signal (USA = marginal
     # tilbud globalt). dxy 0.55 → 0.45, shipping 0.20 → 0.15. Sum=1.00
     # per § 19.5 Del C+ måltilstand.
+    # Sub-fase 12.10 follow-up Spor D (session 137): nass_grain_stocks_
+    # quarterly@0.10 lagt til. NASS quarterly stocks (Mar/Jun/Sep/Dec)
+    # vs samme quarter ifjor — orthogonal til WASDE (s2u-revisjoner) og
+    # FAS (eksport-flow). dxy 0.45→0.35 for sum=1.00.
     weight: 2
     drivers:
       - name: dxy_chg5d
-        weight: 0.45
+        weight: 0.35
         params:
           bull_when: negative
           window: 5
@@ -152,6 +168,15 @@ families:
         weight: 0.15
         params:
           bull_when: high
+        horizons:
+          - MAKRO
+          - SWING
+      - name: nass_grain_stocks_quarterly
+        weight: 0.1
+        params:
+          commodity: CORN
+          category: TOTAL
+          bull_when: low
         horizons:
           - MAKRO
           - SWING

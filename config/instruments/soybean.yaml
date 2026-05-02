@@ -37,17 +37,21 @@ families:
     # Session 98: utvidet med crop_progress_stage (NASS GOOD/EXCELLENT).
     # Vekter: weather 25% + crop_progress 25% (samme yield-domene splittet)
     # + wasde 50% (autoritativ S2U). US er ~30% av global soybean-produksjon.
+    # Sub-fase 12.10 follow-up Spor D (session 137): nass_yield_soy_yoy
+    # @0.20 lagt til. NASS årlig yield-survey (final + monthly forecasts).
+    # Trim: weather 0.25→0.20, crop_progress 0.25→0.20, wasde 0.50→0.40
+    # for sum=1.00.
     weight: 3
     drivers:
       - name: weather_stress
-        weight: 0.25
+        weight: 0.2
         params:
           lookback_months: 1
         horizons: &id001
           - MAKRO
           - SWING
       - name: crop_progress_stage
-        weight: 0.25
+        weight: 0.2
         params:
           metric: GOOD_EXCELLENT
           mode: low_is_bull
@@ -55,9 +59,16 @@ families:
           - MAKRO
           - SWING
       - name: wasde_s2u_change
-        weight: 0.5
+        weight: 0.4
         params:
           region: US
+        horizons:
+          - MAKRO
+          - SWING
+      - name: nass_yield_soy_yoy
+        weight: 0.2
+        params:
+          bull_when: low
         horizons:
           - MAKRO
           - SWING
@@ -109,10 +120,12 @@ families:
     # Soybean er US' nest-største ag-eksport (etter Corn) — FAS ESR
     # demand-signal er primær cross-input. dxy 0.70 → 0.55, shipping
     # 0.20 → 0.15. Sum=1.00 per § 19.5 Del C+ måltilstand.
+    # Sub-fase 12.10 follow-up Spor D (session 137): nass_grain_stocks_
+    # quarterly@0.10 lagt til. dxy 0.55→0.45 for sum=1.00.
     weight: 2
     drivers:
       - name: dxy_chg5d
-        weight: 0.55
+        weight: 0.45
         params:
           bull_when: negative
           window: 5
@@ -135,6 +148,15 @@ families:
         weight: 0.2
         params:
           bull_when: high
+        horizons:
+          - MAKRO
+          - SWING
+      - name: nass_grain_stocks_quarterly
+        weight: 0.1
+        params:
+          commodity: SOYBEANS
+          category: TOTAL
+          bull_when: low
         horizons:
           - MAKRO
           - SWING
