@@ -570,6 +570,70 @@ ferdig og 12.6-rebalansering er gjort.
 
 ## Session log (newest first)
 
+### 2026-05-02 — Session 145: bot-whitelist 17→22 + helsefall-rydding
+
+**Scope:** Operatør-driven utvidelse — alle 22 bedrock-genererte
+instrumenter skal nå strømme til bedrock-bot for observasjons-vindu
+("alle setups med entry/SL/TP tas de første ukene for å se
+rebalansering senere"). Plus pipeline-helse-flagg og secrets-rydding.
+
+**1. Whitelist 17 → 22 (`b507f6f`):**
+- `config/bot_whitelist.yaml`: lagt til BTC, ETH, Copper, NaturalGas,
+  Platinum med bedrock-id → bot-navn-mapping. Oppdatert kilde-kommentar
+  (peker nå til `src/bedrock/bot/instruments.py`, ikke scalp_edge).
+- `src/bedrock/bot/instruments.py`: utvidet `INSTRUMENT_MAP` med
+  PLATINUM/COPPER/NATGAS/BTC/ETH; utvidet `INSTRUMENT_GROUP` med
+  natgas/platinum/copper/crypto. Fjernet BTC/ETH/NatGas fra
+  `PRICE_FEED_MAP` (de handles nå).
+- `tests/unit/test_signals_all_bot_whitelist.py`: oppdatert policy-
+  asserts (var: BTC/ETH/Copper/Platinum IKKE i mapping; nå: alle 5
+  inkludert).
+- Regenerert `data/signals_bot.json`: **22/22 instrumenter, 132 entries
+  (var 17×6=102)**. 157 scoped tester grønne.
+- **Live-verifisert mot Skilling cTrader:** alle 22 broker-symboler
+  matchet på første ticker-kandidat (BTC/ETH/COPPER/NATGAS/PLATINUM
+  eksakt). Bedrock-bot restartet, alle 22 instrumenter initialisert,
+  ingen FATAL/ERROR.
+- `BEDROCK_BOT_INCLUDE_UNPUBLISHED=true` (allerede satt i
+  `bedrock-server.service` siden D5+) gjør at alle 108 adapted entries
+  går til bot — inkludert unpublished, som er ønsket atferd for
+  observasjons-vinduet.
+
+**2. FRED transient 5xx-helsefall — re-runnet grønn:**
+- `bedrock-fetch-fundamentals.service` sto FAILED kl 02:30 — 5/14
+  FRED-serier returnerte HTTP 500 (4 av dem foreign long-term rates
+  IRLTLT01\* + WTREGEN). Klassisk transient FRED-hikke utenfor
+  retry-budsjettet (3 attempts × wait 1-10s ≈ 30s).
+- Manuelt re-run kl 17:20 ga 14/14 OK. PIPELINE-HELSE: GRØNN.
+- Ingen kode-endring nødvendig — eksisterende retry-policy fra
+  session 144 (`0c07f6f`) er allerede slått på. Hvis pattern gjentar
+  seg: vurder å øke `attempts` i FRED-kallet fra 3 til 5-6.
+
+**3. secrets.env-rydding (ikke commit-bart, kun lokal fil):**
+- Systemd-loggen viste `Ignoring invalid environment assignment 'export
+  FRED_API_KEY=...'` warninger fordi `~/.bedrock/secrets.env` hadde
+  `export `-prefiks på 3 første linjer (FRED/NASS/EIA). Systemd
+  `EnvironmentFile=` krever assignments uten `export `.
+- Strippet `export `-prefiks fra de 3 linjene. Backup tatt:
+  `~/.bedrock/secrets.env.bak-20260502-172406`. Permissions bevart
+  (`chmod 600`).
+- Bot restartet, warningene er borte. Python-koden påvirkes ikke
+  (`python-dotenv` ignorerer `export`-prefiks uansett).
+- **GitHub-eksponering bekreftet null:** `~/.bedrock/secrets.env`
+  ligger utenfor repo, gitignore blokkerer `*.env`/`secrets/`/
+  `~/.bedrock/`. `git grep` mot historie + tracked filer ga 0 treff
+  for de 3 reelle API-nøklene. cTrader credentials, FRED, NASS, EIA,
+  AGSI/FAS/USDA er alle trygt utenfor repo.
+
+**Commits (1 — rest er ikke-trackable lokalfiler):**
+- `b507f6f` feat(bot): whitelist alle 22 instrumenter — observasjons-vindu
+
+**Next:** Vent på Spor E-åpning (~2026-06-01). Observasjonsvindu-
+data over neste uker brukes til å vurdere rebalansering av de 5
+nye instrumentene mot kjerne-17 (volum, hit-rate, drawdown).
+
+---
+
 ### 2026-05-02 — Session 144: post-Spor-F robusthets-fixes + pipeline-audit
 
 **Scope:** Operatør-driven undersøkelse av FRED HTTP 5xx-feilene observert
