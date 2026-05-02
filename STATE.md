@@ -660,8 +660,9 @@ porteføljegrenser, ikke per-setup).
 - `880a3d6` fix(bot): tillat samme instrument+retning på forskjellige horisonter
 
 **Next:** Observasjons-vinduet løper videre med published-only. Operatør
-restarter bedrock-bot.service for å aktivere ny dedup-regel. Vurder
-ADR-006 follow-up (score-asymmetri) når neste runde rebalansering startes.
+har restartet `bedrock-bot.service` (2026-05-02) — ny dedup-regel er live.
+Vurder ADR-006 follow-up (score-asymmetri) når neste runde rebalansering
+startes.
 
 ---
 
