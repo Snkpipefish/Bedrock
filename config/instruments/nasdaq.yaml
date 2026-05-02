@@ -109,11 +109,11 @@ families:
       # industrial_production_yoy lagt til (bunke3 #9/#10). real_yield 0.20→
       # 0.15, net_fed_liq 0.25→0.20 for sum=1.00.
       - name: real_yield
-        weight: 0.10
+        weight: 0.05
         params:
           bull_when: low
       - name: dxy_chg5d
-        weight: 0.15
+        weight: 0.10
         params:
           bull_when: negative
           window: 5
@@ -154,6 +154,18 @@ families:
         horizons:
           - MAKRO
       - name: umich_sentiment_z
+        weight: 0.05
+        params: {bull_when: high}
+        horizons:
+          - MAKRO
+      # Sub-fase 12.10 follow-up A10 (session 142): cfnai_3mma + jolts_openings_yoy.
+      # real_yield 0.10→0.05, dxy 0.15→0.10 for sum=1.00.
+      - name: cfnai_3mma
+        weight: 0.05
+        params: {bull_when: high}
+        horizons:
+          - MAKRO
+      - name: jolts_openings_yoy
         weight: 0.05
         params: {bull_when: high}
         horizons:

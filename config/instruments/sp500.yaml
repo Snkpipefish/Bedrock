@@ -85,10 +85,10 @@ families:
     # growth-tempo. vix 0.15→0.10, net_fed_liq 0.25→0.20 for sum=1.00.
     drivers:
       - name: real_yield
-        weight: 0.10
+        weight: 0.05
         params: {bull_when: low}
       - name: dxy_chg5d
-        weight: 0.15
+        weight: 0.10
         params: {bull_when: negative, window: 5}
       - name: vix_regime
         weight: 0.10
@@ -130,6 +130,20 @@ families:
       - name: umich_sentiment_z
         weight: 0.05
         params: {bull_when: high}  # høy sentiment = bull consumer = bull eq
+        horizons:
+          - MAKRO
+      # Sub-fase 12.10 follow-up A10 (session 142): cfnai_3mma + jolts_openings
+      # _yoy (bunke3 #10). CFNAI 3-mnd MA = trend-vekst-indikator; JOLTS
+      # job-openings YoY = labor-demand. real_yield 0.10→0.05, dxy 0.15→0.10
+      # for sum=1.00.
+      - name: cfnai_3mma
+        weight: 0.05
+        params: {bull_when: high}
+        horizons:
+          - MAKRO
+      - name: jolts_openings_yoy
+        weight: 0.05
+        params: {bull_when: high}
         horizons:
           - MAKRO
   structure:
