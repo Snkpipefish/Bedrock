@@ -36,6 +36,7 @@ _NOW = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
         "industrial_production_yoy",
         "cfnai_3mma",
         "ism_pmi_level",
+        "treasury_auction_demand",
         "umich_sentiment_z",
         "jolts_openings_yoy",
         "anfci_z",
@@ -57,8 +58,13 @@ def test_driver_registered(driver_name: str) -> None:
 
 
 class _MockStore:
-    def __init__(self, series: dict[str, pd.Series] | None = None) -> None:
+    def __init__(
+        self,
+        series: dict[str, pd.Series] | None = None,
+        treasury_auctions: pd.DataFrame | None = None,
+    ) -> None:
         self._series = series or {}
+        self._treasury = treasury_auctions
 
     def get_fundamentals(self, series_id: str, last_n: int | None = None) -> pd.Series:
         if series_id not in self._series:
@@ -67,6 +73,23 @@ class _MockStore:
         if last_n is not None:
             return s.tail(last_n)
         return s
+
+    def get_treasury_auctions(
+        self,
+        security_type: str | None = None,
+        security_term: str | None = None,
+        last_n: int | None = None,
+    ) -> pd.DataFrame:
+        if self._treasury is None:
+            raise KeyError("no treasury_auctions in mock")
+        df = self._treasury
+        if security_type is not None:
+            df = df[df["security_type"] == security_type]
+        if security_term is not None:
+            df = df[df["security_term"] == security_term]
+        if df.empty:
+            raise KeyError(f"no rows for {security_type=} {security_term=}")
+        return df.tail(last_n) if last_n else df
 
 
 def _daily_series(values: list[float], end: str = "2026-05-01") -> pd.Series:
@@ -263,6 +286,90 @@ def test_ism_pmi_level_missing_series_returns_zero() -> None:
     fn = get("ism_pmi_level")
     store = _MockStore()
     assert fn(store, "SP500", {}) == 0.0
+
+
+def test_treasury_auction_demand_strong_demand_bear_for_equity() -> None:
+    """Default bull_when='low': z > 1 (strong Treasury-demand) → low score."""
+    fn = get("treasury_auction_demand")
+    base = [2.4 + (i % 3) * 0.05 for i in range(23)]  # std > 0
+    auctions = pd.DataFrame(
+        {
+            "auction_date": pd.date_range("2024-01-01", periods=24, freq="MS"),
+            "security_type": ["Note"] * 24,
+            "security_term": ["10-Year"] * 24,
+            "bid_to_cover_ratio": [*base, 3.5],  # last = extreme high z
+        }
+    )
+    store = _MockStore(treasury_auctions=auctions)
+    score = fn(store, "SP500", {})
+    assert score < 0.1
+
+
+def test_treasury_auction_demand_weak_demand_bull_for_equity() -> None:
+    fn = get("treasury_auction_demand")
+    base = [2.4 + (i % 3) * 0.05 for i in range(23)]
+    auctions = pd.DataFrame(
+        {
+            "auction_date": pd.date_range("2024-01-01", periods=24, freq="MS"),
+            "security_type": ["Note"] * 24,
+            "security_term": ["10-Year"] * 24,
+            "bid_to_cover_ratio": [*base, 1.5],  # last = extreme low z
+        }
+    )
+    store = _MockStore(treasury_auctions=auctions)
+    score = fn(store, "SP500", {})
+    assert score > 0.9
+
+
+def test_treasury_auction_demand_neutral_returns_mid() -> None:
+    fn = get("treasury_auction_demand")
+    auctions = pd.DataFrame(
+        {
+            "auction_date": pd.date_range("2024-01-01", periods=24, freq="MS"),
+            "security_type": ["Note"] * 24,
+            "security_term": ["10-Year"] * 24,
+            "bid_to_cover_ratio": [2.5] * 24,  # constant → z=0
+        }
+    )
+    store = _MockStore(treasury_auctions=auctions)
+    # Constant series → std=0 → graceful 0.5
+    assert fn(store, "SP500", {}) == 0.5
+
+
+def test_treasury_auction_demand_returns_neutral_when_sparse() -> None:
+    fn = get("treasury_auction_demand")
+    auctions = pd.DataFrame(
+        {
+            "auction_date": pd.date_range("2024-01-01", periods=5, freq="MS"),
+            "security_type": ["Note"] * 5,
+            "security_term": ["10-Year"] * 5,
+            "bid_to_cover_ratio": [2.5, 2.6, 2.4, 2.5, 2.7],  # under min_samples=12
+        }
+    )
+    store = _MockStore(treasury_auctions=auctions)
+    assert fn(store, "SP500", {}) == 0.5
+
+
+def test_treasury_auction_demand_missing_table_returns_zero() -> None:
+    fn = get("treasury_auction_demand")
+    store = _MockStore()
+    assert fn(store, "SP500", {}) == 0.0
+
+
+def test_treasury_auction_demand_bull_when_high_inverts() -> None:
+    """Override bull_when='high': z > 1 → high score (bond-ETF tolkning)."""
+    fn = get("treasury_auction_demand")
+    base = [2.4 + (i % 3) * 0.05 for i in range(23)]
+    auctions = pd.DataFrame(
+        {
+            "auction_date": pd.date_range("2024-01-01", periods=24, freq="MS"),
+            "security_type": ["Note"] * 24,
+            "security_term": ["10-Year"] * 24,
+            "bid_to_cover_ratio": [*base, 3.5],
+        }
+    )
+    store = _MockStore(treasury_auctions=auctions)
+    assert fn(store, "TLT", {"bull_when": "high"}) > 0.9
 
 
 def test_umich_sentiment_z_registered() -> None:

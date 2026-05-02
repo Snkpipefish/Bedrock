@@ -131,9 +131,15 @@ families:
         params: {bull_when: high}
         horizons:
           - MAKRO
-      - name: umich_sentiment_z
+      # Sub-fase 12.10 follow-up Spor F6 (2026-05-02): umich_sentiment_z byttet
+      # ut med treasury_auction_demand. UMich sentiment overlapper i stor grad
+      # med anfci_z (financial-conditions-z fanger samme consumer/business-
+      # sentiment-syklus). Treasury-bid-to-cover gir uavhengig safe-haven-
+      # flow-signal (risk-off for equity når demand er sterk). 2-Year Note
+      # brukt — god dekning i backfill (24 rader). Vekt 0.05 bevart, sum=1.00.
+      - name: treasury_auction_demand
         weight: 0.05
-        params: {bull_when: high}  # høy sentiment = bull consumer = bull eq
+        params: {security_type: Note, security_term: "2-Year", bull_when: low}
         horizons:
           - MAKRO
       # Sub-fase 12.10 follow-up A10 (session 142): cfnai_3mma + jolts_openings

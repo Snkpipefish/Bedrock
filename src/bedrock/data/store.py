@@ -77,6 +77,7 @@ from bedrock.data.schemas import (
     DDL_PRICES,
     DDL_SEISMIC_EVENTS,
     DDL_SHIPPING_INDICES,
+    DDL_TREASURY_AUCTIONS,
     DDL_UNICA_REPORTS,
     DDL_WASDE,
     DDL_WEATHER,
@@ -127,10 +128,12 @@ from bedrock.data.schemas import (
     TABLE_PRICES,
     TABLE_SEISMIC_EVENTS,
     TABLE_SHIPPING_INDICES,
+    TABLE_TREASURY_AUCTIONS,
     TABLE_UNICA_REPORTS,
     TABLE_WASDE,
     TABLE_WEATHER,
     TABLE_WEATHER_MONTHLY,
+    TREASURY_AUCTIONS_COLS,
     UNICA_REPORTS_COLS,
     WASDE_COLS,
     WEATHER_COLS,
@@ -240,6 +243,8 @@ class DataStore:
             # + grain_stocks (årlige + kvartalsvise USDA-rapporter).
             conn.execute(DDL_NASS_YIELD)
             conn.execute(DDL_NASS_GRAIN_STOCKS)
+            # Sub-fase 12.10 follow-up Spor F6: US Treasury auction-results.
+            conn.execute(DDL_TREASURY_AUCTIONS)
             # Sub-fase 12.10 Bunke 1 Bug-1: backfill released_at-kolonnen på
             # COT- + AAII-tabellene for eksisterende rader (ALTER TABLE +
             # konvensjons-basert UPDATE). Idempotent.
@@ -2605,6 +2610,94 @@ class DataStore:
                 f"SELECT 1 FROM {TABLE_NASS_GRAIN_STOCKS} WHERE commodity = ? LIMIT 1",
                 (commodity.upper(),),
             )
+            return cursor.fetchone() is not None
+
+    # ------------------------------------------------------------------
+    # Treasury auctions (sub-fase 12.10 follow-up Spor F6, 2026-05-02)
+    # ------------------------------------------------------------------
+
+    def append_treasury_auctions(self, df: pd.DataFrame) -> int:
+        """Skriv Treasury-auction-rader. Returnerer antall rader.
+
+        Idempotent på (auction_date, security_type, security_term)-PK.
+        """
+        missing = [c for c in TREASURY_AUCTIONS_COLS if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"append_treasury_auctions: missing columns {missing}. "
+                f"Required: {list(TREASURY_AUCTIONS_COLS)}. Got: {sorted(df.columns)}"
+            )
+
+        prepared = df[list(TREASURY_AUCTIONS_COLS)].copy()
+        prepared["auction_date"] = pd.to_datetime(prepared["auction_date"]).dt.strftime("%Y-%m-%d")
+
+        rows: Sequence[tuple] = []
+        for row in prepared.itertuples(index=False):
+            values = []
+            for col in TREASURY_AUCTIONS_COLS:
+                v = getattr(row, col)
+                if v is None or (isinstance(v, float) and pd.isna(v)) or pd.isna(v):
+                    values.append(None)
+                elif col in (
+                    "auction_date",
+                    "security_type",
+                    "security_term",
+                    "cusip",
+                ):
+                    values.append(str(v))
+                else:
+                    values.append(float(v))
+            rows.append(tuple(values))
+
+        placeholders = ", ".join("?" * len(TREASURY_AUCTIONS_COLS))
+        cols_sql = ", ".join(TREASURY_AUCTIONS_COLS)
+        with self._connect() as conn:
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {TABLE_TREASURY_AUCTIONS} "
+                f"({cols_sql}) VALUES ({placeholders})",
+                rows,
+            )
+            conn.commit()
+        return len(rows)
+
+    def get_treasury_auctions(
+        self,
+        security_type: str | None = None,
+        security_term: str | None = None,
+        last_n: int | None = None,
+    ) -> pd.DataFrame:
+        """Returner Treasury-auction-rader sortert ASC på auction_date.
+
+        Filtrer på `security_type` og/eller `security_term` hvis gitt.
+        Kaster `KeyError` hvis ingen rader matcher filteret.
+        """
+        clauses = []
+        params_sql: list[str] = []
+        if security_type is not None:
+            clauses.append("security_type = ?")
+            params_sql.append(security_type)
+        if security_term is not None:
+            clauses.append("security_term = ?")
+            params_sql.append(security_term)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        query = f"SELECT * FROM {TABLE_TREASURY_AUCTIONS} {where} ORDER BY auction_date ASC"
+        with self._connect() as conn:
+            df = pd.read_sql(query, conn, params=tuple(params_sql))
+
+        if df.empty:
+            raise KeyError(
+                f"No treasury_auctions for security_type={security_type!r} "
+                f"security_term={security_term!r}"
+            )
+
+        df["auction_date"] = pd.to_datetime(df["auction_date"])
+        if last_n is None:
+            return df
+        return df.tail(last_n).reset_index(drop=True)
+
+    def has_treasury_auctions(self) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute(f"SELECT 1 FROM {TABLE_TREASURY_AUCTIONS} LIMIT 1")
             return cursor.fetchone() is not None
 
     # ------------------------------------------------------------------

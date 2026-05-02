@@ -443,6 +443,83 @@ def ism_pmi_level(store: Any, instrument: str, params: dict) -> float:
     return score if bull_when == "high" else 1.0 - score
 
 
+_TREASURY_BTC_THRESHOLDS_BULL_HIGH: tuple[tuple[float, float], ...] = (
+    # Trapper kalibrert for bull_when='high' (høy demand = høy score).
+    # Z-score av bid_to_cover_ratio mot lookback-vindu.
+    (-2.0, 0.0),  # ekstrem svak Treasury-demand
+    (-1.0, 0.25),
+    (-0.5, 0.4),
+    (0.0, 0.5),
+    (0.5, 0.6),
+    (1.0, 0.75),
+    (float("inf"), 1.0),  # ekstrem sterk Treasury-demand
+)
+
+
+@register("treasury_auction_demand")
+def treasury_auction_demand(store: Any, instrument: str, params: dict) -> float:
+    """US Treasury auction bid-to-cover-ratio z-score (Spor F6).
+
+    Reads TreasuryDirect-auction-historikk for valgt (security_type,
+    security_term)-par og z-score'r siste bid_to_cover-ratio mot
+    rolling-historikk. Default ``security_type='Note'`` /
+    ``security_term='10-Year'`` — den mest-fulgte auksjonen for
+    safe-haven-demand-signal.
+
+    Tolkning for equity-instrumenter:
+    - Høy bid-to-cover (z > 0) = sterk Treasury-demand = risk-off-bias
+      = bearish equity → bruk ``bull_when='low'`` for å invertere.
+    - Svak bid-to-cover (z < 0) = svak demand = risk-on-bias = bullish
+      equity.
+
+    Default ``bull_when='low'`` (equity-tilpasset). Override 'high' for
+    bond ETFs hvor sterk Treasury-demand er positivt for pris.
+
+    Params:
+        security_type: Bill/Note/Bond/TIPS/FRN. Default ``"Note"``.
+        security_term: f.eks. ``"10-Year"``, ``"2-Year"``, ``"13-Week"``.
+            Default ``"10-Year"``.
+        lookback_months: rolling-vindu for z-score (default 24).
+        bull_when: ``"low"`` (default, equity-tolkning) eller ``"high"``.
+        min_samples: minimum auksjoner i historikken (default 12).
+    """
+    _ = params.get("_horizon")
+    bull_when = str(params.get("bull_when", "low")).lower()
+    security_type = str(params.get("security_type", "Note"))
+    security_term = str(params.get("security_term", "10-Year"))
+    lookback_months = int(params.get("lookback_months", 24))
+    min_samples = int(params.get("min_samples", 12))
+
+    try:
+        df = store.get_treasury_auctions(security_type=security_type, security_term=security_term)
+    except Exception:
+        return 0.0
+
+    if df is None or df.empty or "bid_to_cover_ratio" not in df.columns:
+        return 0.0
+
+    s = pd.to_numeric(df["bid_to_cover_ratio"], errors="coerce").dropna()
+    if len(s) < min_samples:
+        return 0.5
+
+    # 24-mnd ≈ 24 auksjoner for monthly Notes; for Bills (ukentlig) ~104.
+    # Bruker ren tail-window (ikke kalender-måneder) for cadence-agnostikk.
+    window = s.tail(lookback_months + 1)
+    if len(window) < 4:
+        return 0.5
+
+    current = float(window.iloc[-1])
+    history = window.iloc[:-1]
+    mean = float(history.mean())
+    std = float(history.std(ddof=0))
+    if std == 0 or pd.isna(std):
+        return 0.5
+
+    z = (current - mean) / std
+    score = _step(z, _TREASURY_BTC_THRESHOLDS_BULL_HIGH)
+    return score if bull_when == "high" else 1.0 - score
+
+
 @register("umich_sentiment_z")
 def umich_sentiment_z(store: Any, instrument: str, params: dict) -> float:
     """Univ Michigan Consumer Sentiment (UMCSENT) z-score. Bull when high."""

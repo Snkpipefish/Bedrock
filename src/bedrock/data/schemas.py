@@ -2188,6 +2188,71 @@ class CecafeExportRow(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Treasury auctions (sub-fase 12.10 follow-up Spor F6, 2026-05-02)
+# ---------------------------------------------------------------------------
+# US Treasury auction-results fra TreasuryDirect API. Brukes til
+# treasury_auction_demand-driver: høy bid-to-cover-ratio = sterk
+# safe-haven-demand = risk-off bias for equity. Indirect/primary-dealer
+# %-fordelinger gir foreign-vs-domestic-demand-overlay.
+# Frekvens: ukentlig+ (Bills daglig, Notes/Bonds månedlig, TIPS kvartalsvis).
+# Kilde: https://www.treasurydirect.gov/TA_WS/securities/auctioned?format=json
+# Gratis, ingen API-key. Field-mapping (camelCase JSON → snake_case schema):
+#   auctionDate → auction_date
+#   securityType → security_type   (Bill/Note/Bond/TIPS/FRN)
+#   securityTerm → security_term   (f.eks. "13-Week", "2-Year", "10-Year")
+#   bidToCoverRatio → bid_to_cover_ratio
+#   indirectBidderAccepted/totalAccepted → indirect_pct
+#   primaryDealerAccepted/totalAccepted → primary_dealer_pct
+#   offeringAmount → offering_amount
+#   totalAccepted → total_accepted
+
+TABLE_TREASURY_AUCTIONS = "treasury_auctions"
+
+DDL_TREASURY_AUCTIONS = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_TREASURY_AUCTIONS} (
+    auction_date        TEXT NOT NULL,    -- ISO YYYY-MM-DD
+    security_type       TEXT NOT NULL,    -- Bill/Note/Bond/TIPS/FRN
+    security_term       TEXT NOT NULL,    -- "13-Week", "2-Year", etc.
+    cusip               TEXT,
+    bid_to_cover_ratio  REAL,
+    indirect_pct        REAL,
+    primary_dealer_pct  REAL,
+    offering_amount     REAL,
+    total_accepted      REAL,
+    PRIMARY KEY (auction_date, security_type, security_term)
+)
+"""
+
+TREASURY_AUCTIONS_COLS: tuple[str, ...] = (
+    "auction_date",
+    "security_type",
+    "security_term",
+    "cusip",
+    "bid_to_cover_ratio",
+    "indirect_pct",
+    "primary_dealer_pct",
+    "offering_amount",
+    "total_accepted",
+)
+
+
+class TreasuryAuctionRow(BaseModel):
+    """En US Treasury auction-result-rad fra TreasuryDirect."""
+
+    auction_date: date
+    security_type: str = Field(min_length=1)
+    security_term: str = Field(min_length=1)
+    cusip: str | None = None
+    bid_to_cover_ratio: float | None = None
+    indirect_pct: float | None = None  # 0..1, ikke 0..100
+    primary_dealer_pct: float | None = None
+    offering_amount: float | None = None
+    total_accepted: float | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+# ---------------------------------------------------------------------------
 # Sub-fase 12.6 harvester-tabeller (session 117 + 118)
 #
 # Disse tabellene er output-only fra `scripts/harvest_*.py` og brukes som

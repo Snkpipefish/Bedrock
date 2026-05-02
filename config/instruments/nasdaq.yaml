@@ -159,9 +159,14 @@ families:
         params: {bull_when: high}
         horizons:
           - MAKRO
-      - name: umich_sentiment_z
+      # Sub-fase 12.10 follow-up Spor F6 (2026-05-02): umich_sentiment_z byttet
+      # ut med treasury_auction_demand. Treasury-bid-to-cover for 2-Year Note
+      # gir safe-haven-demand-signal (sterk demand = risk-off = bearish equity).
+      # UMich overlappet med anfci_z; treasury gir nytt uavhengig signal.
+      # Vekt 0.05 bevart, sum=1.00.
+      - name: treasury_auction_demand
         weight: 0.05
-        params: {bull_when: high}
+        params: {security_type: Note, security_term: "2-Year", bull_when: low}
         horizons:
           - MAKRO
       # Sub-fase 12.10 follow-up A10 (session 142): cfnai_3mma + jolts_openings_yoy.
