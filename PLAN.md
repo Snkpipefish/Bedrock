@@ -2818,3 +2818,109 @@ Tag: `v0.12.10-fase-12.10-LUKKET`. Etter dette: bruker vurderer **Bedrock-2.0**-
 - Live-cutover (kun demo-konto fra start til slutt)
 - Trade-execution-side (bot.yaml lot-sizing/exit-policies — egen sub-fase)
 - UI-eksponering av 67 nye drivere (incremental etter hver bunke; ingen big-bang UI)
+
+### 22.5 Sub-fase 12.10 follow-up Spor A — LUKKET 2026-05-02 (A1-A11)
+
+**Status:** Spor A (YAML-wirings av 12.10-bunke-drivere) LUKKET. 11 sub-spor (A1-A11) levert. Tags: `v0.12.10-followup-a1` ... `v0.12.10-followup-a11`.
+
+**Levert per § 22.1 PRIMÆR-spor:**
+- **52 wirings + 11 replacements** (51 wirings ved spor-finale; A11 leverte siste 1)
+- **2 grade-flips totalt** (Nasdaq + SP500 SWING buy B→A i A10, ved B/A-grensen 3.20). Stop-criterion ≤5/asset-class respektert i alle 11 spor.
+- **Bunker fullt wired:** 6 (alle 6 EIA-drivere), 7 (alle 5 AGSI-drivere)
+- **Bunker delvis wired:** 3 (9/14 — resten har overlap), 4 (5/8 — 3 DEFERRED på CBOE/NOAA-feed), 8 (2/3 — Treasury DEFERRED)
+- **Per asset-class coverage:** Alle 22/22 instrumenter har minst én ny 12.10-bunke-driver wired
+
+**Gjenstår fra A-track (lav prioritet — overlapp eller død kode):**
+- `enso_regime` død driver i `agri.py` (analog-dim-extractor må også oppdateres til noaa_oni_index — egen refactor-commit)
+- `continuing_claims_z`, `t_bill_3mo_yield`, `fomc_decision_distance` — overlapp med eksisterende drivere; kan wires hvis empirisk verdi etablert
+
+**Ikke levert (utsatt til separate spor B-E):**
+- Bunke9 #34 multi-lookback-konsolidering (substantial driver-refactor — Spor E)
+- Bunke9 #36-#41 driver-impl-rewrites (substantial refactors — Spor E)
+- *_surprise data-arkitektur (#5 — Spor B)
+- ALSI/IIP-routes (#24/#25 — Spor C)
+- NASS yield/grain_stocks (#20 — Spor D)
+- Resterende mindre DEFERRED (CBOE pcr/term_curve, NOAA enso_forecast, ism_pmi_level, treasury_auctions, crypto_sentiment_extreme, eia_natgas_processing, cot_concentration_top4, cot_swap_dealer_skew — Spor F)
+
+### 22.6 Sub-fase 12.10 follow-up Spor B-F — gjenstår
+
+#### Spor B: *_surprise data-arkitektur (PLAN § 22.2 #5)
+
+**Mål:** Implementere `nfp_surprise`, `cpi_surprise`, `gdp_surprise`, `pce_surprise`-drivere i ny `event`-familie (per § 22.1 låst beslutning).
+
+**Blocker:** Forex Factory `ff_calendar_thisweek.json` har KUN forecast+previous-keys, ikke actual. FRED-serier PAYEMS/CPIAUCSL/GDP/PCEPI er heller ikke i DB.
+
+**Subtasks:**
+- B1: Velg data-kilde for actual-felt (FRED-cross-reference vs alternativ feed som tradingeconomics/dailyfx). ADR-014 hvis arkitektonisk skifte.
+- B2: Backfill PAYEMS/CPIAUCSL/GDP/PCEPI fra FRED til fundamentals.
+- B3: Implementer cross-source-join-logikk (FF.forecast × FRED.actual eller alt feed).
+- B4: Implementer 4 `econ_surprise`-drivere med title-pattern + country + bull_when.
+- B5: 4 YAML-wirings (SP500/Nasdaq/USDJPY/EURUSD `event`-familie med vekt 1.0).
+- B6: Snapshot-baseline regen + diff-rapport.
+
+**Estimat:** 2-3 sessioner. Substantial fordi cross-source-arkitektur er ny.
+
+#### Spor C: ALSI + IIP-routes (PLAN § 22.2 #24/#25)
+
+**Mål:** GIE-extensions for ALSI (LNG-terminal-storage) og IIP REMIT (supply-unavailability).
+
+**Subtasks:**
+- C1: Schema-utvidelse `alsi_storage`-tabell + IIP REMIT-tabell.
+- C2: Fetcher-extensions med GIE-key (allerede registrert per § 22.1 — én key dekker AGSI+ALSI+IIP).
+- C3: Drivere `alsi_eu_pct`, `alsi_storage_change`, `iip_supply_unavailability`.
+- C4: Backfill + tester + YAML-wirings (NaturalGas + Brent macro).
+- C5: Snapshot-baseline regen + diff-rapport.
+
+**Estimat:** 1-2 sessioner. Bygger på AGSI-mønster fra bunke7.
+
+#### Spor D: NASS yield/grain_stocks (PLAN § 22.2 #20)
+
+**Mål:** USDA NASS QuickStats-utvidelse for yield-survey + quarterly-stocks.
+
+**Subtasks:**
+- D1: Schema-utvidelse `nass_yield` + `nass_grain_stocks`-tabeller.
+- D2: NASS QuickStats-fetcher utvidelser (yield-survey + quarterly-stocks-routes).
+- D3: Drivere `nass_yield_corn_yoy`, `nass_yield_soy_yoy`, `nass_grain_stocks_quarterly`.
+- D4: Backfill + tester + YAML-wirings (Corn + Soybean yield/cross-familier).
+- D5: Snapshot-baseline regen + diff-rapport.
+
+**Estimat:** 1-2 sessioner. Bygger på eksisterende NASS Crop Progress-fetcher.
+
+#### Spor E: Driver-impl-rewrites (PLAN § 22.2 #36-#41 + #34)
+
+**Mål:** Substantial refactor av 6 eksisterende drivere + multi-lookback-konsolidering.
+
+**Subtasks (én per session):**
+- E1: #36 `momentum_z` regime-conditional lookback (20d høy-vol, 100d lav-vol)
+- E2: #37 `sma200_align` slope-component
+- E3: #38 `range_position` ATR-normalisering 14-20d
+- E4: #39 `shipping_pressure` 90d-trend + 12mo-MA-regime
+- E5: #40 `hdd_cdd_anomaly` per-instrument-vekt
+- E6: #41 `aaii_extreme` 8-uker-MA-divergens
+- E7: #34 multi-lookback-konsolidering (~25 drivere — én primær window per driver)
+
+**Estimat:** 6-7 sessioner. Hver har behov for tester + ev. baseline-flips.
+
+#### Spor F: Resterende mindre DEFERRED
+
+**Subtasks:**
+- F1: ism_pmi_level alt-kilde (manuell CSV-fallback?)
+- F2: CBOE pcr_total_extreme + pcr_equity_only fra CBOE-direkte (ny fetcher)
+- F3: cboe_vix_term_curve (overlapper vix_term_ratio — kanskje droppe)
+- F4: noaa_enso_forecast_3mo fra IRI-CSV
+- F5: cot_concentration_top4 + cot_swap_dealer_skew (schema-utvidelse for Conc_Net + TFF Swap)
+- F6: Treasury auctions (#27) — ny fetcher mot Treasury direct
+- F7: crypto_sentiment_extreme (vent til ~juli 2026 når 100+ rader)
+- F8: eia_natgas_processing (monthly natgas-route i eia.fetch)
+
+**Estimat:** 4-6 sessioner. Hver er liten, men data-tilgang varierer.
+
+### 22.7 Anbefalt rekkefølge for Spor B-F
+
+Basert på leveranse-verdi vs implementasjons-kompleksitet:
+
+1. **Spor C** (ALSI/IIP) — bygger direkte på AGSI-mønster, GIE-key allerede registrert. Lavest risk for høy verdi. **Anbefalt først.**
+2. **Spor D** (NASS yield) — bygger på Crop Progress-fetcher; klar verdi for agri.
+3. **Spor B** (*_surprise) — substantial arkitektur-arbeid; ADR kreves; men leverer 4 nye drivere som er sterkt etterspurt.
+4. **Spor F1-F4** (mindre DEFERRED) — lav prioritet; ta opportunistisk.
+5. **Spor E** (driver-impl-rewrites) — substantial refactor med behov for empirisk validering. Best etter at A-spor har rullet ~2-4 uker på live-demo og vi har data på hva som faktisk underperformer.
