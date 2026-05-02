@@ -396,16 +396,18 @@ def test_ttl_allows_fresh_swing(
 # ─────────────────────────────────────────────────────────────
 
 
-def test_duplicate_instrument_direction_blocked(
+def test_duplicate_instrument_direction_horizon_blocked(
     safety: SafetyMonitor, config: ReloadableConfig, active_states: list, tmp_path: Path
 ) -> None:
-    # Preload: allerede en åpen EURUSD-buy-state
+    """Samme (instrument, direction, horizon) blokkeres."""
+    # Preload: allerede en åpen EURUSD-buy-state på SCALP
     active_states.append(
         TradeState(
             signal_id="existing",
             instrument="EURUSD",
             symbol_id=1,
             direction="buy",
+            horizon="SCALP",
             phase=TradePhase.IN_TRADE,
         )
     )
@@ -443,6 +445,61 @@ def test_duplicate_instrument_direction_blocked(
     # Fortsatt kun 1 state (den gamle) — ny ble blokkert
     assert len(active_states) == 1
     assert active_states[0].signal_id == "existing"
+
+
+def test_different_horizon_same_instrument_direction_allowed(
+    safety: SafetyMonitor, config: ReloadableConfig, active_states: list, tmp_path: Path
+) -> None:
+    """Åpen SCALP-buy skal IKKE blokkere ny SWING-buy på samme instrument.
+
+    SCALP/SWING/MAKRO er uavhengige slots — egne tese-tidsskalaer og
+    egne stops/TP'er. Operatør vil ha mange scalps uavhengig av makro/swing.
+    """
+    active_states.append(
+        TradeState(
+            signal_id="existing-scalp",
+            instrument="EURUSD",
+            symbol_id=1,
+            direction="buy",
+            horizon="SCALP",
+            phase=TradePhase.IN_TRADE,
+        )
+    )
+    client = _make_client_stub(
+        symbol_map={"EURUSD": 1},
+        last_bid={1: 1.08},
+        last_ask={1: 1.081},
+        spread_history={1: deque([0.00002] * 15, maxlen=20)},
+    )
+    engine = _make_engine(client, safety, config, active_states, stats_path=tmp_path / "s.json")
+    engine.on_symbols_ready(client)
+    signal = {
+        "id": "new-eur-buy-swing",
+        "instrument": "EURUSD",
+        "direction": "buy",
+        "status": "watchlist",
+        "alert_level": 1.0805,
+        "stop": 1.0750,
+        "t1": 1.0900,
+        "entry_zone": [1.08, 1.081],
+        "horizon": "SWING",
+    }
+    engine.signal_data = {"signals": [signal], "global_state": {}, "rules": {}}
+    engine._on_candle_closed(
+        1,
+        Candle(
+            open=1.08,
+            high=1.081,
+            low=1.08,
+            close=1.081,
+            volume=1,
+            timestamp=datetime.now(timezone.utc),
+        ),
+    )
+    # Begge skal ko-eksistere — scalp og swing er uavhengige slots
+    assert len(active_states) == 2
+    horizons_active = {s.horizon for s in active_states}
+    assert horizons_active == {"SCALP", "SWING"}
 
 
 # ─────────────────────────────────────────────────────────────

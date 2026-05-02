@@ -602,12 +602,16 @@ class EntryEngine:
             # Aktiver bekreftelsesvindu
             if in_zone and state is None:
                 dirn = sig.get("direction", "")
-                # Duplikat-blokk
+                # Duplikat-blokk: blokker kun samme (instrument, direction, horizon).
+                # SCALP/SWING/MAKRO er uavhengige slots — en åpen scalp-buy
+                # skal ikke hindre en swing-buy eller makro-buy på samme
+                # instrument (egne stops/TP'er, egne tese-tidsskalaer).
                 already = any(
                     s
                     for s in self._active_states
                     if getattr(s, "instrument", "") == instrument
                     and s.direction == dirn
+                    and getattr(s, "horizon", "SWING") == horizon
                     and s.phase in (TradePhase.AWAITING_CONFIRMATION, TradePhase.IN_TRADE)
                 )
                 if already:
