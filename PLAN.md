@@ -2689,17 +2689,45 @@ systematisk asset-class-bias-flipp. Ny baseline låst som anker.
 
 ---
 
-## 22. Sub-fase 12.10 — driver-rebalansering (PLANLAGT, parallelt med 12.9 D5/D6)
+## 22. Sub-fase 12.10 — driver-rebalansering (LUKKET 2026-05-02)
 
-**Status:** Planlagt 2026-05-02. Startes i ny session-kontekst når
-operatør vil — uavhengig av D5/D6-status. Bot kjører på demo i
-bakgrunnen; 12.10-arbeid endrer kun signal-generering, ikke
-trade-flyt.
+**Status:** LUKKET 2026-05-02 (tag `v0.12.10-fase-12.10-LUKKET`). Bunker
+1-9 alle taggget med per-bunke-tag (`v0.12.10-bunke1` ... `v0.12.10-bunke9`).
+
+**Levert:**
+- ~50 nye drivere registrert + smoke-testet mot live DB (i moduler
+  `macro_bunke3.py` / `macro_bunke4.py` / `macro_bunke6.py` /
+  `macro_bunke7.py` / `macro_bunke8.py` + utvidelser i `risk.py`,
+  `macro.py`, `agronomy.py`)
+- 3 bug-fixer (COT released_at look-ahead, min_samples-guards på 4
+  sparsom-data-drivere, event_distance audit-vakter)
+- 2 driver-default-bumps (#33 mining_disruption M5.5, #35 comex_stress
+  min_samples=180)
+- ~60 000+ nye rader backfilt på 30+ datakilder (FRED/Yahoo/NOAA/ICE-
+  softs/EIA/USDM-states/AGSI)
+- 100+ nye tester, pyright src/: 0 errors
+
+**DEFERRED (~17 drivere/endringer for senere session):**
+- *_surprise (#5): FF mangler actual; krever cross-source-arkitektur
+- ism_pmi_level (#10): FRED NAPMPMI deprecated
+- CBOE pcr/term_curve + NOAA enso_forecast (#16/#17): ikke i Yahoo-feed
+- NASS yield + grain_stocks (#20): QuickStats-utvidelse
+- FAS china/eu (#21): YAML-wiring follow-up
+- ALSI + IIP REMIT (#24/#25): nye GIE-routes
+- cot_concentration_top4 + cot_swap_dealer_skew (#26): schema-utvidelse
+- Treasury auctions (#27): ny fetcher
+- crypto_sentiment_extreme (#29): vent til 100+ rader
+- YAML-wirings av alle nye drivere (#30/#31/#32/#34/#42): per § 22.1
+  live-demo-validering først
+- Driver-impl-rewrites (#36/#37/#38/#39/#40/#41): substantial refactors
+
+**Følger:** YAML-wirings + DEFERRED-arbeid tas i egne senere sessioner
+basert på empirisk demo-resultat per § 22.1 ("validering mot live-demo").
 
 D6 (scalp_edge retire) tas som egen senere task når operatør sier OK;
 ikke gating for 12.10.
 
-**Kjør på demo-konto fortsatt — ingen live-cutover under hele 12.10.**
+**Kjørte på demo-konto hele veien — ingen live-cutover under 12.10.**
 
 ### 22.1 Beslutninger låst (2026-05-02)
 
