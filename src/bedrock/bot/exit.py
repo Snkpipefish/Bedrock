@@ -436,7 +436,17 @@ class ExitEngine:
         # garantert satt før vi trail-er SL (kalles kun fra T1-/M10-logikk
         # som krever åpen posisjon).
         assert state.position_id is not None
-        self._client.amend_sl_tp(position_id=state.position_id, stop_loss=state.trail_level)
+        # Trail skal aldri gjøre SL LØSERE enn state.stop_price (som kan
+        # være satt strammere av f.eks. weekend-tighten i P2.5 eller
+        # break-even i P3). Velg den tightere for hver retning.
+        # Buy: tightere SL = høyere; Sell: tightere SL = lavere.
+        effective_sl = state.trail_level
+        if state.trail_level is not None and state.stop_price:
+            if state.direction == "buy":
+                effective_sl = max(state.trail_level, state.stop_price)
+            else:
+                effective_sl = min(state.trail_level, state.stop_price)
+        self._client.amend_sl_tp(position_id=state.position_id, stop_loss=effective_sl)
 
     def _set_break_even(self, state: TradeState, symbol_id: int) -> None:
         """Flytt SL til break-even + ATR-buffer (post-T1).

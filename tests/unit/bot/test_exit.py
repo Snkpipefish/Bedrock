@@ -868,6 +868,123 @@ def test_update_trail_ratchet_for_buy(
     assert state.trail_level > trail1
 
 
+def test_update_trail_respects_tighter_state_stop_price_buy(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    tmp_path: Path,
+) -> None:
+    """Når state.stop_price er strammere enn trail_level (f.eks. etter
+    P2.5 weekend-tighten på SWING post-T1), skal amend_sl_tp bruke den
+    strammere SL — ikke overskrive den med trail_level.
+
+    Buy: tightere SL = høyere. trail = close − mult×ATR; weekend-SL kan
+    være høyere (close − weekend_mult×ATR med lavere mult).
+    """
+    client = _make_client_stub(symbol_map={"EURUSD": 1}, symbol_price_digits={1: 5})
+    entry = EntryEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=[],
+        stats_path=tmp_path / "s.json",
+    )
+    entry.on_symbols_ready(client)
+    entry.atr14[1] = [0.0010] * 20
+    ex = ExitEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=[],
+        entry=entry,
+        trade_log_path=tmp_path / "l.json",
+    )
+    state = _in_trade_state(direction="buy", horizon="SWING", entry_price=1.080, stop_price=1.0780)
+    # Simulér: weekend-tighten har satt state.stop_price = 1.0845 (strammere)
+    state.stop_price = 1.0845
+    # Trail: close=1.085, mult=3.5, ATR=0.001 → trail = 1.0815 (LØSERE enn weekend-SL)
+    ex._update_trail(state, 1.085, 1, mult=3.5)
+    # Trail-level oppdateres uavhengig (intern state)
+    assert state.trail_level == 1.0815
+    # Men amend skal bruke max(trail, stop_price) = 1.0845 — strammere SL
+    kwargs = client.amend_sl_tp.call_args.kwargs
+    assert kwargs["stop_loss"] == 1.0845, (
+        f"Trail amend skulle bruke strammere weekend-SL 1.0845, men brukte {kwargs['stop_loss']}"
+    )
+
+
+def test_update_trail_respects_tighter_state_stop_price_sell(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    tmp_path: Path,
+) -> None:
+    """Sell-speilbilde: tightere SL = lavere, så amend skal bruke
+    min(trail, stop_price).
+    """
+    client = _make_client_stub(symbol_map={"EURUSD": 1}, symbol_price_digits={1: 5})
+    entry = EntryEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=[],
+        stats_path=tmp_path / "s.json",
+    )
+    entry.on_symbols_ready(client)
+    entry.atr14[1] = [0.0010] * 20
+    ex = ExitEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=[],
+        entry=entry,
+        trade_log_path=tmp_path / "l.json",
+    )
+    state = _in_trade_state(direction="sell", horizon="SWING", entry_price=1.080, stop_price=1.0820)
+    # Weekend-tighten satte state.stop_price = 1.0775 (strammere for sell = lavere)
+    state.stop_price = 1.0775
+    # Trail: close=1.075, mult=3.5, ATR=0.001 → trail = 1.0785 (LØSERE: høyere enn weekend-SL)
+    ex._update_trail(state, 1.075, 1, mult=3.5)
+    assert state.trail_level == 1.0785
+    kwargs = client.amend_sl_tp.call_args.kwargs
+    assert kwargs["stop_loss"] == 1.0775, (
+        f"Sell trail skulle bruke strammere weekend-SL 1.0775 (lavere=strammere for sell), "
+        f"men brukte {kwargs['stop_loss']}"
+    )
+
+
+def test_update_trail_uses_trail_level_when_it_is_tighter_buy(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    tmp_path: Path,
+) -> None:
+    """Når trail-level rachet høyere enn state.stop_price (forventet i god
+    progress), skal amend bruke trail_level — ikke gå tilbake til løsere SL.
+    """
+    client = _make_client_stub(symbol_map={"EURUSD": 1}, symbol_price_digits={1: 5})
+    entry = EntryEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=[],
+        stats_path=tmp_path / "s.json",
+    )
+    entry.on_symbols_ready(client)
+    entry.atr14[1] = [0.0010] * 20
+    ex = ExitEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=[],
+        entry=entry,
+        trade_log_path=tmp_path / "l.json",
+    )
+    state = _in_trade_state(direction="buy", horizon="SCALP", entry_price=1.080, stop_price=1.0780)
+    # close=1.090, mult=1.5, ATR=0.001 → trail = 1.0885 (HØYERE = strammere enn 1.0780)
+    ex._update_trail(state, 1.090, 1, mult=1.5)
+    assert state.trail_level == 1.0885
+    kwargs = client.amend_sl_tp.call_args.kwargs
+    assert kwargs["stop_loss"] == 1.0885, "Trail er strammere enn stop_price → bruk trail"
+
+
 # ─────────────────────────────────────────────────────────────
 # _calc_pnl
 # ─────────────────────────────────────────────────────────────
