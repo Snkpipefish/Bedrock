@@ -105,6 +105,7 @@ from bedrock.engine.drivers import (
     analog,
     macro,
     macro_bunke3,
+    macro_bunke4,
     positioning,
     risk,
     seasonal,
