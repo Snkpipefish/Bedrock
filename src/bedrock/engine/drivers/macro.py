@@ -2480,9 +2480,15 @@ def comex_stress(store: Any, instrument: str, params: dict) -> float:
 
     wow_window = int(params.get("wow_window", 5))
     copper_handling = str(params.get("copper_handling", "skip"))
+    # Sub-fase 12.10 Bunke 1 Bug-2: returner 0.5 hvis comex_inventory har
+    # færre rader enn min_samples for metallet. COMEX rapporterer daglig
+    # T-1 → 20 rader ≈ 4 uker. Default lavere enn for andre Bug-2-drivere
+    # fordi WoW-bonus-logikken trenger minst wow_window+1 rader; vi setter
+    # min_samples > det for å unngå at en uke med data kvalifiserer.
+    min_samples = int(params.get("min_samples", 20))
 
     try:
-        df = store.get_comex_inventory(metal, last_n=wow_window + 5)
+        df = store.get_comex_inventory(metal)
     except KeyError:
         _log.debug("comex_stress.data_missing", instrument=instrument, metal=metal)
         return 0.0
@@ -2494,7 +2500,14 @@ def comex_stress(store: Any, instrument: str, params: dict) -> float:
         )
         return 0.0
 
-    if len(df) == 0:
+    if len(df) < min_samples:
+        _log.debug(
+            "comex_stress.insufficient_samples",
+            instrument=instrument,
+            metal=metal,
+            n=len(df),
+            min_samples=min_samples,
+        )
         return 0.5
 
     last = df.iloc[-1]
