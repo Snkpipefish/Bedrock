@@ -35,24 +35,21 @@ families:
         horizons:
           - MAKRO
   yield:
-    # Session 98: utvidet med crop_progress_stage (NASS GOOD/EXCELLENT).
-    # Vekter:
-    # - weather_stress 20% (forward-looking)
-    # - crop_progress_stage 20% (USDA ukentlig observert, samme domene)
-    # - wasde_s2u_change 40% (autoritativ S2U)
-    # - disease_pressure 10% (stripe rust, locust)
-    # - export_event_active 10% (Ukraine corridor, India ban)
+    # Session 98: utvidet med crop_progress_stage.
+    # Sub-fase 12.11: drought_monitor flyttet hit fra `weather`-familien.
+    # Vekter re-balansert: weather 0.15 + crop_progress 0.15 + wasde 0.30
+    # + disease 0.10 + export_event 0.10 + drought_monitor 0.20 = 1.00.
     weight: 3
     drivers:
       - name: weather_stress
-        weight: 0.2
+        weight: 0.15
         params:
           lookback_months: 1
         horizons: &id001
           - MAKRO
           - SWING
       - name: crop_progress_stage
-        weight: 0.2
+        weight: 0.15
         params:
           metric: GOOD_EXCELLENT
           mode: low_is_bull
@@ -60,38 +57,53 @@ families:
           - MAKRO
           - SWING
       - name: wasde_s2u_change
-        weight: 0.4
+        weight: 0.30
         params:
           region: US
         horizons:
           - MAKRO
           - SWING
       - name: disease_pressure
-        weight: 0.1
+        weight: 0.10
         params:
           lookback_days: 90
       - name: export_event_active
-        weight: 0.1
+        weight: 0.10
         params:
           lookback_days: 60
-  weather:
-    # Sub-fase 12.7 D2 session 133 (A9): drought_monitor lagt til @ 0.45.
-    # USDM ukentlig D2+ andel co-driver med weather_stress. Sum=1.00 per
-    # § 19.5 Del C+ måltilstand. (NB: us_great_plains-region, men USDM-
-    # CONUS-aggregat er proxy — per-state IL/KS-utvidelse i Plan-S.)
-    weight: 2
-    drivers:
-      - name: weather_stress
-        weight: 0.55
-        params:
-          lookback_months: 1
-        horizons: *id001
       - name: drought_monitor
-        weight: 0.45
+        weight: 0.20
         params:
           aoi: us
           metric: d2_pct
           bull_when: high
+        horizons:
+          - MAKRO
+          - SWING
+  positioning:
+    # Sub-fase 12.11: erstatter ren-dobbel-talt weather-familie med
+    # COT-positioning-signal. 3 ortogonale metrics — se cocoa.yaml.
+    weight: 2
+    drivers:
+      - name: positioning_mm_pct
+        weight: 0.40
+        params: {}
+        horizons:
+          - MAKRO
+          - SWING
+      - name: cot_oi_change
+        weight: 0.35
+        params:
+          contract: "WHEAT-SRW - CHICAGO BOARD OF TRADE"
+          report: disaggregated
+        horizons:
+          - MAKRO
+          - SWING
+      - name: cot_swap_dealer_skew
+        weight: 0.25
+        params:
+          contract: "WHEAT-SRW - CHICAGO BOARD OF TRADE"
+          report: disaggregated
         horizons:
           - MAKRO
           - SWING

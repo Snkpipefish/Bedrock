@@ -61,14 +61,33 @@ families:
         horizons:
           - MAKRO
           - SWING
-  weather:
+  positioning:
+    # Sub-fase 12.11: erstatter ren-dobbel-talt weather-familie med
+    # COT-positioning-signal. 3 ortogonale metrics — se cocoa.yaml.
     weight: 2
     drivers:
-      - name: weather_stress
-        weight: 1.0
+      - name: positioning_mm_pct
+        weight: 0.40
+        params: {}
+        horizons:
+          - MAKRO
+          - SWING
+      - name: cot_oi_change
+        weight: 0.35
         params:
-          lookback_months: 1
-        horizons: *id001
+          contract: "SUGAR NO. 11 - ICE FUTURES U.S."
+          report: disaggregated
+        horizons:
+          - MAKRO
+          - SWING
+      - name: cot_swap_dealer_skew
+        weight: 0.25
+        params:
+          contract: "SUGAR NO. 11 - ICE FUTURES U.S."
+          report: disaggregated
+        horizons:
+          - MAKRO
+          - SWING
   enso:
     # Sugar/Brasil: La Niña gir typisk våtere SE-Brazil = mindre
     # bra for høst (regnete dager forsinker zafra) = bull.

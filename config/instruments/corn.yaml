@@ -40,17 +40,20 @@ families:
     # gir YoY %-endring vs ifjor — komplementær til weather (forward-
     # looking) og crop_progress (real-time observert). weather + crop_
     # progress trimmet 0.50→0.40 hver for sum=1.00.
+    # Sub-fase 12.11: drought_monitor flyttet hit fra `weather`-familien.
+    # Vekter re-balansert: weather 0.30 + crop_progress 0.30 + nass_yield
+    # 0.15 + drought_monitor 0.25 = 1.00.
     weight: 3
     drivers:
       - name: weather_stress
-        weight: 0.4
+        weight: 0.30
         params:
           lookback_months: 1
         horizons: &id001
           - MAKRO
           - SWING
       - name: crop_progress_stage
-        weight: 0.4
+        weight: 0.30
         params:
           metric: GOOD_EXCELLENT
           mode: low_is_bull
@@ -58,33 +61,45 @@ families:
           - MAKRO
           - SWING
       - name: nass_yield_corn_yoy
-        weight: 0.2
+        weight: 0.15
         params:
           bull_when: low
         horizons:
           - MAKRO
           - SWING
-  weather:
-    # Sub-fase 12.5 session 72: ekte vær-stress-driver fra weather_monthly.
-    # Høy stress (varmt + tørt + vann-underskudd) er bull for Corn (lavere
-    # yield-forventning → høyere pris).
-    # Sub-fase 12.7 D2 session 133 (A9): drought_monitor lagt til @ 0.45.
-    # USDM ukentlig D2+ andel — fungerer som co-driver med weather_stress
-    # (månedlig) for å fange ukentlig drought-utvikling. weather_stress
-    # 1.00 → 0.55 per § 19.5 Del C+ måltilstand. Sum=1.00.
-    weight: 2
-    drivers:
-      - name: weather_stress
-        weight: 0.55
-        params:
-          lookback_months: 1
-        horizons: *id001
       - name: drought_monitor
-        weight: 0.45
+        weight: 0.25
         params:
           aoi: us
           metric: d2_pct
           bull_when: high
+        horizons:
+          - MAKRO
+          - SWING
+  positioning:
+    # Sub-fase 12.11: erstatter ren-dobbel-talt weather-familie med
+    # COT-positioning-signal. 3 ortogonale metrics — se cocoa.yaml.
+    weight: 2
+    drivers:
+      - name: positioning_mm_pct
+        weight: 0.40
+        params: {}
+        horizons:
+          - MAKRO
+          - SWING
+      - name: cot_oi_change
+        weight: 0.35
+        params:
+          contract: "CORN - CHICAGO BOARD OF TRADE"
+          report: disaggregated
+        horizons:
+          - MAKRO
+          - SWING
+      - name: cot_swap_dealer_skew
+        weight: 0.25
+        params:
+          contract: "CORN - CHICAGO BOARD OF TRADE"
+          report: disaggregated
         horizons:
           - MAKRO
           - SWING

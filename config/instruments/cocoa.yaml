@@ -44,14 +44,40 @@ families:
         horizons: &id001
           - MAKRO
           - SWING
-  weather:
+  positioning:
+    # Sub-fase 12.11 (2026-05-02): erstatter `weather`-familien som var
+    # ren dobbel-telling av `yield.weather_stress`. Ny familie fanger
+    # COT-positioning-signal: hva sier de profesjonelle aktørene?
+    # Ortogonal til yield (fundamenta) og analog (mønster).
+    # 3 ortogonale metrics:
+    # - positioning_mm_pct: Money Manager net long percentile (trend-
+    #   følger; høy = MM ekstremt long, lav = MM ekstremt short)
+    # - cot_oi_change: open-interest WoW-z (kapital-flytsignal)
+    # - cot_swap_dealer_skew: swap-dealers vs MM (smart-money divergens)
     weight: 2
     drivers:
-      - name: weather_stress
-        weight: 1.0
+      - name: positioning_mm_pct
+        weight: 0.40
+        params: {}
+        horizons:
+          - MAKRO
+          - SWING
+      - name: cot_oi_change
+        weight: 0.35
         params:
-          lookback_months: 1
-        horizons: *id001
+          contract: "COCOA - ICE FUTURES U.S."
+          report: disaggregated
+        horizons:
+          - MAKRO
+          - SWING
+      - name: cot_swap_dealer_skew
+        weight: 0.25
+        params:
+          contract: "COCOA - ICE FUTURES U.S."
+          report: disaggregated
+        horizons:
+          - MAKRO
+          - SWING
   enso:
     # Spor F4 (2026-05-02): noaa_enso_forecast_3mo lagt til som
     # forward-overlay (IRI Plumes 3-mnd-prognose). 0.6/0.4 split —

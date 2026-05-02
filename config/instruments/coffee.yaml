@@ -51,14 +51,33 @@ families:
         weight: 0.3
         params:
           lookback_days: 90
-  weather:
+  positioning:
+    # Sub-fase 12.11: erstatter ren-dobbel-talt weather-familie med
+    # COT-positioning-signal. 3 ortogonale metrics — se cocoa.yaml.
     weight: 2
     drivers:
-      - name: weather_stress
-        weight: 1.0
+      - name: positioning_mm_pct
+        weight: 0.40
+        params: {}
+        horizons:
+          - MAKRO
+          - SWING
+      - name: cot_oi_change
+        weight: 0.35
         params:
-          lookback_months: 1
-        horizons: *id001
+          contract: "COFFEE C - ICE FUTURES U.S."
+          report: disaggregated
+        horizons:
+          - MAKRO
+          - SWING
+      - name: cot_swap_dealer_skew
+        weight: 0.25
+        params:
+          contract: "COFFEE C - ICE FUTURES U.S."
+          report: disaggregated
+        horizons:
+          - MAKRO
+          - SWING
   enso:
     # Coffee i Brasil: La Niña øker frost-risiko + tørke = bull.
     # Spor F4 (2026-05-02): noaa_enso_forecast_3mo lagt til som
