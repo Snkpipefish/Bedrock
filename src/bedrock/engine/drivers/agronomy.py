@@ -293,6 +293,12 @@ def disease_pressure(store: Any, instrument: str, params: dict) -> float:
     from datetime import date, timedelta
 
     lookback_days = int(params.get("lookback_days", 90))
+    # Sub-fase 12.10 Bunke 1 Bug-2: returner nøytral 0.5 hvis disease_alerts-
+    # tabellen er for sparsom for commodity. Standard 5 alerts per commodity
+    # er rimelig — typiske mat-tabeller har >100 historiske alerts; en helt
+    # tom backfill betyr at vi ikke har grunnlag for å ringe en alarm.
+    min_samples = int(params.get("min_samples", 5))
+
     commodity_map = {
         "Corn": "CORN",
         "Soybean": "SOYBEANS",
@@ -303,6 +309,22 @@ def disease_pressure(store: Any, instrument: str, params: dict) -> float:
     }
     commodity = commodity_map.get(instrument)
     if commodity is None:
+        return 0.5
+
+    # Tell totalt antall alerts for commodity (ikke filtrert på lookback)
+    try:
+        df_total = store.get_disease_alerts(commodity=commodity)
+    except Exception as exc:
+        _log.warning("disease.fetch_failed", instrument=instrument, error=str(exc))
+        return 0.5
+
+    if len(df_total) < min_samples:
+        _log.debug(
+            "disease.insufficient_samples",
+            instrument=instrument,
+            n=len(df_total),
+            min_samples=min_samples,
+        )
         return 0.5
 
     from_date = (date.today() - timedelta(days=lookback_days)).isoformat()

@@ -201,18 +201,33 @@ def test_export_event_unknown_instrument_returns_neutral() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _disease_padded(severity: int, yield_impact: float | None = None) -> pd.DataFrame:
+    """Bygg 5+ disease-alerts for samme commodity slik at min_samples-guarden
+    (default 5) ikke trigges. Siste rad har den severity/impact som testes;
+    de andre er svake (severity=1, intet yield_impact)."""
+    rows = [
+        {
+            "commodity": "WHEAT",
+            "alert_date": date.today() - timedelta(days=10 + i * 30),
+            "severity": 1,
+            "yield_impact_pct": None,
+        }
+        for i in range(1, 5)
+    ]
+    rows.append(
+        {
+            "commodity": "WHEAT",
+            "alert_date": date.today() - timedelta(days=5),
+            "severity": severity,
+            "yield_impact_pct": yield_impact,
+        }
+    )
+    return pd.DataFrame(rows)
+
+
 def test_disease_pressure_severe_returns_high() -> None:
     fn = get("disease_pressure")
-    df = pd.DataFrame(
-        [
-            {
-                "commodity": "WHEAT",
-                "alert_date": date.today() - timedelta(days=10),
-                "severity": 4,
-                "yield_impact_pct": 8.0,
-            }
-        ]
-    )
+    df = _disease_padded(severity=4, yield_impact=8.0)
     score = fn(_DummyStore(disease_alerts=df), "Wheat", {})
     assert score >= 0.85
 
@@ -226,18 +241,33 @@ def test_disease_pressure_no_alerts_returns_neutral() -> None:
 def test_disease_pressure_high_yield_impact_bonus() -> None:
     """Yield-impact >= 10% gir +0.05 bonus over base-severity-score."""
     fn = get("disease_pressure")
+    df = _disease_padded(severity=5, yield_impact=15.0)
+    score = fn(_DummyStore(disease_alerts=df), "Wheat", {})
+    assert score == 1.0  # 0.95 + 0.05
+
+
+def test_disease_pressure_min_samples_guard_returns_neutral() -> None:
+    """Sub-fase 12.10 Bunke 1 Bug-2: tabell med < min_samples rader → 0.5."""
+    fn = get("disease_pressure")
+    # Kun 2 rader (under default min_samples=5) — selv severity 5 → 0.5
     df = pd.DataFrame(
         [
             {
                 "commodity": "WHEAT",
-                "alert_date": date.today() - timedelta(days=10),
+                "alert_date": date.today() - timedelta(days=5),
                 "severity": 5,
-                "yield_impact_pct": 15.0,
-            }
+                "yield_impact_pct": 20.0,
+            },
+            {
+                "commodity": "WHEAT",
+                "alert_date": date.today() - timedelta(days=30),
+                "severity": 4,
+                "yield_impact_pct": 10.0,
+            },
         ]
     )
     score = fn(_DummyStore(disease_alerts=df), "Wheat", {})
-    assert score == 1.0  # 0.95 + 0.05
+    assert score == 0.5
 
 
 # ---------------------------------------------------------------------------
