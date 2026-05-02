@@ -804,6 +804,7 @@ CREATE TABLE IF NOT EXISTS {TABLE_ECON_EVENTS} (
     impact       TEXT    NOT NULL,    -- "High", "Medium", "Low"
     forecast     TEXT,                -- analytiker-forventning (kan være tom)
     previous     TEXT,                -- forrige rapportverdi (kan være tom)
+    actual       TEXT,                -- actual fra cross-source (FRED, sub-fase 12.10 Spor B)
     fetched_at   TEXT    NOT NULL,    -- når raden ble hentet (ISO UTC)
     PRIMARY KEY (event_ts, country, title)
 )
@@ -816,6 +817,7 @@ ECON_EVENTS_COLS: tuple[str, ...] = (
     "impact",
     "forecast",
     "previous",
+    "actual",
     "fetched_at",
 )
 
@@ -834,6 +836,7 @@ class EconomicEvent(BaseModel):
     impact: str
     forecast: str | None = None
     previous: str | None = None
+    actual: str | None = None
     fetched_at: datetime
 
     model_config = ConfigDict(extra="forbid")

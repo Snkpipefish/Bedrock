@@ -243,7 +243,20 @@ class DataStore:
             # COT- + AAII-tabellene for eksisterende rader (ALTER TABLE +
             # konvensjons-basert UPDATE). Idempotent.
             self._migrate_released_at_columns(conn)
+            # Sub-fase 12.10 Spor B: legg til `actual`-kolonne på econ_events
+            # for *_surprise-drivere (cross-source FRED-actual). Idempotent.
+            self._migrate_econ_events_actual_column(conn)
             conn.commit()
+
+    def _migrate_econ_events_actual_column(self, conn: sqlite3.Connection) -> None:
+        """Sub-fase 12.10 Spor B: legg til `actual`-kolonne på econ_events.
+
+        Idempotent: hopper ALTER hvis kolonnen finnes. Eksisterende rader
+        får NULL og populeres senere via `scripts/backfill/econ_actuals.py`
+        som joiner FF.event_ts × FRED.observation_date.
+        """
+        if not self._column_exists(conn, TABLE_ECON_EVENTS, "actual"):
+            conn.execute(f"ALTER TABLE {TABLE_ECON_EVENTS} ADD COLUMN actual TEXT")
 
     def _migrate_released_at_columns(self, conn: sqlite3.Connection) -> None:
         """Sub-fase 12.10 Bunke 1 Bug-1: legg til released_at-kolonnen på
@@ -1942,11 +1955,16 @@ class DataStore:
         """Skriv kalender-events til ``econ_events``. Schema:
         ``ECON_EVENTS_COLS``. Idempotent på (event_ts, country, title).
 
-        ``event_ts`` og ``fetched_at`` normaliseres til ISO-streng.
+        ``event_ts`` og ``fetched_at`` normaliseres til ISO-streng. Hvis
+        ``actual``-kolonnen mangler i input (sub-fase 12.10 Spor B-utvidelse),
+        fylles den med NULL — eldre callers (calendar_ff fetcher) trenger
+        ikke endring.
         """
         if df.empty:
             return 0
         prepared = df.copy()
+        if "actual" not in prepared.columns:
+            prepared["actual"] = None
         if "event_ts" in prepared.columns:
             prepared["event_ts"] = pd.to_datetime(prepared["event_ts"], utc=True).dt.strftime(
                 "%Y-%m-%dT%H:%M:%S"
@@ -1957,18 +1975,46 @@ class DataStore:
             )
         return self._append_generic(prepared, TABLE_ECON_EVENTS, ECON_EVENTS_COLS)
 
+    def update_econ_event_actual(
+        self,
+        *,
+        event_ts: str,
+        country: str,
+        title: str,
+        actual: str | None,
+    ) -> int:
+        """Sub-fase 12.10 Spor B: oppdater `actual`-feltet på en eksisterende
+        rad. Returnerer antall berørte rader (0 hvis PK ikke finnes, 1 hvis
+        oppdatert).
+
+        ``event_ts`` skal være ISO-streng som matcher lagret format
+        ("YYYY-MM-DDTHH:MM:SS").
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"""
+                UPDATE {TABLE_ECON_EVENTS}
+                SET actual = ?
+                WHERE event_ts = ? AND country = ? AND title = ?
+                """,
+                (actual, event_ts, country, title),
+            )
+            conn.commit()
+            return cursor.rowcount
+
     def get_econ_events(
         self,
         countries: Sequence[str] | None = None,
         impact_levels: Sequence[str] | None = None,
         from_ts: str | None = None,
         to_ts: str | None = None,
+        title_pattern: str | None = None,
     ) -> pd.DataFrame:
         """Hent kalender-events. Returnerer pd.DataFrame med
         `event_ts` som tz-aware UTC pd.Timestamp i en kolonne (ikke index).
 
-        Filtre er optional; alle returnerer hele tabellen sortert ASC på
-        event_ts. Tom resultat → tom DataFrame med kolonner intakt.
+        Filtre er optional. ``title_pattern`` er SQL LIKE-pattern (case-
+        sensitive — wildcard %% før+etter for substring-match).
         """
         query = f"SELECT * FROM {TABLE_ECON_EVENTS} WHERE 1=1"
         params: list = []
@@ -1986,6 +2032,9 @@ class DataStore:
         if to_ts is not None:
             query += " AND event_ts <= ?"
             params.append(to_ts)
+        if title_pattern is not None:
+            query += " AND title LIKE ?"
+            params.append(title_pattern)
         query += " ORDER BY event_ts ASC"
 
         with self._connect() as conn:
