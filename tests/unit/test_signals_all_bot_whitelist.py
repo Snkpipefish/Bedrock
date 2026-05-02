@@ -87,9 +87,10 @@ def test_repo_whitelist_yaml_is_valid() -> None:
     assert mapping.get("Nasdaq") == "US100"
     # Agri matcher seg selv
     assert mapping.get("Corn") == "Corn"
-    # Crypto skal IKKE være i whitelist
-    assert "BTC" not in mapping
-    assert "ETH" not in mapping
-    # Base metals skal IKKE være i whitelist
-    assert "Copper" not in mapping
-    assert "Platinum" not in mapping
+    # Observasjons-vindu (alle 22 instrumenter): crypto, base metals
+    # og NatGas inkludert for å samle data til rebalansering.
+    assert mapping.get("BTC") == "BTC"
+    assert mapping.get("ETH") == "ETH"
+    assert mapping.get("Copper") == "COPPER"
+    assert mapping.get("Platinum") == "PLATINUM"
+    assert mapping.get("NaturalGas") == "NATGAS"

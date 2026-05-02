@@ -22,13 +22,21 @@ INSTRUMENT_MAP: dict[str, list[str]] = {
     "USDJPY": ["USDJPY"],
     "GBPUSD": ["GBPUSD"],
     "AUDUSD": ["AUDUSD"],
-    # Metals + energy + indices
+    # Metals
     "GOLD": ["XAUUSD", "GOLD"],
     "SILVER": ["XAGUSD", "SILVER"],
+    "PLATINUM": ["XPTUSD", "PLATINUM", "Platinum"],
+    "COPPER": ["XCUUSD", "COPPER", "Copper", "HG"],
+    # Energy
     "OIL BRENT": ["XBRUSD", "OIL BRENT", "UKOIL"],
     "OIL WTI": ["XTIUSD", "OIL WTI", "USOIL"],
+    "NATGAS": ["Natural Gas", "US Natural Gas", "XNG", "NATGAS", "NGAS"],
+    # Indices
     "SPX500": ["SPX500"],
     "US100": ["US100"],
+    # Crypto
+    "BTC": ["BTCUSD", "BTC", "Bitcoin"],
+    "ETH": ["ETHUSD", "ETH", "Ethereum"],
     # Soft commodities
     "Corn": ["Corn"],
     "Wheat": ["Wheat"],
@@ -39,16 +47,14 @@ INSTRUMENT_MAP: dict[str, list[str]] = {
     "Cocoa": ["Cocoa"],
 }
 
-# Rene pris-feed-symboler (abonneres på spot, handles ikke)
+# Rene pris-feed-symboler (abonneres på spot, handles ikke).
+# BTC/ETH/NatGas flyttet til INSTRUMENT_MAP — handles nå.
 PRICE_FEED_MAP: dict[str, list[str]] = {
     "USDCHF": ["USDCHF"],
     "USDCAD": ["USDCAD"],
     "USDNOK": ["USDNOK"],
     "NZDUSD": ["NZDUSD"],
     "EURGBP": ["EURGBP"],
-    "NatGas": ["Natural Gas", "US Natural Gas", "XNG", "NATGAS", "NGAS"],
-    "BTC": ["BTC", "BTCUSD", "Bitcoin"],
-    "ETH": ["ETH", "ETHUSD", "Ethereum"],
     "SOL": ["SOL", "SOLUSD", "Solana"],
     "XRP": ["XRP", "XRPUSD", "Ripple"],
     "ADA": ["ADA", "ADAUSD", "Cardano"],
@@ -103,10 +109,16 @@ INSTRUMENT_GROUP: dict[str, str] = {
     "AUDUSD": "fx",
     "GOLD": "gold",
     "SILVER": "silver",  # ikke korrelert nok til å blokkere hverandre
+    "PLATINUM": "platinum",
+    "COPPER": "copper",
     "OIL BRENT": "oil",
     "OIL WTI": "oil",
+    "NATGAS": "natgas",  # egen gruppe; lavt korrelert med olje
     "SPX500": "indices",
     "US100": "indices",
+    # Crypto — felles gruppe (BTC/ETH samkorr ~0.7+)
+    "BTC": "crypto",
+    "ETH": "crypto",
     # Agri — egne grupper per instrument, blokkerer ikke hverandre
     "Corn": "corn",
     "Wheat": "wheat",

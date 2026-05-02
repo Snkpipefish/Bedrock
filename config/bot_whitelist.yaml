@@ -1,13 +1,15 @@
 # Bot whitelist + navne-mapping
 #
-# Liste over instrumenter som skal pushes til scalp_edge-boten.
-# Bedrock kan generere signaler for flere instrumenter (eksperimenter,
-# crypto, base metals etc.), men kun de som står her sendes til bot.
+# Liste over instrumenter som skal pushes til bedrock-boten.
+# Bedrock kan generere signaler for flere instrumenter, og pr. nå
+# leveres alle 22 til boten — observasjons-vindu over de første ukene
+# brukes for å se rebalansering før evt. innstramming.
 #
-# Kilde: ``~/scalp_edge/signal_server.py:VALID_INSTRUMENTS``
+# Kilde: ``src/bedrock/bot/instruments.py:INSTRUMENT_MAP`` (cTrader-side).
 #
 # Format: bedrock-instrument-id → bot-instrument-name. Hvis bedrock-id
 # matcher bot-navn nøyaktig (f.eks. "Corn"), bruk samme verdi.
+# Lookup er case-insensitive, så "BTC" matcher "Btc" fra YAML-stem.
 #
 # `bedrock signals-all --bot-only` filtrerer signals.json til kun disse
 # instrumentene + transformerer instrument-id til bot-navn.
@@ -22,14 +24,21 @@ mapping:
   # Metals
   Gold: GOLD
   Silver: SILVER
+  Platinum: PLATINUM
+  Copper: COPPER
 
   # Energy
   CrudeOil: "OIL WTI"
   Brent: "OIL BRENT"
+  NaturalGas: NATGAS
 
   # Indices
   SP500: SPX500
   Nasdaq: US100
+
+  # Crypto
+  BTC: BTC
+  ETH: ETH
 
   # Agri (7 stk — bedrock-id matcher bot-navn nøyaktig)
   Corn: Corn
@@ -40,20 +49,21 @@ mapping:
   Sugar: Sugar
   Cocoa: Cocoa
 
-# Instrumenter NOT i whitelist (genereres av bedrock men ikke pushes):
-# - Copper, Platinum (eksperimentelle metals)
-# - NaturalGas (energy, men ikke aktivert i bot)
-# - BTC, ETH (crypto, ikke aktivert i bot)
-
 # ---------------------------------------------------------------------------
 # Per-horisont kvalifisering (sub-fase 12.8 § 20.7)
 # ---------------------------------------------------------------------------
-# Bot-whitelist over kvalifiserer for **Macro + Swing** (alle 17 instrumenter
-# har ≥5 år priser, ≥3 år CFTC for primær-kontrakten, og strukturelle
-# kilder ferske per coverage-rapport). Brent + Copper har ≥4 år CFTC
-# (CFTC publiserte ikke før 2022) — borderline, men aksepteres siden
-# kvalitet > kvantitet for Brent (Brent Last Day-kontrakten er primær for
-# globale crude-flow-signaler).
+# Bot-whitelist over kvalifiserer for **Macro + Swing**. Kjerne-17
+# (FX/metals/energy/indices/agri ekskl. de 5 nye) har ≥5 år priser,
+# ≥3 år CFTC for primær-kontrakten, og strukturelle kilder ferske per
+# coverage-rapport. Brent + Copper har ≥4 år CFTC (CFTC publiserte ikke
+# før 2022) — borderline, men aksepteres siden kvalitet > kvantitet for
+# Brent (Brent Last Day-kontrakten er primær for globale crude-flow-
+# signaler).
+#
+# Eksperimentelle 5 (BTC, ETH, NaturalGas, Copper, Platinum) er nå
+# inkludert i observasjons-vinduet — alle setups med entry/SL/TP tas
+# de første ukene for å samle data til rebalansering. Kvalifiserer kun
+# for Macro+Swing til Plan-S; signal-kvalitet vurderes etter vinduet.
 #
 # **Scalp**: ingen instrumenter kvalifiserer for Scalp-handel før
 # sub-fase Plan-S (PLAN § 19.10) leverer:
