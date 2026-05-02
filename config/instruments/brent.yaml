@@ -58,15 +58,18 @@ families:
     # Sub-fase 12.10 follow-up A1 (session 140): ovx_z lagt til (bunke4 #15)
     # — CBOE Crude Oil VIX deler samme option-marked-vol-tolkning som for
     # WTI. real_yield 0.15→0.10, dxy 0.35→0.25 for familie-sum=1.00.
+    # Sub-fase 12.10 follow-up A2 (session 141): eia_distillate_change@0.10
+    # — distillate er global refining-margin-input. dxy 0.25→0.20, vix 0.20
+    # →0.15 for sum=1.00.
     drivers:
       - name: real_yield
         weight: 0.10
         params: {bull_when: low}
       - name: dxy_chg5d
-        weight: 0.25
+        weight: 0.20
         params: {bull_when: negative, window: 5}
       - name: vix_regime
-        weight: 0.2
+        weight: 0.15
         params: {invert: true}
       - name: eia_stock_change
         weight: 0.3
@@ -74,6 +77,9 @@ families:
       - name: ovx_z
         weight: 0.15
         params: {bull_when: low, lookback_days: 252}
+      - name: eia_distillate_change
+        weight: 0.10
+        params: {invert: true}
   structure:
     drivers:
       - name: range_position
