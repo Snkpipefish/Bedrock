@@ -95,7 +95,7 @@ families:
         horizons:
           - MAKRO
       - name: hdd_cdd_anomaly
-        weight: 0.10  # A9: 0.15→0.10 for å gi plass til AGSI italy + withdrawal
+        weight: 0.05  # A11: 0.10→0.05 for å gi plass til AGSI injection_rate
         params: {lookback_days: 30}  # 30d rolling = MAKRO-vindu
       - name: agsi_germany_pct
         weight: 0.05
@@ -122,6 +122,16 @@ families:
       - name: agsi_withdrawal_rate
         weight: 0.05
         params: {bull_when: high, country: eu}  # høy withdrawal = bull
+        horizons:
+          - MAKRO
+      # Sub-fase 12.10 follow-up A11 (session 142): agsi_injection_rate@0.05
+      # (bunke7 #23). Komplementerer withdrawal_rate — sammen dekker de
+      # full sesong-syklus (lager-fyll vår/sommer, lager-tapping høst/vinter).
+      # bull_when=low: lav injection-rate = svak fyllings-tempo = bull NG
+      # (markedet diskonterer kommende vinter-forsyning).
+      - name: agsi_injection_rate
+        weight: 0.05
+        params: {bull_when: low, country: eu}
         horizons:
           - MAKRO
   structure:
