@@ -2719,7 +2719,7 @@ ikke gating for 12.10.
 
 **Bunke 2 — Lavt-hengende frukt (uke 1, parallelt):**
 4. `cot_ice_cocoa/coffee/sugar/wheat` — wire 4 drivere mot eksisterende ICE COT-data
-5. `nfp_surprise`, `cpi_surprise`, `gdp_surprise`, `pce_surprise` — calendar_ff har forecast/actual-felt
+5. `nfp_surprise`, `cpi_surprise`, `gdp_surprise`, `pce_surprise` — calendar_ff har forecast/actual-felt **DEFERRED 2026-05-02 (Bunke 2 finale):** Forex Factory `ff_calendar_thisweek.json` har KUN forecast+previous-keys, ikke actual. FRED-serier PAYEMS/CPIAUCSL/GDP/PCEPI er heller ikke i DB. Surprise-driverne krever cross-source join (FF.forecast × FRED.actual eller alternativ feed med actual-felt). Re-åpnes i egen session når data-arkitektur er valgt.
 6. `news_intel_severity_veto` — veto-driver fra eksisterende news_intel-tabell
 
 **Bunke 3 — FRED-utvidelse (uke 2):**
