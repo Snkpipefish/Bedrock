@@ -24,11 +24,22 @@ class _MockUnicaStore:
 
 
 def _row(**overrides) -> pd.DataFrame:
-    """Bygg en UNICA-rad med valgfrie overrides."""
+    """Bygg UNICA-rader med valgfrie overrides på siste rad.
+
+    Genererer 12 rader per default (≥ min_samples-guard fra Bug-2) slik at
+    eksisterende tester ikke trenger endre params. Overrides settes kun på
+    siste rad — de andre 11 fungerer som padding for sample-count-guarden.
+    """
     base = dict.fromkeys(UNICA_REPORTS_COLS)
-    base["report_date"] = pd.Timestamp("2026-04-15")
-    base.update(overrides)
-    return pd.DataFrame([base], columns=list(UNICA_REPORTS_COLS))
+    rows = [
+        {**base, "report_date": pd.Timestamp("2026-04-15") - pd.Timedelta(days=15 * (11 - i))}
+        for i in range(11)
+    ]
+    last = dict(base)
+    last["report_date"] = pd.Timestamp("2026-04-15")
+    last.update(overrides)
+    rows.append(last)
+    return pd.DataFrame(rows, columns=list(UNICA_REPORTS_COLS))
 
 
 # ---------------------------------------------------------------------------
@@ -38,6 +49,41 @@ def _row(**overrides) -> pd.DataFrame:
 
 def test_registered() -> None:
     assert get("unica_change") is not None
+
+
+# ---------------------------------------------------------------------------
+# Sub-fase 12.10 Bunke 1 Bug-2: min_samples-guard
+# ---------------------------------------------------------------------------
+
+
+def test_min_samples_guard_returns_neutral_when_table_sparse() -> None:
+    """Hvis UNICA-tabellen har < min_samples rader, returnér 0.5 (nøytral)."""
+    # Bygg en 5-rads fixture (under default min_samples=12)
+    base = dict.fromkeys(UNICA_REPORTS_COLS)
+    rows = [
+        {**base, "report_date": pd.Timestamp(f"2026-01-{i:02d}"), "sugar_production_yoy_pct": -15.0}
+        for i in range(1, 6)
+    ]
+    df = pd.DataFrame(rows, columns=list(UNICA_REPORTS_COLS))
+    store = _MockUnicaStore(df)
+    fn = get("unica_change")
+    # Default min_samples=12; 5 rader er for lite → 0.5 selv om verdien
+    # ellers ville gi 1.0
+    assert fn(store, "Sugar", {}) == 0.5
+
+
+def test_min_samples_guard_overridable_via_param() -> None:
+    """min_samples kan overrides via YAML-param."""
+    base = dict.fromkeys(UNICA_REPORTS_COLS)
+    rows = [
+        {**base, "report_date": pd.Timestamp(f"2026-01-{i:02d}"), "sugar_production_yoy_pct": -15.0}
+        for i in range(1, 6)
+    ]
+    df = pd.DataFrame(rows, columns=list(UNICA_REPORTS_COLS))
+    store = _MockUnicaStore(df)
+    fn = get("unica_change")
+    # min_samples=3 — 5 rader er nok → vanlig score (-15% YoY = 1.0)
+    assert fn(store, "Sugar", {"min_samples": 3}) == 1.0
 
 
 # ---------------------------------------------------------------------------

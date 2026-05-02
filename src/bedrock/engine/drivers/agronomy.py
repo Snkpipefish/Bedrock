@@ -668,16 +668,32 @@ def unica_change(store: Any, instrument: str, params: dict) -> float:
     import pandas as pd
 
     metric = str(params.get("metric", "sugar_production_yoy"))
+    # Sub-fase 12.10 Bunke 1 Bug-2: returner nøytral 0.5 hvis tabellen
+    # er for sparsom for meningsfull score. UNICA publiserer 24 rapp/år;
+    # 12 rapporter ≈ 6 mnd og er minimumsgrunnlag før vi stoler på YoY-
+    # baserte metrikker.
+    min_samples = int(params.get("min_samples", 12))
 
     try:
-        df = store.get_unica_reports(last_n=1)
+        df_full = store.get_unica_reports()
     except Exception as exc:
         _log.warning("unica_change.fetch_failed", instrument=instrument, error=str(exc))
         return 0.0
 
-    if df.empty:
+    if df_full.empty:
         _log.debug("unica_change.no_data", instrument=instrument)
         return 0.0
+
+    if len(df_full) < min_samples:
+        _log.debug(
+            "unica_change.insufficient_samples",
+            instrument=instrument,
+            n=len(df_full),
+            min_samples=min_samples,
+        )
+        return 0.5
+
+    df = df_full.tail(1).reset_index(drop=True)
 
     last = df.iloc[0]
 
