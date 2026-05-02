@@ -426,32 +426,32 @@
     "family_scores": {
       "analog": 0.1,
       "conab": 0.5,
-      "cross": 0.64345,
+      "cross": 0.60845,
       "enso": 0.5,
       "outlook": 0.7,
       "weather": 0.39426,
-      "yield": 0.31935147929
+      "yield": 0.325481183432
     },
     "gates_triggered": [],
     "grade": "B",
     "max_score": 20.0,
-    "score": 8.73347443787
+    "score": 8.681863550296
   },
   "Corn|NONE|sell": {
     "active_families": 7,
     "family_scores": {
       "analog": 0.8,
       "conab": 0.5,
-      "cross": 0.35655,
+      "cross": 0.39155,
       "enso": 0.5,
       "outlook": 0.3,
       "weather": 0.60574,
-      "yield": 0.68064852071
+      "yield": 0.674518816568
     },
     "gates_triggered": [],
     "grade": "B",
     "max_score": 20.0,
-    "score": 9.06652556213
+    "score": 9.118136449704
   },
   "Cotton|NONE|buy": {
     "active_families": 6,
@@ -1388,32 +1388,32 @@
     "family_scores": {
       "analog": 0.2,
       "conab": 0.35,
-      "cross": 0.505,
+      "cross": 0.47,
       "enso": 0.5,
       "outlook": 0.7,
       "weather": 0.39426,
-      "yield": 0.354646153846
+      "yield": 0.353716923077
     },
     "gates_triggered": [],
     "grade": "A",
     "max_score": 16.0,
-    "score": 8.462458461538
+    "score": 8.389670769231
   },
   "Soybean|NONE|sell": {
     "active_families": 7,
     "family_scores": {
       "analog": 0.5,
       "conab": 0.65,
-      "cross": 0.495,
+      "cross": 0.53,
       "enso": 0.5,
       "outlook": 0.3,
       "weather": 0.60574,
-      "yield": 0.645353846154
+      "yield": 0.646283076923
     },
     "gates_triggered": [],
     "grade": "A",
     "max_score": 16.0,
-    "score": 8.937541538462
+    "score": 9.010329230769
   },
   "Sugar|NONE|buy": {
     "active_families": 6,
@@ -1541,7 +1541,7 @@
     "active_families": 5,
     "family_scores": {
       "analog": 0.0,
-      "cross": 0.7546,
+      "cross": 0.7196,
       "enso": 0.5,
       "outlook": 1.0,
       "weather": 0.46785,
@@ -1550,13 +1550,13 @@
     "gates_triggered": [],
     "grade": "A",
     "max_score": 16.0,
-    "score": 10.058067741935
+    "score": 9.988067741935
   },
   "Wheat|NONE|sell": {
     "active_families": 5,
     "family_scores": {
       "analog": 0.3,
-      "cross": 0.2454,
+      "cross": 0.2804,
       "enso": 0.5,
       "outlook": 0.0,
       "weather": 0.53215,
@@ -1565,6 +1565,6 @@
     "gates_triggered": [],
     "grade": "C",
     "max_score": 16.0,
-    "score": 4.541932258065
+    "score": 4.611932258065
   }
 }

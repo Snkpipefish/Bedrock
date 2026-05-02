@@ -156,8 +156,15 @@
   - **Snapshot-diff vs pre-Spor-C anker:** 12 score-endringer (alle på NG + Brent × 6 hor×dir), **0 grade-flips** (godt under stop-criterion ≤5/asset-class). NG macro-family +0.097 buy / -0.097 sell drevet av aktive ALSI drawdown + IIP REMIT-stress live; Brent macro +0.0125. Andre 7 asset-klasser uendret.
   - **Live driver-verifisering 2026-05-02:** alsi_eu_pct EU=0.50 (52.9% full = nøytral), DE/ES=0.25 (mild bear); alsi_storage_change 5d=0.75 (drawdown), 14d=1.00 (sterk drawdown senapril); iip_supply_unavailability active=0.75 (2000-5000 GWh/d EU-stress), recent 30d=1.00. Alle 3 drivere returnerer ikke-default-verdier — signalene aktive.
   - 95 nye tester (32 store/proxy + 37 fetcher + 26 driver). Pyright src/: 0 errors. Diff-rapport: `docs/snapshot_diff_2026-05-02_followup_spor_c.md`.
-- **Sub-fase 12.10 follow-up — Spor B/D/E/F gjenstår** per ny PLAN § 22.6 + § 22.7:
-  - **Spor D** (NASS yield/grain_stocks) — 1-2 sessioner. Anbefalt neste (samme mønster: schema → fetcher → drivere → backfill → YAML).
+- **Sub-fase 12.10 follow-up Spor D LUKKET 2026-05-02** (tag `v0.12.10-followup-spor-d`). § 22.2 #20 — NASS yield + grain_stocks. Bygger på eksisterende `bedrock.fetch.nass`-modul (samme BEDROCK_NASS_API_KEY-secret som crop_progress). **5 commits:**
+  - `6ac2b99` D1: schema (TABLE_NASS_YIELD + TABLE_NASS_GRAIN_STOCKS + DDL + Pydantic + DataStore + AsOfDateStore-proxies + 29 tester). load_time som look-ahead-safe truth (NASS release-timestamp).
+  - `2996fa0` D2: utvidelse av `bedrock/fetch/nass.py` med `fetch_nass_yield_api` + `fetch_nass_grain_stocks_api` + 15 tester. Yield: 5 rader per (commodity, year) — YEAR-final + 4 monthly forecasts. Stocks: 4 quartals × 3 categories per (commodity, year). Cotton støttes for yield (LB/ACRE), ikke stocks.
+  - `4700ba9` D3: 3 nye drivere i `agronomy.py` — `nass_yield_corn_yoy` + `nass_yield_soy_yoy` (latest-estimate vs ifjor-final) + `nass_grain_stocks_quarterly` (matched-quarter YoY). Step-trapp default bull_when='low'. 20 tester. Total drivere registrert: 50 (var 47).
+  - `eaa1eda` D4: backfill-script + live-ingest. **NASS yield 443 rader** (4 commodities × 9 år 2017-2025) + **stocks 444 rader** (3 commodities × 10 år 2017-2026 × 4q × 3 cat). YAML-wirings Corn/Soybean/Wheat × 5 wirings (Corn yield+cross, Soybean yield+cross, Wheat cross). Pydantic familie-sum=1.00 verifisert.
+  - **Snapshot-diff vs pre-Spor-D anker:** 6 score-endringer (Corn/Soybean/Wheat × 2 retninger), **0 grade-flips**. Modest impact (~0.05-0.07 score-Δ) fordi nye drivere er 0.10-0.20 vekt og live-data gir mid-range scores. Andre 6 asset-klasser uendret.
+  - **Live driver-verifisering 2026-05-02:** nass_yield_corn_yoy=0.35 (+1.9% YoY mild bear), nass_yield_soy_yoy=0.35, nass_grain_stocks_quarterly Corn/Soy/Wheat=0.15 (+10.7% Mar-2026 YoY = bear). Alle 5 (instrument, driver)-kombinasjoner aktive.
+  - 64 nye tester (29 store/proxy + 15 fetcher + 20 driver). Pyright src/: 0 errors. Diff-rapport: `docs/snapshot_diff_2026-05-02_followup_spor_d.md`.
+- **Sub-fase 12.10 follow-up — Spor B/E/F gjenstår** per ny PLAN § 22.6 + § 22.7:
   - **Spor B** (*_surprise data-arkitektur) — 2-3 sessioner (substantial, ADR-014 kreves).
   - **Spor F1-F4** (resterende mindre DEFERRED) — 4-6 sessioner totalt.
   - **Spor E** (driver-impl-rewrites #36-#41 + #34 multi-lookback) — 6-7 sessioner. Best etter ~2-4 uker live-demo for empirisk underperform-data.
