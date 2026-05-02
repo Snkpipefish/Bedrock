@@ -726,7 +726,72 @@ class ExitEngine:
 
     def on_execution(self, event: Any) -> None:
         """ORDER_FILLED / PARTIAL / deal-close. Portert fra
-        `trading_bot.py:_on_execution` (2074-2180)."""
+        `trading_bot.py:_on_execution` (2074-2180).
+
+        Også: ORDER_ACCEPTED → capture real orderId på LIMIT-state.
+        ORDER_EXPIRED / ORDER_CANCELLED / ORDER_REJECTED → fjern
+        AWAITING_CONFIRMATION-state slik at nytt signal kan opprette
+        en fersk state (forhindrer at "død" LIMIT-state holder igjen
+        dedup-blokken på samme instrument+retning+horisont).
+        """
+        # Lat-import for å unngå avhengighet under test-stub-flyten
+        try:
+            from ctrader_open_api.messages.OpenApiModelMessages_pb2 import (  # type: ignore
+                ProtoOAExecutionType,
+            )
+
+            _ACCEPTED = ProtoOAExecutionType.ORDER_ACCEPTED
+            _EXPIRED = ProtoOAExecutionType.ORDER_EXPIRED
+            _CANCELLED = ProtoOAExecutionType.ORDER_CANCELLED
+            _REJECTED = ProtoOAExecutionType.ORDER_REJECTED
+        except Exception:
+            _ACCEPTED = _EXPIRED = _CANCELLED = _REJECTED = None  # type: ignore[assignment]
+
+        exec_type = getattr(event, "executionType", None)
+
+        # ORDER_ACCEPTED: capture real orderId for LIMIT-state
+        if _ACCEPTED is not None and exec_type == _ACCEPTED and event.HasField("order"):
+            order = event.order
+            label = order.tradeData.label if order.HasField("tradeData") else ""
+            if label.startswith("SE-"):
+                sig_id = label[3:]
+                with self._lock:
+                    state = next((s for s in self._active_states if s.signal_id == sig_id), None)
+                    if state is not None:
+                        state.order_id = order.orderId
+                        log.info(
+                            "[ORDRE AKSEPTERT] %s — orderId=%d (LIMIT venter på fyll)",
+                            sig_id,
+                            order.orderId,
+                        )
+            return
+
+        # ORDER_EXPIRED / ORDER_CANCELLED / ORDER_REJECTED: rydd state
+        if exec_type in (_EXPIRED, _CANCELLED, _REJECTED) and exec_type is not None:
+            if event.HasField("order"):
+                order = event.order
+                label = order.tradeData.label if order.HasField("tradeData") else ""
+                if label.startswith("SE-"):
+                    sig_id = label[3:]
+                    type_name = {
+                        _EXPIRED: "UTLØPT",
+                        _CANCELLED: "KANSELLERT",
+                        _REJECTED: "AVVIST",
+                    }.get(exec_type, "?")
+                    with self._lock:
+                        state = next(
+                            (s for s in self._active_states if s.signal_id == sig_id),
+                            None,
+                        )
+                        if state is not None and state.phase == TradePhase.AWAITING_CONFIRMATION:
+                            log.info(
+                                "[LIMIT %s] %s — fjerner state.",
+                                type_name,
+                                sig_id,
+                            )
+                            self._active_states.remove(state)
+            return
+
         # Deal-info: lagre commission, evt. gross/swap/commission fra close
         if event.HasField("deal"):
             deal = event.deal

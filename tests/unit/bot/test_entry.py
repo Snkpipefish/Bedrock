@@ -447,6 +447,114 @@ def test_duplicate_instrument_direction_horizon_blocked(
     assert active_states[0].signal_id == "existing"
 
 
+def test_sweep_stale_limit_cancels_disappeared_signal(
+    safety: SafetyMonitor, config: ReloadableConfig, active_states: list, tmp_path: Path
+) -> None:
+    """LIMIT-state hvor signal_id ikke finnes i ferske signaler skal
+    kanselleres + fjernes. Forhindrer gårsdagens MAKRO-LIMIT i å bli
+    liggende på cTrader til 24t-expiry når underliggende setup_id endres."""
+    # Preload: AWAITING_CONFIRMATION-state med real orderId (= LIMIT akseptert)
+    state = _make_state(
+        signal_id="gold-makro-buy-yesterday",
+        instrument="GOLD",
+        direction="buy",
+    )
+    state.order_id = 12345  # real orderId mottatt via ORDER_ACCEPTED
+    state.horizon = "MAKRO"
+    active_states.append(state)
+    client = _make_client_stub(symbol_map={"GOLD": 2})
+    engine = _make_engine(client, safety, config, active_states, stats_path=tmp_path / "s.json")
+    # Ferske signaler inneholder IKKE gold-makro-buy-yesterday
+    engine.on_signals({"signals": [{"id": "different-sig", "instrument": "EURUSD"}], "rules": {}})
+    # State skal være fjernet og cancel_order kalt
+    assert state not in active_states
+    client.cancel_order.assert_called_once_with(order_id=12345)
+
+
+def test_sweep_stale_limit_keeps_state_when_signal_still_present(
+    safety: SafetyMonitor, config: ReloadableConfig, active_states: list, tmp_path: Path
+) -> None:
+    """Hvis signal_id fortsatt finnes i ferske signaler, skal state beholdes
+    og cancel_order ikke kalles. Hysterese-stabilitet er normaltilstanden."""
+    state = _make_state(signal_id="stable-sig", instrument="EURUSD", direction="buy")
+    state.order_id = 99
+    active_states.append(state)
+    client = _make_client_stub(symbol_map={"EURUSD": 1})
+    engine = _make_engine(client, safety, config, active_states, stats_path=tmp_path / "s.json")
+    engine.on_signals({"signals": [{"id": "stable-sig", "instrument": "EURUSD"}], "rules": {}})
+    assert state in active_states
+    client.cancel_order.assert_not_called()
+
+
+def test_sweep_stale_limit_skips_in_trade_states(
+    safety: SafetyMonitor, config: ReloadableConfig, active_states: list, tmp_path: Path
+) -> None:
+    """IN_TRADE-states (= LIMIT er fylt, posisjon åpen) skal ALDRI bli
+    cancellert av sweep — det er en aktiv trade som styres av ExitEngine."""
+    state = _make_state(
+        signal_id="filled-sig", instrument="EURUSD", direction="buy", phase=TradePhase.IN_TRADE
+    )
+    state.order_id = 50
+    active_states.append(state)
+    client = _make_client_stub(symbol_map={"EURUSD": 1})
+    engine = _make_engine(client, safety, config, active_states, stats_path=tmp_path / "s.json")
+    # Non-empty fresh-list som ikke inneholder filled-sig → sweep ville
+    # ellers cancellert. IN_TRADE-state skal beholdes uansett.
+    engine.on_signals({"signals": [{"id": "other-sig"}], "rules": {}})
+    assert state in active_states
+    client.cancel_order.assert_not_called()
+
+
+def test_sweep_stale_limit_skips_states_without_real_order_id(
+    safety: SafetyMonitor, config: ReloadableConfig, active_states: list, tmp_path: Path
+) -> None:
+    """States med order_id <= 0 har ikke fått real orderId fra
+    ORDER_ACCEPTED ennå — vi kan ikke kanselle uten orderId. La staten
+    være; ORDER_REJECTED-event vil rydde hvis LIMIT ble avvist."""
+    state = _make_state(signal_id="pending-sig", instrument="EURUSD", direction="buy")
+    state.order_id = -1  # placeholder, ORDER_ACCEPTED ikke mottatt ennå
+    active_states.append(state)
+    client = _make_client_stub(symbol_map={"EURUSD": 1})
+    engine = _make_engine(client, safety, config, active_states, stats_path=tmp_path / "s.json")
+    engine.on_signals({"signals": [{"id": "other-sig"}], "rules": {}})
+    assert state in active_states
+    client.cancel_order.assert_not_called()
+
+
+def test_sweep_skipped_when_fresh_signals_empty(
+    safety: SafetyMonitor, config: ReloadableConfig, active_states: list, tmp_path: Path
+) -> None:
+    """Tom fresh-list = bot har midlertidig ikke fått signaler (poll-feil
+    eller server-restart). IKKE cancell wholesale — vent til signaler
+    kommer tilbake. Forhindrer mass-cancel ved transient connectivity-
+    problemer."""
+    state = _make_state(signal_id="any-sig", instrument="EURUSD", direction="buy")
+    state.order_id = 88
+    active_states.append(state)
+    client = _make_client_stub(symbol_map={"EURUSD": 1})
+    engine = _make_engine(client, safety, config, active_states, stats_path=tmp_path / "s.json")
+    engine.on_signals({"signals": [], "rules": {}})
+    assert state in active_states
+    client.cancel_order.assert_not_called()
+
+
+def test_sweep_handles_cancel_order_exception(
+    safety: SafetyMonitor, config: ReloadableConfig, active_states: list, tmp_path: Path
+) -> None:
+    """Hvis cancel_order kaster (f.eks. orderId allerede borte på server),
+    skal state likevel fjernes. Server-side LIMIT vil utløpe på sin
+    expiration uansett."""
+    state = _make_state(signal_id="orphan-sig", instrument="EURUSD", direction="buy")
+    state.order_id = 77
+    active_states.append(state)
+    client = _make_client_stub(symbol_map={"EURUSD": 1})
+    client.cancel_order.side_effect = RuntimeError("orderId not found")
+    engine = _make_engine(client, safety, config, active_states, stats_path=tmp_path / "s.json")
+    # Non-empty fresh-list (bare ikke orphan-sig) → sweep kjøres
+    engine.on_signals({"signals": [{"id": "other-sig"}], "rules": {}})
+    assert state not in active_states  # fjernet selv om cancel feilet
+
+
 def test_different_horizon_same_instrument_direction_allowed(
     safety: SafetyMonitor, config: ReloadableConfig, active_states: list, tmp_path: Path
 ) -> None:

@@ -1279,6 +1279,173 @@ def _make_position_event(
     return event
 
 
+def _make_order_event(
+    *,
+    order_id: int,
+    label: str,
+    execution_type: int,
+) -> MagicMock:
+    """Mock execution-event for ORDER_ACCEPTED / EXPIRED / CANCELLED / REJECTED."""
+    event = MagicMock()
+    event.executionType = execution_type
+    event.HasField = lambda fld: fld == "order"
+    event.order = MagicMock()
+    event.order.orderId = order_id
+    event.order.HasField = lambda fld: fld == "tradeData"
+    event.order.tradeData.label = label
+    return event
+
+
+def test_on_execution_order_accepted_captures_order_id(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """ORDER_ACCEPTED skal sette state.order_id = real orderId fra cTrader.
+    Uten dette har vi ingen orderId å kanselle med ved sweep."""
+    from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOAExecutionType
+
+    client = _make_client_stub(symbol_map={"EURUSD": 1}, symbol_price_digits={1: 5})
+    _entry, ex = _make_engines(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        tmp_path=tmp_path,
+    )
+    state = TradeState(
+        signal_id="eur-pending",
+        symbol_id=1,
+        instrument="EURUSD",
+        direction="buy",
+        entry_price=1.080,
+        stop_price=1.078,
+        t1_price=1.085,
+        full_volume=2000,
+        order_id=-1,  # placeholder
+        phase=TradePhase.AWAITING_CONFIRMATION,
+    )
+    active_states.append(state)
+    event = _make_order_event(
+        order_id=42,
+        label="SE-eur-pending",
+        execution_type=ProtoOAExecutionType.ORDER_ACCEPTED,
+    )
+    ex.on_execution(event)
+    assert state.order_id == 42
+    assert state.phase == TradePhase.AWAITING_CONFIRMATION  # still pending
+    assert state in active_states
+
+
+def test_on_execution_order_expired_removes_state(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """ORDER_EXPIRED på en LIMIT skal fjerne AWAITING_CONFIRMATION-state
+    så ny signal kan opprette fersk state for samme (instrument, dir, hor)."""
+    from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOAExecutionType
+
+    client = _make_client_stub(symbol_map={"EURUSD": 1}, symbol_price_digits={1: 5})
+    _entry, ex = _make_engines(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        tmp_path=tmp_path,
+    )
+    state = TradeState(
+        signal_id="expired-sig",
+        symbol_id=1,
+        instrument="EURUSD",
+        direction="buy",
+        order_id=42,
+        phase=TradePhase.AWAITING_CONFIRMATION,
+    )
+    active_states.append(state)
+    event = _make_order_event(
+        order_id=42,
+        label="SE-expired-sig",
+        execution_type=ProtoOAExecutionType.ORDER_EXPIRED,
+    )
+    ex.on_execution(event)
+    assert state not in active_states
+
+
+def test_on_execution_order_rejected_removes_state(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """ORDER_REJECTED (server avviste LIMIT — feil pris/volum/etc.) skal
+    fjerne staten så dedup-blokken ikke holder igjen for samme triplet."""
+    from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOAExecutionType
+
+    client = _make_client_stub(symbol_map={"EURUSD": 1}, symbol_price_digits={1: 5})
+    _entry, ex = _make_engines(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        tmp_path=tmp_path,
+    )
+    state = TradeState(
+        signal_id="rejected-sig",
+        symbol_id=1,
+        instrument="EURUSD",
+        direction="buy",
+        order_id=-1,  # rejected før real orderId ble allokert
+        phase=TradePhase.AWAITING_CONFIRMATION,
+    )
+    active_states.append(state)
+    event = _make_order_event(
+        order_id=0,
+        label="SE-rejected-sig",
+        execution_type=ProtoOAExecutionType.ORDER_REJECTED,
+    )
+    ex.on_execution(event)
+    assert state not in active_states
+
+
+def test_on_execution_order_expired_skips_in_trade_state(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """ORDER_EXPIRED på state som er IN_TRADE (= LIMIT er fylt; expiry-event
+    er for et annet pending-LIMIT for samme symbol) skal IKKE fjerne staten."""
+    from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOAExecutionType
+
+    client = _make_client_stub(symbol_map={"EURUSD": 1}, symbol_price_digits={1: 5})
+    _entry, ex = _make_engines(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        tmp_path=tmp_path,
+    )
+    state = TradeState(
+        signal_id="filled-sig",
+        symbol_id=1,
+        instrument="EURUSD",
+        direction="buy",
+        order_id=42,
+        phase=TradePhase.IN_TRADE,
+    )
+    active_states.append(state)
+    event = _make_order_event(
+        order_id=42,
+        label="SE-filled-sig",
+        execution_type=ProtoOAExecutionType.ORDER_EXPIRED,
+    )
+    ex.on_execution(event)
+    assert state in active_states  # IN_TRADE-state bevart
+
+
 def test_on_execution_flips_to_in_trade_and_amends_sl_tp(
     safety: SafetyMonitor,
     config: ReloadableConfig,

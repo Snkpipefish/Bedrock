@@ -176,9 +176,63 @@ class EntryEngine:
     def on_signals(self, data: dict[str, Any]) -> None:
         """Kalles av SignalComms når /signals har gitt fersk respons."""
         self.signal_data = data
+        # Cancel + rydd LIMIT-states som ikke lenger finnes i ferske
+        # signaler. Forhindrer at gårsdagens MAKRO/SWING-LIMIT-er blir
+        # liggende på cTrader-server etter at underliggende setup er
+        # forsvunnet eller flyttet til nytt setup_id.
+        self._sweep_stale_limit_orders(data.get("signals", []))
         # Reset daily-loss-log-flag når ny dag begynner (via safety-hook,
         # men også her som belte-og-seler)
         # (selve reset-handling er i SafetyMonitor.reset_daily_loss_if_new_day)
+
+    def _sweep_stale_limit_orders(self, fresh_signals: list[dict[str, Any]]) -> None:
+        """Cancel og fjern AWAITING_CONFIRMATION-states hvor signal_id
+        ikke lenger finnes i ferske signaler.
+
+        Et signal "forsvinner" når orchestrator's setup_id endres (level
+        flyttet > hysterese-toleranse, eller score falt under publish-
+        floor). Uten cleanup blir gamle LIMIT-ordrer liggende på cTrader-
+        server inntil expiry (3t SWING / 24t MAKRO) — og dedup-blokken
+        i `_process_watchlist_signal` ville hindre nytt signal på samme
+        (instrument, direction, horizon) fra å opprette ny state.
+
+        Krever at state.order_id > 0 (= LIMIT akseptert av server, real
+        orderId mottatt via ORDER_ACCEPTED-event). Placeholder -1
+        ignoreres — det er en LIMIT som er sendt men ikke akseptert
+        ennå; den vil enten fås real orderId eller en
+        ORDER_REJECTED-event som rydder staten.
+        """
+        if not fresh_signals:
+            return
+        fresh_ids = {s.get("id") for s in fresh_signals if isinstance(s, dict)}
+        with self._lock:
+            for state in list(self._active_states):
+                if state.phase != TradePhase.AWAITING_CONFIRMATION:
+                    continue
+                if state.order_id is None or state.order_id <= 0:
+                    continue
+                if state.signal_id in fresh_ids:
+                    continue
+                # Signal forsvunnet — cancel LIMIT og fjern state
+                log.info(
+                    "[CLEANUP] %s — signal forsvunnet fra fresh batch, "
+                    "kanselerer LIMIT order_id=%d (%s %s).",
+                    state.signal_id,
+                    state.order_id,
+                    state.direction.upper(),
+                    state.horizon,
+                )
+                try:
+                    self._client.cancel_order(order_id=state.order_id)
+                except Exception as exc:
+                    log.warning(
+                        "[CLEANUP] cancel_order feilet for %s (orderId=%d): %s. "
+                        "Fjerner state likevel — server-side LIMIT utløper på expiry.",
+                        state.signal_id,
+                        state.order_id,
+                        exc,
+                    )
+                self._active_states.remove(state)
 
     def on_historical_bars(self, res: Any) -> None:
         """Bootstrap candle_buffers fra historical /15m eller /1H bars."""
