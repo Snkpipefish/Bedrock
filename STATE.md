@@ -273,6 +273,7 @@
   - **Bot tilbake til published-only (session 146, 2026-05-02):** Demo-flagg `BEDROCK_BOT_INCLUDE_UNPUBLISHED` rullet fra `true` → `false` i `bedrock-server.service`. Observasjons-vinduets "alle setups til bot"-modus avsluttet — bot mottar heretter kun `published=True`-entries. Samtidig: ny **conflict-gate** i orchestrator demoter svakere retning når både BUY og SELL klarerer publish-floor på samme `(instrument, horizon)` (whipsaw-vern; rotårsak er score-asymmetri i agri som bidrar 0.5 til begge sider for nøytrale drivere — egen ADR-006-follow-up). Commit `ba28fed`.
   - **Sub-fase 12.10 PLANLAGT 2026-05-02** (PLAN § 22) — driver-rebalansering, åpnes når operatør vil (parallelt med D5/D6, ingen avhengighet). 9 bunker, ~67 nye drivere + 13 endringer på eksisterende, ~3-6 uker estimat. Kjører på demo-konto hele veien. GIE-key (BEDROCK_AGSI_API_KEY) verifisert å dekke AGSI+/ALSI/IIP. Ingen familie-restruktur, ingen ALFRED-vintage, ingen ADR. Kickoff-prompt: `docs/12_10_kickoff_prompt.md`.
   - **Mål 1 (event-driven signal-runs) LANDET 2026-05-02 — session 147** (commits `74441af` + `5cda13c` + `f654544`). Erstatter `bedrock-signals-bot-intraday.timer` (192 fyringer/dag, ~21 t CPU/uke) med `ExecStartPost`-trigger på hver `bedrock-fetch-*.service`. systemd kjører ExecStartPost kun ved exit-code 0, så fetch-failures blokkerer regen automatisk. Ny `bedrock-signals-bot-morning.timer` (Mon-Fri 08:00) er safety-net for manuelle backfills + ExecStartPost-feil. Generator-endring (`generate_service_unit(signals_bot_regen=True)`) + 3 nye pytester (én lader real `config/fetch.yaml` som regression-guard mot at noen fetcher dropper default). Operator-swap utført live (helg, ingen marked åpent): linket morning-units, daemon-reload, disable intraday + enable morning. Neste planlagte regen Sun 02:30 (fundamentals-fetcher) blir første live-prøve. Plan: `docs/plan_event_driven_signals_and_ui.md`.
+  - **Mål 2 (live UI-oppdateringer fra bot via SSE) LANDET 2026-05-02 — session 148** (commits `35fae70` + `16860f4` + `a2a1313`). Erstatter UI-ens 30-sek-polling med Server-Sent Events. Backend: ny `EventBroker` (thread-safe pub/sub) + `FileWatcher` (1-sek mtime-poll-tråd, ingen `watchdog`-dep) + `GET /api/ui/events`-endpoint som streamer `text/event-stream` med 25-sek keepalive. CLI `bedrock server` starter watcher som daemon-tråd og overvåker `signal_log.json` + `signals_bot.json` + `signals.json`. Frontend: `EventSource` med listeners for `trade_log_changed` + `signals_changed`; safety-poll redusert fra 30 sek → 5 min (fanger SSE-disconnect). 15 nye tester. **Live-verifisert via preview-server**: `touch data/signals.json` → SSE-event mottatt i browser etter ~1-2 sek. **Blocker for live-bedrock-server.service**: må restartes (sudo) for å aktivere ny SSE-endpoint + frontend; tas som operator-step når operatør vil. Inntil da serverer prod-server fortsatt 30-sek-polling-versjon (uendret atferd, ingen regresjon). Plan: `docs/plan_event_driven_signals_and_ui.md` § "Mål 2".
   - **D5/D6 senere:** scalp_edge.timer disable + tag `v0.12.9-fase-12.9-LUKKET` tas som egen task når operatør sier OK. Ikke gating for 12.10.
   - Full plan: `docs/bedrock_bot_cutover.md`. **cTrader-credentials klare i `~/.bedrock/secrets.env`** (CTRADER_CLIENT_ID/CLIENT_SECRET/ACCESS_TOKEN/REFRESH_TOKEN/ACCOUNT_ID — alle 5 verifisert).
   - **Next task: D5-fortsettelse** — bot er live siden 2026-05-01 22:02 CEST, ≥24t-vindu løper. Operatør følger journalctl + UI Datakilder-fane (bot-status panel skal forbli grønn). Når ≥24t passert + ≥1 trade plassert+lukket → D6 (scalp_edge.timer disable + arkiv-tag + retire).
@@ -571,6 +572,89 @@ ferdig og 12.6-rebalansering er gjort.
 ---
 
 ## Session log (newest first)
+
+### 2026-05-02 — Session 148: Mål 2 (live UI-oppdateringer via SSE) levert
+
+**Scope:** Mål 2 i `docs/plan_event_driven_signals_and_ui.md`. Erstatter
+UI-ens 30-sek-polling med Server-Sent Events. Trade-events vises i UI
+≤2 sek etter at bot skriver dem (vs opptil 30 sek). Bygger på Mål 1's
+cache-skip — `signals_bot.json` mtime endres kun ved faktisk endring,
+så hvert SSE-event er garantert "noe nytt skjedde".
+
+**Endringer:**
+
+1. **Backend-grunnlag** (commit `35fae70`):
+   - Ny modul `src/bedrock/signal_server/file_watcher.py`:
+     - `EventBroker` — thread-safe pub/sub. Per-client `queue.Queue` via
+       `subscribe()`-context manager (auto-unregister ved exit).
+       Drop-on-full-queue beskytter mot zombie-subscribers.
+     - `FileWatcher` — daemon-tråd som stat'er N filer hver sekund.
+       Initial mtime-snapshot i ctor for å unngå spurious "endret fra
+       0.0"-events ved boot.
+     - `WatchTarget` — frozen dataclass for fil + event-type.
+   - Ny SSE-endpoint `GET /api/ui/events` i `endpoints/ui.py`:
+     - `text/event-stream` med initial 'connected'-event.
+     - Keepalive-comment hver 25 sek (under nginx/cloudflare 30-sek-default).
+     - Headers: `Cache-Control: no-cache` + `X-Accel-Buffering: no`.
+     - Returnerer 503 hvis ingen broker registrert (test-fallback).
+   - 15 nye tester (12 for watcher/broker, 3 for endpoint).
+
+2. **CLI-wiring** (commit `16860f4`):
+   - `bedrock server` starter EventBroker + FileWatcher ved oppstart
+     og registrerer på `app.extensions["bedrock_event_broker"]` /
+     `["bedrock_file_watcher"]`.
+   - Watcher følger 3 filer: `cfg.trade_log_path` →
+     `trade_log_changed`; `cfg.signals_bot_path` + `cfg.signals_path` →
+     `signals_changed`.
+   - `.claude/launch.json` får ny `signal-server-cli`-entry (port 8126)
+     for live-testing av SSE; eksisterende `signal-server` (port 8125,
+     uten broker) beholdt.
+
+3. **Frontend** (commit `a2a1313`):
+   - `EventSource('/api/ui/events')` lyttere for `trade_log_changed` +
+     `signals_changed`. Sistnevnte re-laster kun aktiv setups-fane (lazy).
+   - `REFRESH_INTERVAL_MS` (30 sek) → `SAFETY_POLL_INTERVAL_MS` (5 min).
+     Safety-poll fanger SSE-disconnect, server-restart, eller event-tap.
+   - `onerror` logger warning; browser reconnecter EventSource selv.
+
+**Avvik vs plan-doc (forenklinger):**
+- **Ingen `watchdog`-dep** — én enkel mtime-poll-tråd har ≤2-sek latency
+  (planens success-criterion), sparer en transitiv dep, og er trivielt
+  å teste. Plan nevnte watchdog som ett av flere alternativer.
+- **Ingen bot-heartbeat** — bot-status endres sjelden (start/stopp);
+  5-min safety-poll dekker. Heartbeat kan legges til senere hvis
+  "bot ikke alive"-alert blir nødvendig.
+
+**Live-verifisering (preview-server port 8126):**
+- Server-startup-log: `FileWatcher startet med 3 targets`. SSE-watcher-
+  linje vises i CLI-output.
+- `GET /api/ui/events` returnerer 200 + `text/event-stream`.
+- Browser EventSource opp ved page-load; `'connected'`-event mottatt.
+- `touch data/signals.json` → `signals_changed`-event mottatt i browser
+  etter ~1-2 sek. Samme for `data/signals_bot.json`.
+- Ingen JS-feil i console; UI laster + status-pill viser "ONLINE".
+
+**Tester:** 61/61 grønne i scoped suite (`test_file_watcher.py` +
+`test_endpoints_ui.py`).
+
+**Blocker for prod-aktivering:**
+- `bedrock-server.service` (root, port 5100) må restartes med sudo for
+  å aktivere ny SSE-endpoint + frontend. Inntil da serverer prod-server
+  30-sek-polling-versjon (ingen regresjon — gammel atferd holdes).
+- Operator-kommando: `sudo systemctl restart bedrock-server`. Etter
+  restart: åpne UI, sjekk DevTools Network-tab → én vedvarende
+  EventSource-kobling, ingen 30-sek-bursts.
+
+**Commits:**
+- `35fae70` feat(server): SSE-grunnlag — EventBroker + FileWatcher + /api/ui/events
+- `16860f4` feat(cli): start FileWatcher i bedrock server + signal-server-cli launch
+- `a2a1313` feat(ui): EventSource erstatter 30-sek-polling for live UI-oppdateringer
+
+**Neste:** Mål 1 og Mål 2 ferdig fra plan-doc-en. Planen er fullført.
+Eventuell follow-up: bot-heartbeat-fil hvis vi senere trenger
+"bot ikke alive"-alert i UI; `monitor_<dato>.json`-watching for live
+pipeline-helse-banner (krever glob-pattern eller dato-rotering i
+WatchTarget — ikke nødvendig nå da safety-poll dekker).
 
 ### 2026-05-02 — Session 147: Mål 1 (event-driven signal-runs) levert
 
