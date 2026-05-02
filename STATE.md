@@ -99,6 +99,21 @@
   - **Snapshot-diff vs pre-A3:** 36 score-endringer, **0 grade-flips**, ingen score-Δ over 0.1. Per asset-class: fx 24 / metals 6 / energy 6 score-Δ med 0 flips; indices/crypto/softs/grains uendret.
   - **Akkumulert A1+A2+A3: 21 wirings, 0 grade-flips totalt.** 15/22 instrumenter har nå fått minst én ny driver fra 12.10-bunkene. 5 av 9 bunker har drivere i bruk (3, 4, 6, 7, 8).
   - Diff-rapport: `docs/snapshot_diff_2026-05-02_followup_a3.md`. 3 commits: `0ab78e1` Platinum gvz_z, `6008b26` 4×FX dollar_index_breadth, `bfc4a55` NaturalGas AGSI per-land.
+- **Sub-fase 12.11 LUKKET 2026-05-02** — agri-engine horisont-bevisst + dropp SCALP for alle 7 agri.
+  - **Hva:** `_score_agri` tar nå `horizon`-arg og propagerer til `_score_families` slik at `DriverSpec.horizons`-filteret faktisk virker for agri (var live for financial fra Fase 3 / 2026-05-01 men ignorert for agri). `effective_max_score` per kall = sum av familier med ≥1 applicable driver. Familier hvor alle drivere droppes bidrar 0 til total-score OG ekskluderes fra max_score (ingen MAKRO→SWING informasjons-leakage).
+  - **Hvorfor:** Bruker rapporterte at Soybean/Wheat viste samme score på SCALP/SWING/MAKRO i UI. Rotårsak: `_score_agri` kalte `_score_families(horizon=None)` slik at `DriverSpec.applies_to(None)` returnerte True for alle drivere — engine-filteret var dødt for agri. SCALP fjernet for alle agri (per § 20.2: agri-fundamenta har ikke datafrekvens for scalp; data oppdateres ukentlig–månedlig, ikke real-time).
+  - **YAML-migrasjon:** SCALP-tagger fjernet fra alle 7 agri-instrumenter. Driverne som hadde [SCALP, SWING] beholder SWING. Drivere uten `horizons:`-tag fortsetter å gjelde alle horisonter.
+  - **Per-horisont effekter (BUY-side, dagens markeds-data):**
+    - SCALP: alle 7 agri har eff_max < min_score_publish (eff_max 2-5, floor 6-7). Strukturelt umulig å publisere.
+    - SWING: pott 9-11. Krever ekte 4-familie-konsensus. I dag treffer ingen floor (scores 1.9-5.0).
+    - MAKRO: pott 16-18 (uendret). Alle 7 publiserer (6.02-9.93).
+  - **Signal-effekt:**
+    - signals_bot.json: 132 → 118 entries (-14 SCALP).
+    - 3 SWING publish-flips True→False (Cocoa-sell, Coffee-buy, Soybean-sell — var marginalt over floor før, nå under).
+    - 0 MAKRO publish-flips. 0 financial flips.
+  - **Tester:** 2860/2860 unit + logical grønne. Snapshot-baseline regenerert (118 rader: 90 financial + 28 agri × 2 horisonter × 2 retn). pyright src/ 0 nye errors.
+  - **Default-horisonter:** `_DEFAULT_AGRI_HORIZONS` redusert fra (SCALP, SWING, MAKRO) → (SWING, MAKRO).
+  - 2 commits: `5731f50` engine + YAML + tests + baseline, `075329d` signals_bot.json regen.
 - **Sub-fase 12.10 follow-up Spor A4 LUKKET 2026-05-02** (tag `v0.12.10-followup-a4`). Agri-runde — leverer § 22.2 #30: erstatt `enso_regime` med `noaa_oni_index`. 1:1 driver-swap i 7 agri-instrumenter (Cocoa/Coffee/Sugar/Cotton/Corn/Soybean/Wheat enso-familien). Family-vekt + horisont uendret. Begge drivere leser identisk NOAA ONI-data — current ONI=-0.16 (neutral) gir bit-identisk score 0.5 i begge.
   - **Snapshot-diff vs pre-A4:** **0 score-endringer, 0 grade-flips** — fullt transparent replacement på dagens ONI-regime. Forskjell synlig kun ved ekstrem El Niño (ONI ≥ 1.0). 22/22 instrumenter uendret i score.
   - Gevinst: ADR-010-konsistens (noaa_oni_index har full z-score-mode-suite vs partial enso_regime-implementasjon), § 22.2 #30-leveranse fullført. `enso_regime` driver-funksjon i agri.py er nå død kode — kan slettes ved senere 12.10-cleanup-commit.
@@ -574,6 +589,70 @@ ferdig og 12.6-rebalansering er gjort.
 ---
 
 ## Session log (newest first)
+
+### 2026-05-02 — Session 150: sub-fase 12.11 — agri-engine horisont-bevisst + dropp SCALP for alle agri
+
+**Scope:** Bruker rapporterte at Soybean (og andre agri) viste samme score på SCALP/SWING/MAKRO i UI. Etterforsket og fant at `_score_agri` kalte `_score_families(horizon=None)` slik at `DriverSpec.applies_to(None)` returnerte True for ALLE drivere — engine-filteret som ble levert i Fase 3 (sub-fase 12.9 D5, 2026-05-01) for financial var ignorert for agri. Bruker valgte alternativ 1: aksepter at agri SCALP er av (datafrekvens utilstrekkelig per § 20.2), tag SWING-relevante drivere riktig. 4 valg landet eksplisitt:
+
+1. **Familie-cap-håndtering: drop** (ikke renorm). Familier som mister alle drivere for en horisont bidrar 0 til score OG ekskluderes fra effective_max_score. Begrunnelse: renorm ville leake MAKRO-signal til SWING (en uke-langsom værdriver kan ikke "ta over" når enso/conab forsvinner — strukturell informasjons-mismatch).
+2. **min_score_publish: bevart** (ingen auto-skalering, ingen per-horisont eksplisitt). Bruker valgte å beholde dagens floors (6-7 på de fleste) — som strukturelt gjør SCALP umulig å publisere for agri (eff_max 2-5 < floor 6-7) og krever ekte 4-familie-konsensus for SWING.
+3. **grade_thresholds: bevart felles**. Påvirker UI-badge, ikke trade-gating.
+4. **Default horizons-tag: bakoverkompatibel** (None = alle horisonter). Drivere uten eksplisitt tag fortsetter å bidra til alle horisonter — krever ikke full migrering.
+
+**Engine-endring (engine.py):**
+- `Engine.score` propagerer horisont til agri-grenen.
+- `_score_agri(... horizon: str | None)` tar nå horisont-arg og sender til `_score_families`. Beregner effective_max_score som sum(family.weight) for familier med ≥1 applicable driver.
+- Hvis horizon=None: bakoverkompatibel atferd (alle drivere kjører, max_score = rules.max_score).
+
+**Orchestrator-endring (score.py + signals.py):**
+- `_validate_horizon_arg` aksepterer nå horisont for agri (var hard-fail før).
+- `_compute_scores` unifierer kallmønsteret: agri kalles 1× per (horisont, retning) som financial. Tidligere: 1× per retning delt på alle horisonter (hvilket forklarte den identiske scoren bruker så).
+- `_DEFAULT_AGRI_HORIZONS` redusert (SCALP, SWING, MAKRO) → (SWING, MAKRO). SCALP genereres ikke for agri lenger; hvis caller eksplisitt ber om SCALP gir filteret score=0.
+
+**YAML-migrasjon:** SCALP-tagger fjernet fra alle 7 agri-instrumenter (Cocoa/Coffee/Sugar/Cotton/Corn/Soybean/Wheat). Drivere som hadde [SCALP, SWING] beholder SWING. Drivere uten `horizons:`-tag fortsetter å gjelde alle horisonter.
+
+**Per-horisont effekter (BUY-side, dagens markeds-data 2026-05-02):**
+
+| Inst | SCALP score / eff_max | SWING score / eff_max | MAKRO score / eff_max | Floor | Publish |
+|---|---|---|---|---|---|
+| Cocoa | 0.84 / 2.0 | 1.91 / 9.0 | 7.09 / 16.0 | 6.0 | kun MAKRO |
+| Coffee | 2.59 / 5.0 | 3.10 / 9.0 | 6.02 / 18.0 | 6.0 | kun MAKRO |
+| Sugar | 1.85 / 4.0 | 2.93 / 11.0 | 8.61 / 18.0 | 7.0 | kun MAKRO |
+| Cotton | 1.00 / 2.0 | 5.00 / 9.0 | 9.35 / 16.0 | 6.0 | kun MAKRO |
+| Corn | 1.06 / 2.0 | 4.18 / 11.0 | 8.59 / 18.0 | 7.0 | kun MAKRO |
+| Soybean | 0.85 / 2.0 | 3.19 / 9.0 | 8.27 / 18.0 | 6.0 | kun MAKRO |
+| Wheat | 2.90 / 5.0 | 3.99 / 9.0 | 9.93 / 16.0 | 6.0 | kun MAKRO |
+
+SWING vil publisere når 4 familier samtidig peker samme retning (ekte konsensus). Det er PRESIST det vi vil — ingen falske SWING-signaler basert på MAKRO-only data.
+
+**Signal-effekt:**
+- agri_signals.json: 20 → 28 entries (Coffee + Sugar manglet i pre-fil pga annen filter — nå komplett 7 inst × 2 hor × 2 dir).
+- signals.json: 90 entries (uendret — financial uberørt).
+- signals_bot.json: 132 → 118 entries (-14 SCALP-entries fjernet).
+- 3 SWING publish-flips True→False (Cocoa-sell, Coffee-buy, Soybean-sell). Var marginalt over floor før (engine-filter dødt), nå under floor.
+- 0 MAKRO publish-flips. 0 financial flips.
+
+**Tester:**
+- 33/33 engine-tester grønne (test_engine_agri_smoke / horizon_drivers / direction_polarity / horizon_propagation / smoke).
+- 2860/2860 unit + logical grønne. 2 tester refaktorert pga endret atferd:
+  - `test_score_agri_with_horizon_arg_errors` → `..._propagates` (forventet at horizon kan settes nå).
+  - `test_generate_signals_agri_uses_three_horizons` → `..._uses_default_horizons` (default = SWING+MAKRO, ikke 3).
+- Snapshot-baseline regenerert (104 → 118 rader: 90 financial uendret + 28 nye agri-rader). 0 financial-flips bekreftet via `score_baseline.py --diff-against`. Script `_build_combos` oppdatert til SWING+MAKRO for agri.
+- pyright src/ 0 nye errors (1 pre-eksisterende i bot/exit.py).
+
+**Bot-konsekvens (cTrader demo, kjørende):**
+- Bot mister 14 agri SCALP-entries fra signals_bot.json. Disse hadde sannsynligvis ingen reell trade-aktivitet (SCALP-floor-filteret hadde allerede demotert dem uansett).
+- 3 agri SWING-entries flipper til UNPUBLISHED. Bot fjerner åpne posisjoner på disse om noen.
+- Bot beholder all MAKRO-aktivitet for agri (uendret).
+
+**Commits:**
+- `5731f50` feat(12.11): agri-engine horisont-bevisst + dropp SCALP for alle agri
+- `075329d` chore(12.11): regen signals_bot.json — 14 agri SCALP fjernet
+- (denne) state: session 150 — sub-fase 12.11 LUKKET
+
+**Neste:** ingen direkte oppfølging. Bruker kan justere min_score_publish per (instrument × horisont) hvis SWING-floor viser seg å være for streng (krever 67% av pott i dag) — men det er en empirisk kalibrering for senere session.
+
+---
 
 ### 2026-05-02 — Session 149: pre-live audit + pyright-fix (drivers_overview)
 
