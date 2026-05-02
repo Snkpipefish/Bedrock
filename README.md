@@ -67,6 +67,50 @@ Detaljert mappetre i `PLAN.md § 3.1`.
 | `bedrock.bot` | cTrader Open API klient, candle-buffere, posisjons-management, daily-loss-state |
 | `bedrock.cli` | `bedrock backfill *`, `bedrock signals-all`, `bedrock server`, `bedrock systemd install` |
 
+## Drivere og aggregatorer
+
+**Drivere** er rene Python-funksjoner som returnerer en score `0..1` for ett
+instrument i ett tidsvindu. Kontrakt (låst fra Fase 1):
+
+```python
+@register("driver_navn")
+def driver_navn(store: DataStore, instrument: str, params: dict) -> float:
+    ...
+```
+
+96 drivere er registrert per i dag, fordelt på domener:
+
+| Domene | Eksempler |
+|---|---|
+| `positioning` | `positioning_mm_pct`, `cot_z_score`, `cot_ice_mm_pct` (CFTC + ICE COT MM-net %) |
+| `macro` | `real_yield`, `dxy_chg5d`, `vix_regime`, `eia_stock_change`, `comex_stress`, `mining_disruption` |
+| `structure` | `range_position`, `sma200_align`, `ema_stack` |
+| `risk` | `vol_regime`, `event_distance`, `vix_term_ratio` |
+| `agronomy` | `weather_stress`, `enso_regime`, `seasonal_stage`, `crop_progress_stage`, `wasde_s2u_change`, `disease_pressure`, `bdi_chg30d` |
+| `currency` | `brl_chg5d`, `dxy_chg5d` (delt med macro) |
+| `analog` | `analog_hit_rate`, `analog_avg_return` (k-NN over historiske outcomes) |
+| `sentiment` | `aaii_bull_bear_z`, `news_intel_severity`, `crypto_sentiment_z` |
+| `flow` | `treasury_auction_demand`, `seismic_disruption_pgm` |
+
+**Aggregatorer** er den motsatte siden: én scoring-motor (`bedrock.engine`)
+samler driverne i **familier** (positioning/macro/structure/risk/...),
+beregner gjennomsnitt med YAML-vekter, og rapporterer en `GroupResult`
+per (instrument, horisont, retning). To aggregator-typer eksisterer:
+
+- **`FinancialRules`** — for FX/metals/energy/indices/crypto. Familier:
+  positioning, macro, structure, risk, analog, sentiment.
+- **`AgriRules`** — for grains/softs. Familier: outlook, weather, yield,
+  cross, positioning, analog. Tar hensyn til sesong-fase + WASDE-rytme.
+
+Hver instrument-YAML i `config/instruments/*.yaml` velger drivere ved
+**navn** (ikke kode), tildeler **vekter** og setter **horisont-spesifikke
+publish-floors** (asymmetrisk per BUY/SELL siden ADR-006). Engine bruker
+`polarity: directional|neutral` per familie for å vite om driver-scoren
+skal flippes ved SELL — neutral familier (vol_regime, analog) håndterer
+asymmetri internt.
+
+Se `docs/driver_authoring.md` + `docs/rule_authoring.md` for full kontrakt.
+
 ## Datakilder (per Spor F-lukking)
 
 | Kategori | Kilder |
@@ -90,12 +134,6 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 cd ~/bedrock
 uv sync --all-extras
 uv run pre-commit install
-
-# Hemmeligheter (ikke i repo) — kopier mal og fyll inn
-cp .env.example ~/.bedrock/secrets.env
-chmod 600 ~/.bedrock/secrets.env
-# Rediger inn FRED_API_KEY, BEDROCK_NASS_API_KEY, BEDROCK_EIA_API_KEY,
-# CTRADER_CLIENT_ID/CLIENT_SECRET/ACCESS_TOKEN/REFRESH_TOKEN/ACCOUNT_ID, ...
 
 # Backfill data (eksempel)
 uv run bedrock backfill prices --from 2020-01-01
@@ -137,25 +175,14 @@ bedrock-signals-bot-intraday.timer    (Mon-Fri *5min 06-21 Oslo)
 `bedrock-server.service` (system-unit) holder UI online 24/7.
 `bedrock-bot.service` (user-unit) handler demo via cTrader.
 
-## Sikkerhet
-
-- **Hemmeligheter aldri i repo.** `~/.bedrock/secrets.env` (chmod 600)
-  ligger utenfor repo og blokkeres av `.gitignore` (`.env`, `*.env`,
-  `secrets/`, `~/.bedrock/`).
-- Python leser via `bedrock.config.secrets.get_secret(name)` —
-  prioriterer env-var, faller tilbake til `~/.bedrock/secrets.env`.
-  Aldri hardkodet, aldri i YAML, aldri i UI.
-- Bot-credentials (cTrader Open API) leses via systemd
-  `EnvironmentFile=` fra samme fil; auto-refresh av `CTRADER_ACCESS_TOKEN`
-  håndteres av `bedrock.bot.refresh.py` (skriver tilbake til
-  secrets.env).
-- Admin-UI gated bak `ADMIN_CODE_HASH` (SHA-256, ikke klartekst);
-  endepunkter deaktivert hvis hash ikke satt.
-
 ## Dokumentasjon
 
 - `CLAUDE.md` — agentinstruks for AI-assistert utvikling (session-disciplin)
-- `PLAN.md` — full masterplan med fase-roadmap (Fase 0 → Fase 13 cutover)
+- `PLAN.md` — full masterplan med fase-roadmap (Fase 0 → Fase 13 cutover).
+  **Merk:** planen er endret en del underveis (sub-faser 12.5–12.10 vokste
+  organisk, nye datakilder/Spor er lagt til, Fase 13-cutover-design ble
+  reformet i sub-fase 12.9). Bør revideres ved en senere anledning for å
+  matche faktisk kode-tilstand før en ny stor fase åpnes.
 - `STATE.md` — sesjonshistorikk (newest first), invariants, åpne spørsmål
 - `docs/decisions/` — Architecture Decision Records (ADR-001 .. ADR-008)
 - `docs/commit_convention.md` — conventional commits
