@@ -1373,7 +1373,7 @@ def drivers_overview() -> Response:
         inst_id = inst_cfg.instrument.id
         for fam_name, fam in inst_cfg.rules.families.items():
             for d in fam.drivers:
-                horizons = list(d.horizons) if getattr(d, "horizons", None) else ["all"]
+                horizons = list(d.horizons) if d.horizons else ["all"]
                 wirings.setdefault(d.name, []).append(
                     {
                         "instrument": inst_id,
