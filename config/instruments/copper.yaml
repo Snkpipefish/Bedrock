@@ -57,12 +57,16 @@ families:
     # Sub-fase 12.6 (session 138): real_yield 0.20→0.25 — sterk signal
     # (median |IC|=0.468 for Copper 90d, mono=1.00 SELL). vix_regime
     # trimmet 0.15→0.10 for å holde familie-sum=1.00.
+    # Sub-fase 12.10 follow-up A8 (session 142): industrial_production_yoy
+    # @0.05 (bunke3 #10) — Dr. Copper er klassisk global-vekst-indikator;
+    # US INDPRO-vekst korrelerer sterkt med kobber-demand. dxy 0.30→0.25
+    # for sum=1.00.
     drivers:
       - name: real_yield
         weight: 0.20
         params: {bull_when: low}
       - name: dxy_chg5d
-        weight: 0.3
+        weight: 0.25
         params: {bull_when: negative, window: 5}
       - name: vix_regime
         weight: 0.10
@@ -86,6 +90,11 @@ families:
       - name: seismic_chile_peru_copper
         weight: 0.10
         params: {bull_when: high, lookback_days: 7, min_magnitude: 5.5}
+      - name: industrial_production_yoy
+        weight: 0.05
+        params: {bull_when: high}
+        horizons:
+          - MAKRO
   structure:
     drivers:
       - name: range_position
