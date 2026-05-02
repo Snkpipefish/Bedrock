@@ -109,9 +109,13 @@ families:
     # bekymring (alle horisonter); VIX9D/VIX = front-end vol-curve mean-
     # revert (SCALP/SWING). vol_regime trimmet 0.59→0.39 for å holde
     # familie-sum=1.00.
+    # Sub-fase 12.10 follow-up A2 (session 141): vvix_z@0.05 lagt til
+    # (bunke4 #15) — VIX of VIX z-score. Lav VVIX = vol-vol-stabilitet =
+    # risk-on. Komplementerer cboe_skew_z (hale-priced) med actual vol-
+    # variansjon. vol_regime 0.39→0.34 for sum=1.00.
     drivers:
       - name: vol_regime
-        weight: 0.39
+        weight: 0.34
         params: {period: 14, lookback: 252, mode: high_is_bull}
       - name: event_distance
         weight: 0.15
@@ -136,6 +140,9 @@ families:
         horizons:
           - SCALP
           - SWING
+      - name: vvix_z
+        weight: 0.05
+        params: {bull_when: low, lookback_days: 252}
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     drivers:
