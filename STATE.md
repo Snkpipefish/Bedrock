@@ -629,9 +629,43 @@ errors. Live-verifisert: 14/14 OK på første kjøring etter fixene.
   backfill-scripts men ingen runner i `fetch.yaml`)
 - Bestem skjebne for 13 ubrukte drivere ved Spor E-åpning ~2026-06-01
 
-**Commits (3):**
+**Bunke 3/4/7 wiring-historikk (`docs/bunke_3_4_7_history_2026-05-02.md`):**
+
+Bunkene leverte ~30 drivere i sub-fase 12.10 hovedlevering, men per § 22.1
+ble YAML-wiring deferred til Spor A1-A11. Spor A wired opportunistisk
+per asset-class — ikke fullstendighet-drevet:
+- **Bunke 3 (14 drivere):** 9 wired via Spor A5-A10 + F1; 5 ubrukt
+  (`cfnai_3mma`, `umich_sentiment_z`, `nfci_change` erstattet i F1/F6/A10;
+  `t_bill_3mo_yield`, `continuing_claims_z`, `fomc_decision_distance`
+  redundant med eksisterende drivere).
+- **Bunke 4 (8 drivere):** 6 wired via Spor A1-A4 + F4; 2 ubrukt
+  (`noaa_pdo_index` multi-decade lite actionable, `intraday_atr_h1` krever
+  H1-prices vi ikke fetcher).
+- **Bunke 7 (12 drivere):** 10 wired via Spor A3/A9/A11/C5/F5; 2 ubrukt
+  (`cot_oi_change`, `cot_commercial_extreme` overlapper `cot_z_score`).
+
+Ingen feil i prosessen — wiring-strategien var verdi-drevet, ikke
+fullstendighet-drevet. Reevalueres ved Spor E ~2026-06-01.
+
+**agsi/alsi/iip/aaii runner-status (audit-oppfølging):**
+
+| Tabell | Siste rad | Driver wired? | Status |
+|---|---|---|---|
+| agsi_storage | 5d | ✅ 5 drivere (NaturalGas) | **MANGLER daglig timer** |
+| alsi_storage | 2d | ✅ 2 drivere (NaturalGas) | **MANGLER daglig timer** |
+| iip_remit | 0d | ✅ 1 driver (Brent+NG) | **AKTIV** (7-16 rader/dag fra ukjent kilde) |
+| aaii_sentiment | 2d | ✅ 1 driver (indices) | Mangler timer (ukentlig kadens, OK) |
+
+**Kritisk:** agsi + alsi mangler daglig oppdaterings-mekanisme; siste data
+er 2-5d gammel. Hvis de skal forbli aktive signal-bidrag i NaturalGas
+macro må de registreres som `@register_runner` med daglig timer (06:00 Oslo
+etter GIE D+1 publisering). Inntil videre: signal-styrken degraderes uten
+synlig advarsel når data blir stale.
+
+**Commits (4):**
 - `0c07f6f` fix(fetch): retry HTTP 5xx + 250ms FRED-pacing + fail-tolerance-flag
-- (denne) docs(audit): pipeline_audit_2026-05-02 + state-oppdatering
+- `a45a155` docs(audit): pipeline_audit_2026-05-02
+- (denne) docs(history): bunke_3_4_7_history + agsi/alsi-runner-funn
 - (auto) STATE.md commit
 
 **Next:** Vent på Spor E-åpning (~2026-06-01). Ingen åpne tasks akkurat nå.
