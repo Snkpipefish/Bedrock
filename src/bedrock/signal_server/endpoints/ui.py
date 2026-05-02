@@ -1314,6 +1314,124 @@ def _signals_bot_age(path: Path, now: datetime) -> dict[str, Any]:
     }
 
 
+@ui_bp.get("/api/ui/drivers")
+def drivers_overview() -> Response:
+    """Driver-oversikt for Drivers-fane (sub-fase 12.10 follow-up post-Spor-F).
+
+    Returnerer:
+    - `registered`: alle registrerte drivere (fra `bedrock.engine.drivers.all_names()`)
+    - `wired`: hver drivers wirings i instrument-YAMLer (familie + horisonter + vekt)
+    - `summary`: tellinger (registrert/wired/ubrukt)
+
+    Datakilde: laster instrument-YAMLer ferskt ved hver request — billig
+    (22 filer, ~50 ms total). Caching ikke nødvendig før vi får tunge requests.
+    """
+    # Fersk import + load
+    import importlib
+    from pathlib import Path
+
+    for m in (
+        "macro",
+        "macro_bunke3",
+        "macro_bunke4",
+        "macro_bunke6",
+        "macro_bunke7",
+        "macro_bunke8",
+        "positioning",
+        "trend",
+        "structure",
+        "risk",
+        "agri",
+        "event_surprise",
+        "analog",
+    ):
+        try:
+            importlib.import_module(f"bedrock.engine.drivers.{m}")
+        except Exception as exc:
+            log.debug("driver_module_import_failed module=%s error=%s", m, exc)
+
+    from bedrock.config.instruments import load_instrument_config
+    from bedrock.engine.drivers import all_names
+
+    registered = sorted(all_names())
+
+    # Wirings: driver_name → list[ {instrument, family, weight, horizons, params} ]
+    wirings: dict[str, list[dict[str, Any]]] = {d: [] for d in registered}
+    cfg = _config()
+    instr_dir = Path(cfg.instruments_dir) if cfg.instruments_dir else Path("config/instruments")
+
+    yaml_files = sorted(p for p in instr_dir.glob("*.yaml") if not p.name.startswith("family_"))
+    for p in yaml_files:
+        try:
+            inst_cfg = load_instrument_config(p)
+        except Exception as exc:
+            log.warning("drivers_overview.yaml_load_failed path=%s error=%s", p, exc)
+            continue
+        inst_id = inst_cfg.instrument.id
+        for fam_name, fam in inst_cfg.rules.families.items():
+            for d in fam.drivers:
+                horizons = list(d.horizons) if getattr(d, "horizons", None) else ["all"]
+                wirings.setdefault(d.name, []).append(
+                    {
+                        "instrument": inst_id,
+                        "family": fam_name,
+                        "weight": float(d.weight),
+                        "horizons": horizons,
+                        "params": dict(d.params) if d.params else {},
+                    }
+                )
+
+    used = sorted(d for d, w in wirings.items() if w)
+    unused = sorted(d for d in registered if d not in set(used))
+    in_yaml_not_registered = sorted(set(wirings) - set(registered))
+
+    # Optional metadata: docstring + module
+    from bedrock.engine.drivers import get as get_driver
+
+    def _meta(name: str) -> dict[str, Any]:
+        try:
+            fn = get_driver(name)
+        except Exception:
+            return {"module": None, "doc": None}
+        doc = (fn.__doc__ or "").strip().split("\n\n", 1)[0]  # første avsnitt
+        return {
+            "module": fn.__module__,
+            "doc": doc[:300] if doc else None,
+        }
+
+    registered_set = set(registered)
+    drivers_payload = []
+    for name in sorted(set(registered) | set(wirings)):
+        wires = wirings.get(name, [])
+        meta = _meta(name) if name in registered_set else {"module": None, "doc": None}
+        drivers_payload.append(
+            {
+                "name": name,
+                "registered": name in registered_set,
+                "wired": bool(wires),
+                "wiring_count": len(wires),
+                "instruments": sorted({w["instrument"] for w in wires}),
+                "wirings": wires,
+                "module": meta["module"],
+                "doc": meta["doc"],
+            }
+        )
+
+    return jsonify(
+        {
+            "drivers": drivers_payload,
+            "summary": {
+                "registered_total": len(registered),
+                "wired_total": len(used),
+                "unused_total": len(unused),
+                "in_yaml_not_registered": in_yaml_not_registered,
+                "instruments_count": len(yaml_files),
+            },
+            "unused_drivers": unused,
+        }
+    )
+
+
 @ui_bp.get("/api/ui/bot_status")
 def bot_status() -> Response:
     """Bot-runtime-status for Datakilder-fane (sub-fase 12.9 D5).

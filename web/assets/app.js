@@ -1267,6 +1267,85 @@ function openNewsModal(allCats, catId) {
   modal.showModal();
 }
 
+// ─── Drivers-fane (sub-fase 12.10 follow-up post-Spor-F) ─────
+let _driversCache = null;
+
+async function loadDrivers() {
+  const summaryEl = document.getElementById('drivers-summary');
+  const tbody = document.querySelector('#drivers-table tbody');
+  if (!tbody) return;
+
+  try {
+    if (!_driversCache) {
+      const res = await fetch('/api/ui/drivers', { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      _driversCache = await res.json();
+    }
+    renderDrivers();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">Kunne ikke laste: ${_escapeHtml(String(err))}</td></tr>`;
+    if (summaryEl) summaryEl.textContent = 'feil';
+  }
+
+  // Wire filter (idempotent)
+  const search = document.getElementById('drivers-search');
+  const select = document.getElementById('drivers-filter');
+  if (search && !search.dataset.wired) {
+    search.dataset.wired = '1';
+    search.addEventListener('input', renderDrivers);
+  }
+  if (select && !select.dataset.wired) {
+    select.dataset.wired = '1';
+    select.addEventListener('change', renderDrivers);
+  }
+}
+
+function renderDrivers() {
+  if (!_driversCache) return;
+  const data = _driversCache;
+  const summaryEl = document.getElementById('drivers-summary');
+  const tbody = document.querySelector('#drivers-table tbody');
+  const search = (document.getElementById('drivers-search')?.value || '').toLowerCase().trim();
+  const filter = document.getElementById('drivers-filter')?.value || 'all';
+
+  if (summaryEl) {
+    const s = data.summary;
+    summaryEl.textContent = `${s.registered_total} registrert · ${s.wired_total} brukt · ${s.unused_total} ubrukt · ${s.instruments_count} instrumenter`;
+  }
+
+  let drivers = data.drivers;
+  if (filter === 'wired') drivers = drivers.filter(d => d.wired);
+  else if (filter === 'unused') drivers = drivers.filter(d => !d.wired);
+  if (search) drivers = drivers.filter(d => d.name.toLowerCase().includes(search));
+
+  if (drivers.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">Ingen drivere matcher filteret.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = drivers.map(d => {
+    const status = d.wired
+      ? '<span style="color: #2a8d2a; font-weight: 600;">● BRUKT</span>'
+      : '<span style="color: #999;">○ UBRUKT</span>';
+    const moduleShort = (d.module || '').replace('bedrock.engine.drivers.', '');
+    const insts = d.instruments.length === 0 ? '–' : d.instruments.join(', ');
+    const wires = d.wirings.map(w => {
+      const horiz = w.horizons[0] === 'all' ? '' : ` [${w.horizons.join(',')}]`;
+      return `${w.instrument}/${w.family}@${w.weight}${horiz}`;
+    });
+    const wiresPreview = d.wirings.length === 0
+      ? '–'
+      : `${d.wiring_count}× <small style="color:#666;">(${_escapeHtml(wires.slice(0,2).join(' · '))}${wires.length > 2 ? ' …' : ''})</small>`;
+    return `<tr>
+      <td><code>${_escapeHtml(d.name)}</code>${d.doc ? `<br><small style="color:#777;">${_escapeHtml(d.doc.slice(0, 120))}${d.doc.length > 120 ? '…' : ''}</small>` : ''}</td>
+      <td>${status}</td>
+      <td><small>${_escapeHtml(moduleShort)}</small></td>
+      <td>${wiresPreview}</td>
+      <td><small>${_escapeHtml(insts)}</small></td>
+    </tr>`;
+  }).join('');
+}
+
 // ─── Lazy-load per fane ───────────────────────────────────────
 const loaders = {
   skipsloggen: loadSkipsloggen,
@@ -1274,6 +1353,7 @@ const loaders = {
   agri: loadAgriSetups,
   sentiment: loadSentiment,
   kartrom: loadKartrommet,
+  drivers: loadDrivers,
 };
 
 function activateTab(tabId) {

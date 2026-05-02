@@ -21,6 +21,7 @@
             <button class="tab" data-tab="agri" role="tab">Agri</button>
             <button class="tab" data-tab="sentiment" role="tab">Markedspuls</button>
             <button class="tab" data-tab="kartrom" role="tab">Datakilder</button>
+            <button class="tab" data-tab="drivers" role="tab">Drivere</button>
         </nav>
     </header>
 
@@ -105,6 +106,35 @@
             <div id="kartrom-bot-status"></div>
             <div id="kartrom-system-health"></div>
             <div id="kartrom-groups"><p class="empty">Laster…</p></div>
+        </section>
+        <!-- Fane 6: Drivere (sub-fase 12.10 follow-up post-Spor-F) -->
+        <section id="drivers" class="tab-panel" role="tabpanel">
+            <p class="meta">
+                Oversikt over registrerte vs. wired drivere.
+                <span id="drivers-summary">Laster…</span>
+            </p>
+            <div class="filter-bar" style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem;">
+                <input type="text" id="drivers-search" placeholder="Søk driver-navn…" style="flex: 1; min-width: 200px; padding: 0.4rem 0.6rem;">
+                <select id="drivers-filter" style="padding: 0.4rem 0.6rem;">
+                    <option value="all">Alle drivere</option>
+                    <option value="wired">Kun brukt (wired)</option>
+                    <option value="unused">Kun ubrukt</option>
+                </select>
+            </div>
+            <div class="table-wrapper">
+                <table id="drivers-table">
+                    <thead>
+                        <tr>
+                            <th>Driver</th>
+                            <th>Status</th>
+                            <th>Modul</th>
+                            <th>Bruk</th>
+                            <th>Instrumenter</th>
+                        </tr>
+                    </thead>
+                    <tbody><tr><td colspan="5" class="empty">Laster…</td></tr></tbody>
+                </table>
+            </div>
         </section>
     </main>
 
