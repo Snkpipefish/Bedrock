@@ -112,21 +112,25 @@ families:
     # 0.2 vekt — sekundær til DXY men gir cross-region-validering.
     # Sub-fase 12.5+ session 113: bdi_chg30d → shipping_pressure med
     # eksplisitt index=BDI (Baltic-suite-rebrand).
+    # Sub-fase 12.10 Bunke 2 #4: cot_ice_mm_pct@0.15 lagt til. ICE Wheat
+    # Futures (UK Feed Wheat, ICE Europe) gir et tredje cross-region
+    # positioning-signal (US CFTC + EU Euronext + UK ICE).
+    # dxy 0.40 → 0.30, shipping 0.15 → 0.10. Sum=1.00.
     weight: 2
     drivers:
       - name: dxy_chg5d
-        weight: 0.4
+        weight: 0.30
         params:
           bull_when: negative
           window: 5
       - name: shipping_pressure
-        weight: 0.15
+        weight: 0.10
         params:
           index: BDI
           window_days: 30
           bull_when: negative
       - name: event_distance
-        weight: 0.1
+        weight: 0.10
         params:
           countries: [USD]
           impact_levels: [High]
@@ -135,18 +139,21 @@ families:
           - SCALP
           - SWING
       - name: cot_euronext_mm_pct
-        weight: 0.2
+        weight: 0.20
         params:
           contract: euronext milling wheat
+          metric: mm_net_pct
+          lookback_weeks: 52
+      - name: cot_ice_mm_pct
+        weight: 0.15
+        params:
+          contract: ice wheat
           metric: mm_net_pct
           lookback_weeks: 52
       - name: fas_exports
         weight: 0.15
         params:
           bull_when: high
-          # Sub-fase 12.7 D2 session 133 (A3): All Wheat (cc=107)
-          # FAS ESR demand-signal. dxy 0.50 → 0.40, shipping 0.20 →
-          # 0.15. Sum=1.00 per § 19.5 Del C+ måltilstand.
         horizons:
           - MAKRO
           - SWING
