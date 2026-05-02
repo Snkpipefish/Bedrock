@@ -87,7 +87,7 @@ families:
         weight: 0.10
         params: {invert: true}
       - name: eia_stock_change
-        weight: 0.30
+        weight: 0.25  # A9: 0.30→0.25 for å gi plass til AGSI italy + withdrawal
         params: {series_id: NW2_EPG0_SWO_R48_BCF}  # US NG Storage Lower 48
       - name: agsi_storage_pct
         weight: 0.05  # A3: 0.10→0.05; per-land overtar deler av EU-signalet
