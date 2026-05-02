@@ -570,6 +570,74 @@ ferdig og 12.6-rebalansering er gjort.
 
 ## Session log (newest first)
 
+### 2026-05-02 — Session 144: post-Spor-F robusthets-fixes + pipeline-audit
+
+**Scope:** Operatør-driven undersøkelse av FRED HTTP 5xx-feilene observert
+i `bedrock-fetch-fundamentals.service` + audit av pipeline-konsistens.
+
+**Funn (ikke rate-limit):**
+- Vi henter 14 unike FRED-serier per fyring (~7 % av FRED's 120 req/min-
+  budsjett). Aldri sett 429 i logg.
+- Feilene er ekte HTTP 500 fra FRED-siden, ofte på samme sub-sett av
+  internasjonale rente-serier (IRLTLT01\* + WTREGEN). Apr 30 12:35-feilene
+  var lokal DNS-feil (NameResolutionError), ikke FRED.
+- Eksisterende retry-policy retried KUN på `RequestException`, IKKE på
+  HTTP 5xx — så transient FRED-500 ble hard-fail uten retry.
+
+**3 forbedringer levert (commit `0c07f6f`):**
+1. **`http_get_with_retry` retries nå HTTP 5xx** (default `retry_on_5xx=True`).
+   Bruker `retry_any(RequestException, _is_5xx_response)` via tenacity-9.
+   Fanger `RetryError` ved siste forsøk og returnerer siste response uendret —
+   bevarer caller-API.
+2. **250ms pacing mellom FRED-serier** i `run_fundamentals`. Total runtime
+   ~3.5 sek ekstra per fyring; matcher pattern fra `eia_inventories.py` og
+   memory-feedback `free-api-no-parallel-requests`.
+3. **`bedrock fetch run --fail-tolerance-pct N`** (default 0): andel items
+   som kan feile uten exit-1. `systemd-generator.py` propagerer
+   `--fail-tolerance-pct 50` til `bedrock-fetch-fundamentals.service` —
+   unit flagger ikke RØD før mer enn halvparten av 14 FRED-serier feiler
+   transient. Auto-regenerert + linket via `bedrock systemd install`.
+
+**9 nye tester** (7 base.py retry + 2 systemd-generator). Pyright src/: 0
+errors. Live-verifisert: 14/14 OK på første kjøring etter fixene.
+
+**Pipeline-audit (`docs/pipeline_audit_2026-05-02.md`):**
+
+| Kategori | Status |
+|---|---|
+| Fetcher-config vs runners | 19/19 match (ingen mismatch) |
+| Stale-tabeller | `disease_alerts` 382d, `export_events` 594d (manuelle CSV) |
+| Moduler uten runner | 10 (treasury_auctions, aaii, agsi, alsi, iip, manual_events, fas_esr, drought_monitor, nass-yield, usda_calendar) — backfill-script-drevet |
+| FRED-serier i live-fetch | 14, hvorav ~9 brukes direkte av drivere; rest agg-input til kombinerte drivere |
+| FRED-serier i DB uten driver | DGS2, VXN (lastet men ubrukt — minor noise) |
+| Ubrukte drivere | **13/96** registrert men ikke wired (kandidat-DELETE eller Spor E-wiring) |
+
+**Ubrukte drivere (kandidat-DELETE eller wire i Spor E):**
+- `cfnai_3mma`, `umich_sentiment_z`, `nfci_change` — erstattet i nyere
+  Spor (F1, F6, A10) av bedre alternativer
+- `enso_regime` — erstattet av `noaa_oni_index` i Spor A4, men brukes
+  fortsatt av analog-dim-extractor (ortogonal mini-spor)
+- `cot_oi_change`, `cot_commercial_extreme` — Bunke7 #26 levert, aldri wired
+- `noaa_pdo_index`, `intraday_atr_h1`, `t_bill_3mo_yield`,
+  `continuing_claims_z`, `vix_term_ratio`, `fomc_decision_distance`,
+  `news_intel_severity_veto` — Bunke3-4 levert, aldri wired
+
+**Anbefaling-oppfølgere:**
+- Refresh `data/manual/disease_alerts.csv` + `export_events.csv` hvis
+  disse signalene skal være aktive
+- Sjekk om `agsi/alsi/iip/aaii` trenger daglige timers (de har
+  backfill-scripts men ingen runner i `fetch.yaml`)
+- Bestem skjebne for 13 ubrukte drivere ved Spor E-åpning ~2026-06-01
+
+**Commits (3):**
+- `0c07f6f` fix(fetch): retry HTTP 5xx + 250ms FRED-pacing + fail-tolerance-flag
+- (denne) docs(audit): pipeline_audit_2026-05-02 + state-oppdatering
+- (auto) STATE.md commit
+
+**Next:** Vent på Spor E-åpning (~2026-06-01). Ingen åpne tasks akkurat nå.
+
+---
+
 ### 2026-05-02 — Session 143: sub-fase 12.10 follow-up Spor F LUKKET
 
 **Scope:** Spor F (mindre DEFERRED) — siste av 5 follow-up-spor for
