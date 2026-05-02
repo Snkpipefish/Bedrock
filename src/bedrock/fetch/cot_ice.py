@@ -57,11 +57,25 @@ _log = logging.getLogger(__name__)
 
 # ICE-canonical contract-navn (lowercase). Match-nøkkel → canonical.
 # Dekker både fulle og forkortede navn ICE bruker i ulike rapport-versjoner.
+#
+# Sub-fase 12.10 Bunke 2 #4: utvidet med softs (cocoa/coffee/sugar 11/wheat).
+# ICE Public Reports CSV har disse i samme format som energy-kontraktene.
+# Match-nøkler er bevisst presise for å unngå overlapp (f.eks. "sugar no.11"
+# matcher kun den kontrakten, ikke "sugar no.5" white sugar). Reihefølge er
+# spesifikt-til-generelt: lengre nøkler først.
 ICE_MARKETS: dict[str, str] = {
+    # Energy (eksisterende)
     "brent crude": "ice brent crude",
     "low sulphur gasoil": "ice gasoil",
     "ttf natural gas": "ice ttf gas",
-    # Varianter
+    # Softs (Bunke 2 #4) — ICE Futures Europe public CSV inkluderer:
+    # White Sugar (No.5), Cocoa, Robusta Coffee, Wheat (Feed Wheat).
+    # Match-nøkler er presise for å unngå overlapp.
+    "white sugar": "ice sugar",
+    "robusta coffee": "ice coffee",
+    "cocoa": "ice cocoa",
+    "wheat": "ice wheat",
+    # Varianter (kortform)
     "brent": "ice brent crude",
     "gasoil": "ice gasoil",
     "ttf": "ice ttf gas",

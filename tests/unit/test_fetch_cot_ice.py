@@ -303,8 +303,26 @@ def test_combined_returns_empty_when_both_fail(tmp_path: Path) -> None:
 
 
 def test_ice_markets_canonical_keys() -> None:
-    """Sanity: alle 3 canonical-navn finnes i mappingen."""
+    """Sanity: alle canonical-navn finnes i mappingen."""
     canonicals = set(ICE_MARKETS.values())
     assert "ice brent crude" in canonicals
     assert "ice gasoil" in canonicals
     assert "ice ttf gas" in canonicals
+    # Sub-fase 12.10 Bunke 2 #4: softs lagt til (cocoa/coffee/sugar/wheat)
+    assert "ice cocoa" in canonicals
+    assert "ice coffee" in canonicals
+    assert "ice sugar" in canonicals
+    assert "ice wheat" in canonicals
+
+
+def test_normalize_market_softs() -> None:
+    """Sub-fase 12.10 Bunke 2 #4: ICE Europe softs-produkter mappes
+    til canonical-navn. Match på faktisk navngivning fra ICE public CSV."""
+    from bedrock.fetch.cot_ice import _normalize_market
+
+    assert _normalize_market("ICE Cocoa Futures - ICE Futures Europe") == "ice cocoa"
+    assert _normalize_market("ICE Robusta Coffee Futures - ICE Futures Europe") == "ice coffee"
+    assert _normalize_market("ICE White Sugar Futures - ICE Futures Europe") == "ice sugar"
+    assert _normalize_market("ICE Wheat Futures - ICE Futures Europe") == "ice wheat"
+    # 'and Options'-rader skippes for softs også
+    assert _normalize_market("ICE Cocoa Futures and Options - ICE Futures Europe") is None
