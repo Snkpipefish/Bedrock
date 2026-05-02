@@ -59,7 +59,7 @@ families:
     # trimmet 0.15→0.10 for å holde familie-sum=1.00.
     drivers:
       - name: real_yield
-        weight: 0.25
+        weight: 0.20
         params: {bull_when: low}
       - name: dxy_chg5d
         weight: 0.3
@@ -71,12 +71,21 @@ families:
         weight: 0.2
         params: {metal: copper, wow_window: 5, copper_handling: skip}
       # Sub-fase 12.5+ session 109: mining_disruption — Chile/Peru
-      # alene står for ~40% global produksjon. 0.15 vekt — høyeste blant
-      # metals fordi konsentrasjonen i Chile gjør store enkeltskjelv
-      # potensielt dramatiske for global supply.
+      # alene står for ~40% global produksjon. 0.10 vekt — trimmet ned
+      # fra 0.15 fordi seismic_chile_peru_copper (12.10 bunke8) er nå
+      # wired som dedikert region-spesifikk supply-shock-driver.
       - name: mining_disruption
-        weight: 0.15
+        weight: 0.10
         params: {metal: copper, lookback_days: 7}
+      # Sub-fase 12.10 follow-up A1 (session 140): seismic_chile_peru_copper
+      # (bunke8 #28). M ≥ 5.5 events i Chile/Peru — direkte supply-shock-
+      # signal for kobber siden ~40% global produksjon ligger her.
+      # mining_disruption gir bredere region-vektet score; denne fanger
+      # spesifikt store enkeltskjelv. real_yield 0.25→0.20, mining 0.15→
+      # 0.10 for å holde familie-sum=1.00.
+      - name: seismic_chile_peru_copper
+        weight: 0.10
+        params: {bull_when: high, lookback_days: 7, min_magnitude: 5.5}
   structure:
     drivers:
       - name: range_position
