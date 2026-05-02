@@ -20,6 +20,7 @@ from bedrock.engine.drivers import get, is_registered
         ("eia_petroleum_supplied", "WRPUPUS2"),
         ("eia_imports_crude", "WCRIMUS2"),
         ("eia_gasoline_demand", "WGFUPUS2"),
+        ("eia_natgas_processing", "N9060US2"),  # Spor F8: monthly NGPL Production
     ],
 )
 def test_driver_registered_and_propagates_series_id(
