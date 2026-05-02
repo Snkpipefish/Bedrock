@@ -93,8 +93,13 @@ families:
       # #15) — CBOE Gold-ETF VIX z-score. Lav GVZ = bull (fearless gull-
       # akkumulering); høy GVZ = mistro/risk-off på gull spesifikt.
       # real_yield 0.35→0.30, etf_holdings_change 0.15→0.10 for sum=1.00.
+      # Sub-fase 12.10 follow-up A2 (session 141): seismic_m6_global_24h@0.05
+      # (bunke8 #28) — global M ≥ 6.0 events siste 24t. Major-skjelv globalt
+      # utløser typisk safe-haven-flow til gull. Komplementerer
+      # mining_disruption (gull-mining-spesifikk) med haven-trigger-input.
+      # real_yield 0.30→0.25 for sum=1.00.
       - name: real_yield
-        weight: 0.30
+        weight: 0.25
         params:
           bull_when: low
       - name: dxy_chg5d
@@ -127,6 +132,12 @@ families:
         params:
           bull_when: low
           lookback_days: 252
+      - name: seismic_m6_global_24h
+        weight: 0.05
+        params:
+          bull_when: high
+          lookback_hours: 24
+          min_magnitude: 6.0
   structure:
     # Sub-fase 12.5 Block A polish session 79: range_position erstatter
     # sma200_align (sma er trend, ikke structure). 20-dagers range-posisjon
