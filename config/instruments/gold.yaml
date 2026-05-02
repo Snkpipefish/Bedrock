@@ -89,8 +89,12 @@ families:
       # Sub-fase 12.6 (session 138): real_yield 0.30→0.35 — sterkest IC i
       # hele datasettet (median |IC|=0.541 for Gold 90d, mono=1.00 SELL).
       # vix_regime trimmet 0.10→0.05 for å holde familie-sum=1.00.
+      # Sub-fase 12.10 follow-up A1 (session 140): gvz_z lagt til (bunke4
+      # #15) — CBOE Gold-ETF VIX z-score. Lav GVZ = bull (fearless gull-
+      # akkumulering); høy GVZ = mistro/risk-off på gull spesifikt.
+      # real_yield 0.35→0.30, etf_holdings_change 0.15→0.10 for sum=1.00.
       - name: real_yield
-        weight: 0.35
+        weight: 0.30
         params:
           bull_when: low
       - name: dxy_chg5d
@@ -113,11 +117,16 @@ families:
           metal: gold
           lookback_days: 7
       - name: etf_holdings_change
-        weight: 0.15
+        weight: 0.10
         params:
           ticker: gld
           bull_when: high
           wow_window: 5
+      - name: gvz_z
+        weight: 0.10
+        params:
+          bull_when: low
+          lookback_days: 252
   structure:
     # Sub-fase 12.5 Block A polish session 79: range_position erstatter
     # sma200_align (sma er trend, ikke structure). 20-dagers range-posisjon
