@@ -637,6 +637,38 @@ kjørt det.
 - Hev publish-floor for agri (6.0/16 = 37.5 % er lavt) er en alternativ
   vinkel — kunne vurderes når observasjons-data rulles inn.
 
+**5. Trailing-stop tunet per horisont × gruppe (commit `31adb5c`)**
+
+Operatør spurte om trailing-stoppen "holder seg langt nok unna eller
+følger for fort". Audit-en avdekket at trail-mult var én verdi per
+asset-gruppe i `bot.yaml` — uavhengig av horisont. Konsekvens:
+
+- Gold MAKRO med 3.5×H1-ATR(~$6) = $21-trail. Bare 0.6×ATR-D1; en
+  normal dagspullback klipper ut tesen.
+- Soybean MAKRO med 2.0×H1-ATR(3¢) = 6¢-trail. Daily range er 30-50¢
+  — tesen overlever ikke første USDA-rapport.
+
+Fix i `src/bedrock/signal_server/bot_adapter.py`: nytt
+`TRAIL_MULT_BY_HORIZON_GROUP`-map (3 horisonter × 16 grupper) wired
+inn i `horizon_config.exit_trail_atr_mult`. `_resolve_trail_mult`
+foretrekker denne over `group_params.trail_atr`-fallback. Eksempler:
+
+- Gold MAKRO: 3.5× → 6.0× (trail $21 → $36)
+- Soybean MAKRO: 2.0× → 5.0× (trail 6¢ → 15¢)
+- NatGas MAKRO: implicit fx-fallback 2.5× → eksplisitt 7.0×
+
+Designregel: SCALP < SWING < MAKRO for samme gruppe. SCALP bruker
+M15-ATR (kort hold, raskt out), MAKRO bruker H1-ATR med 5-7× mult
+(≈ 1.2-1.5×ATR-D1, overlever D1-pullback). Mer volatile assets
+(natgas, crypto, edelmetaller, oil) får bredere multipliers enn
+FX/indeks. To nye tester: per-horisont-coverage + monotonisitet
+(SCALP < SWING < MAKRO). 312/312 adapter+bot + 230/230 signal_server
+tester grønne.
+
+**Krever:** `sudo systemctl restart bedrock-server` for at
+`/bot/signals` skal serve nye multipliers. Bot plukker opp ved neste
+poll uten egen restart.
+
 **4. Bot-dedup horisont-aware (commit `880a3d6`)**
 
 Operatør spurte om bot-ens duplikat-regel skiller på horisont. Det gjorde
@@ -658,6 +690,7 @@ porteføljegrenser, ikke per-setup).
 - `ba28fed` fix(orchestrator): demote svakere retning når BUY+SELL begge published på samme horisont
 - `9359ec0` state: session 146 — conflict-gate + bot tilbake til published-only
 - `880a3d6` fix(bot): tillat samme instrument+retning på forskjellige horisonter
+- `31adb5c` fix(bot): per-horisont × per-gruppe trailing-stop-multipliers
 
 **Next:** Observasjons-vinduet løper videre med published-only. Operatør
 har restartet `bedrock-bot.service` (2026-05-02) — ny dedup-regel er live.
