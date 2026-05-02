@@ -34,11 +34,14 @@ def test_unit_has_unit_section(unit_text: str) -> None:
     assert "[Install]" in unit_text
 
 
-def test_unit_starts_after_server(unit_text: str) -> None:
-    """Bot må vente på at /bot/signals er oppe før første poll."""
+def test_unit_starts_after_network(unit_text: str) -> None:
+    """Bot må vente på network-online før første poll. Bevisst ikke koblet
+    mot bedrock-server.service: bot er user-unit, server er system-unit, og
+    user-units kan ikke ``Requires=``/``After=`` system-units. Bot's egen
+    fetch-fail-eskalering (safety.py) håndterer midlertidig server-bortfall.
+    Se kommentar i unit-fila for full begrunnelse."""
     assert "After=" in unit_text
     after_line = next(line for line in unit_text.splitlines() if line.startswith("After="))
-    assert "bedrock-server.service" in after_line
     assert "network-online.target" in after_line
 
 

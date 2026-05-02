@@ -235,7 +235,9 @@ def test_min_magnitude_filter() -> None:
     ]
     store = _MockSeismicStore(_df(events))
     fn = get("mining_disruption")
-    # Med default min_magnitude=4.5: begge teller; med 6.0 kun den ene.
-    s_low = fn(store, "Copper", {"metal": "copper"})
+    # Eksplisitt min_magnitude=4.5 (begge events teller) vs 6.0 (kun den ene).
+    # Sub-fase 12.10 bunke9 #33 bumpet driver-default 4.5→5.5; testen passerer
+    # eksplisitt min_magnitude for å være uavhengig av default-bumps.
+    s_low = fn(store, "Copper", {"metal": "copper", "min_magnitude": 4.5})
     s_high = fn(store, "Copper", {"metal": "copper", "min_magnitude": 6.0})
     assert s_high < s_low
