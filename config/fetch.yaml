@@ -53,6 +53,28 @@ fetchers:
     table: weather
     ts_column: date
 
+  # Sub-fase 12.10 follow-up post-Spor-F (2026-05-02): agsi + alsi
+  # registrert som daglige runners. NaturalGas macro har 5 AGSI-drivere
+  # + 2 ALSI-drivere wired (~30 % av familievekten). Tidligere kun
+  # manuell backfill — risiko for stale signal uten advarsel. GIE
+  # publiserer D+1 (typisk ~05:00 UTC); vi kjører 06:00 Oslo (04:00 UTC)
+  # med stale_hours=30 (1d buffer for D+1 + helg-effekter).
+  agsi:
+    module: bedrock.fetch.agsi
+    cron: "0 6 * * *"           # daglig 06:00 Oslo
+    stale_hours: 36
+    on_failure: log_and_skip
+    table: agsi_storage
+    ts_column: gas_day_start
+
+  alsi:
+    module: bedrock.fetch.alsi
+    cron: "5 6 * * *"           # daglig 06:05 Oslo (5 min etter agsi)
+    stale_hours: 36
+    on_failure: log_and_skip
+    table: alsi_storage
+    ts_column: gas_day_start
+
   enso:
     module: bedrock.fetch.enso
     cron: "0 6 12 * *"          # 12. i måneden 06:00 UTC (etter NOAAs ~10.-publisering)

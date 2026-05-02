@@ -405,6 +405,80 @@ def test_run_enso_handles_empty_df(store: DataStore, configs_dir) -> None:
     assert result.total_rows == 0
 
 
+def test_run_agsi_writes_rows(store: DataStore, configs_dir) -> None:
+    """Spor F follow-up: AGSI daglig runner."""
+    defaults, insts = configs_dir
+    df = pd.DataFrame(
+        {
+            "country": ["eu", "de"],
+            "gas_day_start": ["2026-04-30", "2026-04-30"],
+            "gas_in_storage_twh": [400.5, 100.2],
+            "working_gas_volume_twh": [1100.0, 250.0],
+            "consumption_full_pct": [36.4, 40.1],
+            "injection_twh": [2.1, 0.8],
+            "withdrawal_twh": [0.5, 0.2],
+            "net_withdrawal_twh": [-1.6, -0.6],
+        }
+    )
+    with patch("bedrock.fetch.agsi.fetch_agsi_storage", return_value=df):
+        result = run_fetcher_by_name(
+            "agsi",
+            store,
+            _spec(),
+            from_date=date(2026, 4, 1),
+            instruments_dir=insts,
+            defaults_dir=defaults,
+        )
+
+    assert result.ok_count == 1
+    assert result.fail_count == 0
+    assert result.total_rows == 2
+    assert result.items[0].item_id == "agsi"
+
+
+def test_run_agsi_handles_empty_df(store: DataStore, configs_dir) -> None:
+    defaults, insts = configs_dir
+    with patch("bedrock.fetch.agsi.fetch_agsi_storage", return_value=pd.DataFrame()):
+        result = run_fetcher_by_name(
+            "agsi",
+            store,
+            _spec(),
+            from_date=date(2026, 4, 1),
+            instruments_dir=insts,
+            defaults_dir=defaults,
+        )
+    assert result.ok_count == 1
+    assert result.total_rows == 0
+
+
+def test_run_alsi_writes_rows(store: DataStore, configs_dir) -> None:
+    """Spor F follow-up: ALSI daglig runner."""
+    defaults, insts = configs_dir
+    df = pd.DataFrame(
+        {
+            "country": ["eu"],
+            "gas_day_start": ["2026-04-30"],
+            "inventory_twh": [50.2],
+            "dtmi_twh": [1.5],
+            "full_pct": [55.0],
+            "send_out_twh": [0.8],
+            "dtrs_twh": [3.0],
+        }
+    )
+    with patch("bedrock.fetch.alsi.fetch_alsi_storage", return_value=df):
+        result = run_fetcher_by_name(
+            "alsi",
+            store,
+            _spec(),
+            from_date=date(2026, 4, 1),
+            instruments_dir=insts,
+            defaults_dir=defaults,
+        )
+    assert result.ok_count == 1
+    assert result.fail_count == 0
+    assert result.total_rows == 1
+
+
 def test_run_wasde_appends_rows(store: DataStore, configs_dir) -> None:
     defaults, insts = configs_dir
     df = pd.DataFrame(

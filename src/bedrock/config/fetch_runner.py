@@ -356,6 +356,68 @@ def run_fundamentals(
     return result
 
 
+@register_runner("agsi")
+def run_agsi(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """GIE AGSI+ EU gas storage (daglig D+1).
+
+    Sub-fase 12.10 follow-up post-Spor-F (2026-05-02): NaturalGas macro
+    har 5 AGSI-drivere wired (`agsi_storage_pct`, `agsi_germany_pct`,
+    `agsi_netherlands_pct`, `agsi_italy_pct`, `agsi_withdrawal_rate`,
+    `agsi_injection_rate`). Frem til denne runner-registreringen ble
+    data oppdatert kun manuelt via `scripts/backfill/agsi.py` —
+    risiko for stale signal uten advarsel.
+
+    Standard-vinduet (siste 30 dager) per `fetch_agsi_storage`-default
+    er passende for daglig påfyll.
+    """
+    from bedrock.fetch.agsi import fetch_agsi_storage
+
+    result = FetchRunResult(fetcher_name="agsi")
+
+    def _do() -> int:
+        df = fetch_agsi_storage()
+        if df.empty:
+            return 0
+        return store.append_agsi_storage(df)
+
+    _safe_run([("agsi", _do)], result)
+    return result
+
+
+@register_runner("alsi")
+def run_alsi(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """GIE ALSI EU LNG-terminal storage (daglig D+1).
+
+    Sub-fase 12.10 follow-up post-Spor-F (2026-05-02): NaturalGas macro
+    har 2 ALSI-drivere wired (`alsi_eu_pct`, `alsi_storage_change`).
+    Tidligere kun manuell backfill — nå daglig timer.
+    """
+    from bedrock.fetch.alsi import fetch_alsi_storage
+
+    result = FetchRunResult(fetcher_name="alsi")
+
+    def _do() -> int:
+        df = fetch_alsi_storage()
+        if df.empty:
+            return 0
+        return store.append_alsi_storage(df)
+
+    _safe_run([("alsi", _do)], result)
+    return result
+
+
 @register_runner("enso")
 def run_enso(
     spec: FetcherSpec,
