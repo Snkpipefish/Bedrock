@@ -8,8 +8,12 @@ Per § 22.2 #23-#26.
 - agsi_withdrawal_rate, agsi_injection_rate — nye drivere som leser
   withdrawal_twh / injection_twh-kolonnene direkte.
 
-#24 ALSI: DEFERRED (krever ny GIE-API-route + skjema).
-#25 IIP REMIT: DEFERRED (krever ny IIP-API-route + skjema).
+#24 ALSI: levert i sub-fase 12.10 follow-up Spor C (session 136):
+- alsi_eu_pct: LNG-terminal full_pct (parallel til agsi_storage_pct).
+- alsi_storage_change: WoW %-endring i inventory.
+
+#25 IIP REMIT: levert i sub-fase 12.10 follow-up Spor C (session 136):
+- iip_supply_unavailability: aggregert capacity unavailable nå/nylig.
 
 #26 COT-disaggregated utvidelser (2 av 4):
 - cot_oi_change: open_interest WoW-change z-score
@@ -123,6 +127,274 @@ def agsi_injection_rate(store: Any, instrument: str, params: dict) -> float:
     p = dict(params)
     p.setdefault("bull_when", "low")
     return _agsi_rate_driver(store, instrument, p, column="injection_twh")
+
+
+# ---------------------------------------------------------------------------
+# #24 ALSI EU LNG-terminal (sub-fase 12.10 follow-up Spor C, session 136)
+# ---------------------------------------------------------------------------
+
+
+_DEFAULT_ALSI_PCT_THRESHOLDS_LOW: tuple[tuple[float, float], ...] = (
+    # bull_when="low": lav LNG-fyllingsgrad = bull NG (mindre import-buffer).
+    (15.0, 1.0),  # < 15% = sterk bull (LNG-stress)
+    (30.0, 0.75),  # 15-30% = bull
+    (55.0, 0.5),  # 30-55% = nøytral
+    (75.0, 0.25),  # 55-75% = bear
+    (100.0, 0.1),  # >75% = sterk bear (LNG-overflow)
+)
+
+
+@register("alsi_eu_pct")
+def alsi_eu_pct(store: Any, instrument: str, params: dict) -> float:
+    """ALSI EU LNG-terminal fyllingsgrad mappet til 0..1.
+
+    Søsken til ``agsi_storage_pct``, men leser ALSI (LNG-terminaler) i stedet
+    for AGSI (underjordisk gas-storage). LNG-buffer er 2. linjeforsvar mot
+    EU gas-supply-shock — lav LNG-fyllingsgrad signaliserer at terminalene
+    sender ut til grid raskere enn de fylles, ofte indikator på trang
+    supply/høyt forbruk → bull NG-pris.
+
+    Default (mode=None): step-mapping på rå ``full_pct`` (0..100) fra siste
+    ALSI-observasjon. R4-modes: pct_12m/pct_36m via rolling-percentile,
+    delta_5d_z/delta_20d_z via daglig z-score, extreme_flag_*.
+
+    Frekvens: ALSI publiserer daglig D+1 (samme kadens som AGSI).
+
+    Tolkning:
+        bull_when="low" (default): lav fyllingsgrad = bull NG-pris.
+        bull_when="high": invertert.
+
+    Params:
+        country: ALSI-country-key. Default ``"eu"``. Per-land tilgjengelig:
+            "de", "nl", "fr", "it", "es" etc.
+        bull_when: ``"low"`` (default) eller ``"high"``.
+        thresholds: optional override.
+        mode: feature-velger per ADR-010 (forbeholdt — denne v1-iterasjonen
+            implementerer kun default-trapp; pct_*/delta_* TBD).
+        _horizon: engine-injisert per ADR-010. Lest, ikke brukt.
+
+    Defensive 0.0 ved manglende data eller utilstrekkelig historikk.
+    """
+    _ = params.get("_horizon")
+    country = str(params.get("country", "eu")).lower()
+    bull_when = str(params.get("bull_when", "low")).lower()
+
+    try:
+        df = store.get_alsi_storage(country)
+    except KeyError:
+        _log.debug("alsi_eu_pct.no_data", instrument=instrument, country=country)
+        return 0.0
+    except Exception as exc:
+        _log.warning("alsi_eu_pct.fetch_failed", instrument=instrument, error=str(exc))
+        return 0.0
+
+    if df.empty or "full_pct" not in df.columns:
+        return 0.0
+
+    series = pd.Series(
+        df["full_pct"].astype("float64").values,
+        index=pd.to_datetime(df["gas_day_start"]),
+    ).dropna()
+
+    if series.empty:
+        return 0.0
+
+    current = float(series.iloc[-1])
+
+    user_thresholds = params.get("thresholds")
+    if user_thresholds is None:
+        steps = _DEFAULT_ALSI_PCT_THRESHOLDS_LOW
+    else:
+        steps = tuple((float(t), float(s)) for t, s in user_thresholds)
+
+    score = 0.0
+    for threshold, s in sorted(steps, key=lambda t: t[0]):
+        if current <= threshold:
+            score = float(s)
+            break
+
+    if bull_when == "high":
+        return round(1.0 - score, 4)
+    return round(score, 4)
+
+
+_DEFAULT_ALSI_CHANGE_THRESHOLDS_LOW: tuple[tuple[float, float], ...] = (
+    # bull_when="low": stort fall i inventory = bull (rask drawdown signaliserer
+    # supply-shortage/høyt forbruk).
+    (-10.0, 1.0),  # ≤ -10% WoW = sterk bull (kraftig drawdown)
+    (-5.0, 0.75),
+    (0.0, 0.5),  # nøytral rundt flat
+    (5.0, 0.25),
+    (float("inf"), 0.0),  # > +5% WoW = bear (rask refill)
+)
+
+
+@register("alsi_storage_change")
+def alsi_storage_change(store: Any, instrument: str, params: dict) -> float:
+    """ALSI inventory %-endring over WoW (eller `lookback_days` window).
+
+    Default: 5-dagers %-endring i ``inventory_twh`` (LNG-volum), step-
+    mappet til 0..1. Stor drawdown = supply consumed = bull NG.
+
+    Params:
+        country: ALSI-country-key. Default ``"eu"``.
+        lookback_days: dager tilbake for endrings-beregning. Default 5.
+        bull_when: ``"low"`` (default — drawdown = bull) eller ``"high"``.
+        thresholds: optional override.
+    """
+    _ = params.get("_horizon")
+    country = str(params.get("country", "eu")).lower()
+    lookback_days = int(params.get("lookback_days", 5))
+    bull_when = str(params.get("bull_when", "low")).lower()
+    min_samples = int(params.get("min_samples", 10))
+
+    try:
+        df = store.get_alsi_storage(country)
+    except Exception:
+        return 0.0
+
+    if df.empty or "inventory_twh" not in df.columns:
+        return 0.0
+
+    series = pd.Series(
+        df["inventory_twh"].astype("float64").values,
+        index=pd.to_datetime(df["gas_day_start"]),
+    ).dropna()
+
+    if len(series) < min_samples:
+        return 0.5
+
+    if len(series) <= lookback_days:
+        return 0.5
+
+    current = float(series.iloc[-1])
+    past = float(series.iloc[-(lookback_days + 1)])
+    if past == 0:
+        return 0.5
+    pct_change = (current - past) / past * 100.0
+
+    user_thresholds = params.get("thresholds")
+    if user_thresholds is None:
+        steps = _DEFAULT_ALSI_CHANGE_THRESHOLDS_LOW
+    else:
+        steps = tuple((float(t), float(s)) for t, s in user_thresholds)
+
+    score = _step(pct_change, steps)
+
+    if bull_when == "high":
+        return round(1.0 - score, 4)
+    return round(score, 4)
+
+
+# ---------------------------------------------------------------------------
+# #25 IIP REMIT supply-unavailability (sub-fase 12.10 follow-up Spor C, s136)
+# ---------------------------------------------------------------------------
+
+
+_DEFAULT_IIP_THRESHOLDS_BULL_HIGH: tuple[tuple[float, float], ...] = (
+    # bull_when="high": høy aggregert unavailable_capacity = supply trang = bull.
+    # Empirisk EU baseline: ~500-2000 GWh/d kontinuerlig planned-maintenance.
+    (500.0, 0.0),  # ≤ 500 GWh/d = lav stress, bear
+    (1000.0, 0.25),
+    (2000.0, 0.5),  # 1000-2000 GWh/d = moderat
+    (5000.0, 0.75),
+    (float("inf"), 1.0),  # > 5000 GWh/d = stor disruption, sterk bull
+)
+
+
+@register("iip_supply_unavailability")
+def iip_supply_unavailability(store: Any, instrument: str, params: dict) -> float:
+    """IIP REMIT aggregert supply-unavailability mappet til 0..1.
+
+    Sum av ``unavailable_capacity_gwhd`` for events som er aktive nå
+    (event_from_ts ≤ as_of ≤ event_to_ts) eller publisert i siste
+    ``lookback_days``-vindu — avhengig av ``mode``.
+
+    Tolkning: høy aggregert unavailability = supply trang = bull NG/Brent.
+    Default bull_when='high'.
+
+    Modes:
+        ``"active"`` (default): events aktive ved as_of (sist-rad-dato i DB).
+        ``"recent"``: events publisert i siste ``lookback_days``.
+
+    Params:
+        balancing_zone_prefix: optional zone-filter (f.eks. "21YNL" for NL TTF).
+        mode: ``"active"`` (default) eller ``"recent"``.
+        lookback_days: kun for ``mode="recent"`` (default 30).
+        bull_when: ``"high"`` (default) eller ``"low"``.
+        thresholds: optional override (sortert ASC på terskel i GWh/d).
+        unavailability_type: optional filter ("Planned"/"Unplanned"/None).
+        min_events: minimum events for å returnere score (default 0; ellers 0.5).
+        _horizon: engine-injisert. Lest, ikke brukt.
+
+    Defensive 0.5 (nøytral) ved tom data — IIP-stress-fravær er ikke et
+    bear-signal, bare informasjons-fravær.
+    """
+    _ = params.get("_horizon")
+    bz_prefix = params.get("balancing_zone_prefix")
+    mode = str(params.get("mode", "active")).lower()
+    lookback_days = int(params.get("lookback_days", 30))
+    bull_when = str(params.get("bull_when", "high")).lower()
+    unavailability_type = params.get("unavailability_type")
+    min_events = int(params.get("min_events", 0))
+
+    try:
+        df = store.get_iip_remit(balancing_zone_prefix=bz_prefix)
+    except Exception:
+        return 0.5
+
+    if df is None or df.empty:
+        return 0.5
+
+    pub_ts = pd.to_datetime(df["published_ts"], errors="coerce")
+    df = df[pub_ts.notna()].copy()
+    if df.empty:
+        return 0.5
+
+    pub_ts = pd.to_datetime(df["published_ts"])
+    as_of = pub_ts.max()
+
+    if unavailability_type is not None:
+        df = df[df["unavailability_type"].astype(str) == str(unavailability_type)]
+        if df.empty:
+            return 0.5
+
+    if mode == "active":
+        from_ts = pd.to_datetime(df["event_from_ts"], errors="coerce")
+        to_ts = pd.to_datetime(df["event_to_ts"], errors="coerce")
+        active_mask = (from_ts <= as_of) & (to_ts >= as_of)
+        active = df[active_mask]
+    elif mode == "recent":
+        cutoff = as_of - pd.Timedelta(days=lookback_days)
+        active = df[pd.to_datetime(df["published_ts"]) >= cutoff]
+    else:
+        _log.warning(
+            "iip_supply_unavailability.unknown_mode_falling_back_to_active",
+            instrument=instrument,
+            mode=mode,
+        )
+        from_ts = pd.to_datetime(df["event_from_ts"], errors="coerce")
+        to_ts = pd.to_datetime(df["event_to_ts"], errors="coerce")
+        active_mask = (from_ts <= as_of) & (to_ts >= as_of)
+        active = df[active_mask]
+
+    if len(active) <= min_events:
+        return 0.5
+
+    cap_series = active["unavailable_capacity_gwhd"].astype("float64").dropna()
+    total = float(cap_series.sum()) if not cap_series.empty else 0.0
+
+    user_thresholds = params.get("thresholds")
+    if user_thresholds is None:
+        steps = _DEFAULT_IIP_THRESHOLDS_BULL_HIGH
+    else:
+        steps = tuple((float(t), float(s)) for t, s in user_thresholds)
+
+    score = _step(total, steps)
+
+    if bull_when == "low":
+        return round(1.0 - score, 4)
+    return round(score, 4)
 
 
 # ---------------------------------------------------------------------------
@@ -243,6 +515,9 @@ __all__ = [
     "agsi_italy_pct",
     "agsi_netherlands_pct",
     "agsi_withdrawal_rate",
+    "alsi_eu_pct",
+    "alsi_storage_change",
     "cot_commercial_extreme",
     "cot_oi_change",
+    "iip_supply_unavailability",
 ]
