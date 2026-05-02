@@ -322,8 +322,18 @@ def run_fundamentals(
                 )
         return result
 
+    # Sub-fase 12.10 follow-up post-Spor-F (2026-05-02): pacing 250ms mellom
+    # serier. Vi henter ~14 unike serier; FRED's gratis-limit er 120 req/min
+    # (2/sek) — vi er godt innenfor, men pacing matcher pattern fra
+    # eia_inventories.py og memory-feedback `free-api-no-parallel-requests`.
+    # Total ekstra runtime: 14 × 0.25s ≈ 3.5 sek per dag-fyring.
+    import time as _time
+
+    pacing_sec = 0.25
+
     def _items():
         seen: set[str] = set()
+        first = True
         for cfg in instruments:
             for series_id in cfg.instrument.fred_series_ids:
                 if series_id in seen:
@@ -331,12 +341,15 @@ def run_fundamentals(
                     # instrumenter deler samme serie
                 seen.add(series_id)
 
-                def _do(sid=series_id):
+                def _do(sid=series_id, _is_first=first):
+                    if not _is_first:
+                        _time.sleep(pacing_sec)
                     df = fetch_fred_series(sid, api_key, from_date, to_date)
                     if df.empty:
                         return 0
                     return store.append_fundamentals(df)
 
+                first = False
                 yield series_id, _do
 
     _safe_run(_items(), result)

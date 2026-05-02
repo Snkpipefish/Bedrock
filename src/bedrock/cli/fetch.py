@@ -200,6 +200,18 @@ def _print_table(config: FetchConfig, report: list[FetcherStatus], now: datetime
     default=None,
     help="Begrens til én instrument-id (case-insensitive).",
 )
+@click.option(
+    "--fail-tolerance-pct",
+    "fail_tolerance_pct",
+    default=0.0,
+    show_default=True,
+    type=click.FloatRange(0.0, 100.0),
+    help=(
+        "Andel items (0-100) som kan feile uten at exit-code blir 1. "
+        "Default 0 = enhver feil = exit 1. Sett f.eks. 50 for å tolerere "
+        "transient ekstern API-feil (FRED 5xx på sub-sett av serier)."
+    ),
+)
 def run_cmd(
     fetcher_name: str | None,
     config_path: Path,
@@ -210,6 +222,7 @@ def run_cmd(
     to_date: datetime | None,
     stale_only: bool,
     instrument_filter: str | None,
+    fail_tolerance_pct: float,
 ) -> None:
     """Kjør én eller alle fetchere basert på config.
 
@@ -278,7 +291,16 @@ def run_cmd(
 
         _print_run_result(result)
         if result.fail_count > 0:
-            any_failures = True
+            total_items = len(result.items)
+            fail_pct = (result.fail_count / total_items * 100.0) if total_items else 0.0
+            if fail_pct > fail_tolerance_pct:
+                any_failures = True
+            else:
+                click.echo(
+                    f"  WARNING: {result.fail_count}/{total_items} feilet "
+                    f"({fail_pct:.1f}% ≤ tolerance {fail_tolerance_pct:.1f}%) "
+                    f"— ignorerer for exit-code."
+                )
 
     if any_failures:
         click.get_current_context().exit(1)

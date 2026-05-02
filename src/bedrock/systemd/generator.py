@@ -181,15 +181,26 @@ def generate_service_unit(
     working_dir: Path | str,
     bedrock_executable: str,
     module_hint: str = "",
+    fail_tolerance_pct: float | None = None,
 ) -> str:
     """Bygg .service-innhold for én fetcher.
 
     `bedrock_executable` er full path til `bedrock`-CLI-en, typisk
     `<repo>/.venv/bin/bedrock` eller `uv run bedrock`. Caller avgjør.
+
+    `fail_tolerance_pct` (sub-fase 12.10 follow-up post-Spor-F):
+    propageres som `--fail-tolerance-pct N` til CLI. Brukes for fetchere
+    med kjente transient ekstern-API-issues (f.eks. FRED returnerer 5xx
+    på sub-sett av serier) slik at exit-code ikke blir 1 ved tolerable
+    feil-rater.
     """
     description = f"Bedrock fetch: {fetcher_name}"
     if module_hint:
         description += f" ({module_hint})"
+
+    exec_args = f"fetch run {fetcher_name}"
+    if fail_tolerance_pct is not None:
+        exec_args += f" --fail-tolerance-pct {fail_tolerance_pct:g}"
 
     return (
         "# Auto-generert av `bedrock systemd generate`.\n"
@@ -203,7 +214,7 @@ def generate_service_unit(
         "[Service]\n"
         "Type=oneshot\n"
         f"WorkingDirectory={working_dir}\n"
-        f"ExecStart={bedrock_executable} fetch run {fetcher_name}\n"
+        f"ExecStart={bedrock_executable} {exec_args}\n"
         "StandardOutput=journal\n"
         "StandardError=journal\n"
         "\n"
@@ -255,6 +266,15 @@ def generate_units(
     - `bedrock-fetch-<name>.service`
     - `bedrock-fetch-<name>.timer`
     """
+    # Sub-fase 12.10 follow-up post-Spor-F (2026-05-02): per-fetcher
+    # fail-tolerance for fetchere med kjente transient ekstern-API-issues.
+    # FRED returnerer 5xx på sub-sett av serier (særlig IRLTLT01* + WTREGEN);
+    # 50% tolerance betyr at unit ikke flagger RØD før mer enn halvparten
+    # av seriene feiler i samme run.
+    fail_tolerance_overrides: dict[str, float] = {
+        "fundamentals": 50.0,  # FRED — kjent for transient 5xx på sub-sett
+    }
+
     units: dict[str, str] = {}
     for name, spec in sorted(config.fetchers.items()):
         service_file = f"{UNIT_FILENAME_PREFIX}{name}.service"
@@ -264,6 +284,7 @@ def generate_units(
             working_dir=working_dir,
             bedrock_executable=bedrock_executable,
             module_hint=spec.module,
+            fail_tolerance_pct=fail_tolerance_overrides.get(name),
         )
         units[timer_file] = generate_timer_unit(name, spec.cron)
     return units

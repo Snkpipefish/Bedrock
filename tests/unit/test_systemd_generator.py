@@ -143,6 +143,28 @@ def test_generate_service_unit_has_notify_on_failure() -> None:
     assert "OnFailure=" in unit_section
 
 
+def test_generate_service_with_fail_tolerance() -> None:
+    """Spor F follow-up: fail_tolerance_pct propageres til CLI-arg."""
+    content = generate_service_unit(
+        "fundamentals",
+        working_dir=Path("/repo"),
+        bedrock_executable="/bin/bedrock",
+        fail_tolerance_pct=50.0,
+    )
+    assert "ExecStart=/bin/bedrock fetch run fundamentals --fail-tolerance-pct 50" in content
+
+
+def test_generate_service_without_fail_tolerance_default() -> None:
+    """Når fail_tolerance_pct=None: ExecStart uten flag (bevart eksisterende)."""
+    content = generate_service_unit(
+        "prices",
+        working_dir=Path("/repo"),
+        bedrock_executable="/bin/bedrock",
+    )
+    assert "ExecStart=/bin/bedrock fetch run prices\n" in content
+    assert "--fail-tolerance-pct" not in content
+
+
 def test_generate_service_with_module_hint() -> None:
     content = generate_service_unit(
         "prices",
