@@ -127,6 +127,9 @@ Se `docs/driver_authoring.md` + `docs/rule_authoring.md` for full kontrakt.
 
 ## Oppsett
 
+For en full step-by-step guide (engelsk) for å klone og kjøre på egen
+maskin, se [INSTALL.md](INSTALL.md). Kort versjon:
+
 ```bash
 # Installer uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
