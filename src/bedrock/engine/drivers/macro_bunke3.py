@@ -6,8 +6,9 @@ Levert i Bunke 3 (PLAN § 22.2 #7-#14):
 - credit:    hy_oas_change
 - labor:     initial_claims_z, continuing_claims_z
 - growth:    industrial_production_yoy, cfnai_3mma, umich_sentiment_z,
-             jolts_openings_yoy
-             (ism_pmi_level — DEFERRED, FRED 'NAPMPMI' returnerer 404)
+             jolts_openings_yoy, ism_pmi_level
+             (ism_pmi_level levert Spor F1 2026-05-02 — manuell CSV-fallback
+             via scripts/backfill/ism_pmi.py, series_id ISM_PMI)
 - liquidity: anfci_z, m2_yoy
 - vol:       vix9d_vix_ratio
 - fx:        dollar_index_breadth
@@ -19,7 +20,10 @@ Alle drivere følger pattern fra macro.py:
 3. Mode-dispatch: default / pct_12m / pct_36m / delta_5d_z / delta_20d_z
 4. Step-mapping på raw value eller computed metric for default-mode
 
-Ny ism_pmi_level kan re-åpnes når ISM-data finnes via alternativ kilde.
+ism_pmi_level åpnet Spor F1 2026-05-02 via manuell CSV-fallback per
+ADR-007 § 4. Operatør laster av månedlig ISM Report on Business
+headline-PMI til ``data/manual/ism_pmi.csv`` (FRED NAPMPMI fortsatt
+404 — ISM trakk gratis-feeden).
 """
 
 from __future__ import annotations
@@ -313,7 +317,7 @@ def continuing_claims_z(store: Any, instrument: str, params: dict) -> float:
 
 # ---------------------------------------------------------------------------
 # #10 growth: industrial_production_yoy, cfnai_3mma, umich_sentiment_z,
-#             jolts_openings_yoy. ism_pmi_level DEFERRED.
+#             jolts_openings_yoy, ism_pmi_level (Spor F1 2026-05-02).
 # ---------------------------------------------------------------------------
 
 
@@ -387,6 +391,55 @@ def cfnai_3mma(store: Any, instrument: str, params: dict) -> float:
         return 0.5
     mma3 = float(s.tail(3).mean())
     score = _step(mma3, _CFNAI_3MMA_THRESHOLDS_BULL_HIGH)
+    return score if bull_when == "high" else 1.0 - score
+
+
+_ISM_PMI_THRESHOLDS_BULL_HIGH: tuple[tuple[float, float], ...] = (
+    # ISM Manufacturing PMI: 50-line cross. <45 = recession, 50 = neutral,
+    # >55 = solid expansion. Step-mapping forsterker terskler rundt 50-linjen.
+    (45.0, 0.0),
+    (48.0, 0.25),
+    (50.0, 0.5),
+    (52.0, 0.6),
+    (55.0, 0.75),
+    (float("inf"), 1.0),
+)
+
+
+@register("ism_pmi_level")
+def ism_pmi_level(store: Any, instrument: str, params: dict) -> float:
+    """ISM Manufacturing PMI headline-level (Spor F1 — manuell CSV-fallback).
+
+    Reads ``ISM_PMI`` fra fundamentals (manuell CSV-loader per ADR-007 § 4 —
+    ISM trakk gratis FRED-feeden NAPMPMI som returnerer 404). Default
+    ``bull_when='high'``: PMI > 50 = manufacturing-ekspansjon = bullish
+    equity. Override via YAML for instrumenter med omvendt sensitivitet.
+
+    Step-mapping forsterker terskler rundt 50-linjen (markedet diskonterer
+    cross-overs aggressivt). Standard ISM-fortolkning:
+    - < 45  → deep contraction / recession-territory (bear)
+    - 45-48 → contraction
+    - 48-50 → soft contraction (skeptisk neutral)
+    - 50-52 → mild expansion
+    - 52-55 → solid expansion
+    - > 55  → strong expansion (bull)
+
+    Optional ``series_id``-override hvis flere ISM-PMI-varianter skulle
+    legges inn i fundamentals (Services/Composite mfl).
+    """
+    _ = params.get("_horizon")
+    bull_when = str(params.get("bull_when", "high")).lower()
+    min_samples = int(params.get("min_samples", 6))
+    series_id = str(params.get("series_id", "ISM_PMI"))
+
+    s = _get_series(store, series_id)
+    if s is None:
+        return 0.0
+    if len(s) < min_samples:
+        return 0.5
+
+    current = float(s.iloc[-1])
+    score = _step(current, _ISM_PMI_THRESHOLDS_BULL_HIGH)
     return score if bull_when == "high" else 1.0 - score
 
 

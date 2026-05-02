@@ -22,6 +22,7 @@ gratis API-tilgang eller er paid-only.
 | `news_intel.csv` | url, event_ts, fetched_at, category (gold/silver/copper/oil/gas/grains/softs/geopolitics/agri_weather), title, source, query_id, sentiment_label (nullable), disruption_score (nullable) | Manuell pre-seeding eller fallback ved RSS-feil. Auto-fetcher (Google News RSS) skal håndtere normal drift. |
 | `crypto_sentiment.csv` | indicator (crypto_fng/btc_dominance/eth_dominance/total_mcap_usd/total_mcap_chg24h_pct), date, value, source | Manuell pre-seeding eller fallback ved alternative.me/CoinGecko-feil. Long-format — én rad per (indicator, date). |
 | `iri_enso_forecast.csv` | issue_date, target_period, nino34_mean_c | https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/ — månedlig (rundt 20.) ensemble-mean Niño 3.4 SST-anomali for ~3 mnd fram. Bruker leser av plume-grafen. Loader: `scripts/backfill/iri_enso_forecast.py` (Spor F4 — driver `noaa_enso_forecast_3mo`, series_id `IRI_ENSO_FCST_3MO` i fundamentals). |
+| `ism_pmi.csv` | report_month, headline_pmi, source | https://www.ismworld.org/supply-management-news-and-reports/reports/ism-report-on-business/ — månedlig (1. virkedag, 08:00 ET). Bruker registrerer headline-PMI fra Manufacturing Report on Business. FRED NAPMPMI returnerer 404 (ISM trakk gratis-feeden). Loader: `scripts/backfill/ism_pmi.py` (Spor F1 — driver `ism_pmi_level`, series_id `ISM_PMI` i fundamentals). |
 
 ## Format-eksempler
 

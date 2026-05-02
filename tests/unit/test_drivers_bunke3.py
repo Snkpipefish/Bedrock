@@ -35,6 +35,7 @@ _NOW = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
         "continuing_claims_z",
         "industrial_production_yoy",
         "cfnai_3mma",
+        "ism_pmi_level",
         "umich_sentiment_z",
         "jolts_openings_yoy",
         "anfci_z",
@@ -220,6 +221,48 @@ def test_cfnai_3mma_below_zero_bear() -> None:
     store = _MockStore({"CFNAI": _monthly_series(vals)})
     score = fn(store, "SP500", {})
     assert score == 0.0
+
+
+def test_ism_pmi_level_strong_expansion_bull() -> None:
+    fn = get("ism_pmi_level")
+    vals = [56.0] * 6
+    store = _MockStore({"ISM_PMI": _monthly_series(vals)})
+    assert fn(store, "SP500", {}) == 1.0
+
+
+def test_ism_pmi_level_deep_contraction_bear() -> None:
+    fn = get("ism_pmi_level")
+    vals = [44.0] * 6
+    store = _MockStore({"ISM_PMI": _monthly_series(vals)})
+    assert fn(store, "SP500", {}) == 0.0
+
+
+def test_ism_pmi_level_neutral_50_returns_mid() -> None:
+    fn = get("ism_pmi_level")
+    vals = [50.0] * 6
+    store = _MockStore({"ISM_PMI": _monthly_series(vals)})
+    assert fn(store, "SP500", {}) == 0.5
+
+
+def test_ism_pmi_level_invert_via_bull_when_low() -> None:
+    fn = get("ism_pmi_level")
+    vals = [56.0] * 6
+    store = _MockStore({"ISM_PMI": _monthly_series(vals)})
+    # bull_when=low: PMI 56 = expansion = bear under invertert tolkning
+    assert fn(store, "SP500", {"bull_when": "low"}) == 0.0
+
+
+def test_ism_pmi_level_returns_neutral_when_sparse() -> None:
+    fn = get("ism_pmi_level")
+    vals = [52.0, 53.0, 54.0]  # under min_samples=6
+    store = _MockStore({"ISM_PMI": _monthly_series(vals)})
+    assert fn(store, "SP500", {}) == 0.5
+
+
+def test_ism_pmi_level_missing_series_returns_zero() -> None:
+    fn = get("ism_pmi_level")
+    store = _MockStore()
+    assert fn(store, "SP500", {}) == 0.0
 
 
 def test_umich_sentiment_z_registered() -> None:
