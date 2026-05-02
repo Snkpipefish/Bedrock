@@ -181,6 +181,13 @@ def event_distance(store: Any, instrument: str, params: dict) -> float:
 
     Returns:
         Score 0..1. Retning-nøytral (samme verdi for BUY og SELL).
+
+    **Sub-fase 12.10 Bunke 1 Bug-3 audit (2026-05-02):** driveren bruker
+    kun ``event_ts`` for tids-beregning og leser aldri ``forecast``,
+    ``previous`` eller ``actual``. Schema-vakt i
+    ``test_event_distance_driver.py`` bekrefter at econ_events-tabellen
+    ikke har ``actual``-kolonne (regresjons-test). Look-ahead-fri pr
+    spec: alle felter i schemaet (forecast/previous) er pre-event-data.
     """
     # ADR-010: les _horizon for fremtidig bruk. R4-kontrakt: ikke endre
     # output basert på _horizon. Driver er event-basert (domene-spesifikk);

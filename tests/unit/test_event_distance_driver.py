@@ -248,3 +248,95 @@ def test_driver_registered() -> None:
     assert is_registered("event_distance")
     fn = get("event_distance")
     assert callable(fn)
+
+
+# ---------------------------------------------------------------------------
+# Sub-fase 12.10 Bunke 1 Bug-3: future-actual look-ahead-verifisering
+# ---------------------------------------------------------------------------
+#
+# Spec: event_distance må ikke lese `actual`-feltet (= post-event-resultat).
+# Schema-status (verifisert 2026-05-02): econ_events-tabellen har ikke
+# `actual`-kolonne — kun `forecast` (analytiker-forventning før event) og
+# `previous` (forrige rapporterte verdi). Begge er pre-event-data og
+# look-ahead-fri.
+#
+# Disse testene er regresjons-vakter: hvis noen senere legger til
+# `actual` i schema eller endrer driveren til å lese det, må
+# alarmlydene gå.
+
+
+def test_econ_events_schema_has_no_actual_column() -> None:
+    """Regresjons-vakt: bekrefter at `actual` ikke er i schema-kolonnene."""
+    from bedrock.data.schemas import ECON_EVENTS_COLS
+
+    assert "actual" not in ECON_EVENTS_COLS, (
+        "Sub-fase 12.10 Bunke 1 Bug-3: `actual`-kolonne i econ_events ville "
+        "introdusere look-ahead-bias for event-baserte drivere. Hvis denne "
+        "testen feiler, må driver-laget også oppdateres til å filtrere "
+        "actual-felt på event_ts > now."
+    )
+
+
+def test_event_distance_source_does_not_reference_actual() -> None:
+    """Regresjons-vakt: driver-koden refererer ikke `actual`-feltet."""
+    import inspect
+
+    from bedrock.engine.drivers.risk import event_distance
+
+    source = inspect.getsource(event_distance)
+    # Sjekker at strengen "actual" ikke forekommer som identifikator i koden
+    # (kan tillates i kommentarer som "actual_score" osv. — vi er strenge
+    # for å unngå hvilken som helst look-ahead-introduksjon).
+    assert '"actual"' not in source, (
+        "event_distance refererer 'actual' — Bug-3 brutt: driveren skal "
+        "kun lese pre-event-felter (event_ts/forecast/previous)."
+    )
+
+
+def test_event_distance_ignores_forecast_and_previous_values(
+    store: DataStore,
+) -> None:
+    """Score skal være identisk uansett innholdet i forecast/previous-felt
+    siden event_distance kun bruker event_ts for tids-buffer-beregning."""
+    rows_baseline = [
+        {
+            "event_ts": (_NOW + timedelta(hours=2)).isoformat(),
+            "country": "USD",
+            "title": "FOMC",
+            "impact": "High",
+            "forecast": None,
+            "previous": None,
+            "fetched_at": _NOW.isoformat(),
+        }
+    ]
+    store.append_econ_events(pd.DataFrame(rows_baseline))
+    score_baseline = event_distance(store, "Gold", {"_now": _NOW.isoformat()})
+
+    # Ny store med samme event_ts men populerte forecast+previous
+    import sqlite3
+
+    db_path = store._db_path  # type: ignore[attr-defined]
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("DELETE FROM econ_events")
+        conn.commit()
+    store.append_econ_events(
+        pd.DataFrame(
+            [
+                {
+                    "event_ts": (_NOW + timedelta(hours=2)).isoformat(),
+                    "country": "USD",
+                    "title": "FOMC",
+                    "impact": "High",
+                    "forecast": "5.50%",
+                    "previous": "5.25%",
+                    "fetched_at": _NOW.isoformat(),
+                }
+            ]
+        )
+    )
+    score_with_values = event_distance(store, "Gold", {"_now": _NOW.isoformat()})
+
+    assert score_baseline == score_with_values, (
+        "event_distance skal ikke endre seg når forecast/previous-felter "
+        "er populert — driveren bruker kun event_ts."
+    )
