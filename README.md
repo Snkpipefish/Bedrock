@@ -5,6 +5,15 @@ støtte/motstandsnivåer, og handler godkjente setups via cTrader-bot.
 Config-drevet scoring (YAML + Python-driver-registry) gjør at nye regler
 legges til uten kode-endring.
 
+> ⚠️ **Forskningskode — ikke produksjonsklar for andre brukere.**
+> Dette er forfatterens personlige trading-stack, åpen kun for
+> innsyn/studie. Hovedlogikk, sizing-parametre og INSTRUMENT_MAP er
+> tilpasset én spesifikk megler-konto (Skilling cTrader). Ingen
+> garanti for korrekthet, lønnsomhet, eller kompatibilitet med annen
+> oppsett. Trading med ekte penger på basis av denne koden kan føre
+> til **totalt tap**. Se [LICENSE](LICENSE) for full disclaimer.
+> Kjør aldri `--live` uten ≥24t demo-soak + manuell verifikasjon.
+
 ## Status
 
 **Fase 12 — parallell-drift** (sub-fase 12.10 follow-up Spor F LUKKET).
@@ -156,4 +165,8 @@ bedrock-signals-bot-intraday.timer    (Mon-Fri *5min 06-21 Oslo)
 
 ## Lisens
 
-Proprietær — ikke for redistribusjon.
+All Rights Reserved. Se [LICENSE](LICENSE) for full tekst inkl.
+no-warranty- og trading-disclaimer.
+
+Klone for personlig studie er OK; redistribusjon, hosting eller
+kommersiell bruk krever skriftlig samtykke fra forfatter.
