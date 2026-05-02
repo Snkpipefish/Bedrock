@@ -55,12 +55,16 @@ families:
     # VIX = geopolitisk premium → invert (høy VIX = bull pga supply-risk).
     # eia_stock_change = US crude oil weekly inventories — primær fundamental
     # for crude prising (sub-fase 12.5+ session 107).
+    # Sub-fase 12.10 follow-up A1 (session 140): ovx_z lagt til (bunke4 #15)
+    # — CBOE Crude Oil VIX z-score. Lav OVX = bull risk-on for crude
+    # (option-marked-implied stabilitet). real_yield 0.15→0.10, dxy 0.35→
+    # 0.25 for å holde familie-sum=1.00.
     drivers:
       - name: real_yield
-        weight: 0.15
+        weight: 0.10
         params: {bull_when: low}
       - name: dxy_chg5d
-        weight: 0.35
+        weight: 0.25
         params: {bull_when: negative, window: 5}
       - name: vix_regime
         weight: 0.2
@@ -68,6 +72,9 @@ families:
       - name: eia_stock_change
         weight: 0.3
         params: {series_id: WCESTUS1}  # US Crude Oil Stocks excl. SPR
+      - name: ovx_z
+        weight: 0.15
+        params: {bull_when: low, lookback_days: 252}
   structure:
     drivers:
       - name: range_position
