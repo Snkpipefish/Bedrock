@@ -65,12 +65,15 @@ families:
   macro:
     # B1 D1 (sub-fase 12.7, session 129): net_fed_liq_change@0.30 +
     # nfci_change@0.20 lagt til (samme som BTC). Sum = 1.00.
+    # Sub-fase 12.10 follow-up A5 (session 142): m2_yoy@0.10 lagt til —
+    # samme crypto-likviditet-sensitivitet som BTC. real_yield 0.20→0.15,
+    # dxy 0.20→0.15 for sum=1.00.
     drivers:
       - name: real_yield
-        weight: 0.20
+        weight: 0.15
         params: {bull_when: low}
       - name: dxy_chg5d
-        weight: 0.20
+        weight: 0.15
         params: {bull_when: negative, window: 5}
       - name: vix_regime
         weight: 0.10
@@ -83,6 +86,11 @@ families:
       - name: nfci_change
         weight: 0.20
         params: {bull_when: low}
+        horizons:
+          - MAKRO
+      - name: m2_yoy
+        weight: 0.10
+        params: {bull_when: high}
         horizons:
           - MAKRO
   structure:

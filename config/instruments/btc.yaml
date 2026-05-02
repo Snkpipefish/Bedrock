@@ -71,12 +71,16 @@ families:
     # nfci_change@0.20 lagt til. NetFedLiq tyngst-vektet for crypto
     # (empirisk meget likviditets-sensitiv, særlig i 2020-2022).
     # Sum = 1.00.
+    # Sub-fase 12.10 follow-up A5 (session 142): m2_yoy@0.10 lagt til
+    # (bunke3 #11). Crypto er empirisk meget M2-likviditets-sensitiv —
+    # 2020-21 bull-fasen er klassisk M2-impuls-eksempel. real_yield 0.20→
+    # 0.15, dxy 0.20→0.15 for sum=1.00.
     drivers:
       - name: real_yield
-        weight: 0.20
+        weight: 0.15
         params: {bull_when: low}
       - name: dxy_chg5d
-        weight: 0.20
+        weight: 0.15
         params: {bull_when: negative, window: 5}
       - name: vix_regime
         weight: 0.10
@@ -89,6 +93,11 @@ families:
       - name: nfci_change
         weight: 0.20
         params: {bull_when: low}
+        horizons:
+          - MAKRO
+      - name: m2_yoy
+        weight: 0.10
+        params: {bull_when: high}
         horizons:
           - MAKRO
   structure:
