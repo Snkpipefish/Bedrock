@@ -77,7 +77,7 @@ families:
         weight: 0.10
         params: {invert: true}
       - name: eia_stock_change
-        weight: 0.20
+        weight: 0.15
         params: {series_id: WCESTUS1}  # US Crude Oil Stocks (global proxy)
       - name: ovx_z
         weight: 0.15
@@ -92,6 +92,11 @@ families:
         weight: 0.05
         params: {bull_when: high}
       - name: eia_petroleum_supplied
+        weight: 0.05
+        params: {bull_when: high}
+      # Sub-fase 12.10 follow-up A10 (session 142): eia_gasoline_demand@0.05
+      # (bunke6 #22, siste EIA-driver). eia_stock 0.20→0.15 for sum=1.00.
+      - name: eia_gasoline_demand
         weight: 0.05
         params: {bull_when: high}
   structure:
