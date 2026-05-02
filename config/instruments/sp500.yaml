@@ -80,6 +80,9 @@ families:
     # Sub-fase 12.10 follow-up A5 (session 142): m2_yoy + t10y3m lagt til
     # (bunke3 #11/#7) — M2 YoY veksttak (likviditet) + 10Y-3M spread
     # (recession-leader). real_yield 0.20→0.15, dxy 0.20→0.15 for sum=1.00.
+    # Sub-fase 12.10 follow-up A8 (session 142): initial_claims_z +
+    # industrial_production_yoy lagt til (bunke3 #9/#10) — labor-styrke +
+    # growth-tempo. vix 0.15→0.10, net_fed_liq 0.25→0.20 for sum=1.00.
     drivers:
       - name: real_yield
         weight: 0.15
@@ -88,10 +91,10 @@ families:
         weight: 0.15
         params: {bull_when: negative, window: 5}
       - name: vix_regime
-        weight: 0.15
+        weight: 0.10
         params: {invert: false}
       - name: net_fed_liq_change
-        weight: 0.25
+        weight: 0.20
         params: {bull_when: high}
         horizons:
           - MAKRO
@@ -108,6 +111,16 @@ families:
       - name: t10y3m
         weight: 0.05
         params: {bull_when: high}  # steep curve = expansion = bull equity
+        horizons:
+          - MAKRO
+      - name: initial_claims_z
+        weight: 0.05
+        params: {bull_when: low}  # lave claims = sterk arbeidsmarked = bull
+        horizons:
+          - MAKRO
+      - name: industrial_production_yoy
+        weight: 0.05
+        params: {bull_when: high}
         horizons:
           - MAKRO
   structure:

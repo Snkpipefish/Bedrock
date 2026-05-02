@@ -105,8 +105,11 @@ families:
     drivers:
       # Sub-fase 12.10 follow-up A5 (session 142): m2_yoy + t10y3m lagt til
       # (bunke3 #11/#7). real_yield 0.25→0.20, dxy 0.20→0.15 for sum=1.00.
+      # Sub-fase 12.10 follow-up A8 (session 142): initial_claims_z +
+      # industrial_production_yoy lagt til (bunke3 #9/#10). real_yield 0.20→
+      # 0.15, net_fed_liq 0.25→0.20 for sum=1.00.
       - name: real_yield
-        weight: 0.20
+        weight: 0.15
         params:
           bull_when: low
       - name: dxy_chg5d
@@ -119,13 +122,13 @@ families:
         params:
           invert: false
       - name: net_fed_liq_change
-        weight: 0.25
-        params: {bull_when: high}  # Liquidity-vekst = bull risk-on
+        weight: 0.20
+        params: {bull_when: high}
         horizons:
           - MAKRO
       - name: nfci_change
         weight: 0.20
-        params: {bull_when: low}   # Lav NFCI = løsere conditions = bull
+        params: {bull_when: low}
         horizons:
           - MAKRO
       - name: m2_yoy
@@ -135,7 +138,17 @@ families:
           - MAKRO
       - name: t10y3m
         weight: 0.05
-        params: {bull_when: high}  # steep curve = bull equity
+        params: {bull_when: high}
+        horizons:
+          - MAKRO
+      - name: initial_claims_z
+        weight: 0.05
+        params: {bull_when: low}
+        horizons:
+          - MAKRO
+      - name: industrial_production_yoy
+        weight: 0.05
+        params: {bull_when: high}
         horizons:
           - MAKRO
   structure:
