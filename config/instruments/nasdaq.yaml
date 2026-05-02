@@ -156,6 +156,9 @@ families:
     # (bunke4 #15). VVIX (vol-of-vol) gir Nasdaq en third risk-input som
     # er sterkt korrelert med tech-sektor-rebalansering. vol_regime
     # 0.39→0.34 for sum=1.00.
+    # Sub-fase 12.10 follow-up A7 (session 142): hy_oas_change@0.05.
+    # Tech-tunge Nasdaq er HY-credit-følsom (lav-margin tech-låntakere
+    # først rammet ved spread-utvidelse). credit_spread_change 0.26→0.21.
     drivers:
       - name: vol_regime
         weight: 0.34
@@ -173,7 +176,7 @@ families:
           - SCALP
           - SWING
       - name: credit_spread_change
-        weight: 0.26
+        weight: 0.21
         params: {bull_when: low}
         horizons:
           - MAKRO
@@ -189,6 +192,11 @@ families:
       - name: vvix_z
         weight: 0.05
         params: {bull_when: low, lookback_days: 252}
+      - name: hy_oas_change
+        weight: 0.05
+        params: {bull_when: low}
+        horizons:
+          - MAKRO
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     drivers:

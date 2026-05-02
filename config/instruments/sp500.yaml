@@ -126,6 +126,11 @@ families:
     # (bunke4 #15) — VIX of VIX z-score. Lav VVIX = vol-vol-stabilitet =
     # risk-on. Komplementerer cboe_skew_z (hale-priced) med actual vol-
     # variansjon. vol_regime 0.39→0.34 for sum=1.00.
+    # Sub-fase 12.10 follow-up A7 (session 142): hy_oas_change@0.05 lagt
+    # til (bunke3 #8) — direkte ICE BofA US High Yield OAS WoW-pt-endring.
+    # Komplementerer credit_spread_change (Moody's AAA/BAA — IG-credit)
+    # med direkte HY-credit-stress-input. credit_spread_change 0.26→0.21
+    # for sum=1.00.
     drivers:
       - name: vol_regime
         weight: 0.34
@@ -140,7 +145,7 @@ families:
           - SCALP
           - SWING
       - name: credit_spread_change
-        weight: 0.26
+        weight: 0.21
         params: {bull_when: low}
         horizons:
           - MAKRO
@@ -156,6 +161,11 @@ families:
       - name: vvix_z
         weight: 0.05
         params: {bull_when: low, lookback_days: 252}
+      - name: hy_oas_change
+        weight: 0.05
+        params: {bull_when: low}  # narrowing = risk-on
+        horizons:
+          - MAKRO
   analog:
     polarity: neutral  # ADR-006 + session 100: direction-aware i driver, engine flipper ikke
     drivers:
