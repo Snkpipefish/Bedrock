@@ -118,3 +118,18 @@ Live-fetcher henter 14 unike FRED-serier (~14 calls/dag, ~7 % av FRED's 120 req/
 3. **13 ubrukte drivere** bør evalueres i Spor E-vinduet (slett eller wire).
 4. **Manuell-CSV-er for `disease_alerts` + `export_events`** bør refreshes hvis disse signalene er ønsket aktive.
 5. **agsi/alsi/iip-fetchere har ikke runner-timer** — sjekk at de har en oppdaterings-kilde (eller registrér en daglig runner).
+
+---
+
+## Oppdatering 2026-05-02 (post-audit fixes)
+
+- **agsi + alsi runners registrert** (commit `d98e250`). Daglig 06:00 / 06:05
+  Oslo timer aktivert i user-systemd. Live-verifisert: 145 + 174 rader
+  hentet i første kjøring; latest gas_day_start=2026-04-30 (D+1 normal lag).
+- **iip_remit** kjører fortsatt fra ukjent mekanisme (~12-16 rader/dag); siden
+  data er fersk ble den ikke flyttet til registered-runner ennå. Bør auditeres
+  separat for å forstå source-of-truth.
+- **UI Drivers-fane** levert (commit `271a1fd`). Endpoint `/api/ui/drivers`
+  serverer registry-vs-wirings-payload; UI-fanen "Drivere" viser søk/filter
+  med 96 registrert / 83 brukt / 13 ubrukt-tellingen live. Operatør kan nå
+  navigere driverlista direkte uten å lese rapport.

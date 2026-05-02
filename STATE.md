@@ -662,11 +662,28 @@ macro må de registreres som `@register_runner` med daglig timer (06:00 Oslo
 etter GIE D+1 publisering). Inntil videre: signal-styrken degraderes uten
 synlig advarsel når data blir stale.
 
-**Commits (4):**
+**Commits (6):**
 - `0c07f6f` fix(fetch): retry HTTP 5xx + 250ms FRED-pacing + fail-tolerance-flag
 - `a45a155` docs(audit): pipeline_audit_2026-05-02
-- (denne) docs(history): bunke_3_4_7_history + agsi/alsi-runner-funn
-- (auto) STATE.md commit
+- `b6b90f5` docs(history): bunke_3_4_7_history + agsi/alsi-runner-funn
+- `d98e250` feat(fetch): register agsi + alsi as daily runners
+- `271a1fd` feat(ui): ny Drivers-fane — oversikt over registrerte vs wired
+- (denne) state: oppdatering for agsi/alsi-fix + UI-fane
+
+**Post-audit fixes:**
+1. **agsi + alsi nå daglige runners** (`d98e250`). `@register_runner`
+   for begge i `fetch_runner.py`; cron 06:00/06:05 Oslo i `fetch.yaml`
+   (etter GIE D+1 publisering). systemd-units regenerert + timers
+   aktivert via `systemctl --user enable --now`. Live-verifisert: 145+174
+   rader. Stale-risikoen for NaturalGas macro-familien er nå borte.
+2. **UI Drivers-fane** (`271a1fd`). Nytt `/api/ui/drivers`-endpoint +
+   ny "Drivere"-fane i `web/index.html` med søk + filter (alle/brukt/
+   ubrukt). Live-verifisert i preview: 96 registrert / 83 brukt / 13
+   ubrukt — matcher audit-rapporten. Operatør kan nå se driver-status
+   live uten å lese docs.
+
+iip_remit kjører fortsatt fra ukjent mekanisme (~12-16 rader/dag);
+flagget for separat audit men ikke kritisk siden data er fersk.
 
 **Next:** Vent på Spor E-åpning (~2026-06-01). Ingen åpne tasks akkurat nå.
 
