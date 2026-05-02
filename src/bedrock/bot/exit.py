@@ -749,7 +749,11 @@ class ExitEngine:
 
         exec_type = getattr(event, "executionType", None)
 
-        # ORDER_ACCEPTED: capture real orderId for LIMIT-state
+        # ORDER_ACCEPTED: capture real orderId for LIMIT-state.
+        # KUN for LIMIT — entry.py setter state.order_id = -1 som placeholder
+        # ved LIMIT-send. MARKET-state har order_id=None og skal forbli
+        # None, ellers bryter `is_limit`-check (`state.order_id is not
+        # None and state.order_id != 0`) og SL/TP amendes aldri på fill.
         if _ACCEPTED is not None and exec_type == _ACCEPTED and event.HasField("order"):
             order = event.order
             label = order.tradeData.label if order.HasField("tradeData") else ""
@@ -757,7 +761,7 @@ class ExitEngine:
                 sig_id = label[3:]
                 with self._lock:
                     state = next((s for s in self._active_states if s.signal_id == sig_id), None)
-                    if state is not None:
+                    if state is not None and state.order_id is not None:
                         state.order_id = order.orderId
                         log.info(
                             "[ORDRE AKSEPTERT] %s — orderId=%d (LIMIT venter på fyll)",

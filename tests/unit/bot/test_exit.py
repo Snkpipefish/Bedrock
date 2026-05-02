@@ -1338,6 +1338,51 @@ def test_on_execution_order_accepted_captures_order_id(
     assert state in active_states
 
 
+def test_on_execution_order_accepted_does_not_overwrite_market_state_order_id(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """KRITISK regresjons-vakt: ORDER_ACCEPTED skal IKKE sette order_id på
+    MARKET-state. MARKET har order_id=None som default; is_limit-check
+    (`state.order_id is not None and state.order_id != 0`) bruker det
+    til å bestemme at SL/TP må amendes etter fill. Hvis vi overskriver
+    med real orderId, vil MARKET-fill aldri amende SL/TP og posisjonen
+    kjører uten beskyttelse.
+    """
+    from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOAExecutionType
+
+    client = _make_client_stub(symbol_map={"EURUSD": 1}, symbol_price_digits={1: 5})
+    _entry, ex = _make_engines(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        tmp_path=tmp_path,
+    )
+    state = TradeState(
+        signal_id="market-sig",
+        symbol_id=1,
+        instrument="EURUSD",
+        direction="buy",
+        order_id=None,  # MARKET — ingen placeholder satt av entry.py
+        phase=TradePhase.AWAITING_CONFIRMATION,
+    )
+    active_states.append(state)
+    event = _make_order_event(
+        order_id=999,
+        label="SE-market-sig",
+        execution_type=ProtoOAExecutionType.ORDER_ACCEPTED,
+    )
+    ex.on_execution(event)
+    # MARKET-state skal beholde order_id=None — ellers bryter is_limit-checken
+    assert state.order_id is None, (
+        "ORDER_ACCEPTED på MARKET-state skal IKKE sette order_id "
+        "(ville brutt is_limit-check + ført til MARKET-fill uten SL/TP)"
+    )
+
+
 def test_on_execution_order_expired_removes_state(
     safety: SafetyMonitor,
     config: ReloadableConfig,
