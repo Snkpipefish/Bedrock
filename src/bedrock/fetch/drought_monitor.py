@@ -37,8 +37,22 @@ _log = logging.getLogger(__name__)
 USDM_BASE_URL = (
     "https://usdmdataservices.unl.edu/api/USStatistics/GetDroughtSeverityStatisticsByAreaPercent"
 )
+USDM_STATE_URL = (
+    "https://usdmdataservices.unl.edu/api/StateStatistics/GetDroughtSeverityStatisticsByAreaPercent"
+)
 DEFAULT_TIMEOUT = 30.0
 REQUEST_PACING_SEC = 1.5
+
+# State-abbrev → FIPS-kode (StateStatistics-endpoint krever FIPS, ikke abbrev).
+# Sub-fase 12.10 Bunke 5 #19. Kun de 5 statene som driverne wires til —
+# kan utvides ved behov.
+_STATE_ABBREV_TO_FIPS: dict[str, str] = {
+    "ia": "19",  # Iowa
+    "tx": "48",  # Texas
+    "ca": "06",  # California
+    "ks": "20",  # Kansas
+    "nd": "38",  # North Dakota
+}
 
 
 class DroughtMonitorFetchError(RuntimeError):
@@ -118,14 +132,23 @@ def fetch_drought_monitor(
         DataFrame med ``DROUGHT_MONITOR_COLS``. Tom hvis ingen rader.
     """
     if raw_response is None:
+        # Sub-fase 12.10 Bunke 5 #19: konvertér state-abbrev til FIPS-kode
+        # (StateStatistics-endpoint krever FIPS).
+        api_aoi = aoi
+        if aoi.lower() in _STATE_ABBREV_TO_FIPS:
+            api_aoi = _STATE_ABBREV_TO_FIPS[aoi.lower()]
         params = {
-            "aoi": aoi,
+            "aoi": api_aoi,
             "startdate": _format_date_us(start_date),
             "enddate": _format_date_us(end_date),
             "statisticsType": str(statistics_type),
         }
+        # state-aoi (≤2 chars eller numerisk FIPS) routes til StateStatistics-
+        # endpoint. CONUS aggregat ('us') bruker default.
+        is_state = aoi.lower() != "us" and (len(aoi) <= 2 or aoi.isdigit())
+        url = USDM_STATE_URL if is_state else USDM_BASE_URL
         try:
-            response = http_get_with_retry(USDM_BASE_URL, params=params, timeout=timeout)
+            response = http_get_with_retry(url, params=params, timeout=timeout)
         except Exception as exc:
             raise DroughtMonitorFetchError(f"usdm.{aoi}: network failure: {exc}") from exc
 
