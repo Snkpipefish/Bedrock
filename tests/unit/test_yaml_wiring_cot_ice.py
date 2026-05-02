@@ -88,11 +88,21 @@ def test_naturalgas_positioning_weights_sum_to_one(configs) -> None:
 
 
 def test_other_instruments_not_using_cot_ice(configs) -> None:
-    """Kun Brent + NaturalGas skal bruke cot_ice_mm_pct i session 106."""
+    """cot_ice_mm_pct-instrumenter:
+    - Energy (session 106): Brent + NaturalGas
+    - Softs (12.10 Bunke 2 #4, 2026-05-02): Cocoa + Coffee + Sugar + Wheat
+    """
     using_ice: list[str] = []
     for inst_id, cfg in configs.items():
         for fam_name, fam in cfg.rules.families.items():
             for d in fam.drivers:
                 if d.name == "cot_ice_mm_pct":
                     using_ice.append(f"{inst_id}/{fam_name}")
-    assert sorted({s.split("/")[0] for s in using_ice}) == ["Brent", "NaturalGas"]
+    assert sorted({s.split("/")[0] for s in using_ice}) == [
+        "Brent",
+        "Cocoa",
+        "Coffee",
+        "NaturalGas",
+        "Sugar",
+        "Wheat",
+    ]
