@@ -147,9 +147,17 @@
   - 13 unike nye drivere wired: cboe_skew_z, vix9d_vix_ratio, ovx_z, gvz_z, seismic_chile_peru_copper, eia_distillate_change, vvix_z, seismic_m6_global_24h, dollar_index_breadth, agsi_germany_pct, agsi_netherlands_pct, agsi_italy_pct, agsi_withdrawal_rate, agsi_injection_rate, eia_refinery_utilization_z, eia_imports_crude, eia_petroleum_supplied, eia_propane_change, eia_gasoline_demand, m2_yoy, t10y3m, hy_oas_change, initial_claims_z, industrial_production_yoy, umich_sentiment_z, cfnai_3mma, jolts_openings_yoy, move_index_z + 2 replacements (noaa_oni_index, anfci_z).
   - Tags: `v0.12.10-followup-a1` ... `v0.12.10-followup-a11`.
   - Diff-rapporter: `docs/snapshot_diff_2026-05-02_followup_a{1,2,3,4,5}.md` (a6-a11 dokumentert kun i STATE-entries pga svært modest impact).
-- **Sub-fase 12.10 follow-up — Spor B/C/D/E/F gjenstår** per ny PLAN § 22.6 + § 22.7:
-  - **Spor C** (ALSI/IIP — bygger på AGSI-mønster) anbefalt først. 1-2 sessioner.
-  - **Spor D** (NASS yield/grain_stocks) — 1-2 sessioner.
+- **Sub-fase 12.10 follow-up Spor C LUKKET 2026-05-02** (tag `v0.12.10-followup-spor-c`). § 22.2 #24/#25 — ALSI EU LNG-terminal storage + IIP REMIT supply-unavailability. Bygger på AGSI-mønster fra bunke7. **6 commits:**
+  - `4b67adb` C1: schema (TABLE_ALSI_STORAGE + TABLE_IIP_REMIT + DDL + Pydantic + DataStore + AsOfDateStore-proxies + 32 tester). Schema er additivt — eksisterende DBer migreres automatisk via DDL CREATE IF NOT EXISTS.
+  - `bf43588` C2: fetchere `bedrock/fetch/alsi.py` + `bedrock/fetch/iip.py` med GIE-key (samme `AGSI_API_KEY` dekker AGSI/ALSI/IIP per § 22.1) + 37 tester. ALSI: GWh→TWh-konvertering, EU-aggregat via `?type=eu`. IIP: paginert med `stop_before_published_ts` for inkrementell-mode.
+  - `3dd7a76` C3: 3 nye drivere i `macro_bunke7.py` — `alsi_eu_pct` (full_pct step-trapp, MAKRO-only-mønster fra AGSI), `alsi_storage_change` (5d WoW pct-change), `iip_supply_unavailability` (sum unavailable_capacity_gwhd, mode='active'/'recent'). 26 tester. Total drivere registrert: 47 (var 44).
+  - `2e5f7c2` C4a: backfill-scripts + live-ingest. **ALSI 21924 rader** (6 countries × 3654 dager 2016-04→2026-04, ADR-011 10-år rolling). **IIP 10628 rader** (full arkiv 2022-01-31→2026-05-02, 213 sider × 50 records).
+  - `416baa2` C4b+C5: YAML-wirings + baseline regen + diff-rapport. NaturalGas macro: alsi_eu_pct@0.05 (MAKRO-only) + alsi_storage_change@0.05 + iip_supply_unavailability@0.05; trim eia_stock 0.25→0.15, dxy 0.15→0.10. Brent macro: iip_supply_unavailability@0.05 (ALSI ikke wired — LNG mindre direkte koblet til Brent vs EIA crude); trim dxy 0.15→0.10. Pydantic familie-sum=1.00 verifisert begge.
+  - **Snapshot-diff vs pre-Spor-C anker:** 12 score-endringer (alle på NG + Brent × 6 hor×dir), **0 grade-flips** (godt under stop-criterion ≤5/asset-class). NG macro-family +0.097 buy / -0.097 sell drevet av aktive ALSI drawdown + IIP REMIT-stress live; Brent macro +0.0125. Andre 7 asset-klasser uendret.
+  - **Live driver-verifisering 2026-05-02:** alsi_eu_pct EU=0.50 (52.9% full = nøytral), DE/ES=0.25 (mild bear); alsi_storage_change 5d=0.75 (drawdown), 14d=1.00 (sterk drawdown senapril); iip_supply_unavailability active=0.75 (2000-5000 GWh/d EU-stress), recent 30d=1.00. Alle 3 drivere returnerer ikke-default-verdier — signalene aktive.
+  - 95 nye tester (32 store/proxy + 37 fetcher + 26 driver). Pyright src/: 0 errors. Diff-rapport: `docs/snapshot_diff_2026-05-02_followup_spor_c.md`.
+- **Sub-fase 12.10 follow-up — Spor B/D/E/F gjenstår** per ny PLAN § 22.6 + § 22.7:
+  - **Spor D** (NASS yield/grain_stocks) — 1-2 sessioner. Anbefalt neste (samme mønster: schema → fetcher → drivere → backfill → YAML).
   - **Spor B** (*_surprise data-arkitektur) — 2-3 sessioner (substantial, ADR-014 kreves).
   - **Spor F1-F4** (resterende mindre DEFERRED) — 4-6 sessioner totalt.
   - **Spor E** (driver-impl-rewrites #36-#41 + #34 multi-lookback) — 6-7 sessioner. Best etter ~2-4 uker live-demo for empirisk underperform-data.
