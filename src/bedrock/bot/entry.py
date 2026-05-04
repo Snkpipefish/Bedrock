@@ -1198,6 +1198,9 @@ class EntryEngine:
                     return
 
         # ── Korrelasjonsgating ────────────────────────────────
+        # Makro/swing/scalp behandles uavhengig i samme instrument: kun
+        # posisjoner med SAMME horisont teller mot per-gruppe-taket.
+        this_horizon = (sig.get("horizon") or "SWING").upper()
         this_group = sig.get("correlation_group") or INSTRUMENT_GROUP.get(instr_name, "")
         corr_cfg = gs.get("correlation_config", {})
         if this_group:
@@ -1206,27 +1209,33 @@ class EntryEngine:
                 s_group = getattr(s, "correlation_group", None) or INSTRUMENT_GROUP.get(
                     getattr(s, "instrument", ""), ""
                 )
+                s_horizon = str(getattr(s, "horizon", "") or "").upper()
                 if (
                     s_group == this_group
+                    and s_horizon == this_horizon
                     and s.phase == TradePhase.IN_TRADE
                     and s.signal_id != state.signal_id
                 ):
                     group_count += 1
-            max_per_grp = corr_cfg.get("max_per_group", {})
+            max_per_grp_cfg = corr_cfg.get("max_per_group", {})
             default_per_group = {
                 "precious_metals": 2,
                 "us_indices": 1,
                 "energy": 1,
                 "usd_pairs": 2,
             }.get(this_group, 1)
-            max_in_group = max_per_grp.get(this_group, default_per_group)
+            if isinstance(max_per_grp_cfg, dict):
+                max_in_group = max_per_grp_cfg.get(this_group, default_per_group)
+            else:
+                max_in_group = int(max_per_grp_cfg)
             if group_count >= max_in_group:
                 log.info(
-                    "[KORRELASJON] %s blokkert — %d/%d i %s allerede aktiv (regime=%s).",
+                    "[KORRELASJON] %s blokkert — %d/%d i %s/%s allerede aktiv (regime=%s).",
                     sig["id"],
                     group_count,
                     max_in_group,
                     this_group,
+                    this_horizon,
                     gs.get("correlation_regime", "normal"),
                 )
                 self._remove_state(state)
