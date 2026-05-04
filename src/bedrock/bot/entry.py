@@ -1040,6 +1040,32 @@ class EntryEngine:
           UTEN git-push (gammel bot pushet logg til cot-explorer; Bedrock
           skal ikke gjøre git i hot-path)
         """
+        # Idempotency: hvis state allerede har en aktiv LIMIT på server
+        # (order_id > 0) eller en in-flight send (order_id == -1), ikke
+        # send en ny ordre. Forhindrer at re-publiserte signaler eller
+        # gjentatte confirmation-events lager duplikat-LIMITs på cTrader.
+        if state.order_id is not None and state.order_id != 0:
+            log.debug(
+                "[DUP-GUARD] %s — ordre allerede sendt (order_id=%s, phase=%s); "
+                "hopper over ny send.",
+                sig.get("id"),
+                state.order_id,
+                state.phase.name,
+            )
+            return
+        if state.phase != TradePhase.AWAITING_CONFIRMATION:
+            log.debug(
+                "[DUP-GUARD] %s — state phase=%s, ikke AWAITING_CONFIRMATION; "
+                "hopper over ordre-send.",
+                sig.get("id"),
+                state.phase.name,
+            )
+            return
+        # Reservér slot tidlig så samtidige confirmation-events ikke
+        # begge kan komme forbi guarden over. Erstattes med ekte orderId
+        # i on_execution når server svarer ORDER_ACCEPTED.
+        state.order_id = -1
+
         gs = (self.signal_data or {}).get("global_state", {})
         rules = (self.signal_data or {}).get("rules", {})
 
