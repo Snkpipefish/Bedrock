@@ -36,7 +36,13 @@ STEP_DAYS = 7  # ukentlig step for høy oppløsning
 # Agri har kun SWING + MAKRO (per orchestrator/signals._DEFAULT_AGRI_HORIZONS).
 # SCALP er ikke aktiv — agri-fundamenta (COT ukentlig, WASDE månedlig)
 # har ikke datafrekvens for scalping.
-HORIZONS = [90, 180]  # SWING (90d) + MAKRO (180d)
+#
+# Sukker-traders posisjonerer seg 6-12 måneder i forveien for neste
+# Brasil zafra (apr-nov). ICE no.11 forward curve listet 3 år frem.
+# Test multiple MAKRO-horisonter for å finne hvor markedet best priser
+# inn fundamenta: 90d (taktisk SWING), 180d (kort MAKRO), 270d (zafra-
+# overlap), 365d (full crop year cycle).
+HORIZONS = [90, 180, 270, 365]
 
 
 def _section(
