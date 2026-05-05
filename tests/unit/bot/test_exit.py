@@ -1792,3 +1792,96 @@ def test_on_reconcile_skips_duplicates(
     res.position = [pos]
     ex.on_reconcile(res)
     assert len(active_states) == 1  # ingen duplikat
+
+
+# ─────────────────────────────────────────────────────────────
+# Price-digits-rounding på amend (cTrader avviser flere desimaler)
+# ─────────────────────────────────────────────────────────────
+
+
+def test_amend_sl_tp_rounds_trail_to_symbol_price_digits(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    tmp_path: Path,
+) -> None:
+    """Trail-amend må runde stop_loss til symbolets price_digits.
+    Eksempel: PLATINUM med digits=2 fikk tidligere SL=1966.6750244140626
+    fra ATR-aritmetikk (float-presisjon) og cTrader avviste med
+    INVALID_REQUEST. Med rounding må verdien bli 1966.68.
+    """
+    client = _make_client_stub(symbol_map={"PLATINUM": 1}, symbol_price_digits={1: 2})
+    entry = EntryEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=[],
+        stats_path=tmp_path / "s.json",
+    )
+    entry.on_symbols_ready(client)
+    entry.atr14[1] = [3.5] * 20
+    ex = ExitEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=[],
+        entry=entry,
+        trade_log_path=tmp_path / "l.json",
+    )
+    state = _in_trade_state(
+        instrument="PLATINUM",
+        direction="buy",
+        horizon="SWING",
+        entry_price=1972.80,
+        stop_price=1966.0,
+    )
+    # close=1980 mult=2 ATR=3.5 → trail = 1980 − 7 = 1973.0 (eksakt)
+    # Tving en float som har for mange desimaler ved å la state.stop_price
+    # være strammere — koden velger max(trail, stop) for buy.
+    state.stop_price = 1966.6750244140626
+    ex._update_trail(state, 1980.0, 1, mult=2.0)
+    kwargs = client.amend_sl_tp.call_args.kwargs
+    sent_sl = kwargs["stop_loss"]
+    assert sent_sl == round(sent_sl, 2), f"SL {sent_sl} har flere desimaler enn price_digits=2"
+    assert sent_sl == 1973.0  # trail vinner; rundet eksakt
+
+
+def test_amend_sl_tp_rounds_break_even_to_symbol_price_digits(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    tmp_path: Path,
+) -> None:
+    """Break-even-amend må også runde. PLATINUM digits=2."""
+    client = _make_client_stub(
+        symbol_map={"PLATINUM": 1},
+        last_bid={1: 1985.0},
+        last_ask={1: 1985.0},
+        symbol_price_digits={1: 2},
+    )
+    entry = EntryEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=[],
+        stats_path=tmp_path / "s.json",
+    )
+    entry.on_symbols_ready(client)
+    entry.atr14[1] = [3.5] * 20
+    ex = ExitEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=[],
+        entry=entry,
+        trade_log_path=tmp_path / "l.json",
+    )
+    state = _in_trade_state(
+        instrument="PLATINUM",
+        direction="buy",
+        horizon="SWING",
+        entry_price=1972.7654321,
+        stop_price=1966.0,
+    )
+    ex._set_break_even(state, 1)
+    kwargs = client.amend_sl_tp.call_args.kwargs
+    sent_sl = kwargs["stop_loss"]
+    assert sent_sl == round(sent_sl, 2), f"BE-SL {sent_sl} har flere desimaler enn price_digits=2"

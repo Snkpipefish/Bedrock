@@ -189,6 +189,7 @@ class ExitEngine:
                 tighter_sl = self._compute_weekend_sl(state, close, atr)
                 if tighter_sl is not None:
                     old_sl = state.stop_price
+                    tighter_sl = self._round_price(state.symbol_id, tighter_sl)
                     state.stop_price = tighter_sl
                     self._client.amend_sl_tp(position_id=state.position_id, stop_loss=tighter_sl)
                     log.info(
@@ -359,6 +360,13 @@ class ExitEngine:
     # Helpers: weekend, progress, trail, BE, close-volume
     # ─────────────────────────────────────────────────────────
 
+    def _round_price(self, symbol_id: int, value: float) -> float:
+        """Rund pris til symbolets price_digits før ordre-amend.
+        cTrader avviser INVALID_REQUEST hvis flere desimaler enn tillatt.
+        """
+        digits = self._client.symbol_price_digits.get(symbol_id, 5)
+        return round(value, digits)
+
     def _weekend_action(self) -> dict[str, bool]:
         """Fredag-lukkevindu CET: 19-20 strammer SL, ≥20 lukker SCALP.
 
@@ -446,6 +454,8 @@ class ExitEngine:
                 effective_sl = max(state.trail_level, state.stop_price)
             else:
                 effective_sl = min(state.trail_level, state.stop_price)
+        if effective_sl is not None:
+            effective_sl = self._round_price(state.symbol_id, effective_sl)
         self._client.amend_sl_tp(position_id=state.position_id, stop_loss=effective_sl)
 
     def _set_break_even(self, state: TradeState, symbol_id: int) -> None:
@@ -499,6 +509,7 @@ class ExitEngine:
 
         # state.position_id satt før BE-flytting (krever åpen posisjon).
         assert state.position_id is not None
+        be_stop = self._round_price(state.symbol_id, be_stop)
         self._client.amend_sl_tp(position_id=state.position_id, stop_loss=be_stop)
         state.stop_price = be_stop
         log.info(
