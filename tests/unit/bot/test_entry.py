@@ -1824,6 +1824,147 @@ def test_loss_cooldown_does_not_block_different_signal_id(
     assert active_states[0].signal_id == "new-setup-id"
 
 
+def test_conflict_gate_blocks_opposite_direction_on_same_slot(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list,
+    tmp_path: Path,
+) -> None:
+    """Hvis BUY allerede er IN_TRADE på (instrument, horizon), nytt
+    SELL-signal på samme slot skal blokkeres. Orchestrator sin
+    direction-conflict-resolver demoter svakere side per batch, men
+    på tvers av tidsepoker kan begge sider være åpne — bot må
+    forhindre netting-posisjoner med dobbel kommisjon."""
+    log_path = tmp_path / "signal_log.json"
+    client = _make_client_stub(
+        symbol_map={"OIL_WTI": 1},
+        last_bid={1: 105.0},
+        last_ask={1: 105.02},
+        spread_history={1: deque([0.02] * 15, maxlen=20)},
+    )
+    engine = _make_engine(
+        client,
+        safety,
+        config,
+        active_states,
+        stats_path=tmp_path / "s.json",
+        trade_log_path=log_path,
+    )
+    engine.on_symbols_ready(client)
+    # Eksisterende BUY-posisjon (åpnet på et tidligere tidspunkt)
+    active_states.append(
+        TradeState(
+            signal_id="oil-buy-old",
+            symbol_id=1,
+            instrument="OIL_WTI",
+            direction="buy",
+            entry_price=107.0,
+            stop_price=106.0,
+            t1_price=110.0,
+            full_volume=2000,
+            remaining_volume=2000,
+            position_id=99,
+            phase=TradePhase.IN_TRADE,
+            horizon="SWING",
+        )
+    )
+    sell_signal = {
+        "id": "oil-sell-new",
+        "instrument": "OIL_WTI",
+        "direction": "sell",
+        "status": "watchlist",
+        "alert_level": 105.0,
+        "stop": 106.5,
+        "t1": 100.0,
+        "entry_zone": [104.9, 105.1],
+        "horizon": "SWING",
+        "horizon_config": {},
+    }
+    engine.signal_data = {"signals": [sell_signal], "global_state": {}, "rules": {}}
+    engine._on_candle_closed(
+        1,
+        Candle(
+            open=105.0,
+            high=105.05,
+            low=104.95,
+            close=105.0,
+            volume=1,
+            timestamp=datetime.now(timezone.utc),
+        ),
+    )
+    # Kun den eksisterende BUY-staten skal være i listen
+    assert len(active_states) == 1
+    assert active_states[0].signal_id == "oil-buy-old"
+
+
+def test_conflict_gate_allows_same_direction_different_horizon(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list,
+    tmp_path: Path,
+) -> None:
+    """SCALP og SWING er uavhengige slots. BUY på SCALP skal IKKE
+    blokkere BUY på SWING samme instrument."""
+    log_path = tmp_path / "signal_log.json"
+    client = _make_client_stub(
+        symbol_map={"EURUSD": 1},
+        last_bid={1: 1.0800},
+        last_ask={1: 1.0802},
+        spread_history={1: deque([0.00002] * 15, maxlen=20)},
+    )
+    engine = _make_engine(
+        client,
+        safety,
+        config,
+        active_states,
+        stats_path=tmp_path / "s.json",
+        trade_log_path=log_path,
+    )
+    engine.on_symbols_ready(client)
+    active_states.append(
+        TradeState(
+            signal_id="eur-scalp-buy",
+            symbol_id=1,
+            instrument="EURUSD",
+            direction="buy",
+            entry_price=1.08,
+            stop_price=1.078,
+            t1_price=1.09,
+            full_volume=2000,
+            remaining_volume=2000,
+            position_id=42,
+            phase=TradePhase.IN_TRADE,
+            horizon="SCALP",
+        )
+    )
+    swing_signal = {
+        "id": "eur-swing-buy",
+        "instrument": "EURUSD",
+        "direction": "buy",
+        "status": "watchlist",
+        "alert_level": 1.0801,
+        "stop": 1.0750,
+        "t1": 1.0900,
+        "entry_zone": [1.0800, 1.0803],
+        "horizon": "SWING",
+        "horizon_config": {},
+    }
+    engine.signal_data = {"signals": [swing_signal], "global_state": {}, "rules": {}}
+    engine._on_candle_closed(
+        1,
+        Candle(
+            open=1.0801,
+            high=1.0802,
+            low=1.0800,
+            close=1.0801,
+            volume=1,
+            timestamp=datetime.now(timezone.utc),
+        ),
+    )
+    # SCALP-BUY + SWING-BUY = 2 states (ulike horisonter)
+    assert len(active_states) == 2
+
+
 def test_log_trade_closed_records_loss_signal_id_to_entry_engine(
     safety: SafetyMonitor,
     config: ReloadableConfig,

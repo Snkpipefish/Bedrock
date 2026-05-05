@@ -683,6 +683,37 @@ class EntryEngine:
                         )
                         self._cooldown_logged.add(sig_id)
                     return
+                # Konflikt-blokk: blokker ny entry hvis det er en MOTSATT
+                # direction-state allerede aktiv for samme (instrument,
+                # horizon). Orchestrator's `_resolve_direction_conflicts`
+                # filtrerer per signal-batch, men på tvers av tidsepoker
+                # kan bot ha BUY åpen fra dag X og SELL signal fra dag Y.
+                # Uten denne gaten ender vi med begge sider åpne — netto-
+                # eksponering ≈ 0, men dobbel kommisjon og whipsaw-tap.
+                # La eksisterende posisjon håndteres av sin manage-logikk;
+                # ny signal må vente til motsatt side er stengt.
+                opposite_open = next(
+                    (
+                        s
+                        for s in self._active_states
+                        if getattr(s, "instrument", "") == instrument
+                        and s.direction != dirn
+                        and getattr(s, "horizon", "SWING") == horizon
+                        and s.phase in (TradePhase.AWAITING_CONFIRMATION, TradePhase.IN_TRADE)
+                    ),
+                    None,
+                )
+                if opposite_open:
+                    log.info(
+                        "[KONFLIKT] %s [%s] %s blokkert — motsatt %s allerede åpen "
+                        "(state %s). Venter på at motsatt side stenger.",
+                        sig_id,
+                        horizon,
+                        dirn,
+                        opposite_open.direction,
+                        opposite_open.signal_id,
+                    )
+                    return
                 # Duplikat-blokk: blokker kun samme (instrument, direction, horizon).
                 # SCALP/SWING/MAKRO er uavhengige slots — en åpen scalp-buy
                 # skal ikke hindre en swing-buy eller makro-buy på samme
