@@ -1972,6 +1972,116 @@ def test_on_reconcile_does_not_overwrite_existing_server_sl(
     assert state.t1_price == 2050.0
 
 
+def test_p0_sl_breach_closes_buy_when_close_below_stop(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Software-SL-breach-vakt: hvis 15m-close er ≤ SL for BUY, bot
+    stenger selv om server-side SL mangler. Beskytter mot scenarioet der
+    amend feilet og posisjonen ligger ubeskyttet på cTrader-server."""
+    client = _make_client_stub(symbol_map={"PLATINUM": 1}, symbol_price_digits={1: 2})
+    entry, ex = _make_engines(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        tmp_path=tmp_path,
+    )
+    entry.atr14[1] = [3.5] * 20
+    state = _in_trade_state(
+        instrument="PLATINUM",
+        direction="buy",
+        horizon="SWING",
+        entry_price=1976.05,
+        stop_price=1966.68,
+        t1_price=2074.80,
+    )
+    active_states.append(state)
+    candle = Candle(
+        open=1970.0,
+        high=1970.0,
+        low=1963.0,
+        close=1963.5,
+        volume=0,
+        timestamp=datetime.now(timezone.utc),
+    )
+    ex.manage_open_positions(1, candle)
+    client.close_position.assert_called_once()
+    assert state not in active_states
+
+
+def test_p0_sl_breach_closes_sell_when_close_above_stop(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Speilbilde for SELL: close ≥ SL → stenger."""
+    client = _make_client_stub(symbol_map={"AUDUSD": 1}, symbol_price_digits={1: 5})
+    entry, ex = _make_engines(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        tmp_path=tmp_path,
+    )
+    entry.atr14[1] = [0.001] * 20
+    state = _in_trade_state(
+        instrument="AUDUSD",
+        direction="sell",
+        horizon="SWING",
+        entry_price=0.71744,
+        stop_price=0.71860,
+        t1_price=0.71058,
+    )
+    active_states.append(state)
+    candle = Candle(
+        open=0.7180,
+        high=0.7195,
+        low=0.7180,
+        close=0.7191,
+        volume=0,
+        timestamp=datetime.now(timezone.utc),
+    )
+    ex.manage_open_positions(1, candle)
+    client.close_position.assert_called_once()
+
+
+def test_p0_sl_breach_skipped_when_stop_price_zero(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Hvis state.stop_price=0 (fersk MARKET-fill, amend pending), P0
+    skal IKKE prøve å stenge basert på SL — geo-spike kan fortsatt fyre."""
+    client = _make_client_stub(symbol_map={"EURUSD": 1})
+    entry, ex = _make_engines(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        tmp_path=tmp_path,
+    )
+    entry.atr14[1] = [0.0010] * 20
+    state = _in_trade_state(direction="buy", horizon="SWING")
+    state.stop_price = 0.0
+    active_states.append(state)
+    # Liten move (under geo-spike-terskel) — ingen close skal fyre
+    candle = Candle(
+        open=1.080,
+        high=1.080,
+        low=1.0795,
+        close=1.0796,
+        volume=0,
+        timestamp=datetime.now(timezone.utc),
+    )
+    ex.manage_open_positions(1, candle)
+    client.close_position.assert_not_called()
+
+
 def test_on_reconcile_logs_warning_when_no_signal_log_match(
     safety: SafetyMonitor,
     config: ReloadableConfig,

@@ -155,6 +155,29 @@ class ExitEngine:
                 rules.get("geo_spike_atr_multiplier", 2.0),
             )
 
+            # ── P0: Software-SL-breach-vakt ──────────────────
+            # Sikkerhetsnett hvis server-side SL mangler eller amend ble
+            # avvist (TRADING_BAD_STOPS, INVALID_REQUEST). Bot stenger
+            # selv hvis pris allerede har gått forbi state.stop_price.
+            # Dette forutsetter at state.stop_price er satt — for fersk-
+            # åpnede MARKET-trades med pending amend kan stop_price være 0
+            # i et kort vindu; da faller vi gjennom til P1.
+            if state.stop_price and state.stop_price > 0:
+                sl_breached = (is_sell and close >= state.stop_price) or (
+                    not is_sell and close <= state.stop_price
+                )
+                if sl_breached:
+                    log.warning(
+                        "[SL-BREACH] %s — close %.5f forbi SL %.5f (%s). STENGER software-side.",
+                        state.signal_id,
+                        close,
+                        state.stop_price,
+                        "sell" if is_sell else "buy",
+                    )
+                    self._close_all(state, close, "SL-BREACH")
+                    remove.append(state)
+                    continue
+
             # ── P1: Geo-spike ────────────────────────────────
             if atr:
                 move_against = close - state.entry_price if is_sell else state.entry_price - close
