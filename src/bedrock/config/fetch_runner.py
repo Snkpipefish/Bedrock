@@ -296,6 +296,43 @@ def run_weather(
     return result
 
 
+@register_runner("isma_india")
+def run_isma_india(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """ISMA India sugar production fetcher (sub-fase 12.11+ analytiker D.5).
+
+    Henter siste sukker-prod-tall fra ISMA's offentlige API og skriver
+    til fundamentals med series_id=ISMA_INDIA_SUGAR_PROD_LAKH_TONS.
+    Instrument-uavhengig — kjører én gang per fetch-runde.
+    """
+    from bedrock.fetch.isma_india import SERIES_ID, fetch_isma_india
+
+    result = FetchRunResult(fetcher_name="isma_india")
+
+    def _items():
+        def _do():
+            df = fetch_isma_india()
+            if df.empty:
+                return 0
+            mask = (df["date"] >= from_date.isoformat()) & (
+                df["date"] <= to_date.isoformat()
+            )
+            windowed = df[mask]
+            if windowed.empty:
+                return 0
+            return store.append_fundamentals(windowed)
+
+        yield "isma_india", _do
+
+    _safe_run(_items(), result)
+    return result
+
+
 @register_runner("weather_monthly")
 def run_weather_monthly(
     spec: FetcherSpec,

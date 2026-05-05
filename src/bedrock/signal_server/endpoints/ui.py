@@ -621,6 +621,9 @@ _FETCHER_HORIZONS: dict[str, list[str]] = {
     "weather_monthly": ["M"],
     # ENSO: kvartals-regime, kun macro.
     "enso": ["M"],
+    # ISMA India sugar: månedlig press-release-data, kun macro
+    # (sub-fase 12.11+, sukker-spesifikk).
+    "isma_india": ["M"],
     # EIA: ons-release. Macro-S/D, swing-release-drift, scalp-event.
     "eia_inventories": ["M", "Sw", "Sc"],
     # COMEX warehouse: ukentlig oppdatering, macro-stress + swing-delta.
