@@ -111,37 +111,69 @@ def weather_stress(store: Any, instrument: str, params: dict) -> float:
     # ADR-010: les _horizon. Domene-spesifikk vær-formel — output
     # uendret med eller uten _horizon (R4 disiplin B).
     _horizon = params.get("_horizon")
-    region = _resolve_weather_region(instrument)
-    if region is None:
-        return 0.0
 
     lookback = int(params.get("lookback_months", 1))
     invert = bool(params.get("invert", False))
     weights = params.get("weights") or _DEFAULT_STRESS_WEIGHTS
 
+    # Multi-region modus (sub-fase 12.11+, analytiker D): hvis
+    # `params["regions"]` er en dict {region_name: vekt}, beregn
+    # vektet-snitt-stress på tvers av regioner. Fallback: enkelt-
+    # region fra instrument.weather_region (backward-compatible).
+    regions_param = params.get("regions")
+    if regions_param and isinstance(regions_param, dict):
+        region_scores: list[tuple[float, float]] = []  # (weight, score)
+        for region_name, region_weight in regions_param.items():
+            single = _compute_single_region_stress(
+                store, region_name, lookback, weights
+            )
+            if single is None:
+                continue
+            region_scores.append((float(region_weight), single))
+        if not region_scores:
+            return 0.0
+        total_w = sum(w for w, _ in region_scores)
+        if total_w == 0:
+            return 0.0
+        score = sum(w * s for w, s in region_scores) / total_w
+    else:
+        region = _resolve_weather_region(instrument)
+        if region is None:
+            return 0.0
+        single = _compute_single_region_stress(
+            store, region, lookback, weights
+        )
+        if single is None:
+            return 0.0
+        score = single
+
+    score = max(0.0, min(1.0, score))
+    if invert:
+        return round(1.0 - score, 4)
+    return round(score, 4)
+
+
+def _compute_single_region_stress(
+    store: Any,
+    region: str,
+    lookback: int,
+    weights: dict,
+) -> float | None:
+    """Beregn rå stress-score for én region. Returnerer None ved
+    manglende data."""
     try:
         df = store.get_weather_monthly(region, last_n=lookback)
     except KeyError:
-        _log.warning(
-            "weather_stress.no_data",
-            instrument=instrument,
-            region=region,
-        )
-        return 0.0
+        _log.warning("weather_stress.no_data", region=region)
+        return None
     except Exception as exc:
-        _log.warning(
-            "weather_stress.fetch_failed",
-            instrument=instrument,
-            region=region,
-            error=str(exc),
-        )
-        return 0.0
+        _log.warning("weather_stress.fetch_failed", region=region, error=str(exc))
+        return None
 
     if df.empty:
-        return 0.0
+        return None
 
     latest = df.iloc[-1]
-
     hot = float(latest.get("hot_days") or 0)
     dry = float(latest.get("dry_days") or 0)
     water = latest.get("water_bal")
@@ -149,19 +181,13 @@ def weather_stress(store: Any, instrument: str, params: dict) -> float:
 
     hot_norm = min(1.0, hot / 30.0)
     dry_norm = min(1.0, dry / 31.0)
-    # Negativ water_bal = mangel = stress. Klippet til [-150, 0]/150.
     water_norm = min(1.0, max(0.0, -water_val / 150.0))
 
     w_hot = float(weights.get("hot_days", 0.4))
     w_dry = float(weights.get("dry_days", 0.4))
     w_water = float(weights.get("water_bal", 0.2))
 
-    score = w_hot * hot_norm + w_dry * dry_norm + w_water * water_norm
-    score = max(0.0, min(1.0, score))
-
-    if invert:
-        return round(1.0 - score, 4)
-    return round(score, 4)
+    return w_hot * hot_norm + w_dry * dry_norm + w_water * water_norm
 
 
 # ---------------------------------------------------------------------------

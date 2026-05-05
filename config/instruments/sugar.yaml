@@ -61,6 +61,15 @@ families:
         weight: 0.5
         params:
           lookback_months: 1
+          # Multi-region per analytiker D (peer-review 2026-05):
+          # eksport-impact-vektet, ikke total produksjon.
+          # Centro-Sul dominerer global eksport (~45%); India er
+          # policy-swing-faktor (35 mt produksjon, 0-10 mt eksport
+          # avhengig av regjering); Thailand jevn eksportør.
+          regions:
+            brazil_centro_sul: 0.55
+            india_maharashtra: 0.30
+            thailand_suphan_buri: 0.15
         horizons: &id001
           - MAKRO
           - SWING
