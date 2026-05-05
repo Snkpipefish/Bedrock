@@ -83,11 +83,21 @@ families:
   positioning:
     # Sub-fase 12.11: erstatter ren-dobbel-talt weather-familie med
     # COT-positioning-signal. 3 ortogonale metrics — se cocoa.yaml.
+    #
+    # Sub-fase 12.11+ analytiker C.1 (peer-review 2026-05): A SELL
+    # underperformance ble identifisert som overshoot/mean-reversion-
+    # mønster. Lineær positioning_mm_pct ga full SELL-signal ved
+    # ekstrem MM-long posisjonering — markedet snur i stedet. Mode
+    # `extreme_flag_soft` returnerer 1.0 ved BEGGE ekstremer (pct
+    # ≥ 0.95 eller ≤ 0.05) — engine-flipping gjør at ingen SELL-
+    # eller BUY-signal genereres ved overshoots. Lineær mid-range
+    # bevares.
     weight: 2
     drivers:
       - name: positioning_mm_pct
         weight: 0.40
-        params: {}
+        params:
+          mode: extreme_flag_soft
         horizons:
           - MAKRO
           - SWING
