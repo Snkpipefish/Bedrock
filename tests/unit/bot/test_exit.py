@@ -1794,6 +1794,235 @@ def test_on_reconcile_skips_duplicates(
     assert len(active_states) == 1  # ingen duplikat
 
 
+def _make_reconcile_pos(
+    *,
+    position_id: int,
+    label: str,
+    symbol_id: int,
+    side: int,
+    volume: int,
+    stop_loss: float,
+    take_profit: float,
+    price: float,
+) -> MagicMock:
+    """Helper for å bygge en cTrader Position-mock for reconcile-tester."""
+    pos = MagicMock()
+    pos.positionId = position_id
+    pos.HasField = lambda fld: fld == "tradeData"
+    pos.tradeData.label = label
+    pos.tradeData.symbolId = symbol_id
+    pos.tradeData.tradeSide = side
+    pos.tradeData.volume = volume
+    pos.stopLoss = stop_loss
+    pos.takeProfit = take_profit
+    pos.price = price
+    return pos
+
+
+def test_on_reconcile_restores_sl_tp_from_signal_log_when_server_has_zero(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Bot restarter ofte; cTrader kan rapportere SL=0 fordi tidligere
+    amend-kall feilet. Reconcile må slå opp original SL/TP fra
+    signal_log.json og sende amend slik at posisjonen igjen er
+    beskyttet — uten å overskrive SL som faktisk ER satt på server."""
+    log_path = tmp_path / "signal_log.json"
+    log_path.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {
+                        "timestamp": "2026-05-04 18:00 timezone.utc",
+                        "result": None,
+                        "signal": {
+                            "id": "ce2d898262d0",
+                            "instrument": "PLATINUM",
+                            "direction": "BUY",
+                            "entry": 1972.80,
+                            "stop": 1966.0,
+                            "t1": 2074.80,
+                            "position_id": 16567511,
+                            "horizon": "SWING",
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    client = _make_client_stub(
+        symbol_map={"PLATINUM": 1},
+        symbol_info={1: {"lot_size": 100, "min_volume": 100, "step_volume": 100}},
+        symbol_price_digits={1: 2},
+    )
+    entry = EntryEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        stats_path=tmp_path / "s.json",
+    )
+    ex = ExitEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        entry=entry,
+        trade_log_path=log_path,
+    )
+    pos = _make_reconcile_pos(
+        position_id=16567511,
+        label="SE-ce2d898262d0",
+        symbol_id=1,
+        side=1,
+        volume=200,
+        stop_loss=0.0,
+        take_profit=0.0,
+        price=1972.80,
+    )
+    res = MagicMock()
+    res.position = [pos]
+    ex.on_reconcile(res)
+
+    # Amend må ha blitt sendt for å gjenopprette SL/TP
+    client.amend_sl_tp.assert_called_once()
+    kwargs = client.amend_sl_tp.call_args.kwargs
+    assert kwargs["position_id"] == 16567511
+    assert kwargs["stop_loss"] == 1966.0
+    assert kwargs["take_profit"] == 2074.80
+
+    # State skal nå reflektere gjenopprettede verdier
+    state = active_states[0]
+    assert state.stop_price == 1966.0
+    assert state.t1_price == 2074.80
+    assert state.t1_hit is False  # Restored TP → ikke trail-only-modus
+    assert state.reconciled_sl == 1966.0
+    assert state.reconciled_tp == 2074.80
+
+
+def test_on_reconcile_does_not_overwrite_existing_server_sl(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Hvis server allerede har SL/TP satt, restore-logikken skal IKKE
+    sende ekstra amend (no-op). Vi sletter ikke eksisterende beskyttelse."""
+    log_path = tmp_path / "signal_log.json"
+    log_path.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {
+                        "result": None,
+                        "signal": {
+                            "id": "abc123",
+                            "stop": 1900.0,
+                            "t1": 2100.0,
+                            "position_id": 999,
+                            "instrument": "PLATINUM",
+                            "direction": "BUY",
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    client = _make_client_stub(
+        symbol_map={"PLATINUM": 1},
+        symbol_price_digits={1: 2},
+        symbol_info={1: {"lot_size": 100, "min_volume": 100, "step_volume": 100}},
+    )
+    entry = EntryEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        stats_path=tmp_path / "s.json",
+    )
+    ex = ExitEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        entry=entry,
+        trade_log_path=log_path,
+    )
+    # Server har allerede SL=1950, TP=2050 (ulik fra signal_log) — vi skal IKKE røre den
+    pos = _make_reconcile_pos(
+        position_id=999,
+        label="SE-abc123",
+        symbol_id=1,
+        side=1,
+        volume=200,
+        stop_loss=1950.0,
+        take_profit=2050.0,
+        price=1980.0,
+    )
+    res = MagicMock()
+    res.position = [pos]
+    ex.on_reconcile(res)
+    client.amend_sl_tp.assert_not_called()
+    state = active_states[0]
+    assert state.stop_price == 1950.0  # uendret fra server
+    assert state.t1_price == 2050.0
+
+
+def test_on_reconcile_logs_warning_when_no_signal_log_match(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """SL=0 + ingen match i signal_log → log warning, ikke send amend.
+    Posisjonen står ubeskyttet men minst ikke tom-amendet til 0."""
+    log_path = tmp_path / "signal_log.json"
+    log_path.write_text(json.dumps({"entries": []}), encoding="utf-8")
+    client = _make_client_stub(
+        symbol_map={"PLATINUM": 1},
+        symbol_price_digits={1: 2},
+        symbol_info={1: {"lot_size": 100, "min_volume": 100, "step_volume": 100}},
+    )
+    entry = EntryEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        stats_path=tmp_path / "s.json",
+    )
+    ex = ExitEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        entry=entry,
+        trade_log_path=log_path,
+    )
+    pos = _make_reconcile_pos(
+        position_id=42,
+        label="SE-orphan",
+        symbol_id=1,
+        side=1,
+        volume=200,
+        stop_loss=0.0,
+        take_profit=0.0,
+        price=1972.0,
+    )
+    res = MagicMock()
+    res.position = [pos]
+    with caplog.at_level("WARNING"):
+        ex.on_reconcile(res)
+    client.amend_sl_tp.assert_not_called()
+    assert any(
+        "RECONCILE-RESTORE" in r.message and "fant ikke" in r.message for r in caplog.records
+    ), "Forventet RECONCILE-RESTORE warning"
+
+
 # ─────────────────────────────────────────────────────────────
 # Price-digits-rounding på amend (cTrader avviser flere desimaler)
 # ─────────────────────────────────────────────────────────────

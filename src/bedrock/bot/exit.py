@@ -668,6 +668,117 @@ class ExitEngine:
         except Exception as exc:
             log.warning("[TRADE-LOG] Lukking feilet: %s", exc)
 
+    def _lookup_reconcile_levels(
+        self, *, signal_id: str, position_id: int
+    ) -> tuple[float, float] | None:
+        """Slå opp original SL/TP fra signal_log.json for reconcile-restore.
+
+        Returnerer (stop, t1) hvis funnet (t1=0.0 hvis ikke logget).
+        Matcher først på position_id (mest pålitelig), så signal.id som
+        fallback (i tilfelle position_id ikke ble logget ved åpning).
+
+        Brukes ved restart hvis cTrader rapporterer SL=0 på en åpen
+        posisjon — typisk fordi tidligere amend-kall ble avvist
+        (INVALID_REQUEST e.l.) og posisjonen lå ubeskyttet på server.
+        """
+        path = self._trade_log_path
+        if not path.exists():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            log.warning("[RECONCILE-RESTORE] kunne ikke lese %s: %s", path, exc)
+            return None
+        entries = data.get("entries", []) if isinstance(data, dict) else []
+
+        def _extract(sig: dict) -> tuple[float, float] | None:
+            stop_raw = sig.get("stop")
+            if stop_raw is None:
+                return None
+            try:
+                stop = float(stop_raw)
+            except (TypeError, ValueError):
+                return None
+            if stop <= 0:
+                return None
+            t1_raw = sig.get("t1")
+            try:
+                t1 = float(t1_raw) if t1_raw is not None else 0.0
+            except (TypeError, ValueError):
+                t1 = 0.0
+            return (stop, t1)
+
+        # Primær: position_id-match
+        for entry in entries:
+            sig = entry.get("signal", {}) if isinstance(entry, dict) else {}
+            if sig.get("position_id") == position_id:
+                hit = _extract(sig)
+                if hit:
+                    return hit
+        # Fallback: signal.id-match (nyeste først — entries er reverse-chrono)
+        for entry in entries:
+            sig = entry.get("signal", {}) if isinstance(entry, dict) else {}
+            if sig.get("id") == signal_id:
+                hit = _extract(sig)
+                if hit:
+                    return hit
+        return None
+
+    def _restore_reconciled_levels(self, state: TradeState) -> None:
+        """Hvis reconcile fant SL=0 på server, prøv å gjenopprette SL/TP
+        fra signal_log.json og send amend til cTrader. Trygt å kalle
+        for alle reconciled states — no-op hvis SL allerede satt.
+
+        Bot restarter ofte (deploy/crash); SL/TP server-side kan mangle
+        hvis tidligere amend feilet. Uten restore står posisjonen
+        ubeskyttet til neste BE/trail-trigger — som kan være timer unna.
+        """
+        if state.stop_price > 0:
+            return  # SL satt fra reconcile — ingenting å gjøre
+        if state.position_id is None or state.symbol_id is None:
+            return
+        levels = self._lookup_reconcile_levels(
+            signal_id=state.signal_id, position_id=state.position_id
+        )
+        if levels is None:
+            log.warning(
+                "[RECONCILE-RESTORE] %s — fant ikke original SL i signal_log; "
+                "posisjon #%d står uten SL på server.",
+                state.signal_id,
+                state.position_id,
+            )
+            return
+        stop, t1 = levels
+        sl_rounded = self._round_price(state.symbol_id, stop)
+        tp_arg = self._round_price(state.symbol_id, t1) if t1 > 0 else None
+        try:
+            self._client.amend_sl_tp(
+                position_id=state.position_id,
+                stop_loss=sl_rounded,
+                take_profit=tp_arg,
+            )
+        except Exception as exc:
+            log.warning(
+                "[RECONCILE-RESTORE] %s — amend feilet: %s. SL fortsatt 0 på server.",
+                state.signal_id,
+                exc,
+            )
+            return
+        state.stop_price = sl_rounded
+        state.reconciled_sl = sl_rounded
+        if tp_arg is not None:
+            state.t1_price = tp_arg
+            state.reconciled_tp = tp_arg
+            state.t1_hit = False
+            state.t1_price_reached = False
+        log.info(
+            "[RECONCILE-RESTORE] %s — SL=%.5f TP=%s gjenopprettet fra signal_log "
+            "(amend sendt til cTrader).",
+            state.signal_id,
+            sl_rounded,
+            f"{tp_arg:.5f}" if tp_arg else "ukjent",
+        )
+
     def _log_reconcile_opened(self, state: TradeState) -> None:
         """Legg til RECONCILE-state i signal_log hvis ikke allerede der.
         Portert fra `trading_bot.py:_log_reconcile_opened` (1847-1884)."""
@@ -1031,4 +1142,11 @@ class ExitEngine:
                 stop,
                 tp_str,
             )
+            # Hvis SL=0 på server, prøv gjenopprette fra signal_log.json
+            # før vi setter staten i "managed"-modus. Bot restarter ofte;
+            # tidligere INVALID_REQUEST-amend kan ha latt posisjonen ligge
+            # ubeskyttet — vi skal aldri slette eksisterende SL ved restart,
+            # men vi må SETTE en hvis serveren mangler den.
+            if state.stop_price <= 0:
+                self._restore_reconciled_levels(state)
             self._log_reconcile_opened(state)
