@@ -33,7 +33,10 @@ DB_PATH = Path("data/bedrock.db")
 OUT_PATH = Path("docs/backtest_sugar_full_2026-05.md")
 INSTRUMENTS_DIR = Path("config/instruments")
 STEP_DAYS = 7  # ukentlig step for høy oppløsning
-HORIZONS = [30, 90, 180]  # SCALP/SWING/MAKRO proxy via outcome-horizons
+# Agri har kun SWING + MAKRO (per orchestrator/signals._DEFAULT_AGRI_HORIZONS).
+# SCALP er ikke aktiv — agri-fundamenta (COT ukentlig, WASDE månedlig)
+# har ikke datafrekvens for scalping.
+HORIZONS = [90, 180]  # SWING (90d) + MAKRO (180d)
 
 
 def _section(
