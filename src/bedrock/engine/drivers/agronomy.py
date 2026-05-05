@@ -733,6 +733,107 @@ def usda_psd_yoy(store: Any, instrument: str, params: dict) -> float:
 
 
 # ---------------------------------------------------------------------------
+# ethanol_parity_brl (sub-fase 12.11+ analytiker D.2)
+# ---------------------------------------------------------------------------
+
+
+@register("ethanol_parity_brl")
+def ethanol_parity_brl(store: Any, instrument: str, params: dict) -> float:
+    """Sukker/etanol-paritet i cents/lb sukker-ekvivalent (sukker-spesifikk).
+
+    Brasilianske sukker-møller velger mellom sukker- og etanol-allokering
+    basert på relativ pris. Når etanol-paritet > front-måned sukker-pris,
+    skifter mølle-mix til etanol → mindre sukker-eksport → BULL #11.
+
+    Formel:
+        anhydrous_brl_per_liter ≈ ANP hydrous × 1.05 (skatte-justering)
+        paritet_cents_lb = (anhydrous / brl_usd) × (1/1.852 kg/L) ×
+                           2.20462 lb/kg × 100
+
+    Signal:
+        delta = paritet_cents_lb - sukker_close_cents_lb
+        z = (delta_now - mean(delta_60d)) / std(delta_60d)
+        score = step-mapping av z-score (0..1)
+
+    Når delta > +1σ → høy paritet → bull (1.0). Negativ z → bear (0).
+
+    Params:
+        ethanol_series: fundamentals series_id (default
+            "ANP_ETANOL_HIDR_CS_BRL_LITER")
+        brl_series: USDBRL series (default "DEXBZUS")
+        sugar_instrument: instrument-id for sukker-pris (default "Sugar")
+        anhydrous_factor: hydrous → anhydrous justering (default 1.05)
+        sugar_kg_per_liter: kg sukker per liter etanol-ekvivalent
+            (default 1.852, industri-standard)
+        lookback_days: rolling vindu for z-score (default 60)
+        bull_when: "high" (paritet høy = bull, default) / "low"
+
+    Returnerer 0..1 score. Defensiv 0.5 ved manglende data.
+    """
+    _horizon = params.get("_horizon")
+    import pandas as pd
+
+    eth_id = str(params.get("ethanol_series", "ANP_ETANOL_HIDR_CS_BRL_LITER"))
+    brl_id = str(params.get("brl_series", "DEXBZUS"))
+    sugar_inst = str(params.get("sugar_instrument", "Sugar"))
+    anhyd_factor = float(params.get("anhydrous_factor", 1.05))
+    sugar_kg_per_l = float(params.get("sugar_kg_per_liter", 1.852))
+    lookback = int(params.get("lookback_days", 60))
+    bull_when = str(params.get("bull_when", "high")).lower()
+
+    try:
+        eth = store.get_fundamentals(eth_id)
+        brl = store.get_fundamentals(brl_id)
+        sugar_df = store.get_prices(sugar_inst, tf="D1")
+    except (KeyError, Exception) as exc:
+        _log.debug("ethanol_parity_brl.data_missing", error=str(exc))
+        return 0.5
+
+    if eth is None or brl is None or sugar_df is None or sugar_df.empty:
+        return 0.5
+    if len(eth) < lookback or len(sugar_df) < lookback:
+        return 0.5
+
+    # Align: bruk siste-felles-dato for alle 3 series
+    sugar = sugar_df["close"]
+    sugar.index = pd.to_datetime(sugar_df["ts"])
+    eth.index = pd.to_datetime(eth.index)
+    brl.index = pd.to_datetime(brl.index)
+
+    # Forward-fill til daily, finne siste-felles
+    common = pd.DataFrame({"eth": eth, "brl": brl, "sb": sugar}).ffill().dropna()
+    if len(common) < lookback:
+        return 0.5
+
+    common = common.iloc[-lookback:]
+
+    anhyd = common["eth"] * anhyd_factor
+    paritet_cents_lb = (anhyd / common["brl"]) * (1.0 / sugar_kg_per_l) * 2.20462 * 100.0
+    delta = paritet_cents_lb - common["sb"]
+
+    if delta.std() == 0:
+        return 0.5
+
+    z_now = (delta.iloc[-1] - delta.mean()) / delta.std()
+
+    # Step-mapping z-score → score
+    if z_now <= -2.0:
+        score = 0.0
+    elif z_now <= -1.0:
+        score = 0.25
+    elif z_now <= 0.0:
+        score = 0.4
+    elif z_now <= 1.0:
+        score = 0.6
+    elif z_now <= 2.0:
+        score = 0.85
+    else:
+        score = 1.0
+
+    return score if bull_when == "high" else 1.0 - score
+
+
+# ---------------------------------------------------------------------------
 # unica_change (sub-fase 12.5+ session 112)
 # ---------------------------------------------------------------------------
 

@@ -203,12 +203,13 @@ families:
           contract: ice sugar
           metric: mm_net_pct
           lookback_weeks: 52
-      - name: momentum_z
+      # Sub-fase 12.11+ analytiker D.2: erstatter momentum_z(CrudeOil)
+      # proxy med direkte ANP etanol-paritet-måling. Crude → BR etanol-
+      # pris går gjennom Petrobras-prising/skatte-struktur/BRL — tre
+      # decoupling-ledd. ANP gir direkte hydrous-pris i Centro-Sul.
+      - name: ethanol_parity_brl
         weight: 0.20
-        params:
-          instrument: CrudeOil
-          window: 20
-          tf: D1
+        params: {}
         horizons:
           - SWING
           - MAKRO

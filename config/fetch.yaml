@@ -53,6 +53,18 @@ fetchers:
     table: weather
     ts_column: date
 
+  # Sub-fase 12.11+ analytiker D.2: ANP Brasil etanol pumpe-pris.
+  # Eksport-impact-vektet daglig snitt for Centro-Sul-states.
+  # Erstatter crude-oil-proxy med direkte etanol-paritet-måling.
+  # Månedlig publisering ~5. i mnd; vi henter 7. for buffer.
+  anp_ethanol:
+    module: bedrock.fetch.anp_ethanol
+    cron: "0 5 7 * *"            # 7. i mnd 05:00 Oslo
+    stale_hours: 720              # månedlig
+    on_failure: log_and_skip
+    table: fundamentals
+    ts_column: date
+
   # Sub-fase 12.11+ analytiker D.5: USDA FAS PSD India sugar.
   # Offisiell tidsserie (production/exports/imports/end-stocks),
   # 16+ års historikk via API. Erstatter ISMA-parsing som kjernekilde.

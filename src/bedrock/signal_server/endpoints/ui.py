@@ -627,6 +627,9 @@ _FETCHER_HORIZONS: dict[str, list[str]] = {
     # USDA FAS PSD India sugar: månedlig offisielt PSD, 16+ år
     # historikk. Macro only.
     "usda_psd_india_sugar": ["M"],
+    # ANP Brasil etanol pumpe-pris: månedlig CSV-publisering, daglig
+    # aggregat. Macro + Swing (60d-z-score reaktiv på regime-shifts).
+    "anp_ethanol": ["M", "Sw"],
     # EIA: ons-release. Macro-S/D, swing-release-drift, scalp-event.
     "eia_inventories": ["M", "Sw", "Sc"],
     # COMEX warehouse: ukentlig oppdatering, macro-stress + swing-delta.

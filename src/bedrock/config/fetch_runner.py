@@ -296,6 +296,37 @@ def run_weather(
     return result
 
 
+@register_runner("anp_ethanol")
+def run_anp_ethanol(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """ANP Brasil etanol pumpe-pris (sub-fase 12.11+ analytiker D.2).
+
+    Henter månedlige CSV/XLSX fra ANP "dados abertos" og aggregerer
+    ETANOL hydrous-pris til daglig eksport-impact-vektet snitt for
+    Centro-Sul-states. Skriver til fundamentals.
+    """
+    from bedrock.fetch.anp_ethanol import fetch_anp_ethanol
+
+    result = FetchRunResult(fetcher_name="anp_ethanol")
+
+    def _items():
+        def _do():
+            df = fetch_anp_ethanol(from_year=from_date.year, to_year=to_date.year)
+            if df.empty:
+                return 0
+            return store.append_fundamentals(df)
+
+        yield "anp_ethanol", _do
+
+    _safe_run(_items(), result)
+    return result
+
+
 @register_runner("usda_psd_india_sugar")
 def run_usda_psd_india_sugar(
     spec: FetcherSpec,
