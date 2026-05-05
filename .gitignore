@@ -92,3 +92,6 @@ data/_meta/tier2_backfill.log
 bedrock manuell data/
 data/_meta/backfill_*.pid
 data/_meta/backfill_*.log
+
+# Lokale backfill-PDFer (lastet ned via Wayback, ikke distribusjonsklare)
+data/manual/unica_archive/
