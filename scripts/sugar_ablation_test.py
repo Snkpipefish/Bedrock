@@ -63,11 +63,18 @@ def run_ablation(family_to_zero: str | None) -> dict:
     if family_to_zero is not None:
         with open(temp_dir / "sugar.yaml") as f:
             cfg = yaml.safe_load(f)
-        # AgriRules krever weight > 0. Drop familien helt for ablation
-        # (engine ignorerer manglende familier — score = 0 for den
-        # familien i additive_sum).
-        if family_to_zero in cfg.get("families", {}):
-            del cfg["families"][family_to_zero]
+        # AgriRules krever weight > 0 (Pydantic gt=0). Setter til 0.001
+        # — funksjonelt nær null bidrag i additive_sum, men passerer
+        # validering. Også må vi overstyre parent (family_agri.yaml)
+        # ved å eksplisitt sette familien i child config.
+        cfg.setdefault("families", {})
+        if family_to_zero not in cfg["families"]:
+            cfg["families"][family_to_zero] = {
+                "weight": 0.001,
+                "drivers": [{"name": "noaa_oni_index", "weight": 1.0, "params": {}}],
+            }
+        else:
+            cfg["families"][family_to_zero]["weight"] = 0.001
         with open(temp_dir / "sugar.yaml", "w") as f:
             yaml.dump(cfg, f, sort_keys=False, allow_unicode=True)
 
