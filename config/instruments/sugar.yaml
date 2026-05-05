@@ -13,12 +13,13 @@ instrument:
   yahoo_ticker: SB=F
   cot_contract: "SUGAR NO. 11 - ICE FUTURES U.S."
   cot_report: disaggregated
-  # brazil_mato_grosso er ikke perfekt for sukker (mer sentral-Brasil),
-  # men nærmeste tilgjengelige region. Bytt til São Paulo-region hvis
-  # weather_monthly utvides senere.
-  weather_region: brazil_mato_grosso
-  weather_lat: -21.5
-  weather_lon: -47.0  # SP-region
+  # Sub-fase 12.11+: brazil_centro_sul backfilled via Open-Meteo
+  # Archive (Ribeirão Preto SP, hjertet av sukker-belte). 184 mnd
+  # 2011-01 → 2026-04. Erstatter mais-region brazil_mato_grosso som
+  # ikke matchet sukker-region.
+  weather_region: brazil_centro_sul
+  weather_lat: -21.18
+  weather_lon: -47.81
 
 aggregation: additive_sum
 max_score: 16
