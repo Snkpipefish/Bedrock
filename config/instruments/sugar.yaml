@@ -90,21 +90,30 @@ families:
           - MAKRO
           - SWING
   enso:
-    # Sugar/Brasil: La Niña gir typisk våtere SE-Brazil = mindre
-    # bra for høst (regnete dager forsinker zafra) = bull.
-    # Spor F4 (2026-05-02): noaa_enso_forecast_3mo lagt til som
-    # forward-overlay (IRI Plumes 3-mnd-prognose). 0.6/0.4 split —
-    # current ONI primær, forecast som strategisk forward-bias.
+    # Sukker har OMVENDT ENSO-sensitivitet vs grain. El Niño gir tørke
+    # i Brasil Centro-Sul + India monsun-svikt → mindre sukker → BULL.
+    # La Niña gir våt zafra som forsinker høst men ikke skader avling
+    # like mye. Default driver er bull_when=low (grain-default), så
+    # sukker MÅ overstyre med bull_when=high.
+    #
+    # Sub-fase 12.11+ attribution-funn: enso-familien returnerte 1.0
+    # alltid for SELL pga feil polaritet. Driver-attribution
+    # (docs/sugar_attribution_a_sell_2026-05.md) viste +nan korrelasjon
+    # mellom enso-score og forward-return — ikke-aktivt signal.
+    #
+    # 0.6/0.4 split: current ONI primær, IRI 3-mnd-forecast som forward-bias.
     weight: 2
     drivers:
       - name: noaa_oni_index
         weight: 0.6
-        params: {}
+        params:
+          bull_when: high
         horizons:
           - MAKRO
       - name: noaa_enso_forecast_3mo
         weight: 0.4
-        params: {}
+        params:
+          bull_when: high
         horizons:
           - MAKRO
   unica:
