@@ -63,8 +63,11 @@ def run_ablation(family_to_zero: str | None) -> dict:
     if family_to_zero is not None:
         with open(temp_dir / "sugar.yaml") as f:
             cfg = yaml.safe_load(f)
+        # AgriRules krever weight > 0. Drop familien helt for ablation
+        # (engine ignorerer manglende familier — score = 0 for den
+        # familien i additive_sum).
         if family_to_zero in cfg.get("families", {}):
-            cfg["families"][family_to_zero]["weight"] = 0
+            del cfg["families"][family_to_zero]
         with open(temp_dir / "sugar.yaml", "w") as f:
             yaml.dump(cfg, f, sort_keys=False, allow_unicode=True)
 
