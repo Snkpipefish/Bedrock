@@ -794,9 +794,18 @@ def ethanol_parity_brl(store: Any, instrument: str, params: dict) -> float:
     if len(eth) < lookback or len(sugar_df) < lookback:
         return 0.5
 
-    # Align: bruk siste-felles-dato for alle 3 series
-    sugar = sugar_df["close"]
-    sugar.index = pd.to_datetime(sugar_df["ts"])
+    # store.get_prices returnerer pd.Series indeksert på ts (ikke DataFrame).
+    # Backwards-compat: håndter både Series og DataFrame med 'close'-kolonne.
+    if isinstance(sugar_df, pd.Series):
+        sugar = sugar_df
+    elif "close" in getattr(sugar_df, "columns", []):
+        sugar = sugar_df["close"]
+        if "ts" in sugar_df.columns:
+            sugar.index = pd.to_datetime(sugar_df["ts"])
+    else:
+        return 0.5
+
+    sugar.index = pd.to_datetime(sugar.index)
     eth.index = pd.to_datetime(eth.index)
     brl.index = pd.to_datetime(brl.index)
 
