@@ -99,6 +99,13 @@
   - **Snapshot-diff vs pre-A3:** 36 score-endringer, **0 grade-flips**, ingen score-Δ over 0.1. Per asset-class: fx 24 / metals 6 / energy 6 score-Δ med 0 flips; indices/crypto/softs/grains uendret.
   - **Akkumulert A1+A2+A3: 21 wirings, 0 grade-flips totalt.** 15/22 instrumenter har nå fått minst én ny driver fra 12.10-bunkene. 5 av 9 bunker har drivere i bruk (3, 4, 6, 7, 8).
   - Diff-rapport: `docs/snapshot_diff_2026-05-02_followup_a3.md`. 3 commits: `0ab78e1` Platinum gvz_z, `6008b26` 4×FX dollar_index_breadth, `bfc4a55` NaturalGas AGSI per-land.
+- **Sub-fase 12.11+ ÅPEN 2026-05-05** — sukker datafundament + analytiker-peer-review (session 151):
+  - **Datafundament:** brazil_centro_sul weather (184 mnd via Open-Meteo Archive), UNICA backfill via Wayback Machine (42 rapporter, 12 år), USDA FAS PSD India sugar (16 år, 4 metrics × 16 år), ISMA India press-release-fetcher (forward-overlay), ANP Brasil etanol pumpe-pris (584 daily 2024-2026), multi-region weather (India Maharashtra + Thailand Suphan Buri 184 mnd hver).
+  - **Driver-tuning:** ENSO `bull_when=high` (sukker omvendt sensitivitet vs grain), forward-syklus seasonal_stage (markedet priser 6-12 mnd forward), positioning `extreme_flag_soft` (anti-driver-fix), multi-region weather_stress (eksport-impact-vektet), USDA PSD India yoy-driver, ethanol_parity_brl driver (erstatter crude-proxy).
+  - **Analyse-funn:** A+ BUY 180d 77.8%/+20.19% etter post-fixes (fra 55.1%/+7.37%); A SELL non-monotonisitet krympet kraftig (180d -5.20% → -1.31%); DSR/PSR=1.000 alle 4 horisonter; rullerende publish-floor avdekket regime-shift 2022-2024 (India eksportforbud); ANP-paritet ρ=-0.143 (riktig retning, svak magnitude).
+  - **Pågående ved session-slutt:** Backtest 6 + ablation v3 + forward-syklus A/B kjører på codespace `stunning-sniffle-pv459prj4wgh664p`. Keepalive-cron aktiv 15-min intervall.
+  - **Filer:** 4 nye fetchers (`weather_monthly`, `usda_psd`, `isma_india`, `anp_ethanol`), 2 nye drivere (`usda_psd_yoy`, `ethanol_parity_brl`), 2 modifiserte (`weather_stress` multi-region, `noaa_oni_index` bull_when override), 5 systemd timer-units, 6+ analyse-skripter, 12+ commits til main.
+
 - **Sub-fase 12.11 LUKKET 2026-05-02** — agri-engine horisont-bevisst + dropp SCALP for alle 7 agri + Sugar-ethanol-katalysator.
   - **Sugar follow-up (commit `4c5091a`):** `momentum_z` driver utvidet med valgfri `params.instrument`-override; Sugar `cross`-familien får `momentum_z(instrument=CrudeOil, window=20, tf=D1)` @ vekt 0.20. Begrunnelse: Brasil-sukker har direkte avhengighet til oljepris via ethanol-mix-ratio (høy oljepris → mer ethanol-attraktivt → mindre sukker). Reaktiv respons fanges via unica.mix_sugar_pct, prediktiv katalysator manglet. Cross-trim: brl_chg5d 0.65→0.50, cot_ice_mm_pct 0.25→0.20, momentum_z 0.20 ny. Effekt: 4 Sugar-rader endret (~0.03 score-Δ), 0 grade/publish-flips (CrudeOil ved 20d-mean i dag).
   - **Weather→positioning follow-up (commit `e0689c8`):** Bruker oppdaget at `weather`-familien var ren dobbel-telling av `yield.weather_stress` på alle 7 agri. Familien fjernet og erstattet med ny `positioning`-familie (vekt 2 beholdt) på alle 7 agri. Drivere: `positioning_mm_pct@0.40` (MM net-long percentile via instrument-YAML cot_contract-lookup) + `cot_oi_change@0.35` (OI WoW-z) + `cot_swap_dealer_skew@0.25`. For Cotton/Corn/Soybean/Wheat: `drought_monitor` flyttet fra gamle weather-familien inn i yield-familien som co-driver (samme yield-impact-domene), yield-vekter re-balansert til sum=1.00. Effekt: 28 agri score-flips (forventet — ny familie), 4 publish-flips (Cocoa+Sugar MAKRO BUY True / SELL False — MM-positioning gir directional signal), 2 grade-flips (Coffee MAKRO SELL A+→A, Cotton MAKRO SELL B→C), 0 financial-flips. Resultat: ortogonale signaler på alle agri (fundamenta yield + sentiment positioning + klima enso + region-produksjon conab/unica + analog mønster + cross FX/shipping/calendar = 6 ortogonale dimensjoner per instrument).
@@ -606,6 +613,61 @@ ferdig og 12.6-rebalansering er gjort.
 ---
 
 ## Session log (newest first)
+
+### 2026-05-05/06 — Session 151: sub-fase 12.11+ — sukker datafundament + analytiker-peer-review-implementering
+
+**Scope:** Bruker ba om analyse av drivere per instrument og horisont, startet med sukker. Eksterne analytiker-peer-review (lagt i `docs/sugar_analyst_response_2026-05.md`) listet 8 prioriterte tiltak. Session adresserte alle 8 + 4 metodiske innvendinger via en kjede av fixer, backfill og backtests.
+
+**Datafundament (forarbeid før driver-tuning):**
+- **brazil_centro_sul weather-region** (commit `6981b6d`): Ny `weather_monthly`-fetcher (`bedrock.fetch.weather_monthly`) henter daglig fra Open-Meteo Archive og aggregerer til månedlig WeatherMonthlyRow. 184 mnd backfilled (2011-01 → 2026-04, Ribeirão Preto SP). Erstatter mais-region `brazil_mato_grosso` som ikke matchet sukker. Auto-update via systemd timer (2. i mnd 04:00 Oslo).
+- **UNICA Wayback-backfill** (commit `8bb74a8`): UNICA's offentlige nettside viser kun siste rapport, ingen arkiv. Brave-MCP brukt: Wayback CDX API → 73 snapshots → 47 unike PDF-URLer → 44/47 nedlastet → 42 ren parsing via eksisterende `parse_unica`. Resultat: 12 års historikk (2012-05 → 2026-04) for `unica_change` sub-drivere.
+- **USDA FAS PSD India sugar** (commit `c94dd55`): Ny fetcher mot `api.fas.usda.gov` med X-Api-Key auth. 16 års offisielle PSD-tall (2010-2025): production, exports, imports, ending stocks. Ny driver `usda_psd_yoy` (generic YoY-step-mapping for hvilken som helst PSD-serie). 64 rader backfilled. Erstatter ISMA som primær India-kilde (ISMA API gav kun 18 mnd press-release-parsing).
+- **ISMA India press-release-fetcher** (commit `b58c4e5`): Beholdes som complementary forward-overlay. 31 datapunkter backfilled fra public API. Ukentlig auto-update.
+- **ANP Brasil etanol** (commit `c3b2b0c`): Ny CSV/XLSX-fetcher mot ANP "dados abertos". Filter ETANOL + Centro-Sul-states (SP/GO/MG/MS/MT/PR/RJ/ES) med eksport-impact-vekter. Daglig snitt R$/liter. 584 daily rows backfilled (2024-01 → 2026-03). Driver `ethanol_parity_brl` erstatter `momentum_z(CrudeOil)`-proxy med direkte måling per analytikerens D.2.
+
+**Driver-tuning (analytiker-peer-review-implementering):**
+- **ENSO bull_when=high** (commit `40b4c8b`): Driver-attribution avslørte at `noaa_oni_index` returnerte 0.0 alltid for sukker (default `bull_when=low` er for grain — sukker har omvendt sensitivitet). Fix: bull_when=high. Krevde også at `ONI`/`PDO`/`IRI_ENSO_FCST_3MO`-serier ble kopiert til codespace (var bare på laptop).
+- **Forward-syklus seasonal_stage** (commit `63e22ca`): Endret `monthly_scores` fra current-cycle [0.7,0.7,0.8,0.9,1.0,1.0,1.0,1.0,0.9,0.7,0.6,0.6] til forward-cycle [1.0,1.0,0.9,0.7,0.6,0.7,0.8,0.9,1.0,0.9,0.8,0.9]. Sukker no.11 prises 6-12 mnd forward — peak-bull-window er FØR zafra, ikke under.
+- **Multi-region weather** (commit `b15810d`): `weather_stress`-driver utvidet med `params.regions` dict. Backward-compatible. Sugar.yaml: brazil_centro_sul=0.55 + india_maharashtra=0.30 + thailand_suphan_buri=0.15 (eksport-impact-vektet). India + Thailand backfilled 184 mnd hver via Open-Meteo.
+- **Positioning extreme_flag_soft** (commit `076153a`): Analytikerens C.1 anti-driver-fix. Lineær `positioning_mm_pct` ga A SELL-signal ved ekstrem MM-long → markedet snur (overshoot/mean-reversion). `extreme_flag_soft` returnerer 1.0 ved BEGGE ekstremer (pct ≥ 0.95 eller ≤ 0.05). Engine-flipping blokkerer falske SELL-signaler.
+- **USDA PSD India i unica-familie**: Familie-vekting omstrukturert. UNICA cum-prod 0.45 + UNICA mix 0.25 + USDA PSD India 0.30 (Brasil 0.70 / India 0.30 reflekterer eksport-impact).
+
+**Analyser og validering:**
+- **Backtest-progresjon** (4 fulle 14-års-runder + 1 attribution-runde):
+  - **Backtest 3** (4 horisonter h=90/180/270/365 × 2 retninger): A+ BUY 180d 55.1%/+7.37%, 270d 51.7%/+7.52%. Bekreftet at sukker prises 6-12 mnd forward (180d/270d sweet spots).
+  - **Backtest 5** (post-ENSO + seasonal-fix): A+ BUY 180d **77.8%/+20.19%**, 270d 66.7%/+19.03%. A SELL 180d -5.20% → -1.31%. Non-monoton SELL-progresjon krympet kraftig.
+  - **A SELL driver-attribution** (commit `d9b3fbf`): Identifiserte ENSO-bug (driver returnerte 0.0 alltid). Korrelasjons-analyse mellom familie-score og forward-return.
+- **DSR + Bonferroni** (commit `fcd36e1`): A+ BUY på alle 4 horisonter holder PSR=1.000 etter deflasjon med 24 trials. Pure Python (math.erf for normal CDF, Beasley-Springer-Moro for inverse CDF — ingen scipy-avhengighet).
+- **Rullerende publish-floor** (commit `b8a7675`): 5-års rolling-vindu med kvartalsvis re-kalibrering. Funn: 2017-2019 floor ~5 oppnår 60% hr; 2022-2024 ingen floor klarer 55% (India-eksportforbud-regime). Bekrefter analytikerens hypotese om at statisk 14-års-floor antar regime-stasjonaritet.
+- **ANP-paritet validering** (commit `076153a`): ρ(paritet_z, neste UNICA mix_sugar_pct) = -0.143 (n=18). Riktig retning men svak magnitude (analytiker krever |ρ| ≥ 0.5). Sannsynlig årsak: ANP gir hydrous pumpe-pris, ikke wholesale anhydrous; anhydrous_factor=1.05 underestimerer.
+- **Familie-vekt-ablation** (commit `2517d27`): Drop-one-out på A+ BUY 90d. Pydantic gt=0 constraint krevde weight=0.001 (ikke 0). v3 kjører på codespace.
+- **Forward-syklus A/B-test** (commit `9a97d60`): Current-cycle vs forward-cycle outlook-familie isolert. 8 års vindu. Suksess-kriterium: Δ Sharpe ≥ 0.20.
+
+**Infrastruktur:**
+- **weather_monthly fetcher i fetch-pipeline** (commit `06fee9a`): Runner registrert, fetch.yaml entry, UI fetcher-helse markert M-only. Generic for alle weather_monthly-regioner som ikke har cot-explorer JSON.
+- **Codespace pipeline-orkestrering**: Backtest 6 (alle fixes samlet) → ablation v3 → A/B-test kjører sekvensielt på `stunning-sniffle-pv459prj4wgh664p`. Total ~80 min wall-time. Keepalive-cron reaktivert (15 min intervall, brukergodkjent for sessionen).
+- **DB-sync laptop ↔ codespace**: 679 fundamentals + 552 weather_monthly rader synket via `gh codespace cp` + import-script.
+
+**Status etter session:**
+- Sukker-config: 7 familier, max_score 16, alle med reell historikk (UNICA 12 år, USDA PSD India 16 år, weather multi-region 14 år, ENSO 76 år, COT 16 år).
+- Bot restartet 4 ganger underveis med oppdatert config (siste PID 61589).
+- Symlinks for systemd-units flyttet fra worktree-path til main-repo-path (overlever worktree-cleanup).
+- Total: 12+ commits til main, alle pushet via auto-push hook.
+
+**Filer endret/lagt til:**
+- Nye fetchers: `weather_monthly.py`, `usda_psd.py`, `isma_india.py`, `anp_ethanol.py`
+- Nye drivere: `usda_psd_yoy`, `ethanol_parity_brl`
+- Modifiserte drivere: `weather_stress` (multi-region), `noaa_oni_index` (bull_when override via params)
+- Backfill-skripter: `weather_monthly_brazil_centro_sul.py`, `weather_monthly_sugar_regions.py`, `unica_history.py`
+- Analyse-skripter: `sugar_attribution_a_sell.py`, `sugar_dsr_correlations.py`, `sugar_rolling_floor.py`, `sugar_ablation_test.py`, `sugar_anp_validation.py`, `sugar_seasonal_ab_test.py`
+- Backtest: `backtest_sugar_full.py` (4 horisonter)
+- Docs: `sugar_analyst_briefing_2026-05.md`, `sugar_analyst_response_2026-05.md`, `sugar_anp_ethanol_parity_plan_2026-05.md`, 6+ backtest/analyse-rapporter
+- Config: `sugar.yaml` (mange iterasjoner), `fetch.yaml` (4 nye fetchers), `ui.py` (fetcher-helse-mapping)
+- 5 systemd timer-units (weather_monthly, isma_india, usda_psd_india_sugar, anp_ethanol)
+
+**Pågående ved session-slutt:** Backtest 6 + ablation v3 + A/B-test kjører på codespace. Analytiker-tiltak C.4 (grade_thresholds-justering) avhenger av score-distribusjon fra backtest 6.
+
+---
 
 ### 2026-05-02 — Session 150: sub-fase 12.11 — agri-engine horisont-bevisst + dropp SCALP for alle agri
 
