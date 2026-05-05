@@ -671,6 +671,11 @@ class ExitEngine:
                     break
             data["last_updated"] = now
             self._atomic_write_json(data)
+            # Loss-cooldown: registrer signal_id slik at EntryEngine
+            # blokkerer re-entry på samme orchestrator-setup. Verner mot
+            # loss → re-entry → loss-loop i sideways-marked.
+            if result == "loss" and state.signal_id:
+                self._entry.record_lost_signal(state.signal_id)
             real_tag = " [cTrader]" if pnl.get("pnl_real") else " [est]"
             pnl_str = (
                 f"  {pnl['pnl_usd']:+.2f} USD ({pnl['pips']:+.1f} pips){real_tag}" if pnl else ""

@@ -17,6 +17,7 @@ Dekker også:
 
 from __future__ import annotations
 
+import json
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -82,6 +83,7 @@ def _make_engine(
     stats_path: Path,
     execute_trade: MagicMock | None = None,
     manage_positions: MagicMock | None = None,
+    trade_log_path: Path | None = None,
 ) -> EntryEngine:
     return EntryEngine(
         client=client_stub,
@@ -91,6 +93,8 @@ def _make_engine(
         execute_trade=execute_trade or MagicMock(),
         manage_open_positions=manage_positions or MagicMock(),
         stats_path=stats_path,
+        # Default tmp-fil for testing — unngår å lese live signal_log
+        trade_log_path=trade_log_path or stats_path.parent / "signal_log.json",
     )
 
 
@@ -1668,3 +1672,227 @@ def test_log_trade_opened_writes_json(
     assert data["entries"][0]["signal"]["lots"] == 0.02
     assert data["entries"][0]["signal"]["position_id"] == 42
     assert data["entries"][0]["closed_at"] is None
+
+
+# ─────────────────────────────────────────────────────────────
+# Loss-cooldown — blokk re-entry på samme signal_id etter tap
+# ─────────────────────────────────────────────────────────────
+
+
+def test_loss_cooldown_blocks_re_entry_on_same_signal_id(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list,
+    tmp_path: Path,
+) -> None:
+    """Etter at et signal stengte i tap, samme signal_id (orchestrator
+    setup_id) skal IKKE generere ny TradeState — uansett om markedet
+    fortsatt er i entry_zone. Verner mot loss → re-entry-loop i
+    sideways-marked."""
+    log_path = tmp_path / "signal_log.json"
+    client = _make_client_stub(
+        symbol_map={"EURUSD": 1},
+        last_bid={1: 1.0800},
+        last_ask={1: 1.0802},
+        spread_history={1: deque([0.00002] * 15, maxlen=20)},
+    )
+    engine = _make_engine(
+        client,
+        safety,
+        config,
+        active_states,
+        stats_path=tmp_path / "s.json",
+        trade_log_path=log_path,
+    )
+    engine.on_symbols_ready(client)
+    # Simulér at signalet allerede har stengt i tap
+    engine.record_lost_signal("eurusd-buy-1")
+    signal = {
+        "id": "eurusd-buy-1",
+        "instrument": "EURUSD",
+        "direction": "buy",
+        "status": "watchlist",
+        "alert_level": 1.0801,
+        "stop": 1.0750,
+        "t1": 1.0900,
+        "entry_zone": [1.0800, 1.0803],
+        "horizon": "SCALP",
+        "horizon_config": {},
+    }
+    engine.signal_data = {"signals": [signal], "global_state": {}, "rules": {}}
+    engine._on_candle_closed(
+        1,
+        Candle(
+            open=1.0801,
+            high=1.0802,
+            low=1.0800,
+            close=1.0801,
+            volume=1,
+            timestamp=datetime.now(timezone.utc),
+        ),
+    )
+    assert len(active_states) == 0  # cooldown blokkerte
+
+
+def test_loss_cooldown_loaded_from_signal_log_at_startup(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list,
+    tmp_path: Path,
+) -> None:
+    """Cooldown må overleve restart. Ved oppstart skal EntryEngine
+    laste alle signal_ids med result='loss' fra signal_log.json."""
+    log_path = tmp_path / "signal_log.json"
+    log_path.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {"result": "loss", "signal": {"id": "lost-1"}},
+                    {"result": "win", "signal": {"id": "won-1"}},
+                    {"result": "loss", "signal": {"id": "lost-2"}},
+                    {"result": None, "signal": {"id": "open-1"}},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    client = _make_client_stub(symbol_map={"EURUSD": 1})
+    engine = _make_engine(
+        client,
+        safety,
+        config,
+        active_states,
+        stats_path=tmp_path / "s.json",
+        trade_log_path=log_path,
+    )
+    assert "lost-1" in engine._lost_signal_ids
+    assert "lost-2" in engine._lost_signal_ids
+    assert "won-1" not in engine._lost_signal_ids
+    assert "open-1" not in engine._lost_signal_ids
+
+
+def test_loss_cooldown_does_not_block_different_signal_id(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list,
+    tmp_path: Path,
+) -> None:
+    """Ny signal_id (orchestrator har rotert setup_id) skal IKKE
+    blokkeres selv om gammel signal_id er i tap-listen."""
+    log_path = tmp_path / "signal_log.json"
+    client = _make_client_stub(
+        symbol_map={"EURUSD": 1},
+        last_bid={1: 1.0800},
+        last_ask={1: 1.0802},
+        spread_history={1: deque([0.00002] * 15, maxlen=20)},
+    )
+    engine = _make_engine(
+        client,
+        safety,
+        config,
+        active_states,
+        stats_path=tmp_path / "s.json",
+        trade_log_path=log_path,
+    )
+    engine.on_symbols_ready(client)
+    engine.record_lost_signal("old-setup-id")
+    signal = {
+        "id": "new-setup-id",  # rotert av orchestrator
+        "instrument": "EURUSD",
+        "direction": "buy",
+        "status": "watchlist",
+        "alert_level": 1.0801,
+        "stop": 1.0750,
+        "t1": 1.0900,
+        "entry_zone": [1.0800, 1.0803],
+        "horizon": "SCALP",
+        "horizon_config": {},
+    }
+    engine.signal_data = {"signals": [signal], "global_state": {}, "rules": {}}
+    engine._on_candle_closed(
+        1,
+        Candle(
+            open=1.0801,
+            high=1.0802,
+            low=1.0800,
+            close=1.0801,
+            volume=1,
+            timestamp=datetime.now(timezone.utc),
+        ),
+    )
+    assert len(active_states) == 1
+    assert active_states[0].signal_id == "new-setup-id"
+
+
+def test_log_trade_closed_records_loss_signal_id_to_entry_engine(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list,
+    tmp_path: Path,
+) -> None:
+    """ExitEngine._log_trade_closed skal kalle entry.record_lost_signal
+    ved loss-resultat, slik at re-entry blokkeres umiddelbart uten å
+    vente på neste log-reload."""
+    from bedrock.bot.exit import ExitEngine
+
+    log_path = tmp_path / "signal_log.json"
+    # Forhåndsskriv åpen entry som _log_trade_closed kan oppdatere
+    log_path.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {
+                        "result": None,
+                        "signal": {
+                            "id": "lost-now",
+                            "instrument": "EURUSD",
+                            "direction": "BUY",
+                            "entry": 1.08,
+                            "stop": 1.075,
+                            "t1": None,
+                            "position_id": 99,
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    client = _make_client_stub(
+        symbol_map={"EURUSD": 1},
+        last_bid={1: 1.07},
+        last_ask={1: 1.07},
+    )
+    client.symbol_info = {1: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}}
+    entry = _make_engine(
+        client,
+        safety,
+        config,
+        active_states,
+        stats_path=tmp_path / "s.json",
+        trade_log_path=log_path,
+    )
+    ex = ExitEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        entry=entry,
+        trade_log_path=log_path,
+    )
+    state = TradeState(
+        signal_id="lost-now",
+        symbol_id=1,
+        instrument="EURUSD",
+        direction="buy",
+        entry_price=1.08,
+        stop_price=1.075,
+        t1_price=0.0,
+        full_volume=2000,
+        remaining_volume=2000,
+        position_id=99,
+        phase=TradePhase.IN_TRADE,
+        horizon="SCALP",
+    )
+    ex._log_trade_closed(state, "SL-BREACH", close_price=1.07)
+    assert "lost-now" in entry._lost_signal_ids

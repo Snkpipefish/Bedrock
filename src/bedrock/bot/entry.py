@@ -155,6 +155,16 @@ class EntryEngine:
         self._last_expiry_log: datetime | None = None
         self._daily_loss_logged: bool = False
 
+        # Loss-cooldown: signal_ids som har stengt i tap. Blokkerer
+        # re-entry på samme signal_id fra orchestrator. Setup-id
+        # persisteres på tvers av dager via hysterese — uten dette
+        # ender vi i loss → re-entry → loss-loop i sideways-marked.
+        # Lastes fra signal_log ved oppstart, oppdateres av ExitEngine
+        # via `record_lost_signal()` ved hver loss-close.
+        self._lost_signal_ids: set[str] = set()
+        self._cooldown_logged: set[str] = set()
+        self._load_lost_signal_ids_from_log()
+
         self._lock = Lock()
 
     # ─────────────────────────────────────────────────────────
@@ -656,6 +666,23 @@ class EntryEngine:
             # Aktiver bekreftelsesvindu
             if in_zone and state is None:
                 dirn = sig.get("direction", "")
+                sig_id = sig.get("id", "")
+                # Loss-cooldown: hvis denne signal_id allerede har stengt
+                # i tap, ikke ta på nytt. Orchestrator persisterer setup_id
+                # via hysterese — i sideways-marked får vi samme signal_id
+                # om og om igjen, og uten cooldown ender vi i en
+                # loss → re-entry → loss-loop. Cooldown clearer kun når
+                # orchestrator rotere setup_id (= ny tese).
+                if sig_id and sig_id in self._lost_signal_ids:
+                    if sig_id not in self._cooldown_logged:
+                        log.info(
+                            "[COOLDOWN] %s [%s] — har stengt i tap; "
+                            "blokkerer re-entry til orchestrator roterer setup_id.",
+                            sig_id,
+                            horizon,
+                        )
+                        self._cooldown_logged.add(sig_id)
+                    return
                 # Duplikat-blokk: blokker kun samme (instrument, direction, horizon).
                 # SCALP/SWING/MAKRO er uavhengige slots — en åpen scalp-buy
                 # skal ikke hindre en swing-buy eller makro-buy på samme
@@ -952,6 +979,41 @@ class EntryEngine:
     # ─────────────────────────────────────────────────────────
     # Helpers
     # ─────────────────────────────────────────────────────────
+
+    def _load_lost_signal_ids_from_log(self) -> None:
+        """Last signal_ids med result='loss' fra signal_log.json ved oppstart.
+
+        Sikrer at loss-cooldown overlever bot-restart. Trygt no-op hvis
+        loggen ikke finnes eller er korrupt — tom set er gyldig start-tilstand.
+        """
+        path = self._trade_log_path
+        if not path.exists():
+            return
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            log.warning("[COOLDOWN] kunne ikke lese %s: %s", path, exc)
+            return
+        entries = data.get("entries", []) if isinstance(data, dict) else []
+        loaded = 0
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("result") != "loss":
+                continue
+            sig_id = (entry.get("signal") or {}).get("id")
+            if isinstance(sig_id, str) and sig_id:
+                self._lost_signal_ids.add(sig_id)
+                loaded += 1
+        if loaded:
+            log.info("[COOLDOWN] Lastet %d tap-signal_ids fra logg.", loaded)
+
+    def record_lost_signal(self, signal_id: str) -> None:
+        """Registrer at et signal stengte i tap. ExitEngine kaller denne
+        fra `_log_trade_closed` slik at re-entry blokkeres umiddelbart
+        — uten å vente på neste log-reload."""
+        if signal_id:
+            self._lost_signal_ids.add(signal_id)
 
     def _horizon_ttl_seconds(self, horizon: str) -> int:
         ttl_cfg = self._config.horizon_ttl
