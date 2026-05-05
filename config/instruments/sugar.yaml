@@ -22,7 +22,12 @@ instrument:
   weather_lon: -47.81
 
 aggregation: additive_sum
-max_score: 16
+# Sub-fase 12.11+: UNICA-familien midlertidig nedvektet til 0 fordi
+# database har kun 1 historisk rapport (UNICA-arkivet er ikke offentlig
+# tilgjengelig — kun løpende fetcher kan akkumulere). Re-aktiveres til
+# vekt 2 når ≥26 rapporter (≈1 år) er samlet og driver-terskler kan
+# kalibreres mot reell historikk. Total max_score: 16 - 2 = 14.
+max_score: 14
 # Session 102: invertert asymmetrisk floor. Backtest (session 99):
 # Sugar BUY-hr 34.9% vs SELL-hr 45.0% (90d) — -10.1pp **SELL-bias**.
 # Eneste agri med strukturell SELL-bias (Brazil over-supply + global
@@ -114,7 +119,11 @@ families:
     # + mix_sugar_pct (current sukker-mix-prosent, lav = etanol-tilt =
     # bullish). Sub-vekter 0.6/0.4 — production_yoy er tyngre
     # fundamental.
-    weight: 2
+    #
+    # MIDLERTIDIG NEDVEKTET (weight: 0): kun 1 rapport i db, ikke nok
+    # til å beregne YoY-z-scores. Reaktiveres når historikk bygges via
+    # løpende fetcher. Driverne beholdes som referanse.
+    weight: 0
     drivers:
       - name: unica_change
         weight: 0.6
@@ -199,6 +208,8 @@ families:
           - MAKRO
           - SWING
 grade_thresholds:
-  A_plus: {min_score: 11, min_families_active: 4}
-  A: {min_score: 8, min_families_active: 3}
-  B: {min_score: 6, min_families_active: 2}
+  # Justert for max_score 14 (UNICA midlertidig nedvektet). Beholder
+  # samme prosentvise terskler som før: A+ ≈ 70%, A ≈ 50%, B ≈ 38%.
+  A_plus: {min_score: 10, min_families_active: 4}
+  A: {min_score: 7, min_families_active: 3}
+  B: {min_score: 5, min_families_active: 2}
