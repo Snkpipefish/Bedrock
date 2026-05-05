@@ -53,6 +53,19 @@ fetchers:
     table: weather
     ts_column: date
 
+  # Sub-fase 12.11+: månedlig weather-aggregat for regioner uten cot-
+  # explorer pre-aggregert JSON (foreløpig brazil_centro_sul for sukker).
+  # Open-Meteo Archive trekker hele historisk vindu — idempotent
+  # INSERT OR REPLACE per (region, month). Kjører 2. i mnd 04:00 Oslo
+  # (etter at Open-Meteo har full forrige måned tilgjengelig).
+  weather_monthly:
+    module: bedrock.fetch.weather_monthly
+    cron: "0 4 2 * *"           # 2. i mnd 04:00 Oslo
+    stale_hours: 720             # månedlig (~30d)
+    on_failure: retry_with_backoff
+    table: weather_monthly
+    ts_column: month
+
   # Sub-fase 12.10 follow-up post-Spor-F (2026-05-02): agsi + alsi
   # registrert som daglige runners. NaturalGas macro har 5 AGSI-drivere
   # + 2 ALSI-drivere wired (~30 % av familievekten). Tidligere kun

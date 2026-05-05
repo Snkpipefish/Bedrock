@@ -296,6 +296,47 @@ def run_weather(
     return result
 
 
+@register_runner("weather_monthly")
+def run_weather_monthly(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """Månedlig weather-aggregat per instrument-region.
+
+    Henter daglig fra Open-Meteo Archive og aggregerer til
+    weather_monthly-tabellen. Brukes for regioner som ikke har
+    cot-explorer pre-aggregert JSON (sub-fase 12.11+: brazil_centro_sul
+    for sukker). Idempotent via INSERT OR REPLACE på (region, month).
+    """
+    from bedrock.fetch.weather_monthly import fetch_weather_monthly
+
+    result = FetchRunResult(fetcher_name="weather_monthly")
+
+    def _items():
+        for cfg in instruments:
+            meta = cfg.instrument
+            if not meta.weather_region or meta.weather_lat is None or meta.weather_lon is None:
+                continue
+
+            def _do(
+                region=meta.weather_region,
+                lat=meta.weather_lat,
+                lon=meta.weather_lon,
+            ):
+                df = fetch_weather_monthly(region, lat, lon, from_date, to_date)
+                if df.empty:
+                    return 0
+                return store.append_weather_monthly(df)
+
+            yield meta.weather_region, _do
+
+    _safe_run(_items(), result)
+    return result
+
+
 @register_runner("fundamentals")
 def run_fundamentals(
     spec: FetcherSpec,

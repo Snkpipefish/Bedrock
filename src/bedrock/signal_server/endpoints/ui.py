@@ -616,6 +616,9 @@ _FETCHER_HORIZONS: dict[str, list[str]] = {
     # Vær: macro-regime + swing-forecast-shifts. Ikke scalp (forecasts
     # endrer seg ikke minutt-for-minutt på meningsfulle skalaer).
     "weather": ["M", "Sw"],
+    # Månedlig vær-aggregat (sub-fase 12.11+: brazil_centro_sul for
+    # sukker). Månedlig kadens — kun macro.
+    "weather_monthly": ["M"],
     # ENSO: kvartals-regime, kun macro.
     "enso": ["M"],
     # EIA: ons-release. Macro-S/D, swing-release-drift, scalp-event.
