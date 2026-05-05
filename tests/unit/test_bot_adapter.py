@@ -287,12 +287,13 @@ def test_global_state_correlation_config_uses_max_total_key():
 
 
 def test_use_limit_orders_per_horizon():
-    """SCALP→MARKET (fart > entry-kvalitet), SWING/MAKRO→LIMIT (entry-kvalitet
-    > fart; SL/TP festes synkront serverside, ingen amend-lag)."""
+    """Alle horisonter bruker MARKET — entry kun ved bekreftet
+    confirmation-candle. LIMIT på alert_level ble fylt selv om markedet
+    etterpå drev mot oss; confirmation gir bedre retnings-bevis."""
     expected = {
         "scalp": False,  # MARKET
-        "swing": True,  # LIMIT
-        "makro": True,  # LIMIT
+        "swing": False,  # MARKET
+        "makro": False,  # MARKET
     }
     for hor_in, want in expected.items():
         payload = adapt_to_bot_format([_make_entry(horizon=hor_in)])

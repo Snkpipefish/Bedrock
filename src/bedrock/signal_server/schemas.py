@@ -28,6 +28,23 @@ _VALID_DIRECTIONS = {"BUY", "SELL"}
 _VALID_HORIZONS = {"SCALP", "SWING", "MAKRO"}
 
 
+def _norm_direction(value: str) -> str:
+    """Direction-kontrakten på fil/HTTP-grensa er case-insensitiv. Vi lagrer
+    UPPERCASE internt; bot-adapteren beholder strengen rått og bot leser
+    lowercase, så transport-laget skal tåle begge."""
+    upper = value.strip().upper()
+    if upper not in _VALID_DIRECTIONS:
+        raise ValueError(f"direction må være BUY/SELL, fikk {value!r}")
+    return upper
+
+
+def _norm_horizon(value: str) -> str:
+    upper = value.strip().upper()
+    if upper not in _VALID_HORIZONS:
+        raise ValueError(f"horizon må være SCALP/SWING/MAKRO, fikk {value!r}")
+    return upper
+
+
 class PersistedSignal(BaseModel):
     """Ett signal slik det ligger på disk.
 
@@ -49,16 +66,12 @@ class PersistedSignal(BaseModel):
     @field_validator("direction")
     @classmethod
     def _direction_must_be_valid(cls, value: str) -> str:
-        if value not in _VALID_DIRECTIONS:
-            raise ValueError(f"direction må være BUY/SELL, fikk {value!r}")
-        return value
+        return _norm_direction(value)
 
     @field_validator("horizon")
     @classmethod
     def _horizon_must_be_valid(cls, value: str) -> str:
-        if value not in _VALID_HORIZONS:
-            raise ValueError(f"horizon må være SCALP/SWING/MAKRO, fikk {value!r}")
-        return value
+        return _norm_horizon(value)
 
     @field_validator("score")
     @classmethod
@@ -86,9 +99,7 @@ class KillSwitch(BaseModel):
     @field_validator("horizon")
     @classmethod
     def _horizon_must_be_valid(cls, value: str) -> str:
-        if value not in _VALID_HORIZONS:
-            raise ValueError(f"horizon må være SCALP/SWING/MAKRO, fikk {value!r}")
-        return value
+        return _norm_horizon(value)
 
     @property
     def slot(self) -> tuple[str, str]:
@@ -109,16 +120,12 @@ class InvalidationRequest(BaseModel):
     @field_validator("direction")
     @classmethod
     def _direction_must_be_valid(cls, value: str) -> str:
-        if value not in _VALID_DIRECTIONS:
-            raise ValueError(f"direction må være BUY/SELL, fikk {value!r}")
-        return value
+        return _norm_direction(value)
 
     @field_validator("horizon")
     @classmethod
     def _horizon_must_be_valid(cls, value: str) -> str:
-        if value not in _VALID_HORIZONS:
-            raise ValueError(f"horizon må være SCALP/SWING/MAKRO, fikk {value!r}")
-        return value
+        return _norm_horizon(value)
 
 
 class PriceBarIn(BaseModel):

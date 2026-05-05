@@ -147,9 +147,11 @@ HORIZON_DEFAULTS: dict[str, dict[str, Any]] = {
             "tp_atr_mult": 3.5,
             "sizing_base_risk_usd": 40,
             "exit_trail_atr_mult": TRAIL_MULT_BY_HORIZON_GROUP["SWING"],
-            # SWING: LIMIT — venter på pris ved alert_level. SL/TP festes
-            # synkront på cTrader-serveren ved fill (ingen amend-lag).
-            "use_limit_orders": True,
+            # SWING: MARKET — entry kun etter bekreftet confirmation-candle
+            # (15m close med body+wick+EMA-bias riktig vei). LIMIT på
+            # alert_level ble fylt selv om markedet etterpå drev mot oss
+            # — confirmation gir bedre retnings-bevis enn rene zone-touches.
+            "use_limit_orders": False,
         },
     },
     "MAKRO": {
@@ -162,8 +164,10 @@ HORIZON_DEFAULTS: dict[str, dict[str, Any]] = {
             "tp_atr_mult": None,  # MAKRO bruker trailing-only per Fase 4
             "sizing_base_risk_usd": 60,
             "exit_trail_atr_mult": TRAIL_MULT_BY_HORIZON_GROUP["MAKRO"],
-            # MAKRO: LIMIT — entry-kvalitet >> fart på multi-uke tese.
-            "use_limit_orders": True,
+            # MAKRO: MARKET — samme begrunnelse som SWING. Multi-uke tese
+            # krever at vi tar entry kun når retnings-konfirmasjon er
+            # tydelig på lukket candle, ikke ved ren zone-berøring.
+            "use_limit_orders": False,
         },
     },
 }
