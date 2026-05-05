@@ -659,6 +659,80 @@ def conab_yoy(store: Any, instrument: str, params: dict) -> float:
 
 
 # ---------------------------------------------------------------------------
+# usda_psd_yoy (sub-fase 12.11+ analytiker D.5)
+# ---------------------------------------------------------------------------
+
+
+@register("usda_psd_yoy")
+def usda_psd_yoy(store: Any, instrument: str, params: dict) -> float:
+    """USDA FAS PSD YoY-endring (production/exports/imports), 0..1 score.
+
+    Generic for any (country, commodity) hvor PSD-fundamentals er
+    backfilled. Initial bruk: India sugar production
+    (`series_id="USDA_PSD_INDIA_SUGAR_PROD_KMT"`).
+
+    Tolkning lik conab_yoy: lavere produksjon (negativ YoY) = bull;
+    høyere = bear. Step-mapping kan overstyres via params.
+
+    Params:
+        series_id (REQUIRED): fundamentals-series f.eks.
+            "USDA_PSD_INDIA_SUGAR_PROD_KMT"
+        thresholds: optional override som conab_yoy
+        bull_when: "low" (default — drop = bull) eller "high"
+
+    Returnerer 0..1. Defensiv 0.5 (nøytral) ved manglende historikk
+    (krever ≥ 2 års data for å beregne YoY).
+    """
+    _horizon = params.get("_horizon")
+    import pandas as pd
+
+    series_id = params.get("series_id")
+    if not series_id:
+        _log.warning("usda_psd_yoy.no_series_id", instrument=instrument)
+        return 0.5
+
+    try:
+        s = store.get_fundamentals(series_id)
+    except KeyError:
+        _log.debug("usda_psd_yoy.data_missing", instrument=instrument, series_id=series_id)
+        return 0.5
+    except Exception as exc:
+        _log.warning("usda_psd_yoy.fetch_failed", instrument=instrument, error=str(exc))
+        return 0.5
+
+    if s is None or len(s) < 2:
+        return 0.5
+
+    current = float(s.iloc[-1])
+    previous = float(s.iloc[-2])
+    if previous == 0 or pd.isna(current) or pd.isna(previous):
+        return 0.5
+
+    yoy_pct = (current - previous) / previous * 100.0
+    bull_when = str(params.get("bull_when", "low")).lower()
+
+    user_thresholds = params.get("thresholds")
+    if user_thresholds is None:
+        steps: tuple[tuple[float, float], ...] = (
+            (-10.0, 1.00),
+            (-5.0, 0.85),
+            (-2.0, 0.65),
+            (0.0, 0.50),
+            (5.0, 0.35),
+        )
+    else:
+        steps = tuple((float(t), float(s)) for t, s in user_thresholds)
+
+    score = 0.15
+    for threshold, step_score in steps:
+        if yoy_pct <= threshold:
+            score = float(step_score)
+            break
+
+    return score if bull_when == "low" else 1.0 - score
+
+
+# ---------------------------------------------------------------------------
 # unica_change (sub-fase 12.5+ session 112)
 # ---------------------------------------------------------------------------
 

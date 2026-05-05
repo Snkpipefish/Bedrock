@@ -135,25 +135,35 @@ families:
         horizons:
           - MAKRO
   unica:
-    # Sub-fase 12.5+ session 112: UNICA Centro-Sul halvmånedlig
-    # sukker/etanol-rapport. Brazil er ~40% global sukker-produksjon
-    # — DOMINANT. Dual-driver: sugar_production_yoy (akkumulert YoY)
-    # + mix_sugar_pct (current sukker-mix-prosent, lav = etanol-tilt =
-    # bullish). Sub-vekter 0.6/0.4 — production_yoy er tyngre
-    # fundamental.
+    # Sub-fase 12.5+ session 112 + 12.11+ analytiker D.5: kombinert
+    # Brasil + India supply-familie. UNICA bi-ukentlig (Brasil ~40%
+    # global produksjon) + USDA PSD årlig (India ~30% produksjon,
+    # policy-swing-faktor).
     #
-    # Sub-fase 12.11+: 42 historiske rapporter backfilled fra Wayback
-    # Machine (2012-05 → 2026-04). Familie reaktivert til vekt 2.
+    # Sub-vekter:
+    # - unica_change sugar_production_yoy: 0.45 (Brasil cum YoY)
+    # - unica_change mix_sugar_pct: 0.25 (Brasil sukker/etanol-allokering)
+    # - usda_psd_yoy India: 0.30 (offisiell PSD, 16 års historikk)
+    #
+    # Brasil 0.70 vs India 0.30 reflekterer eksport-impact (Brasil
+    # ~45% global eksport, India 0-15% avhengig av policy).
     weight: 2
     drivers:
       - name: unica_change
-        weight: 0.6
+        weight: 0.45
         params:
           metric: sugar_production_yoy
       - name: unica_change
-        weight: 0.4
+        weight: 0.25
         params:
           metric: mix_sugar_pct
+      - name: usda_psd_yoy
+        weight: 0.30
+        params:
+          series_id: USDA_PSD_INDIA_SUGAR_PROD_KMT
+          bull_when: low  # mindre India-prod = supply tight = bull
+        horizons:
+          - MAKRO
   cross:
     # Sub-fase 12.5+ session 80: erstattet DXY-proxy med direkte BRL-
     # måling via DEXBZUS. USDBRL UP = BRL svakhet = bull for sukker-

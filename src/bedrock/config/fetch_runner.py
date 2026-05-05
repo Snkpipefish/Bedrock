@@ -296,6 +296,39 @@ def run_weather(
     return result
 
 
+@register_runner("usda_psd_india_sugar")
+def run_usda_psd_india_sugar(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """USDA FAS PSD India sugar (sub-fase 12.11+ analytiker D.5).
+
+    Henter offisiell PSD-data (production/exports/imports/end-stocks)
+    for India sugar via USDA FAS API. 16+ års historikk (2010+).
+    Skriver til fundamentals.
+    """
+    from bedrock.fetch.usda_psd import fetch_india_sugar_history
+
+    result = FetchRunResult(fetcher_name="usda_psd_india_sugar")
+
+    def _items():
+        def _do():
+            df = fetch_india_sugar_history(
+                from_year=from_date.year, to_year=to_date.year
+            )
+            if df.empty:
+                return 0
+            return store.append_fundamentals(df)
+
+        yield "usda_psd_india_sugar", _do
+
+    _safe_run(_items(), result)
+    return result
+
+
 @register_runner("isma_india")
 def run_isma_india(
     spec: FetcherSpec,

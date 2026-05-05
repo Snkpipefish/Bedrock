@@ -53,6 +53,19 @@ fetchers:
     table: weather
     ts_column: date
 
+  # Sub-fase 12.11+ analytiker D.5: USDA FAS PSD India sugar.
+  # Offisiell tidsserie (production/exports/imports/end-stocks),
+  # 16+ års historikk via API. Erstatter ISMA-parsing som kjernekilde.
+  # USDA reviderer årlig per WASDE-publisering — månedlig refresh
+  # fanger oppdaterte tall.
+  usda_psd_india_sugar:
+    module: bedrock.fetch.usda_psd
+    cron: "0 22 12 * *"          # 12. i mnd 22:00 Oslo (etter WASDE 11.)
+    stale_hours: 720              # månedlig
+    on_failure: log_and_skip
+    table: fundamentals
+    ts_column: date
+
   # Sub-fase 12.11+ analytiker D.5: ISMA India sukker-produksjon.
   # API-basert fetcher (https://api.ismaindia.org/api/auth/getallresource).
   # Parser produksjons-tall fra press release-titler (X lakh tonnes).
