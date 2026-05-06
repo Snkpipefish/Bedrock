@@ -218,7 +218,7 @@ function _familyHtml(name, fam) {
         </thead>
         <tbody>
           ${drivers.map(d => `<tr>
-            <td>${d.name}</td>
+            <td>${_driverLabelHtml(d.name)}</td>
             <td>${_driverHorizonChips(d.horizons)}</td>
             <td class="num">${_fmt2(d.value)}</td>
             <td class="num">${_fmt2(d.weight)}</td>
@@ -948,8 +948,8 @@ function renderKartrommet(res) {
         </thead>
         <tbody>
           ${grp.sources.map(s => `<tr>
-            <td>${s.name}</td>
-            <td>${s.table}</td>
+            <td>${_fetcherLabelHtml(s.name)}</td>
+            <td><code class="src-name">${_escapeHtml(s.table)}</code></td>
             <td><span class="status-pill status-${s.status}">${s.status}</span></td>
             <td>${renderHorizonChips(s.horizons)}</td>
             <td>${s.age_hours !== null ? s.age_hours.toFixed(1) + ' t' : '–'}</td>
@@ -1183,6 +1183,31 @@ function _escapeHtml(s) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+// Render-hjelpere for datakilde-/driver-navn. Slår opp lesbar label +
+// forklarings-tooltip i `source_labels.js`. Tooltip-format: "tech_name —
+// beskrivelse" slik at hover alltid viser hvilken teknisk kilde dette er.
+// Ukjente navn faller tilbake til <code>tech_name</code> så det er
+// synlig at mappingen mangler.
+function _fetcherLabelHtml(name) {
+  const lib = window.BedrockSourceLabels;
+  const info = lib ? lib.getFetcherLabel(name) : null;
+  if (!info || info.isFallback) {
+    return `<code class="src-name">${_escapeHtml(name)}</code>`;
+  }
+  const tip = `${name} — ${info.desc}`;
+  return `<span class="src-label" title="${_escapeHtml(tip)}">${_escapeHtml(info.label)}</span>`;
+}
+
+function _driverLabelHtml(name) {
+  const lib = window.BedrockSourceLabels;
+  const info = lib ? lib.getDriverLabel(name) : null;
+  if (!info || info.isFallback) {
+    return `<code class="src-name">${_escapeHtml(name)}</code>`;
+  }
+  const tip = `${name} — ${info.desc}`;
+  return `<span class="src-label" title="${_escapeHtml(tip)}">${_escapeHtml(info.label)}</span>`;
 }
 
 function _formatNewsTime(iso) {

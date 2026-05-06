@@ -863,6 +863,20 @@ main {
   font-size: var(--fs-xs);
 }
 
+/* Lesbare labels for datakilder + drivere (source_labels.js).
+ * .src-label: hover-tooltip viser teknisk navn + full beskrivelse.
+ * .src-name: fallback når mapping mangler — markert som mono-kode.
+ */
+.src-label {
+  border-bottom: 1px dotted var(--c-ink-muted);
+  cursor: help;
+}
+.src-name {
+  font-family: var(--ff-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: var(--fs-xs);
+  color: var(--c-ink-muted);
+}
+
 .status-pill.status-fresh,
 .status-pill.status-aging,
 .status-pill.status-stale,
