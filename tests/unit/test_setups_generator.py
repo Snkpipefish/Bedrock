@@ -351,21 +351,49 @@ def test_build_setup_scalp_rejects_when_rr_below_min() -> None:
     assert setup is None
 
 
-def test_build_setup_swing_falls_back_to_third_level() -> None:
-    """SWING skal prøve 2. nivå først, så 3. hvis 2. gir for lav R:R.
+def test_build_setup_swing_rejects_when_intended_cluster_below_min_rr() -> None:
+    """SWING bruker KUN tilsiktet klynge (idx 1). Ingen fallback til 3. nivå.
+
+    Asymmetri-prinsipp: horisont-kontrakten skal være hard. Hvis 2. klynge
+    i retning ikke gir nok R:R, drop heller setup enn å gli ut til 3.
+    klynge — det ville flyttet TP-distansen ut av SWING-vinduet og inn i
+    MAKRO-territorium.
 
     Setup: entry=100, sl_atr=1.0 → sl=99, risk=1.0. Ahead-liste sortert
-    ASC: [101 (X0 skippes), 102 (X1 target), 103 (X2 fallback)].
-
-    - X1 (102): reward=2, R:R=2.0 < 2.5 → fail
-    - X2 (103): reward=3, R:R=3.0 ≥ 2.5 → pass, velg denne
+    ASC: [101 (idx 0 skippes), 102 (idx 1 target), 103 (idx 2 ignored)].
+    Idx 1 (102): R:R=2.0 < 2.5 → drop.
     """
     cfg = SetupConfig(sl_atr_multiplier=1.0)
     levels = [
         _lvl(100.0, LevelType.SWING_LOW, strength=0.8),
-        _lvl(101.0, LevelType.ROUND_NUMBER, strength=0.7),  # X0 (skippes av SWING)
-        _lvl(102.0, LevelType.SWING_HIGH, strength=0.7),  # X1 — faller pga R:R
-        _lvl(103.0, LevelType.PRIOR_HIGH, strength=0.8),  # X2 — velges
+        _lvl(101.0, LevelType.ROUND_NUMBER, strength=0.7),  # idx 0 (skippes av SWING)
+        _lvl(102.0, LevelType.SWING_HIGH, strength=0.7),  # idx 1 — under floor
+        _lvl(103.0, LevelType.PRIOR_HIGH, strength=0.8),  # idx 2 — IKKE fallback lenger
+    ]
+    setup = build_setup(
+        instrument="Gold",
+        direction=Direction.BUY,
+        horizon=Horizon.SWING,
+        current_price=100.5,
+        atr=1.0,
+        levels=levels,
+        config=cfg,
+    )
+    assert setup is None
+
+
+def test_build_setup_swing_uses_intended_cluster_when_rr_meets_floor() -> None:
+    """SWING velger idx 1 når R:R ≥ floor — selv om idx 2 ville gi høyere R:R.
+
+    Bekrefter at vi ikke "shopper" etter høyest mulig R:R: tilsiktet klynge
+    vinner så lenge floor er innfridd. Det bevarer horisont-kontrakten.
+    """
+    cfg = SetupConfig(sl_atr_multiplier=1.0)
+    levels = [
+        _lvl(100.0, LevelType.SWING_LOW, strength=0.8),
+        _lvl(101.0, LevelType.ROUND_NUMBER, strength=0.7),  # idx 0
+        _lvl(103.5, LevelType.SWING_HIGH, strength=0.7),  # idx 1 — R:R=3.5
+        _lvl(106.0, LevelType.PRIOR_HIGH, strength=0.8),  # idx 2 — IKKE valgt
     ]
     setup = build_setup(
         instrument="Gold",
@@ -377,8 +405,8 @@ def test_build_setup_swing_falls_back_to_third_level() -> None:
         config=cfg,
     )
     assert setup is not None
-    assert setup.tp == 103.0
-    assert setup.rr == pytest.approx(3.0)
+    assert setup.tp == 103.5
+    assert setup.rr == pytest.approx(3.5)
 
 
 def test_build_setup_empty_levels() -> None:

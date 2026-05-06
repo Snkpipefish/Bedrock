@@ -389,11 +389,16 @@ def _find_tp_cluster(
 ) -> tuple[ClusteredLevel, float] | None:
     """Finn TP-klynge per horisont-regler; returner (cluster, rr) eller None.
 
-    Kandidat-rekkefølge (klynger i retning etter avstand):
-    - SCALP: indeks 0 (nærmeste), fallback 1
-    - SWING: indeks 1 (2. i retningen per PLAN § 5.2), fallback 2
+    Tilsiktet TP-klynge (asymmetri-prinsipp: hard horisont-semantikk,
+    ingen fallback til neste klynge):
+    - SCALP: indeks 0 (nærmeste klynge i retning)
+    - SWING: indeks 1 (2. klynge i retning per PLAN § 5.2)
 
-    For hver kandidat: sjekk om R:R ≥ min_rr. Første som treffer vinner.
+    Hvis tilsiktet klynge ikke finnes eller R:R < `min_rr` → returner None.
+    Tidligere fallback til neste klynge gjorde at SWING-setups kunne ende
+    med MAKRO-distanse til TP — det bryter horisont-kontrakten. Hellere
+    drop setup enn å glide ut av horisont-vinduet.
+
     `min_rr=None` skal ikke kalles her (MAKRO er håndtert før).
     """
     assert min_rr is not None, "MAKRO bør være håndtert før _find_tp_cluster"
@@ -410,22 +415,15 @@ def _find_tp_cluster(
             key=lambda c: -c.price,
         )
 
-    if horizon == Horizon.SCALP:
-        indices: tuple[int, ...] = (0, 1)
-    else:  # SWING
-        indices = (1, 2)
+    target_idx = 0 if horizon == Horizon.SCALP else 1
+    if target_idx >= len(ahead):
+        return None
 
-    for idx in indices:
-        if idx >= len(ahead):
-            continue
-        candidate = ahead[idx]
-        rr = _compute_rr(entry, sl, candidate.price, direction)
-        if rr is None:
-            continue
-        if rr >= min_rr:
-            return (candidate, rr)
-
-    return None
+    candidate = ahead[target_idx]
+    rr = _compute_rr(entry, sl, candidate.price, direction)
+    if rr is None or rr < min_rr:
+        return None
+    return (candidate, rr)
 
 
 def _compute_rr(
