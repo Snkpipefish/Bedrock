@@ -250,6 +250,11 @@ families:
           - MAKRO
           - SWING
 grade_thresholds:
-  A_plus: {min_score: 11, min_families_active: 4}
+  # Sub-fase 12.11+ punkt C.4 (analytiker peer-review): A_plus min_score
+  # senket 11 → 10. Backtest v6 viste A+ BUY n=10 (h=180) / n=13 (h=270),
+  # under analytikers n>=30-krav for statistisk signifikant grade-bøtte.
+  # Score-distribusjon mellom 8-11 er ~112 signaler per score-poeng;
+  # senking til 10 forventes å gi A+ BUY n>=30. Backtest v7 verifiserer.
+  A_plus: {min_score: 10, min_families_active: 4}
   A: {min_score: 8, min_families_active: 3}
   B: {min_score: 6, min_families_active: 2}
