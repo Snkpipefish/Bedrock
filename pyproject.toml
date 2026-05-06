@@ -17,6 +17,7 @@ dependencies = [
     # DuckDB/pyarrow: produksjons-hardwaren mangler SSE4.2/AVX)
     "pandas>=2.2",
     "numpy>=2.2,<2.3",  # SIMD-sensitive, pin upper bound (ADR-002)
+    "openpyxl>=3.1",    # pd.read_excel for xlsx (ANP Brasil etanol-fallback)
 
     # HTTP / nettverk
     "requests>=2.32",
