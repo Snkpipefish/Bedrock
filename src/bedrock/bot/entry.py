@@ -1374,6 +1374,24 @@ class EntryEngine:
             self._remove_state(state)
             return
 
+        # ── SL sanity-guard ───────────────────────────────────
+        # Bot må aldri åpne en posisjon uten gyldig SL. MARKET-flowen
+        # sender amend_sl_tp etter fill (exit.py:on_execution); hvis
+        # stop_loss=0 fester cTrader ingen SL og posisjonen står ubeskyttet.
+        # Adapteren (bot_adapter._adapt_one) dropper allerede sl=None,
+        # men dette er defense-in-depth for direkte signal-injection
+        # eller fremtidige adapter-endringer.
+        sig_stop = sig.get("stop")
+        if sig_stop is None or float(sig_stop) <= 0:
+            log.warning(
+                "[ENTRY-GUARD] %s — stop=%r mangler/<=0; nekter å åpne "
+                "ubeskyttet posisjon. Fix generator/adapter-pipeline.",
+                sig.get("id", "?"),
+                sig_stop,
+            )
+            self._remove_state(state)
+            return
+
         # ── Ordre-sending ─────────────────────────────────────
         trade_side = "SELL" if sig["direction"] == "sell" else "BUY"
         hcfg = sig.get("horizon_config", {})

@@ -241,6 +241,21 @@ def _adapt_one(
     stop = inner.get("sl")
     t1 = inner.get("tp")  # None for MAKRO trailing-only — bot håndterer
 
+    # Drop entries uten gyldig SL: bot ville sendt MARKET-ordre + amend
+    # stop_loss=0.0, som lar posisjonen stå ubeskyttet på cTrader-server.
+    # Observert 2026-05-06: 4 orphan-posisjoner uten SL fra session 142
+    # INCLUDE_UNPUBLISHED-vinduet hvor sl=None slapp gjennom som stop=0.0.
+    if stop is None or float(stop) <= 0:
+        log.warning(
+            "[ADAPTER] %s %s %s — sl=%r mangler/<=0; entry droppet for å "
+            "hindre ubeskyttet posisjon på server.",
+            instrument,
+            horizon,
+            direction,
+            stop,
+        )
+        return None
+
     correlation_group = ASSET_CLASS_TO_GROUP.get(asset_class, "fx")
 
     return {
@@ -251,7 +266,7 @@ def _adapt_one(
         "status": "watchlist",
         "entry_zone": entry_zone,
         "alert_level": float(inner.get("entry") or 0.0),
-        "stop": float(stop) if stop is not None else 0.0,
+        "stop": float(stop),
         "t1": float(t1) if t1 is not None else 0.0,
         "atr": float(inner.get("atr") or 0.0),
         "expiry_candles": defaults["expiry_candles"],

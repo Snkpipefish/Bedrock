@@ -4,9 +4,12 @@
 // gammel 30-sek-polling.
 // Vanilla JS (per PLAN § 15).
 
-// Safety-poll: hver 5. min lastes alt på nytt selv uten SSE-events.
-// Fanger SSE-disconnect, server-restart, eller event-tap.
-const SAFETY_POLL_INTERVAL_MS = 5 * 60_000;
+// Safety-poll: hver 30. sek lastes alt på nytt selv uten SSE-events.
+// Fanger SSE-disconnect, server-restart, eller event-tap. SSE er fortsatt
+// primær path (≤2 sek latens via file-watcher); dette er fallback.
+// Bumpet ned fra 5 min 2026-05-06 etter operatør ønsket oftere
+// oppdatering av åpne/lukkede posisjoner i Handelslogg-fanen.
+const SAFETY_POLL_INTERVAL_MS = 30_000;
 
 // ─── Tab-navigasjon ───────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(btn => {
