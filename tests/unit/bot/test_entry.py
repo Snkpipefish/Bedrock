@@ -1965,6 +1965,77 @@ def test_conflict_gate_allows_same_direction_different_horizon(
     assert len(active_states) == 2
 
 
+def test_conflict_gate_blocks_opposite_direction_across_horizons(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list,
+    tmp_path: Path,
+) -> None:
+    """Asymmetri-prinsipp: per instrument tillates KUN én retning av gangen,
+    uansett horisont. Åpen SWING-BUY skal blokkere ny MAKRO-SELL på samme
+    instrument — å ha begge åpne samtidig er motstridende makro-syn og gir
+    netto null-eksponering med dobbel kommisjon."""
+    log_path = tmp_path / "signal_log.json"
+    client = _make_client_stub(
+        symbol_map={"OIL_WTI": 1},
+        last_bid={1: 105.0},
+        last_ask={1: 105.02},
+        spread_history={1: deque([0.02] * 15, maxlen=20)},
+    )
+    engine = _make_engine(
+        client,
+        safety,
+        config,
+        active_states,
+        stats_path=tmp_path / "s.json",
+        trade_log_path=log_path,
+    )
+    engine.on_symbols_ready(client)
+    active_states.append(
+        TradeState(
+            signal_id="oil-swing-buy",
+            symbol_id=1,
+            instrument="OIL_WTI",
+            direction="buy",
+            entry_price=107.0,
+            stop_price=106.0,
+            t1_price=110.0,
+            full_volume=2000,
+            remaining_volume=2000,
+            position_id=99,
+            phase=TradePhase.IN_TRADE,
+            horizon="SWING",
+        )
+    )
+    makro_sell_signal = {
+        "id": "oil-makro-sell",
+        "instrument": "OIL_WTI",
+        "direction": "sell",
+        "status": "watchlist",
+        "alert_level": 105.0,
+        "stop": 106.5,
+        "t1": 100.0,
+        "entry_zone": [104.9, 105.1],
+        "horizon": "MAKRO",
+        "horizon_config": {},
+    }
+    engine.signal_data = {"signals": [makro_sell_signal], "global_state": {}, "rules": {}}
+    engine._on_candle_closed(
+        1,
+        Candle(
+            open=105.0,
+            high=105.05,
+            low=104.95,
+            close=105.0,
+            volume=1,
+            timestamp=datetime.now(timezone.utc),
+        ),
+    )
+    # Kun den eksisterende SWING-BUY-staten skal stå — MAKRO-SELL blokkert
+    assert len(active_states) == 1
+    assert active_states[0].signal_id == "oil-swing-buy"
+
+
 def test_log_trade_closed_records_loss_signal_id_to_entry_engine(
     safety: SafetyMonitor,
     config: ReloadableConfig,

@@ -308,25 +308,26 @@ def generate_signals(
 
 
 def _resolve_direction_conflicts(entries: list[SignalEntry]) -> list[SignalEntry]:
-    """Demote svakere retning når begge BUY og SELL er published på samme horisont.
+    """Demote svakere retning når begge BUY og SELL er published på samme instrument.
 
-    Agri-scoring (og enkelte financial-tilfeller) er ikke null-sum: nøytrale
-    drivere (verdi=0.5) bidrar likt til begge retninger, slik at både BUY og
-    SELL kan klarere publish-terskelen samtidig. Resultat: bot kan motta
-    motstridende A-grade-setups på samme instrument/horisont og bli whipsaw'a.
+    Asymmetri-prinsipp: per instrument må bot kun se én retning av gangen — på
+    tvers av alle horisonter. Et SWING-BUY og MAKRO-SELL på samme ticker er
+    motstridende makro-syn; en av dem må vinne. Ellers risikerer vi netto
+    null-eksponering med dobbel kommisjon, eller at to motstridende posisjoner
+    holdes samtidig.
 
-    Regel: for hver (instrument, horizon) — hvis både BUY og SELL har
-    `published=True` og setup ≠ None, behold den med høyest score; sett
-    `published=False` + `skip_reason="opposite_direction_dominates"` på den
-    andre. Setup-objektet bevares så hysterese / UI fortsatt ser kandidaten.
+    Regel: for hvert instrument — hvis både BUY og SELL har `published=True`
+    og setup ≠ None (uavhengig av horisont), behold den med høyest score;
+    sett `published=False` + `skip_reason="opposite_direction_dominates"` på
+    øvrige. Setup-objektet bevares så hysterese / UI fortsatt ser kandidaten.
     """
-    by_key: dict[tuple[str, Horizon], list[int]] = {}
+    by_instrument: dict[str, list[int]] = {}
     for idx, e in enumerate(entries):
         if e.published and e.setup is not None:
-            by_key.setdefault((e.instrument, e.horizon), []).append(idx)
+            by_instrument.setdefault(e.instrument, []).append(idx)
 
     out = list(entries)
-    for indices in by_key.values():
+    for indices in by_instrument.values():
         if len(indices) < 2:
             continue
         directions_present = {out[i].direction for i in indices}
