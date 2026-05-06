@@ -8,7 +8,7 @@ OnFailure=bedrock-notify@%N.service
 
 [Service]
 Type=oneshot
-WorkingDirectory=/home/pc/bedrock/.claude/worktrees/naughty-mendeleev-aa4da0
+WorkingDirectory=/home/pc/bedrock
 ExecStart=/home/pc/bedrock/.venv/bin/bedrock fetch run weather
 ExecStartPost=/home/pc/bedrock/.venv/bin/bedrock signals-all --bot-only --output data/signals_bot.json
 StandardOutput=journal
