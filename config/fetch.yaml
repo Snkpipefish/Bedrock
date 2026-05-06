@@ -126,7 +126,7 @@ fetchers:
   agsi:
     module: bedrock.fetch.agsi
     cron: "0 6 * * *"           # daglig 06:00 Oslo
-    stale_hours: 36
+    stale_hours: 60             # ENTSOG D+1 + observert 1-2 dagers publiserings-lag (ADR-015)
     on_failure: log_and_skip
     table: agsi_storage
     ts_column: gas_day_start
@@ -134,7 +134,7 @@ fetchers:
   alsi:
     module: bedrock.fetch.alsi
     cron: "5 6 * * *"           # daglig 06:05 Oslo (5 min etter agsi)
-    stale_hours: 36
+    stale_hours: 60             # GIE D+1 + observert 1-2 dagers publiserings-lag (ADR-015)
     on_failure: log_and_skip
     table: alsi_storage
     ts_column: gas_day_start
@@ -172,7 +172,7 @@ fetchers:
   shipping:
     module: bedrock.fetch.shipping
     cron: "30 23 * * 1-5"       # Mon-Fri 23:30 Oslo (etter US close 22 Oslo + Yahoo-lag)
-    stale_hours: 30             # daglig på hverdager
+    stale_hours: 48             # Yahoo D+1 + helg-buffer Mon morning (ADR-015)
     on_failure: retry_with_backoff
     table: shipping_indices
     ts_column: date
@@ -221,7 +221,7 @@ fetchers:
   comex:
     module: bedrock.fetch.comex
     cron: "0 22 * * 1-5"         # Mon-Fri 22:00 Oslo (etter COMEX-close + buffer)
-    stale_hours: 30              # daglig
+    stale_hours: 60              # CME position-data publisert next-day + helg-buffer Mon morning (ADR-015)
     on_failure: log_and_skip
     table: comex_inventory
     ts_column: date

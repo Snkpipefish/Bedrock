@@ -60,3 +60,5 @@ Nøytrale (men verdt å nevne):
 | [009](009-cutover-readiness.md) | Cutover-readiness 12.5+ → 12.6 → Fase 13 | accepted | 12.5+ |
 | [010](010-horizon-aware-driver-pattern.md) | Horisont-bevisst driver-pattern (Alt 1) | accepted | 12.7 (R1) |
 | [011](011-backfill-policy.md) | Backfill-policy for engangs-historikk-skripts | accepted | 12.7 (R1) |
+| [014](014-econ-surprise-cross-source.md) | Cross-source data-arkitektur for *_surprise-drivere | accepted | 12.10 |
+| [015](015-monitor-stale-hours-source-lag.md) | Monitor `stale_hours` reflekterer kilde-lag, ikke fetch-cadence | accepted | 12.5 |
