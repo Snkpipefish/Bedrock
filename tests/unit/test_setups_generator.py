@@ -479,6 +479,61 @@ def test_setup_config_min_rr_for_makro_is_none() -> None:
     assert cfg.min_rr_for(Horizon.SWING) == 2.5
 
 
+def test_setup_config_sl_atr_multiplier_for_makro_is_wider() -> None:
+    """MAKRO bruker bredere SL-buffer (1.5×ATR) enn SCALP/SWING (0.3×ATR).
+
+    Asymmetri-prinsipp: makro-tese trenger plass til normal volatilitet
+    før trailing aktiveres. Tett SL gir tidlig trail-aktivering på støy.
+    """
+    cfg = SetupConfig()
+    assert cfg.sl_atr_multiplier_for(Horizon.SCALP) == 0.3
+    assert cfg.sl_atr_multiplier_for(Horizon.SWING) == 0.3
+    assert cfg.sl_atr_multiplier_for(Horizon.MAKRO) == 1.5
+
+
+def test_build_setup_makro_uses_wider_sl_buffer() -> None:
+    """MAKRO-setup skal ha SL = entry - 1.5×ATR (BUY), ikke 0.3×ATR.
+
+    Setup: entry=100, atr=1.0. SCALP/SWING ville gi sl=99.7. MAKRO skal
+    gi sl=98.5 (1.5×ATR forbi entry).
+    """
+    levels = [
+        _lvl(100.0, LevelType.SWING_LOW, strength=0.8),
+        _lvl(108.0, LevelType.PRIOR_HIGH, strength=0.8),
+    ]
+    setup = build_setup(
+        instrument="Gold",
+        direction=Direction.BUY,
+        horizon=Horizon.MAKRO,
+        current_price=102.0,
+        atr=1.0,
+        levels=levels,
+    )
+    assert setup is not None
+    assert setup.entry == 100.0
+    assert setup.sl == pytest.approx(98.5)
+
+
+def test_build_setup_makro_sl_buffer_overridable_via_config() -> None:
+    """Config kan overstyre sl_atr_multiplier_makro per instrument."""
+    cfg = SetupConfig(sl_atr_multiplier_makro=2.0)
+    levels = [
+        _lvl(100.0, LevelType.SWING_LOW, strength=0.8),
+        _lvl(108.0, LevelType.PRIOR_HIGH, strength=0.8),
+    ]
+    setup = build_setup(
+        instrument="Gold",
+        direction=Direction.BUY,
+        horizon=Horizon.MAKRO,
+        current_price=102.0,
+        atr=1.0,
+        levels=levels,
+        config=cfg,
+    )
+    assert setup is not None
+    assert setup.sl == pytest.approx(98.0)
+
+
 # ---------------------------------------------------------------------------
 # Integrasjon: detektor → cluster → setup
 # ---------------------------------------------------------------------------

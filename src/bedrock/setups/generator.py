@@ -102,18 +102,28 @@ class SetupConfig(BaseModel):
 
     Defaults matcher PLAN § 5.2-5.3:
     - `cluster_atr_multiplier=0.3`: nivåer innenfor 0.3×ATR cluster sammen
-    - `sl_atr_multiplier=0.3`: SL ligger 0.3×ATR forbi entry-nivået
+    - `sl_atr_multiplier=0.3`: SL-avstand for SCALP/SWING (×ATR forbi entry)
+    - `sl_atr_multiplier_makro=1.5`: SL-avstand for MAKRO. Bredere buffer
+       hindrer at trailing aktiveres på støy — makro-tese trenger plass til
+       normal volatilitet uten å stenges på første mot-bevegelse
     - `min_entry_strength=0.6`: entry-klyngen må minst ha denne strength
     - `min_rr_scalp=1.5`, `min_rr_swing=2.5`: asymmetri-floor per horisont
     """
 
     cluster_atr_multiplier: float = Field(default=0.3, gt=0.0)
     sl_atr_multiplier: float = Field(default=0.3, gt=0.0)
+    sl_atr_multiplier_makro: float = Field(default=1.5, gt=0.0)
     min_entry_strength: float = Field(default=0.6, ge=0.0, le=1.0)
     min_rr_scalp: float = Field(default=1.5, gt=0.0)
     min_rr_swing: float = Field(default=2.5, gt=0.0)
 
     model_config = ConfigDict(extra="forbid")
+
+    def sl_atr_multiplier_for(self, horizon: Horizon) -> float:
+        """MAKRO trenger bredere SL-buffer enn SCALP/SWING."""
+        if horizon == Horizon.MAKRO:
+            return self.sl_atr_multiplier_makro
+        return self.sl_atr_multiplier
 
     def min_rr_for(self, horizon: Horizon) -> float | None:
         """MAKRO har ingen fast min R:R (trailing), returner None."""
@@ -292,7 +302,7 @@ def build_setup(
         return None
 
     entry = entry_cluster.price
-    sl = _compute_sl(entry, direction, cfg.sl_atr_multiplier * atr)
+    sl = _compute_sl(entry, direction, cfg.sl_atr_multiplier_for(horizon) * atr)
 
     if horizon == Horizon.MAKRO:
         # MAKRO: ingen fast TP — bot-tråling overtar. Entry + SL er nok.
