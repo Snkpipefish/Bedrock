@@ -27,7 +27,7 @@ max_score: 16
 # Sugar BUY-hr 34.9% vs SELL-hr 45.0% (90d) — -10.1pp **SELL-bias**.
 # Eneste agri med strukturell SELL-bias (Brazil over-supply + global
 # substitusjon til HFCS). BUY-floor strenger, SELL lavere.
-min_score_publish: {buy: 7, sell: 5}
+min_score_publish: {buy: 7.0, sell: 7.0}  # rolling 5y, oppdatert 2026-05-06
 
 families:
   outlook:
