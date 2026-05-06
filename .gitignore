@@ -96,6 +96,17 @@ data/agri_signals.json
 data/_meta/tier2_backfill.pid
 data/_meta/tier2_backfill.log
 
+# Harvest session pid-filer (ad-hoc CLI-runs)
+data/_meta/harvest_session_*.pid
+
+# Lokale db-backups + snapshots (ikke distribusjonsklare)
+data/bedrock.db.before-*
+data/bedrock.db.snapshot*
+/bedrock.db
+
+# Claude Code worktrees (lokal arbeidskopi)
+.claude/worktrees/
+
 # Manuelt nedlastede kilder (store filer, ikke checkes inn)
 bedrock manuell data/
 data/_meta/backfill_*.pid
