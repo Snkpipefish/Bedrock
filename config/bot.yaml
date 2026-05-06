@@ -69,11 +69,15 @@ reloadable:
     swing:  14400     # 4 t
     makro:  86400     # 24 t
 
-  # Per-horisont minimum R:R-gate
+  # Per-horisont minimum R:R-gate. Synkronisert med generator-floors
+  # (SetupConfig.min_rr_scalp=1.5, min_rr_swing=2.5) så bot ikke slipper
+  # gjennom setups med svakere R:R enn det generator allerede filtrerte
+  # på. MAKRO bruker trailing (rr=None fra generator); 2.0-floor brukes
+  # kun hvis tp er satt eksplisitt.
   horizon_min_rr:
-    scalp: 1.0
-    swing: 1.3
-    makro: 1.5
+    scalp: 1.5
+    swing: 2.5
+    makro: 2.0
 
   # Signal-server-polling. Bot adapter intervall når SCALP-signaler er
   # aktive (kortere horisont = raskere poll).

@@ -117,11 +117,17 @@ class HorizonTTLConfig(BaseModel):
 
 
 class HorizonMinRRConfig(BaseModel):
-    """Per-horisont minimum R:R-gate (reloadable)."""
+    """Per-horisont minimum R:R-gate (reloadable).
 
-    scalp: float = 1.0
-    swing: float = 1.3
-    makro: float = 1.5
+    Synkronisert med generator (SetupConfig.min_rr_scalp/swing) så bot
+    ikke slipper gjennom setups med svakere R:R enn generator allerede
+    filtrerte på. MAKRO 2.0 brukes kun hvis tp er satt eksplisitt;
+    trailing-makro har rr=None og hopper R:R-sjekken.
+    """
+
+    scalp: float = 1.5
+    swing: float = 2.5
+    makro: float = 2.0
 
     model_config = ConfigDict(extra="forbid")
 

@@ -710,7 +710,7 @@ def test_filter_rr_above_min_passes(
         "direction": "buy",
         "alert_level": 1.08,
         "stop": 1.07,
-        "t1": 1.10,  # 2:1
+        "t1": 1.115,  # reward=0.035 risk=0.01 → 3.5:1 (over SWING-floor 2.5)
         "entry_zone": [1.08, 1.081],
         "horizon": "SWING",
     }
