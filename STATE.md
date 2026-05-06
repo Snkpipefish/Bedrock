@@ -628,6 +628,55 @@ ferdig og 12.6-rebalansering er gjort.
 
 ## Session log (newest first)
 
+### 2026-05-06 — Session 154: post-sub-fase-12.11+ future-spor + worktree-cleanup
+
+**Scope:** Bruker ba om å fortsette med future-spor etter session 153-LUKKING. Prioritert ROI: real-time data-kilder for å adressere USDA PSD årlig-lag-problem. Også oppryddingstask: codespace stoppet, worktree-DB-pointer-bug fanget, main-checkout fast-forwarded.
+
+**Operasjonelle fix (commit `89e6ef2`):**
+- Codespace `stunning-sniffle-pv459prj4wgh664p` stoppet (bruker-direktiv).
+- **Git-feil identifisert** fra 02:30 i journal-loggen: 9 systemd-services (anp_ethanol, cot_disaggregated, cot_legacy, fundamentals, isma_india, prices, usda_psd_india_sugar, weather, weather_monthly) hadde `WorkingDirectory=/home/pc/bedrock/.claude/worktrees/naughty-mendeleev-aa4da0/` etter session 151+152-arbeid. Worktree-DB var stub (339KB, 2 prisbarer per instrument). signals-all (ExecStartPost) feilet for ALLE 22 instrumenter med `compute_atr: need >= period+1 bars (15), got 2-3`. Fix: WorkingDirectory pekt om til `/home/pc/bedrock`. Manuell backfill av prices+fundamentals (3 dager bak) for å fylle main DB-gap.
+- Main-checkout fast-forwarded fra 17c91a0 → 6ace6a2 (alle 7 sukker-commits fra worktree-branch nå i origin/main).
+
+**Future-spor #1 — usda_psd_yoy(EXPORTS_KMT) wiring (commit `1d58adc`):**
+- Lagt til `usda_psd_yoy(USDA_PSD_INDIA_SUGAR_EXPORTS_KMT)` som co-driver i unica-familien. Vekter rebalansert: PROD 0.30→0.20, EXPORTS NEW @ 0.20.
+- OOS 2023 v2: Δ A+/A SELL gikk fra +2 → +0 (EXPORTS-driver dilluterte PROD's wrong signal i forbud-regimet). Hit-rate fortsatt 25% (USDA PSD årlig-lag fanget ikke 2023 spesifikt).
+- 0 grade-flips på dagens data. MAKRO SELL +1.66 score (India 2025-eksport hoppet 89→2,000 kt).
+
+**Future-spor #4 — UN Comtrade månedlig (commit `98a6daf`):**
+- Ny fetcher `bedrock/fetch/comtrade.py` mot `https://comtradeapi.un.org/public/v1/preview/C/M/HS` — public preview-endpoint krever INGEN nøkkel (~500 records/call gratis). Aggregerer alle 1701-HS-koder for verdens-eksport.
+- Backfill: 178 måneder India sugar exports (2011-01 → 2025-10) i fundamentals som `COMTRADE_INDIA_SUGAR_EXPORTS_USD/KG_MONTHLY`. Verifisert at data fanger eksportforbud-effekt: 2022 1,266 kt/mnd → 2024 485 kt/mnd → 2025 693 kt/mnd recovery.
+- Ny driver `comtrade_export_yoy`: 12-mo trailing sum YoY (eliminerer sesong vs raw m_now-vs-m_prior). Default step-mapping samme som usda_psd_yoy. 8 unit-tester.
+- Wired til sugar.yaml unica-familien som 5. driver @ 0.25 vekt (høyeste vekt blant India-drivere siden månedlig granularitet er mest real-time). BR/India splitt nå 0.50/0.50.
+- Systemd-timer `bedrock-fetch-comtrade_india_sugar.timer` aktivert: 15. i hver mnd 06:00 Oslo.
+- **OOS 2023 v3 viser STERK forbedring vs v2:** A+ SELL hit-rate **dobles** fra 25% → 50% (n=4→6) med Comtrade wired. India-drivere går fra "skader A+ SELL" til "dobler treffsikkerhet" i forbud-regimet — Comtrade's månedlige granularitet hjelper engine identifisere ekte bear-signaler tidligere enn USDA PSD-årlig.
+
+**Future-spor #3 — Rolling-floor systemd-timer (commit `3660d6c`):**
+- Ny `bedrock-rolling-floor-sugar.timer` aktivert: 1. dag i hver mars/jun/sep/des kl 06:00 Oslo (kvartalsvis). Kjører `--dry-run` (skriver state + audit-log, oppdaterer IKKE sugar.yaml automatisk). Operator må kjøre `--apply` manuelt etter review.
+- Trygg automasjon — ingen overraskende prod-endringer fra automatisk pipeline. Neste timer-fyring 2026-06-01.
+
+**CEPEA Brasil cash-pris — DEFERRED:**
+- Forsøkt fetch via curl. Cloudflare anti-bot blokkerer alle requests (403 + "Just a moment"-challenge). Krever headless-browser-emulering (Playwright/Selenium) for å hente. Skip for nå — ROI/effort-balanse forskyver mot lavere prioritet etter Comtrade leverte real-time India-data.
+- Alternativ-vurdering: World Bank Pink Sheet har månedlig sukker cash-pris men 1-2 mnd lag, mindre granulær enn CEPEA. Hopp over inntil egen browser-emulering bygges (ikke i scope nå).
+
+**Status etter session:**
+- 4 nye commits til main: `89e6ef2` (systemd-fix) + `1d58adc` (EXPORTS-driver) + `98a6daf` (Comtrade) + `3660d6c` (rolling-floor-timer).
+- Auto-push virker for direkte main-arbeid (worktree-branch-issue forsvant ved sync).
+- Pipeline-helse: forventet GRØNN ved neste timer-fyring (worktree-DB-pointer-bug fixet).
+- 9 av 13 analytiker-recommendations er nå ferdig + 3 av 4 future-spor (kun asymmetrisk grade-cutoff per direction gjenstår, krever schema-utvidelse).
+
+**Åpne future-spor (lav-prioritet):**
+- A+ SELL non-monotonisitet — strukturelt, krever Pydantic-schema-utvidelse for asymmetrisk grade-cutoff per direction
+- CEPEA cash-pris — venter på generell browser-emulering-infrastruktur
+- OCSB Thailand månedlig — 2 dager middels ROI per analytiker
+
+**Filer endret/lagt til session 154:**
+- Ny: `src/bedrock/fetch/comtrade.py` + `tests/unit/test_comtrade_driver.py` + `scripts/backfill_comtrade_india_sugar.py`
+- Ny driver: `comtrade_export_yoy` i `agronomy.py`
+- Endret: `config/instruments/sugar.yaml` (EXPORTS + Comtrade wiring), `config/fetch.yaml` (Comtrade entry), `src/bedrock/config/fetch_runner.py` (runner-registrering), `scripts/sugar_oos_2023_validation.py` (oppdaterte regex for nye vekter), 9 systemd unit-files (WorkingDirectory-fix), `data/_meta/sugar_floor_history.jsonl` (audit-trail)
+- Nye systemd-units: `bedrock-fetch-comtrade_india_sugar.{service,timer}` + `bedrock-rolling-floor-sugar.{service,timer}`
+
+---
+
 ### 2026-05-06 — Session 153: sub-fase 12.11+ LUKKET — siste 4 analytiker-tiltak fullført
 
 **Scope:** Fortsette analytiker-tiltak fra session 152 handover (`docs/sugar_handover_prompt.md`). 4 punkter gjenstod: C.4 grade_thresholds, ANP-formel re-kalibrering, OOS 2023 India-forbud-validering, rullerende floor i prod-config. Pipeline-helse rød ved oppstart pga 4 sukker-fetcher-services i FAILED state — fra runner-registrering-deploy-gap.
