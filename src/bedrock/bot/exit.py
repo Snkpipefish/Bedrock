@@ -696,18 +696,16 @@ class ExitEngine:
         except Exception as exc:
             log.warning("[TRADE-LOG] Lukking feilet: %s", exc)
 
-    def _lookup_reconcile_levels(
-        self, *, signal_id: str, position_id: int
-    ) -> tuple[float, float] | None:
-        """Slå opp original SL/TP fra signal_log.json for reconcile-restore.
+    def _lookup_signal_log_entry(
+        self, *, signal_id: str, position_id: int | None
+    ) -> dict[str, Any] | None:
+        """Slå opp original signal-dict fra signal_log.json.
 
-        Returnerer (stop, t1) hvis funnet (t1=0.0 hvis ikke logget).
         Matcher først på position_id (mest pålitelig), så signal.id som
         fallback (i tilfelle position_id ikke ble logget ved åpning).
-
-        Brukes ved restart hvis cTrader rapporterer SL=0 på en åpen
-        posisjon — typisk fordi tidligere amend-kall ble avvist
-        (INVALID_REQUEST e.l.) og posisjonen lå ubeskyttet på server.
+        Returnerer signal-objektet (med stop, t1, horizon, instrument osv)
+        eller None hvis ikke funnet. Brukes av reconcile-flowen for å
+        gjenopprette horizon, SL, TP fra forrige åpning.
         """
         path = self._trade_log_path
         if not path.exists():
@@ -719,38 +717,48 @@ class ExitEngine:
             return None
         entries = data.get("entries", []) if isinstance(data, dict) else []
 
-        def _extract(sig: dict) -> tuple[float, float] | None:
-            stop_raw = sig.get("stop")
-            if stop_raw is None:
-                return None
-            try:
-                stop = float(stop_raw)
-            except (TypeError, ValueError):
-                return None
-            if stop <= 0:
-                return None
-            t1_raw = sig.get("t1")
-            try:
-                t1 = float(t1_raw) if t1_raw is not None else 0.0
-            except (TypeError, ValueError):
-                t1 = 0.0
-            return (stop, t1)
-
         # Primær: position_id-match
-        for entry in entries:
-            sig = entry.get("signal", {}) if isinstance(entry, dict) else {}
-            if sig.get("position_id") == position_id:
-                hit = _extract(sig)
-                if hit:
-                    return hit
+        if position_id is not None:
+            for entry in entries:
+                sig = entry.get("signal", {}) if isinstance(entry, dict) else {}
+                if sig.get("position_id") == position_id and isinstance(sig, dict):
+                    return sig
         # Fallback: signal.id-match (nyeste først — entries er reverse-chrono)
         for entry in entries:
             sig = entry.get("signal", {}) if isinstance(entry, dict) else {}
-            if sig.get("id") == signal_id:
-                hit = _extract(sig)
-                if hit:
-                    return hit
+            if sig.get("id") == signal_id and isinstance(sig, dict):
+                return sig
         return None
+
+    def _lookup_reconcile_levels(
+        self, *, signal_id: str, position_id: int
+    ) -> tuple[float, float] | None:
+        """Slå opp original SL/TP fra signal_log.json for reconcile-restore.
+
+        Returnerer (stop, t1) hvis funnet (t1=0.0 hvis ikke logget).
+        Krever stop > 0 — entries med stop=0 (orphan-posisjoner) returnerer
+        None. Brukes ved restart hvis cTrader rapporterer SL=0 på en åpen
+        posisjon — typisk fordi tidligere amend-kall ble avvist
+        (INVALID_REQUEST e.l.) og posisjonen lå ubeskyttet på server.
+        """
+        sig = self._lookup_signal_log_entry(signal_id=signal_id, position_id=position_id)
+        if sig is None:
+            return None
+        stop_raw = sig.get("stop")
+        if stop_raw is None:
+            return None
+        try:
+            stop = float(stop_raw)
+        except (TypeError, ValueError):
+            return None
+        if stop <= 0:
+            return None
+        t1_raw = sig.get("t1")
+        try:
+            t1 = float(t1_raw) if t1_raw is not None else 0.0
+        except (TypeError, ValueError):
+            t1 = 0.0
+        return (stop, t1)
 
     def _restore_reconciled_levels(self, state: TradeState) -> None:
         """Hvis reconcile fant SL=0 på server, prøv å gjenopprette SL/TP
@@ -1135,6 +1143,34 @@ class ExitEngine:
             has_tp = tp > 0.0
             vol = pos.tradeData.volume if pos.HasField("tradeData") else 0
 
+            # Slå opp original signal-meta fra signal_log.json. Reconcile
+            # via cTrader-protokollen rapporterer kun pos-nivå-felt
+            # (stopLoss, takeProfit, price, volume) — ikke horizon/grade
+            # eller original t1 hvis TP ble fjernet på serveren. Uten
+            # signal_log-oppslag faller state.horizon til SWING-default
+            # (state.py:65), som blant annet betyr at MAKRO-posisjoner
+            # mister sin trailing-from-entry-policy (entry.py:752–765).
+            sig_log = self._lookup_signal_log_entry(signal_id=label[3:], position_id=pos.positionId)
+            log_horizon = (sig_log.get("horizon") if sig_log else None) or "SWING"
+            log_horizon = str(log_horizon).upper()
+            log_t1 = 0.0
+            if sig_log is not None:
+                try:
+                    log_t1 = float(sig_log.get("t1") or 0.0)
+                except (TypeError, ValueError):
+                    log_t1 = 0.0
+            is_makro = log_horizon == "MAKRO"
+            is_long_horizon = log_horizon in ("SWING", "MAKRO")
+
+            # MAKRO har ingen T1 by design (entry.py:749) — trail er aktiv
+            # fra entry. Ved restart må vi reprodusere trail_active=True.
+            # SCALP/SWING med has_tp=True: T1-grenen virker normalt.
+            # SCALP/SWING med has_tp=False og log_t1>0: TP ble mistet
+            # (typisk amend-feil) — vi forsøker å gjenopprette TP via
+            # amend nedenfor, og holder t1_price_reached=False.
+            # SCALP/SWING uten kjent TP og uten log_t1: aktiver trail som
+            # nød-exit; ellers står posisjonen kun på hard SL.
+
             state = TradeState(
                 signal_id=label[3:],
                 position_id=pos.positionId,
@@ -1147,8 +1183,10 @@ class ExitEngine:
                 direction=direction,
                 symbol_id=sym_id,
                 expiry_candles=32,
+                horizon=log_horizon,
                 t1_hit=not has_tp,
                 t1_price_reached=not has_tp,
+                trail_active=is_makro,
             )
             instr_name = next(
                 (k for k, v in self._client.symbol_map.items() if v == sym_id),
@@ -1162,13 +1200,16 @@ class ExitEngine:
             self._active_states.append(state)
             tp_str = f"T1={tp:.5f}" if has_tp else "T1=ukjent"
             log.info(
-                "[RECONCILE] Tok over posisjon %s #%d %s @ %.5f SL=%.5f %s",
+                "[RECONCILE] Tok over posisjon %s #%d %s @ %.5f SL=%.5f %s "
+                "horisont=%s trail_active=%s",
                 label,
                 pos.positionId,
                 direction,
                 entry,
                 stop,
                 tp_str,
+                log_horizon,
+                state.trail_active,
             )
             # Hvis SL=0 på server, prøv gjenopprette fra signal_log.json
             # før vi setter staten i "managed"-modus. Bot restarter ofte;
@@ -1177,4 +1218,61 @@ class ExitEngine:
             # men vi må SETTE en hvis serveren mangler den.
             if state.stop_price <= 0:
                 self._restore_reconciled_levels(state)
+
+            # Gjenopprett TP når server-TP er borte men signal_log har
+            # original t1 > 0 (typisk SCALP/SWING der TP-amend feilet).
+            # MAKRO hopper over — den hadde aldri TP by design.
+            # Sjekk state.t1_price (ikke has_tp): hvis _restore_reconciled_
+            # levels nettopp restorerte TP, skal vi ikke amende på nytt.
+            if (
+                not is_makro
+                and state.t1_price <= 0
+                and log_t1 > 0
+                and state.stop_price > 0
+                and state.position_id is not None
+                and state.symbol_id is not None
+            ):
+                tp_rounded = self._round_price(state.symbol_id, log_t1)
+                sl_rounded = self._round_price(state.symbol_id, state.stop_price)
+                try:
+                    self._client.amend_sl_tp(
+                        position_id=state.position_id,
+                        stop_loss=sl_rounded,
+                        take_profit=tp_rounded,
+                    )
+                    state.t1_price = tp_rounded
+                    state.reconciled_tp = tp_rounded
+                    state.t1_hit = False
+                    state.t1_price_reached = False
+                    log.info(
+                        "[RECONCILE-TP] %s — TP=%.5f gjenopprettet fra signal_log (amend sendt).",
+                        state.signal_id,
+                        tp_rounded,
+                    )
+                except Exception as exc:
+                    log.warning(
+                        "[RECONCILE-TP] %s — amend feilet: %s. Aktiverer trail som nød-exit.",
+                        state.signal_id,
+                        exc,
+                    )
+                    state.trail_active = True
+
+            # Aktiver trail som nød-exit for posisjoner uten T1 (verken
+            # på server eller i log) og som ikke er MAKRO. Ellers står
+            # de kun på hard SL — ingen progressiv beskyttelse.
+            elif not is_makro and state.t1_price <= 0 and log_t1 <= 0:
+                state.trail_active = True
+                log.info(
+                    "[RECONCILE-TRAIL] %s — ingen T1 (server eller log). "
+                    "Aktiverer trail som nød-exit på hard SL.",
+                    state.signal_id,
+                )
+
+            # SWING+MAKRO ekskluderes fra timeout/EMA9-exit i exit-loop
+            # (linjer som sjekker `not is_long_horizon`). Sett `expiry`
+            # passende for å hindre at noen kant-case-grein utløser
+            # tids-stopp på SWING/MAKRO. SCALP beholder default 32.
+            if is_long_horizon:
+                state.expiry_candles = 9999
+
             self._log_reconcile_opened(state)

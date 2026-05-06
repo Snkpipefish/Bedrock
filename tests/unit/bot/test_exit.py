@@ -2133,6 +2133,233 @@ def test_on_reconcile_logs_warning_when_no_signal_log_match(
     ), "Forventet RECONCILE-RESTORE warning"
 
 
+def test_on_reconcile_makro_activates_trail_from_signal_log(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """MAKRO-posisjoner har trail_active=True fra entry by design (entry.py:
+    752–765, ingen fast TP). Reconcile må gjenopprette dette ved restart —
+    ellers står MAKRO kun på hard SL."""
+    log_path = tmp_path / "signal_log.json"
+    log_path.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {
+                        "timestamp": "2026-05-04 18:00 timezone.utc",
+                        "result": None,
+                        "signal": {
+                            "id": "makro-trade",
+                            "instrument": "OIL WTI",
+                            "direction": "SELL",
+                            "entry": 106.33,
+                            "stop": 106.74,
+                            "t1": None,
+                            "position_id": 9001,
+                            "horizon": "MAKRO",
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    client = _make_client_stub(
+        symbol_map={"OIL WTI": 1},
+        symbol_info={1: {"lot_size": 100, "min_volume": 100, "step_volume": 100}},
+        symbol_price_digits={1: 2},
+    )
+    entry = EntryEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        stats_path=tmp_path / "s.json",
+    )
+    ex = ExitEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        entry=entry,
+        trade_log_path=log_path,
+    )
+    pos = _make_reconcile_pos(
+        position_id=9001,
+        label="SE-makro-trade",
+        symbol_id=1,
+        side=2,
+        volume=200,
+        stop_loss=106.74,
+        take_profit=0.0,
+        price=106.33,
+    )
+    res = MagicMock()
+    res.position = [pos]
+    ex.on_reconcile(res)
+
+    state = active_states[0]
+    assert state.horizon == "MAKRO"
+    assert state.trail_active is True
+    assert state.t1_price_reached is True  # MAKRO har aldri T1 by design
+    # Ingen amend skal sendes for MAKRO uten TP — tail-only er korrekt
+    client.amend_sl_tp.assert_not_called()
+
+
+def test_on_reconcile_restores_tp_when_server_lost_it_but_log_has_t1(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """SCALP/SWING med server-SL ok men TP=0 + signal_log har gyldig t1 →
+    amend TP tilbake til server, og t1_price_reached=False slik at T1-grenen
+    i exit-loopen virker normalt (partial-close + BE + trail)."""
+    log_path = tmp_path / "signal_log.json"
+    log_path.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {
+                        "timestamp": "2026-05-04 18:00 timezone.utc",
+                        "result": None,
+                        "signal": {
+                            "id": "swing-trade",
+                            "instrument": "PLATINUM",
+                            "direction": "BUY",
+                            "entry": 1972.80,
+                            "stop": 1966.0,
+                            "t1": 2074.80,
+                            "position_id": 7001,
+                            "horizon": "SWING",
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    client = _make_client_stub(
+        symbol_map={"PLATINUM": 1},
+        symbol_info={1: {"lot_size": 100, "min_volume": 100, "step_volume": 100}},
+        symbol_price_digits={1: 2},
+    )
+    entry = EntryEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        stats_path=tmp_path / "s.json",
+    )
+    ex = ExitEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        entry=entry,
+        trade_log_path=log_path,
+    )
+    pos = _make_reconcile_pos(
+        position_id=7001,
+        label="SE-swing-trade",
+        symbol_id=1,
+        side=1,
+        volume=200,
+        stop_loss=1966.0,  # Server-SL ok
+        take_profit=0.0,  # Server-TP mistet
+        price=1972.80,
+    )
+    res = MagicMock()
+    res.position = [pos]
+    ex.on_reconcile(res)
+
+    # Amend skal være sendt for å gjenopprette TP
+    client.amend_sl_tp.assert_called_once()
+    kwargs = client.amend_sl_tp.call_args.kwargs
+    assert kwargs["take_profit"] == 2074.80
+    state = active_states[0]
+    assert state.horizon == "SWING"
+    assert state.t1_price == 2074.80
+    assert state.t1_price_reached is False
+    assert state.trail_active is False  # T1-flow vil aktivere ved hit
+
+
+def test_on_reconcile_swing_without_t1_activates_emergency_trail(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """SCALP/SWING uten TP både på server og i log → kun hard SL som exit.
+    Bot aktiverer trail som nød-exit slik at posisjonen får progressiv
+    beskyttelse selv uten kjent T1-mål."""
+    log_path = tmp_path / "signal_log.json"
+    log_path.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {
+                        "timestamp": "2026-05-04 18:00 timezone.utc",
+                        "result": None,
+                        "signal": {
+                            "id": "no-tp-swing",
+                            "instrument": "PLATINUM",
+                            "direction": "SELL",
+                            "entry": 1972.0,
+                            "stop": 1980.0,
+                            "t1": 0.0,
+                            "position_id": 7002,
+                            "horizon": "SWING",
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    client = _make_client_stub(
+        symbol_map={"PLATINUM": 1},
+        symbol_info={1: {"lot_size": 100, "min_volume": 100, "step_volume": 100}},
+        symbol_price_digits={1: 2},
+    )
+    entry = EntryEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        stats_path=tmp_path / "s.json",
+    )
+    ex = ExitEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        entry=entry,
+        trade_log_path=log_path,
+    )
+    pos = _make_reconcile_pos(
+        position_id=7002,
+        label="SE-no-tp-swing",
+        symbol_id=1,
+        side=2,
+        volume=200,
+        stop_loss=1980.0,
+        take_profit=0.0,
+        price=1972.0,
+    )
+    res = MagicMock()
+    res.position = [pos]
+    ex.on_reconcile(res)
+
+    state = active_states[0]
+    assert state.horizon == "SWING"
+    assert state.t1_price == 0.0  # Ingen kjent TP
+    assert state.trail_active is True  # Nød-exit aktivert
+    client.amend_sl_tp.assert_not_called()
+
+
 # ─────────────────────────────────────────────────────────────
 # Price-digits-rounding på amend (cTrader avviser flere desimaler)
 # ─────────────────────────────────────────────────────────────
