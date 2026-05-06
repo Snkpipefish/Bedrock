@@ -628,6 +628,41 @@ ferdig og 12.6-rebalansering er gjort.
 
 ## Session log (newest first)
 
+### 2026-05-06 — Session 155: asymmetri-tightening + monitor-cleanup + git-hygiene
+
+**Scope:** Bruker bekymret for at "asymmetriske" setups (høy R:R, lang vei til TP) på samme instrument kunne gå begge veier samtidig (BUY + SELL) og dilluere edge. Bedt om strammere gates. Også red helsestatus å rydde i.
+
+**Asymmetri-tightening (4 commits, 372 tester grønne):**
+- `11b3fbc` — **Cross-horizon dedup.** `_resolve_direction_conflicts` (orchestrator/signals.py) og bot's konflikt-gate (entry.py) endret fra `(instrument, horizon)`-key til instrument-key. Per instrument tillates kun én retning av gangen, uansett horisont. Et SWING-BUY + MAKRO-SELL på samme ticker er motstridende makro-syn → svakere score demotes til `published=False, skip_reason=opposite_direction_dominates`. Same-direction cross-horizon (BUY-SCALP + BUY-SWING) forblir tillatt — uavhengige slots. Ny test_conflict_gate_blocks_opposite_direction_across_horizons.
+- `663842f` — **Hard horisont-semantikk i TP-valg.** `_find_tp_cluster` bruker nå KUN tilsiktet klynge per horisont (SCALP idx 0, SWING idx 1). Ingen fallback til neste klynge. Tidligere fallback ga geometrisk MAKRO-distanse på SWING-setups, brøt horisont-kontrakten (TTL/trail-mekanikk antar SWING-tidsskala). Hellere drop setup enn å gli ut av horisont-vinduet. Test omdøpt: `test_build_setup_swing_falls_back_to_third_level` → `test_build_setup_swing_rejects_when_intended_cluster_below_min_rr`. Ny test bekrefter idx 1 valgt når R:R ≥ floor.
+- `434f58c` — **Bot R:R-floors synket til generator.** `bot.yaml` horizon_min_rr scalp 1.0→1.5, swing 1.3→2.5, makro 1.5→2.0. Defaults i `HorizonMinRRConfig` matchet. Tidligere var bot-side gate svakere enn generator (1.5/2.5) — i praksis tannløs. Nå håndhevet på begge sider. test_filter_rr_above_min_passes oppdatert (t1 1.10 → 1.115, R:R 2.0 → 3.5).
+- `4ed1579` — **Bredere SL-buffer for MAKRO.** Ny `SetupConfig.sl_atr_multiplier_makro=1.5` (5× SCALP/SWING 0.3). MAKRO trailer på støy med 0.3×ATR — hindrer at trailing aktiveres på normal volatilitet før makro-tese spiller ut. Per-instrument-overstyring mulig.
+
+**Monitor-helse RØD → OK (3 commits):**
+- Diagnose: `news_intel.timer` og `crypto_sentiment.timer` var `linked` men ikke `enabled` → fyrte aldri (rotårsak til "stale"). Manuelt enabled (kommando-handling, ingen kode-endring).
+- 7 andre "aging"-fetchere kjørte feilfritt; data var bare 1-2 dager bak pga kilde-publiserings-lag (COMEX positions T+1, ENTSOG/GIE D+1-D+2, Yahoo D+1) — ikke fetcher-feil.
+- `c60e6f3` — **Bump stale_hours** for kilder med D+1 publiserings-lag: comex 30→60, shipping 30→48, agsi 36→60, alsi 36→60. ADR-015 dokumenterer regelen `stale_hours = kilde-lag + fetch-cadence + helg-margin` (mønsteret var allerede etablert for fundamentals/FRED@48). Falske RØD-alarmer eliminert; reell-feil-deteksjon bevart.
+- `07fb735` — **Fjern signal_diff-sjekk** fra monitor.py + run_monitor + tester. Bedrock og cot-explorer deler fortsatt noe infra (cot-explorer-signal-filer oppdateres periodisk), så diffen ga falske RØD-alarmer uten operasjonell verdi. Asymmetri-endringene gjør at bedrock by design avviker mer fra cot-explorer enn 80%-terskelen tillot. compare-modulen består — brukes fortsatt av `scripts/compare_signals_daily.py` ad-hoc.
+
+**Git-hygiene (1 commit):**
+- `a0ad92d` — utvidet .gitignore (`.claude/worktrees/`, root `/bedrock.db`, `data/_meta/harvest_session_*.pid`, `data/bedrock.db.before-*`, `data/bedrock.db.snapshot*`). Avlistningssporet `data/signals_bot.json` (regelen var allerede der, men filen ble sporet før regelen → uendelig "modified"-støy fra ExecStartPost-regenerering). Working tree nå clean.
+
+**Status etter session:**
+- 7 commits til main, alle pushet via auto-push-hook. Branch i sync med origin/main (0/0 ahead/behind).
+- Monitor `Overall: OK` — 3 sjekker grønt (fetcher_freshness, pipeline_log_errors, agri_tp_override). Signal_diff fjernet.
+- 372 tester grønt på endrede områder (orchestrator + bot/entry + setups/generator + parallel/monitor).
+- Ny ADR-015 dokumenterer monitor-tuning-prinsippet.
+
+**Lokale filer ikke committet (ignorert nå):**
+- `bedrock.db` i repo-root, 3 stk `data/bedrock.db.before-cloud-backup-1777627873*`, `data/bedrock.db.snapshot.gz` (23 MB), `data/_meta/harvest_session_136.pid`. Kan slettes manuelt — destruktivt, så ikke gjort uten bekreftelse.
+
+**Filer endret session 155:**
+- Endret: `src/bedrock/orchestrator/signals.py`, `src/bedrock/bot/entry.py`, `src/bedrock/bot/config.py`, `src/bedrock/setups/generator.py`, `src/bedrock/parallel/monitor.py`, `src/bedrock/parallel/__init__.py`, `scripts/monitor_pipeline.py`, `config/bot.yaml`, `config/fetch.yaml`, `.gitignore`, `tests/unit/test_setups_generator.py`, `tests/unit/bot/test_entry.py`, `tests/unit/test_parallel_monitor.py`
+- Ny: `docs/decisions/015-monitor-stale-hours-source-lag.md`
+- Slettet (untracked, fil består): `data/signals_bot.json`
+
+---
+
 ### 2026-05-06 — Session 154: post-sub-fase-12.11+ future-spor + worktree-cleanup
 
 **Scope:** Bruker ba om å fortsette med future-spor etter session 153-LUKKING. Prioritert ROI: real-time data-kilder for å adressere USDA PSD årlig-lag-problem. Også oppryddingstask: codespace stoppet, worktree-DB-pointer-bug fanget, main-checkout fast-forwarded.
