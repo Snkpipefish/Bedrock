@@ -29,7 +29,9 @@ LAG_OFFSETS = [0, 1, 2, 4]
 LOOKBACK = 60
 
 
-def compute_signal_z(eth: pd.Series, brl: pd.Series, sb: pd.Series, anhyd_factor: float, kg_per_l: float) -> pd.Series:
+def compute_signal_z(
+    eth: pd.Series, brl: pd.Series, sb: pd.Series, anhyd_factor: float, kg_per_l: float
+) -> pd.Series:
     common = pd.DataFrame({"eth": eth, "brl": brl, "sb": sb}).ffill().dropna()
     anhyd = common["eth"] * anhyd_factor
     paritet_cents_lb = (anhyd / common["brl"]) * (1.0 / kg_per_l) * 2.20462 * 100.0
@@ -54,8 +56,10 @@ def main() -> int:
 
     md: list[str] = []
     md.append("# ANP etanol-paritet — parameter-sweep\n\n")
-    md.append(f"*Generert {date.today()} via `scripts/sugar_anp_sweep.py`. "
-              f"UNICA: {len(unica)} reports.*\n\n")
+    md.append(
+        f"*Generert {date.today()} via `scripts/sugar_anp_sweep.py`. "
+        f"UNICA: {len(unica)} reports.*\n\n"
+    )
     md.append("**Krav:** ρ ≤ -0.30 (anbefalt -0.5). Ellers dropp driveren.\n\n")
     md.append("---\n\n")
     md.append("## Sweep-resultater\n\n")

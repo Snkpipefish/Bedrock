@@ -27,10 +27,7 @@ _log = logging.getLogger(__name__)
 
 OPEN_METEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 
-_DAILY_VARS = (
-    "temperature_2m_max,temperature_2m_min,precipitation_sum,"
-    "et0_fao_evapotranspiration"
-)
+_DAILY_VARS = "temperature_2m_max,temperature_2m_min,precipitation_sum,et0_fao_evapotranspiration"
 
 HOT_DAY_TMAX_C = 32.0
 DRY_DAY_PRECIP_MM = 1.0
@@ -90,8 +87,7 @@ def fetch_weather_monthly(
 
     if response.status_code != 200:
         raise WeatherMonthlyFetchError(
-            f"Open-Meteo returned HTTP {response.status_code} for {region}: "
-            f"{response.text[:200]!r}"
+            f"Open-Meteo returned HTTP {response.status_code} for {region}: {response.text[:200]!r}"
         )
 
     try:

@@ -92,20 +92,14 @@ def compute_floor_for_direction(
     )
     if direction.lower() == "buy":
         scores = [float(s.score or 0) for s in result.signals if s.score is not None]
-        hits = [
-            float(s.forward_return_pct) >= HIT_THRESHOLD_PCT for s in result.signals
-        ]
+        hits = [float(s.forward_return_pct) >= HIT_THRESHOLD_PCT for s in result.signals]
     else:
         scores = [float(s.score or 0) for s in result.signals if s.score is not None]
-        hits = [
-            float(s.forward_return_pct) <= -HIT_THRESHOLD_PCT for s in result.signals
-        ]
+        hits = [float(s.forward_return_pct) <= -HIT_THRESHOLD_PCT for s in result.signals]
 
     floor = find_floor(scores, hits)
     n_total = len(scores)
-    n_at_floor = (
-        sum(1 for s in scores if floor is not None and s >= floor) if floor else 0
-    )
+    n_at_floor = sum(1 for s in scores if floor is not None and s >= floor) if floor else 0
     return {
         "floor": floor,
         "n_total": n_total,
@@ -186,12 +180,16 @@ def main() -> int:
 
     print()
     print(f"=== Rolling {LOOKBACK_YEARS}yr floor-anbefaling for Sugar ===")
-    print(f"BUY:  floor={buy_result['floor']!r}  n={buy_result['n_total']}  "
-          f"n@floor={buy_result['n_at_floor']}  "
-          f"hr@floor={buy_result['hit_rate_at_floor']!r}")
-    print(f"SELL: floor={sell_result['floor']!r}  n={sell_result['n_total']}  "
-          f"n@floor={sell_result['n_at_floor']}  "
-          f"hr@floor={sell_result['hit_rate_at_floor']!r}")
+    print(
+        f"BUY:  floor={buy_result['floor']!r}  n={buy_result['n_total']}  "
+        f"n@floor={buy_result['n_at_floor']}  "
+        f"hr@floor={buy_result['hit_rate_at_floor']!r}"
+    )
+    print(
+        f"SELL: floor={sell_result['floor']!r}  n={sell_result['n_total']}  "
+        f"n@floor={sell_result['n_at_floor']}  "
+        f"hr@floor={sell_result['hit_rate_at_floor']!r}"
+    )
 
     current = read_current_floor(SUGAR_YAML)
     print(f"Nåværende sugar.yaml: {current}")
@@ -204,9 +202,7 @@ def main() -> int:
 
     print(f"Δ buy: {delta_buy:+.2f}, Δ sell: {delta_sell:+.2f}")
 
-    significant = (
-        abs(delta_buy) > APPLY_THRESHOLD or abs(delta_sell) > APPLY_THRESHOLD
-    )
+    significant = abs(delta_buy) > APPLY_THRESHOLD or abs(delta_sell) > APPLY_THRESHOLD
 
     state = {
         "as_of": today.isoformat(),

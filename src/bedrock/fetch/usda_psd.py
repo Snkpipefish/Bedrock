@@ -67,9 +67,7 @@ def fetch_psd_country_year(
     key = _get_api_key(api_key)
     url = f"{API_BASE}/commodity/{commodity_code}/country/{country_iso}/year/{year}"
     try:
-        response = http_get_with_retry(
-            url, headers={"X-Api-Key": key}, timeout=timeout
-        )
+        response = http_get_with_retry(url, headers={"X-Api-Key": key}, timeout=timeout)
     except Exception as exc:
         raise UsdaPsdFetchError(
             f"Network failure for {commodity_code}/{country_iso}/{year}: {exc}"

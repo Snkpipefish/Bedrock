@@ -116,7 +116,7 @@ def main() -> int:
             sections.append(_section(store, h, direction, from_date, today))
 
     total_elapsed = time.time() - total_t0
-    sections.append(f"---\n\n*Total wall-time: {total_elapsed/60:.1f} min*\n")
+    sections.append(f"---\n\n*Total wall-time: {total_elapsed / 60:.1f} min*\n")
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

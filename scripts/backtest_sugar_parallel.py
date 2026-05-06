@@ -103,7 +103,7 @@ def main() -> int:
                 print(f"FAIL h={h}d {d}: {exc}", flush=True)
 
     total_elapsed = time.time() - total_t0
-    print(f"\nTotal wall-time: {total_elapsed/60:.1f} min", flush=True)
+    print(f"\nTotal wall-time: {total_elapsed / 60:.1f} min", flush=True)
 
     out_lines: list[str] = []
     out_lines.append("# Sugar full-historikk-backtest v7 (sub-fase 12.11+)\n")
@@ -121,8 +121,9 @@ def main() -> int:
         for h in HORIZONS:
             section = sections.get((h, d), f"## Sugar · h={h}d · direction={d}\n\nFAILED.\n")
             out_lines.append(section)
-    out_lines.append(f"---\n\n*Total wall-time: {total_elapsed/60:.1f} min "
-                     f"(workers={args.workers})*\n")
+    out_lines.append(
+        f"---\n\n*Total wall-time: {total_elapsed / 60:.1f} min (workers={args.workers})*\n"
+    )
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

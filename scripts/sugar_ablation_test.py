@@ -50,7 +50,6 @@ def run_ablation(family_to_zero: str | None) -> dict:
     from bedrock.backtest import (
         BacktestConfig,
         run_orchestrator_replay,
-        summary_stats,
     )
     from bedrock.data.store import DataStore
 
@@ -90,7 +89,8 @@ def run_ablation(family_to_zero: str | None) -> dict:
     )
     t0 = time.time()
     result = run_orchestrator_replay(
-        store, bcfg,
+        store,
+        bcfg,
         instruments_dir=str(temp_dir),
         direction=DIRECTION,
         step_days=STEP_DAYS,
@@ -132,10 +132,14 @@ def main() -> int:
 
     lines: list[str] = []
     lines.append("# Sugar familie-vekt-ablation\n")
-    lines.append(f"*Generert {date.today()}. Drop-one-out på A+ BUY 90d-bøtta. "
-                 f"Baseline = full sugar.yaml. Vinduet = 14 år.*\n")
+    lines.append(
+        f"*Generert {date.today()}. Drop-one-out på A+ BUY 90d-bøtta. "
+        f"Baseline = full sugar.yaml. Vinduet = 14 år.*\n"
+    )
     lines.append("## Resultater\n")
-    lines.append("| Dropped | n A+ | A+ hit-rate | A+ avg | A+ Sharpe | Δ Sharpe vs baseline | Tolkning |")
+    lines.append(
+        "| Dropped | n A+ | A+ hit-rate | A+ avg | A+ Sharpe | Δ Sharpe vs baseline | Tolkning |"
+    )
     lines.append("|---|---:|---:|---:|---:|---:|---|")
     for r in results:
         delta = r["sharpe_a_plus"] - baseline_sharpe if r["family_dropped"] != "(baseline)" else 0.0
@@ -151,16 +155,14 @@ def main() -> int:
             tolk = "🔥 negativ! drop helt"
         lines.append(
             f"| {r['family_dropped']} | {r['n_a_plus']} | "
-            f"{r['hit_rate_a_plus']*100:.1f}% | {r['avg_a_plus']:+.2f}% | "
+            f"{r['hit_rate_a_plus'] * 100:.1f}% | {r['avg_a_plus']:+.2f}% | "
             f"{r['sharpe_a_plus']:+.2f} | {delta:+.2f} | {tolk} |"
         )
     lines.append("")
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text("\n".join(lines), encoding="utf-8")
-    Path(args.out).with_suffix(".json").write_text(
-        json.dumps(results, indent=2), encoding="utf-8"
-    )
+    Path(args.out).with_suffix(".json").write_text(json.dumps(results, indent=2), encoding="utf-8")
     print(f"Skrevet {args.out}")
     return 0
 

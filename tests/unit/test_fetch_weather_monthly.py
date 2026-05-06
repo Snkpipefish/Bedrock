@@ -138,9 +138,7 @@ def test_fetch_http_error_raises() -> None:
 
     with patch("bedrock.fetch.weather_monthly.http_get_with_retry", return_value=response):
         with pytest.raises(WeatherMonthlyFetchError, match="HTTP 500"):
-            fetch_weather_monthly(
-                "r", 0.0, 0.0, date(2024, 1, 1), date(2024, 1, 31)
-            )
+            fetch_weather_monthly("r", 0.0, 0.0, date(2024, 1, 1), date(2024, 1, 31))
 
 
 def test_fetch_network_failure_raises() -> None:
@@ -151,6 +149,4 @@ def test_fetch_network_failure_raises() -> None:
         side_effect=RuntimeError("connection refused"),
     ):
         with pytest.raises(WeatherMonthlyFetchError, match="Network failure"):
-            fetch_weather_monthly(
-                "r", 0.0, 0.0, date(2024, 1, 1), date(2024, 1, 31)
-            )
+            fetch_weather_monthly("r", 0.0, 0.0, date(2024, 1, 1), date(2024, 1, 31))

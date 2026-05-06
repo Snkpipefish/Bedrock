@@ -85,11 +85,13 @@ def test_fetch_http_error_raises() -> None:
 def test_fetch_returns_dataframe_on_success() -> None:
     response = Mock()
     response.status_code = 200
-    response.json = Mock(return_value={
-        "data": [
-            {"title": "Sugar 274.8 lakh tons in 2025-26", "date": "2026-04-17"},
-        ]
-    })
+    response.json = Mock(
+        return_value={
+            "data": [
+                {"title": "Sugar 274.8 lakh tons in 2025-26", "date": "2026-04-17"},
+            ]
+        }
+    )
     with patch("bedrock.fetch.isma_india.http_get_with_retry", return_value=response):
         df = fetch_isma_india()
     assert len(df) == 1

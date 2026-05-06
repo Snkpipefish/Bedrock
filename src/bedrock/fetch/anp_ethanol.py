@@ -24,7 +24,7 @@ import io
 import logging
 import re
 import time
-from datetime import date, datetime
+from datetime import date
 from typing import Any
 
 import pandas as pd
@@ -102,9 +102,7 @@ def _parse_xlsx_bytes(data: bytes) -> list[dict[str, Any]]:
     return df.to_dict("records")
 
 
-def fetch_month(
-    year: int, month: int, *, timeout: float = 60.0
-) -> list[dict[str, Any]]:
+def fetch_month(year: int, month: int, *, timeout: float = 60.0) -> list[dict[str, Any]]:
     """Last ned + parse én måneds ANP-data. Prøver flere URL-mønstre.
 
     URL-mønsteret endret seg ~2026: nyere bruker
@@ -129,9 +127,7 @@ def fetch_month(
                     return _parse_xlsx_bytes(data)
                 return _parse_csv_bytes(data)
             except Exception as exc:
-                _log.warning(
-                    "anp.parse_failed year=%s month=%s err=%s", year, month, exc
-                )
+                _log.warning("anp.parse_failed year=%s month=%s err=%s", year, month, exc)
                 continue
     raise AnpFetchError(f"Failed to fetch ANP for {year}-{month:02d}")
 

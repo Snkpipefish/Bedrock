@@ -48,10 +48,18 @@ def test_state_weights_reasonable() -> None:
 
 def test_aggregate_filters_non_ethanol() -> None:
     records = [
-        {"Produto": "GASOLINA", "Estado - Sigla": "SP",
-         "Data da Coleta": "01/01/2026", "Valor de Venda": "6,39"},
-        {"Produto": "ETANOL", "Estado - Sigla": "SP",
-         "Data da Coleta": "01/01/2026", "Valor de Venda": "4,50"},
+        {
+            "Produto": "GASOLINA",
+            "Estado - Sigla": "SP",
+            "Data da Coleta": "01/01/2026",
+            "Valor de Venda": "6,39",
+        },
+        {
+            "Produto": "ETANOL",
+            "Estado - Sigla": "SP",
+            "Data da Coleta": "01/01/2026",
+            "Valor de Venda": "4,50",
+        },
     ]
     df = aggregate_to_daily(records)
     assert len(df) == 1
@@ -60,10 +68,18 @@ def test_aggregate_filters_non_ethanol() -> None:
 
 def test_aggregate_filters_non_centro_sul() -> None:
     records = [
-        {"Produto": "ETANOL", "Estado - Sigla": "BA",  # not in CS
-         "Data da Coleta": "01/01/2026", "Valor de Venda": "5,00"},
-        {"Produto": "ETANOL", "Estado - Sigla": "SP",
-         "Data da Coleta": "01/01/2026", "Valor de Venda": "4,50"},
+        {
+            "Produto": "ETANOL",
+            "Estado - Sigla": "BA",  # not in CS
+            "Data da Coleta": "01/01/2026",
+            "Valor de Venda": "5,00",
+        },
+        {
+            "Produto": "ETANOL",
+            "Estado - Sigla": "SP",
+            "Data da Coleta": "01/01/2026",
+            "Valor de Venda": "4,50",
+        },
     ]
     df = aggregate_to_daily(records)
     assert len(df) == 1
@@ -73,10 +89,18 @@ def test_aggregate_filters_non_centro_sul() -> None:
 def test_aggregate_weighted_average() -> None:
     # Bare SP og GO på samme dato — vektet snitt
     records = [
-        {"Produto": "ETANOL", "Estado - Sigla": "SP",
-         "Data da Coleta": "01/01/2026", "Valor de Venda": "4,00"},
-        {"Produto": "ETANOL", "Estado - Sigla": "GO",
-         "Data da Coleta": "01/01/2026", "Valor de Venda": "5,00"},
+        {
+            "Produto": "ETANOL",
+            "Estado - Sigla": "SP",
+            "Data da Coleta": "01/01/2026",
+            "Valor de Venda": "4,00",
+        },
+        {
+            "Produto": "ETANOL",
+            "Estado - Sigla": "GO",
+            "Data da Coleta": "01/01/2026",
+            "Valor de Venda": "5,00",
+        },
     ]
     df = aggregate_to_daily(records)
     # SP w=0.45, GO w=0.15. Vektet: (4*0.45 + 5*0.15) / (0.45+0.15)
@@ -86,12 +110,24 @@ def test_aggregate_weighted_average() -> None:
 
 def test_aggregate_skips_invalid_values() -> None:
     records = [
-        {"Produto": "ETANOL", "Estado - Sigla": "SP",
-         "Data da Coleta": "01/01/2026", "Valor de Venda": "0,00"},  # 0 — skip
-        {"Produto": "ETANOL", "Estado - Sigla": "SP",
-         "Data da Coleta": "01/01/2026", "Valor de Venda": "999"},  # > 20 — skip
-        {"Produto": "ETANOL", "Estado - Sigla": "SP",
-         "Data da Coleta": "01/01/2026", "Valor de Venda": "4,50"},
+        {
+            "Produto": "ETANOL",
+            "Estado - Sigla": "SP",
+            "Data da Coleta": "01/01/2026",
+            "Valor de Venda": "0,00",
+        },  # 0 — skip
+        {
+            "Produto": "ETANOL",
+            "Estado - Sigla": "SP",
+            "Data da Coleta": "01/01/2026",
+            "Valor de Venda": "999",
+        },  # > 20 — skip
+        {
+            "Produto": "ETANOL",
+            "Estado - Sigla": "SP",
+            "Data da Coleta": "01/01/2026",
+            "Valor de Venda": "4,50",
+        },
     ]
     df = aggregate_to_daily(records)
     assert len(df) == 1
@@ -100,8 +136,12 @@ def test_aggregate_skips_invalid_values() -> None:
 
 def test_aggregate_returns_series_id() -> None:
     records = [
-        {"Produto": "ETANOL", "Estado - Sigla": "SP",
-         "Data da Coleta": "01/01/2026", "Valor de Venda": "4,50"},
+        {
+            "Produto": "ETANOL",
+            "Estado - Sigla": "SP",
+            "Data da Coleta": "01/01/2026",
+            "Valor de Venda": "4,50",
+        },
     ]
     df = aggregate_to_daily(records)
     assert df.iloc[0]["series_id"] == SERIES_ID
@@ -109,8 +149,7 @@ def test_aggregate_returns_series_id() -> None:
 
 def test_fetch_month_csv_success() -> None:
     csv_text = (
-        "Produto;Estado - Sigla;Data da Coleta;Valor de Venda;X\n"
-        "ETANOL;SP;01/01/2026;4,50;y\n"
+        "Produto;Estado - Sigla;Data da Coleta;Valor de Venda;X\nETANOL;SP;01/01/2026;4,50;y\n"
     )
     response = Mock()
     response.status_code = 200
@@ -128,6 +167,7 @@ def test_fetch_month_404_then_xlsx() -> None:
     csv_resp.content = b""
     # XLSX response (zip-magic + minimal valid empty xlsx)
     import openpyxl
+
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.append(["Produto", "Estado - Sigla", "Data da Coleta", "Valor de Venda"])

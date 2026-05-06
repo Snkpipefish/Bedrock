@@ -21,7 +21,6 @@ Output: docs/sugar_attribution_a_sell_2026-05.md med:
 from __future__ import annotations
 
 import argparse
-import json
 import time
 from datetime import date, timedelta
 from pathlib import Path
@@ -51,10 +50,14 @@ def collect_signals(
     from bedrock.orchestrator.signals import generate_signals
 
     outcomes = store.get_outcomes(INSTRUMENT, horizon_days=HORIZON_DAYS)
-    outcomes = outcomes[
-        (outcomes["ref_date"] >= pd.Timestamp(from_date))
-        & (outcomes["ref_date"] <= pd.Timestamp(to_date))
-    ].sort_values("ref_date").reset_index(drop=True)
+    outcomes = (
+        outcomes[
+            (outcomes["ref_date"] >= pd.Timestamp(from_date))
+            & (outcomes["ref_date"] <= pd.Timestamp(to_date))
+        ]
+        .sort_values("ref_date")
+        .reset_index(drop=True)
+    )
     outcomes = outcomes.iloc[::STEP_DAYS].reset_index(drop=True)
 
     rows: list[dict[str, Any]] = []
@@ -124,7 +127,7 @@ def attribution_report(df: pd.DataFrame) -> str:
         if sub.empty:
             continue
         lines.append(
-            f"| {g} | {len(sub)} | {sub['hit'].mean()*100:.1f}% | "
+            f"| {g} | {len(sub)} | {sub['hit'].mean() * 100:.1f}% | "
             f"{sub['forward_return_pct'].mean():+.2f}% | {sub['score'].mean():.2f} |"
         )
     lines.append("")
@@ -169,8 +172,7 @@ def attribution_report(df: pd.DataFrame) -> str:
     a_grade = df[df["grade"].isin(["A", "A_plus"])]
     if not a_grade.empty:
         lines.append(
-            "*Hvilke familier scoret høyere når A-SELL bommet? Disse "
-            "drar opp scoren feilaktig.*\n"
+            "*Hvilke familier scoret høyere når A-SELL bommet? Disse drar opp scoren feilaktig.*\n"
         )
         lines.append("| Familie | Avg score (HIT) | Avg score (MISS) | Diff (M-H) |")
         lines.append("|---|---:|---:|---:|")
@@ -180,8 +182,7 @@ def attribution_report(df: pd.DataFrame) -> str:
             diff = miss_avg - hit_avg
             star = " **⚠**" if diff > 0.05 else ""
             lines.append(
-                f"| {c.replace('fam_', '')} | {hit_avg:.3f} | {miss_avg:.3f} | "
-                f"{diff:+.3f}{star} |"
+                f"| {c.replace('fam_', '')} | {hit_avg:.3f} | {miss_avg:.3f} | {diff:+.3f}{star} |"
             )
     lines.append("")
 
@@ -202,7 +203,7 @@ def main() -> int:
     print(f"Samler SELL-signaler {from_d} → {today}", flush=True)
     t0 = time.time()
     rows = collect_signals(store, from_d, today)
-    print(f"Samlet {len(rows)} signaler på {(time.time()-t0)/60:.1f} min", flush=True)
+    print(f"Samlet {len(rows)} signaler på {(time.time() - t0) / 60:.1f} min", flush=True)
 
     df = pd.DataFrame(rows)
     out = Path(args.out)

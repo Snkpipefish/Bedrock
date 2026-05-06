@@ -86,6 +86,7 @@ override-dependencies = [
 target-version = "py310"
 line-length = 100
 src = ["src", "tests"]
+extend-exclude = [".claude/worktrees", ".claude/cache"]
 
 [tool.ruff.lint]
 select = [

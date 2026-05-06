@@ -124,9 +124,7 @@ def weather_stress(store: Any, instrument: str, params: dict) -> float:
     if regions_param and isinstance(regions_param, dict):
         region_scores: list[tuple[float, float]] = []  # (weight, score)
         for region_name, region_weight in regions_param.items():
-            single = _compute_single_region_stress(
-                store, region_name, lookback, weights
-            )
+            single = _compute_single_region_stress(store, region_name, lookback, weights)
             if single is None:
                 continue
             region_scores.append((float(region_weight), single))
@@ -140,9 +138,7 @@ def weather_stress(store: Any, instrument: str, params: dict) -> float:
         region = _resolve_weather_region(instrument)
         if region is None:
             return 0.0
-        single = _compute_single_region_stress(
-            store, region, lookback, weights
-        )
+        single = _compute_single_region_stress(store, region, lookback, weights)
         if single is None:
             return 0.0
         score = single

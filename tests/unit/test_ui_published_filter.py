@@ -93,11 +93,24 @@ def test_financial_invalidated_always_hidden(client, app) -> None:
 def test_agri_endpoint_uses_same_filter(client, app) -> None:
     """Agri-endepunktet skal også default-filtrere unpublished."""
     cfg = app.extensions["bedrock_config"]
+    # asset_class kreves etter f7fa000 (defensiv filter mot pollution).
     _write_signals(
         cfg.agri_signals_path,
         [
-            {"instrument": "Wheat", "score": 8.0, "grade": "A", "published": True},
-            {"instrument": "Corn", "score": 6.0, "grade": "B", "published": False},
+            {
+                "instrument": "Wheat",
+                "asset_class": "grains",
+                "score": 8.0,
+                "grade": "A",
+                "published": True,
+            },
+            {
+                "instrument": "Corn",
+                "asset_class": "grains",
+                "score": 6.0,
+                "grade": "B",
+                "published": False,
+            },
         ],
     )
     resp = client.get("/api/ui/setups/agri")

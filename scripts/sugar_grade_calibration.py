@@ -124,11 +124,7 @@ def main() -> int:
             returns = sorted(float(r["forward_return_pct"]) for r in subset)
             n = len(subset)
             avg = sum(returns) / n
-            median = (
-                returns[n // 2]
-                if n % 2 == 1
-                else (returns[n // 2 - 1] + returns[n // 2]) / 2
-            )
+            median = returns[n // 2] if n % 2 == 1 else (returns[n // 2 - 1] + returns[n // 2]) / 2
             md_sections.append(
                 f"| >={cutoff:.1f} | {n} | {hits / n * 100:.1f}% | "
                 f"{avg:+.2f}% | {median:+.2f}% | {returns[0]:+.2f}% | {returns[-1]:+.2f}% |\n"
@@ -144,16 +140,12 @@ def main() -> int:
             if r["hit"]:
                 stat["hits"] += 1
             stat["ret_sum"] += float(r["forward_return_pct"])
-        md_sections.append(
-            "| Bøtte | n | hit-rate | avg return |\n"
-            "|---|---:|---:|---:|\n"
-        )
+        md_sections.append("| Bøtte | n | hit-rate | avg return |\n|---|---:|---:|---:|\n")
         for b in sorted(bucket_stats.keys(), key=lambda x: float(x.split("-")[0])):
             st = bucket_stats[b]
             n_b = int(st["n"])
             md_sections.append(
-                f"| {b} | {n_b} | {st['hits'] / n_b * 100:.1f}% | "
-                f"{st['ret_sum'] / n_b:+.2f}% |\n"
+                f"| {b} | {n_b} | {st['hits'] / n_b * 100:.1f}% | {st['ret_sum'] / n_b:+.2f}% |\n"
             )
         md_sections.append("\n")
 

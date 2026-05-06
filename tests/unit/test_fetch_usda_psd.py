@@ -28,29 +28,38 @@ def test_fetch_year_returns_records() -> None:
         {"attributeId": ATTR_PRODUCTION, "value": 26574.0, "marketYear": "2010"},
         {"attributeId": ATTR_EXPORTS, "value": 1187.0, "marketYear": "2010"},
     ]
-    with patch(
-        "bedrock.fetch.usda_psd.http_get_with_retry",
-        return_value=_mock_response(payload=payload),
-    ), patch("bedrock.fetch.usda_psd._get_api_key", return_value="key"):
+    with (
+        patch(
+            "bedrock.fetch.usda_psd.http_get_with_retry",
+            return_value=_mock_response(payload=payload),
+        ),
+        patch("bedrock.fetch.usda_psd._get_api_key", return_value="key"),
+    ):
         records = fetch_psd_country_year("0612000", "IN", 2010)
     assert len(records) == 2
     assert records[0]["value"] == 26574.0
 
 
 def test_fetch_year_http_error_raises() -> None:
-    with patch(
-        "bedrock.fetch.usda_psd.http_get_with_retry",
-        return_value=_mock_response(status=500, text="error"),
-    ), patch("bedrock.fetch.usda_psd._get_api_key", return_value="key"):
+    with (
+        patch(
+            "bedrock.fetch.usda_psd.http_get_with_retry",
+            return_value=_mock_response(status=500, text="error"),
+        ),
+        patch("bedrock.fetch.usda_psd._get_api_key", return_value="key"),
+    ):
         with pytest.raises(UsdaPsdFetchError, match="HTTP 500"):
             fetch_psd_country_year("0612000", "IN", 2010)
 
 
 def test_fetch_year_unexpected_shape_raises() -> None:
-    with patch(
-        "bedrock.fetch.usda_psd.http_get_with_retry",
-        return_value=_mock_response(payload={"error": "x"}),
-    ), patch("bedrock.fetch.usda_psd._get_api_key", return_value="key"):
+    with (
+        patch(
+            "bedrock.fetch.usda_psd.http_get_with_retry",
+            return_value=_mock_response(payload={"error": "x"}),
+        ),
+        patch("bedrock.fetch.usda_psd._get_api_key", return_value="key"),
+    ):
         with pytest.raises(UsdaPsdFetchError, match="Unexpected response"):
             fetch_psd_country_year("0612000", "IN", 2010)
 
@@ -74,9 +83,11 @@ def test_india_history_aggregates_multiple_years() -> None:
             ]
         )
 
-    with patch("bedrock.fetch.usda_psd.http_get_with_retry", side_effect=_resp), patch(
-        "bedrock.fetch.usda_psd._get_api_key", return_value="key"
-    ), patch("time.sleep"):
+    with (
+        patch("bedrock.fetch.usda_psd.http_get_with_retry", side_effect=_resp),
+        patch("bedrock.fetch.usda_psd._get_api_key", return_value="key"),
+        patch("time.sleep"),
+    ):
         df = fetch_india_sugar_history(from_year=2020, to_year=2022)
 
     assert len(df) == 6  # 2 attrs × 3 years

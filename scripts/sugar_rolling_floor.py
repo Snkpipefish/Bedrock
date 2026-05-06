@@ -18,8 +18,6 @@ Output: docs/sugar_rolling_floor_2026-05.md
 
 from __future__ import annotations
 
-import math
-from datetime import timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -65,11 +63,11 @@ def main() -> int:
     lines.append("# Sugar rullerende publish-floor (5-års vindu)\n")
     lines.append(
         "*Analytiker-anbefaling B (peer-review 2026-05): bytt fra statisk "
-        f"14-års-floor til rullerende 5-års vindu, oppdatert kvartalsvis.*\n"
+        "14-års-floor til rullerende 5-års vindu, oppdatert kvartalsvis.*\n"
     )
     lines.append(
         f"**Kriterium:** laveste score-terskel der SELL hit-rate ≥ "
-        f"{MIN_HIT_RATE*100:.0f}% (forward_return ≤ -3%) og n ≥ {MIN_SAMPLES}.\n"
+        f"{MIN_HIT_RATE * 100:.0f}% (forward_return ≤ -3%) og n ≥ {MIN_SAMPLES}.\n"
     )
     lines.append(
         f"**Datasett:** {len(df)} SELL-signaler h=180d, "
@@ -83,7 +81,7 @@ def main() -> int:
     static_avg = static_sub["forward_return_pct"].mean()
     lines.append("## 1. Statisk floor (nåværende = 5)\n")
     lines.append(f"- n = {len(static_sub)}")
-    lines.append(f"- hit-rate (return ≤ -3%): {static_hr*100:.1f}%")
+    lines.append(f"- hit-rate (return ≤ -3%): {static_hr * 100:.1f}%")
     lines.append(f"- avg forward_return: {static_avg:+.2f}%")
     lines.append("")
 
@@ -110,12 +108,12 @@ def main() -> int:
             snapshots.append((cur, floor, len(valid), hr, avg))
             lines.append(
                 f"| {cur.date()} | {lookback_start.date()}..{cur.date()} | "
-                f"{floor:.2f} | {len(valid)} | {hr*100:.1f}% | {avg:+.2f}% |"
+                f"{floor:.2f} | {len(valid)} | {hr * 100:.1f}% | {avg:+.2f}% |"
             )
         else:
             lines.append(
                 f"| {cur.date()} | {lookback_start.date()}..{cur.date()} | "
-                f"— | — | n/a (ingen score-grense oppnår {MIN_HIT_RATE*100:.0f}% hr) | — |"
+                f"— | — | n/a (ingen score-grense oppnår {MIN_HIT_RATE * 100:.0f}% hr) | — |"
             )
             snapshots.append((cur, None, 0, 0, 0))
         cur += pd.DateOffset(months=3)
@@ -128,13 +126,17 @@ def main() -> int:
         lines.append(f"- Antall snapshots med valid floor: {len(valid_floors)} av {len(snapshots)}")
         lines.append(f"- Min: {min(valid_floors):.2f}")
         lines.append(f"- Max: {max(valid_floors):.2f}")
-        lines.append(f"- Median: {sorted(valid_floors)[len(valid_floors)//2]:.2f}")
-        lines.append(f"- Std: {(sum((f - sum(valid_floors)/len(valid_floors))**2 for f in valid_floors)/len(valid_floors))**0.5:.2f}")
+        lines.append(f"- Median: {sorted(valid_floors)[len(valid_floors) // 2]:.2f}")
+        lines.append(
+            f"- Std: {(sum((f - sum(valid_floors) / len(valid_floors)) ** 2 for f in valid_floors) / len(valid_floors)) ** 0.5:.2f}"
+        )
         lines.append("")
         lines.append("**Tolkning:**")
         spread = max(valid_floors) - min(valid_floors)
         if spread > 2.0:
-            lines.append(f"- Floor-spread {spread:.2f} > 2.0 → regime-shifts er reelle, statisk floor=5 er upassende")
+            lines.append(
+                f"- Floor-spread {spread:.2f} > 2.0 → regime-shifts er reelle, statisk floor=5 er upassende"
+            )
         else:
             lines.append(f"- Floor-spread {spread:.2f} ≤ 2.0 → statisk floor er nær-optimal")
         lines.append("")
@@ -155,7 +157,7 @@ def main() -> int:
             continue
         hr = sub["sell_hit"].mean()
         avg = sub["forward_return_pct"].mean()
-        lines.append(f"| {f:.1f} | {len(sub)} | {hr*100:.1f}% | {avg:+.2f}% | n/a |")
+        lines.append(f"| {f:.1f} | {len(sub)} | {hr * 100:.1f}% | {avg:+.2f}% | n/a |")
     lines.append("")
 
     OUT.parent.mkdir(parents=True, exist_ok=True)

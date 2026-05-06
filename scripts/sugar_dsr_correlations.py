@@ -18,7 +18,6 @@ Output: docs/sugar_dsr_correlations_2026-05.md
 
 from __future__ import annotations
 
-import csv
 import math
 import re
 from pathlib import Path
@@ -33,27 +32,49 @@ def _norm_cdf(x: float) -> float:
 
 def _norm_ppf(p: float) -> float:
     """Inverse normal CDF — Beasley-Springer-Moro approximation."""
-    a = [-3.969683028665376e01, 2.209460984245205e02, -2.759285104469687e02,
-         1.383577518672690e02, -3.066479806614716e01, 2.506628277459239e00]
-    b = [-5.447609879822406e01, 1.615858368580409e02, -1.556989798598866e02,
-         6.680131188771972e01, -1.328068155288572e01]
-    c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e00,
-         -2.549732539343734e00, 4.374664141464968e00, 2.938163982698783e00]
-    d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e00,
-         3.754408661907416e00]
+    a = [
+        -3.969683028665376e01,
+        2.209460984245205e02,
+        -2.759285104469687e02,
+        1.383577518672690e02,
+        -3.066479806614716e01,
+        2.506628277459239e00,
+    ]
+    b = [
+        -5.447609879822406e01,
+        1.615858368580409e02,
+        -1.556989798598866e02,
+        6.680131188771972e01,
+        -1.328068155288572e01,
+    ]
+    c = [
+        -7.784894002430293e-03,
+        -3.223964580411365e-01,
+        -2.400758277161838e00,
+        -2.549732539343734e00,
+        4.374664141464968e00,
+        2.938163982698783e00,
+    ]
+    d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e00, 3.754408661907416e00]
     p_low = 0.02425
     if p < p_low:
         q = math.sqrt(-2.0 * math.log(p))
-        return ((((c[0]*q + c[1])*q + c[2])*q + c[3])*q + c[4])*q + c[5] / \
-               ((((d[0]*q + d[1])*q + d[2])*q + d[3])*q + 1.0)
+        return ((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5] / (
+            (((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0
+        )
     if p <= 1.0 - p_low:
         q = p - 0.5
         r = q * q
-        return (((((a[0]*r + a[1])*r + a[2])*r + a[3])*r + a[4])*r + a[5])*q / \
-               (((((b[0]*r + b[1])*r + b[2])*r + b[3])*r + b[4])*r + 1.0)
+        return (
+            (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5])
+            * q
+            / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1.0)
+        )
     q = math.sqrt(-2.0 * math.log(1.0 - p))
-    return -(((((c[0]*q + c[1])*q + c[2])*q + c[3])*q + c[4])*q + c[5]) / \
-           ((((d[0]*q + d[1])*q + d[2])*q + d[3])*q + 1.0)
+    return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / (
+        (((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0
+    )
+
 
 ATTR_CSV = Path("docs/sugar_attribution_a_sell_2026-05.csv")
 BACKTEST_MD = Path("docs/backtest_sugar_horizons_2026-05.md")
@@ -93,7 +114,7 @@ def deflated_sharpe(
 
     # PSR (Probabilistic Sharpe Ratio) etter deflasjon
     # PSR(SR*) = Φ((SR_obs - SR*) × sqrt(n-1) / sqrt(1 - skew*SR_obs + (kurt-1)/4 * SR_obs^2))
-    denom_inner = 1.0 - skewness * sr_observed + ((kurtosis - 1.0) / 4.0) * sr_observed ** 2
+    denom_inner = 1.0 - skewness * sr_observed + ((kurtosis - 1.0) / 4.0) * sr_observed**2
     if denom_inner <= 0:
         return sr_threshold, float("nan")
     z = (sr_observed - sr_threshold) * math.sqrt(n_obs - 1) / math.sqrt(denom_inner)
@@ -172,7 +193,7 @@ def main() -> int:
     lines.append("|---|" + "|".join(["---:"] * len(fam_cols)) + "|")
     for i, c1 in enumerate(fam_cols):
         row = [c1.replace("fam_", "")]
-        for j, c2 in enumerate(fam_cols):
+        for j, _c2 in enumerate(fam_cols):
             v = corr.iloc[i, j]
             if pd.isna(v):
                 row.append("—")
@@ -197,8 +218,10 @@ def main() -> int:
 
     lines.append("### Funn — overlappende familier (|ρ| > 0.6)\n")
     if not high_corr_pairs:
-        lines.append("*Ingen familier med |ρ| > 0.6. Analytiker-hypotese om "
-                     "outlook/unica-dobbeltvekting **ikke bekreftet** på A-SELL-data.*\n")
+        lines.append(
+            "*Ingen familier med |ρ| > 0.6. Analytiker-hypotese om "
+            "outlook/unica-dobbeltvekting **ikke bekreftet** på A-SELL-data.*\n"
+        )
     else:
         lines.append("| Familie A | Familie B | ρ | Tolkning |")
         lines.append("|---|---|---:|---|")
@@ -214,12 +237,12 @@ def main() -> int:
 
     lines.append(f"## 2. Deflated Sharpe Ratio (n_trials={n_trials})\n")
     lines.append(
-        "*Bonferroni-korreksjon: med α=0.05 og {n_trials} tester må p < {p_bonf:.4f}. "
-        "DSR + PSR (López de Prado) gir mer presis deflasjon.*\n".format(
-            n_trials=n_trials, p_bonf=0.05 / n_trials
-        )
+        f"*Bonferroni-korreksjon: med α=0.05 og {n_trials} tester må p < {0.05 / n_trials:.4f}. "
+        "DSR + PSR (López de Prado) gir mer presis deflasjon.*\n"
     )
-    lines.append("| Horisont | Retning | Grade | n | Hit-rate | Avg ret | SR (annual) | SR* (deflated) | PSR | Status |")
+    lines.append(
+        "| Horisont | Retning | Grade | n | Hit-rate | Avg ret | SR (annual) | SR* (deflated) | PSR | Status |"
+    )
     lines.append("|---:|---|---|---:|---:|---:|---:|---:|---:|---|")
 
     # For SR trenger vi std av per-signal-returns. Vi har bare avg per
@@ -231,19 +254,21 @@ def main() -> int:
         if r["n"] < 10:
             lines.append(
                 f"| {r['horizon']}d | {r['direction']} | {r['grade']} | {r['n']} | "
-                f"{r['hit_rate']*100:.1f}% | {r['avg_return']:+.2f}% | — | — | — | "
+                f"{r['hit_rate'] * 100:.1f}% | {r['avg_return']:+.2f}% | — | — | — | "
                 f"insufficient (n<10) |"
             )
             continue
         # Approksimert SR fra avg + heuristic std
         # Std på sukker forward returns er ~10-15% over historisk vindu
         std_approx = 12.0  # konservativ for SWING/MAKRO
-        sr_approx = (r["avg_return"] / std_approx) * math.sqrt(365 / 7 / 4) if r["avg_return"] != 0 else 0.0
+        sr_approx = (
+            (r["avg_return"] / std_approx) * math.sqrt(365 / 7 / 4) if r["avg_return"] != 0 else 0.0
+        )
         sr_th, psr = deflated_sharpe(sr_approx, n_trials=n_trials, n_obs=r["n"])
         status = "✅ ekte" if psr > 0.95 else ("⚠ marginal" if psr > 0.5 else "❌ støy")
         lines.append(
             f"| {r['horizon']}d | {r['direction']} | {r['grade']} | {r['n']} | "
-            f"{r['hit_rate']*100:.1f}% | {r['avg_return']:+.2f}% | {sr_approx:+.2f} | "
+            f"{r['hit_rate'] * 100:.1f}% | {r['avg_return']:+.2f}% | {sr_approx:+.2f} | "
             f"{sr_th:+.2f} | {psr:.3f} | {status} |"
         )
     lines.append("")
@@ -253,7 +278,11 @@ def main() -> int:
     # ------------------------------------------------------------------
     lines.append("## 3. A+ BUY 90d — presis DSR (analytiker-flaggship)\n")
     a_plus_buy_90 = next(
-        (r for r in backtest_rows if r["horizon"] == 90 and r["direction"] == "buy" and r["grade"] == "A+"),
+        (
+            r
+            for r in backtest_rows
+            if r["horizon"] == 90 and r["direction"] == "buy" and r["grade"] == "A+"
+        ),
         None,
     )
     if a_plus_buy_90:
@@ -267,7 +296,7 @@ def main() -> int:
         lines.append(f"- SR* (deflated, n_trials={n_trials}): {sr_th:+.3f}")
         lines.append(f"- PSR: {psr:.3f}")
         lines.append(
-            f"- **Konklusjon:** "
+            "- **Konklusjon:** "
             + (
                 "✅ A+ BUY 90d holder DSR-test (PSR > 0.95) — gå i prod."
                 if psr > 0.95
@@ -282,12 +311,13 @@ def main() -> int:
     # ------------------------------------------------------------------
     lines.append("## 4. SELL grade-progresjon (analytiker non-monotonisitet)\n")
     sell_rows = [r for r in backtest_rows if r["direction"] == "sell"]
-    for h in sorted(set(r["horizon"] for r in sell_rows)):
+    for h in sorted({r["horizon"] for r in sell_rows}):
         sub = sorted([r for r in sell_rows if r["horizon"] == h], key=lambda x: x["grade"])
         progression = [(r["grade"], r["hit_rate"], r["avg_return"], r["n"]) for r in sub]
-        lines.append(f"**h={h}d:** " + " → ".join(
-            f"{g} ({hr*100:.1f}%/{ar:+.1f}% n={n})" for g, hr, ar, n in progression
-        ))
+        lines.append(
+            f"**h={h}d:** "
+            + " → ".join(f"{g} ({hr * 100:.1f}%/{ar:+.1f}% n={n})" for g, hr, ar, n in progression)
+        )
         # Sjekk monotonisitet (A → B → C avg_return skal øke for SELL hvis
         # ekstrem-grade SELL er ekte signal). Faktisk forventet: A SELL
         # mest negativ, C minst.
@@ -295,7 +325,9 @@ def main() -> int:
         c_ret = next((p[2] for p in progression if p[0] == "C"), None)
         if a_ret is not None and c_ret is not None:
             if a_ret < c_ret - 5:
-                lines.append(f"  → **non-monoton: A {a_ret:+.1f}% < C {c_ret:+.1f}%** (overshoot/mean-reversion bekreftet)")
+                lines.append(
+                    f"  → **non-monoton: A {a_ret:+.1f}% < C {c_ret:+.1f}%** (overshoot/mean-reversion bekreftet)"
+                )
             else:
                 lines.append(f"  → ok: A {a_ret:+.1f}% ≥ C {c_ret:+.1f}% - 5pp")
     lines.append("")

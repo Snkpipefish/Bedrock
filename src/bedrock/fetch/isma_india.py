@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date, datetime, timezone
+from datetime import datetime
 from typing import Any
 
 import pandas as pd
@@ -72,9 +72,7 @@ def fetch_isma_india(timeout: float = 30.0) -> pd.DataFrame:
         raise IsmaFetchError(f"Network failure: {exc}") from exc
 
     if response.status_code != 200:
-        raise IsmaFetchError(
-            f"ISMA returned HTTP {response.status_code}: {response.text[:200]!r}"
-        )
+        raise IsmaFetchError(f"ISMA returned HTTP {response.status_code}: {response.text[:200]!r}")
 
     try:
         payload = response.json()

@@ -68,7 +68,8 @@ def run_with_seasonal(monthly_scores: list[float], label: str) -> dict:
     )
     t0 = time.time()
     result = run_orchestrator_replay(
-        store, bcfg,
+        store,
+        bcfg,
         instruments_dir=str(temp_dir),
         direction=DIRECTION,
         step_days=STEP_DAYS,
@@ -108,9 +109,13 @@ def run_with_seasonal(monthly_scores: list[float], label: str) -> dict:
 def main() -> int:
     print(f"[{time.strftime('%H:%M:%S')}] A/B-test: current vs forward-syklus")
     a = run_with_seasonal(CURRENT_CYCLE, "current_cycle")
-    print(f"[{time.strftime('%H:%M:%S')}] A done: n={a['n_a_plus']} A+, sharpe={a['sharpe_a_plus']:.2f}")
+    print(
+        f"[{time.strftime('%H:%M:%S')}] A done: n={a['n_a_plus']} A+, sharpe={a['sharpe_a_plus']:.2f}"
+    )
     b = run_with_seasonal(FORWARD_CYCLE, "forward_cycle")
-    print(f"[{time.strftime('%H:%M:%S')}] B done: n={b['n_a_plus']} A+, sharpe={b['sharpe_a_plus']:.2f}")
+    print(
+        f"[{time.strftime('%H:%M:%S')}] B done: n={b['n_a_plus']} A+, sharpe={b['sharpe_a_plus']:.2f}"
+    )
 
     delta_sharpe = b["sharpe_a_plus"] - a["sharpe_a_plus"]
     delta_avg = b["avg_a_plus"] - a["avg_a_plus"]
@@ -126,14 +131,14 @@ def main() -> int:
     for r in (a, b):
         lines.append(
             f"| {r['label']} | {r['n_a_plus']} | "
-            f"{r['hr_a_plus']*100:.1f}% | {r['avg_a_plus']:+.2f}% | "
+            f"{r['hr_a_plus'] * 100:.1f}% | {r['avg_a_plus']:+.2f}% | "
             f"{r['sharpe_a_plus']:+.2f} |"
         )
     lines.append("")
 
     lines.append("## Forward-syklus vs current-syklus\n")
     lines.append(f"- Δ Sharpe: **{delta_sharpe:+.2f}** (suksess-kriterium: ≥ +0.20)")
-    lines.append(f"- Δ hit-rate: {delta_hr*100:+.1f}pp")
+    lines.append(f"- Δ hit-rate: {delta_hr * 100:+.1f}pp")
     lines.append(f"- Δ avg return: {delta_avg:+.2f}pp")
     if delta_sharpe >= 0.20:
         lines.append("- **Konklusjon: ✅ Forward-syklus validert** — beholdes.")
