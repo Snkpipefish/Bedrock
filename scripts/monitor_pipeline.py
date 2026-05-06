@@ -19,11 +19,9 @@ import sys
 from pathlib import Path
 
 from bedrock.parallel.monitor import (
-    DEFAULT_BEDROCK_SIGNALS,
     DEFAULT_BOT_LOG,
     DEFAULT_DB,
     DEFAULT_FETCH_YAML,
-    DEFAULT_OLD_SIGNALS,
     DEFAULT_PIPELINE_LOG,
     format_monitor_json,
     format_monitor_text,
@@ -37,27 +35,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
     parser.add_argument("--pipeline-log", type=Path, default=DEFAULT_PIPELINE_LOG)
     parser.add_argument("--bot-log", type=Path, default=DEFAULT_BOT_LOG)
-    parser.add_argument("--bedrock-signals", type=Path, default=DEFAULT_BEDROCK_SIGNALS)
-    parser.add_argument(
-        "--old-signals",
-        type=Path,
-        action="append",
-        default=None,
-        help="Sti til gammel signal-fil; kan gis flere ganger.",
-    )
     parser.add_argument("--report", choices=("text", "json"), default="text")
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args(argv)
-
-    old_signals = args.old_signals if args.old_signals else list(DEFAULT_OLD_SIGNALS)
 
     report = run_monitor(
         fetch_yaml=args.fetch_yaml,
         db=args.db,
         pipeline_log=args.pipeline_log,
         bot_log=args.bot_log,
-        bedrock_signals=args.bedrock_signals,
-        old_signals=old_signals,
     )
 
     text = format_monitor_json(report) if args.report == "json" else format_monitor_text(report)

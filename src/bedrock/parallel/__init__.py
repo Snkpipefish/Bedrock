@@ -2,14 +2,12 @@
 
 Eksponerer to kjerne-API-er:
 
-- ``compare`` / ``CompareReport`` — daglig diff bedrock signals.json mot
-  cot-explorers signals.json + agri_signals.json.
+- ``compare`` / ``CompareReport`` — ad-hoc diff bedrock signals.json mot
+  cot-explorers signals.json + agri_signals.json (manuell bruk via
+  ``scripts/compare_signals_daily.py``).
 - ``run_monitor`` / ``MonitorReport`` — automatisk sjekk av PLAN § 12.3
   cutover-kriterier (fetcher-freshness, pipeline-log-feil, bot-log
-  agri-TP-overrides, signal-diff).
-
-Begge har tynne CLI-wrappers i ``scripts/`` (``compare_signals_daily.py``
-og ``monitor_pipeline.py``).
+  agri-TP-overrides). Signal-diff fjernet i 12.9 follow-up.
 """
 
 from bedrock.parallel.compare import (
@@ -26,7 +24,6 @@ from bedrock.parallel.monitor import (
     check_agri_tp_override,
     check_fetcher_freshness,
     check_pipeline_log_errors,
-    check_signal_diff,
     format_monitor_json,
     format_monitor_text,
     run_monitor,
@@ -41,7 +38,6 @@ __all__ = [
     "check_agri_tp_override",
     "check_fetcher_freshness",
     "check_pipeline_log_errors",
-    "check_signal_diff",
     "compare",
     "format_compare_json",
     "format_compare_markdown",

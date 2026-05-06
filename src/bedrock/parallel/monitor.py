@@ -1,6 +1,6 @@
 """Pipeline-monitoring for Fase 12 parallell-drift.
 
-Automatiserer 4 av 5 PLAN § 12.3 cutover-kriterier:
+Automatiserer 3 av 5 PLAN § 12.3 cutover-kriterier:
 
 1. Fetcher-freshness (alle bedrock-fetchere har kjørt innenfor
    ``stale_hours`` definert i ``fetch.yaml``).
@@ -8,8 +8,12 @@ Automatiserer 4 av 5 PLAN § 12.3 cutover-kriterier:
    nylige kjøringer — proxy for "ingen git-push-feil").
 3. Bot-log agri-TP-overrides (scalp_edge bot-log skal ha 0 treff på
    "agri TP overridden" — bekrefter at Fase 7 bot-fix tar effekt).
-4. Signal-diff (kaller ``bedrock.parallel.compare`` og flagger hvis
-   andelen grade-endringer overskrider terskel).
+
+Tidligere 4. punkt (signal-diff mot cot-explorer) ble fjernet i
+sub-fase 12.9 follow-up: parallel-drift er over og bedrock + cot-explorer
+deler fortsatt noe infrastruktur, så diffen ga falske alarmer uten
+operasjonell verdi. Modulen ``bedrock.parallel.compare`` består og brukes
+fortsatt av ``scripts/compare_signals_daily.py`` for ad-hoc-bruk.
 
 Det femte kriteriet (manuell inspeksjon av siste 20 setups) er ikke
 automatisert — surfacert som dokumentert TODO i tekst-rapporten.
@@ -22,27 +26,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from bedrock.parallel.compare import CompareReport, compare
-
 # Default-stier (kan overskrives av CLI-flagg)
 DEFAULT_DB = Path("data/bedrock.db")
 DEFAULT_FETCH_YAML = Path("config/fetch.yaml")
-DEFAULT_BEDROCK_SIGNALS = Path("data/signals.json")
-DEFAULT_OLD_SIGNALS: tuple[Path, ...] = (
-    Path.home() / "cot-explorer" / "data" / "signals.json",
-    Path.home() / "cot-explorer" / "data" / "agri_signals.json",
-)
 DEFAULT_BOT_LOG = Path.home() / "scalp_edge" / "bot.log"
 DEFAULT_PIPELINE_LOG = Path("logs/pipeline.log")
 
-# Heuristikk-terskler
-# Sub-fase 12.5+ session 81: bumpet fra 0.5 til 0.8.
-# Rationale: bedrock er by design strengere enn cot-explorer (real drivers
-# vs placeholders, kalibrerte grade-terskler). 50-70 % grade-endring er
-# forventet under obs-vinduet og ikke en feil. > 80 % er fortsatt en
-# meningsfull terskel som flagger systemiske problemer (f.eks. en
-# regresjon der bedrock plutselig graderer alt som C).
-_GRADE_DIFF_RATIO_FAIL = 0.8
 _PIPELINE_LOG_TAIL_LINES = 1000
 _BOT_LOG_TAIL_LINES = 5000
 
@@ -216,66 +205,6 @@ def check_agri_tp_override(
     )
 
 
-def check_signal_diff(
-    *,
-    bedrock_signals: Path = DEFAULT_BEDROCK_SIGNALS,
-    old_signals: tuple[Path, ...] | list[Path] = DEFAULT_OLD_SIGNALS,
-    grade_diff_ratio_fail: float = _GRADE_DIFF_RATIO_FAIL,
-) -> CheckResult:
-    """PLAN § 12.3 #4: signal-diff mellom gammel og ny pipeline forklarbar.
-
-    Heuristikk: hvis andelen felles signaler med endret grade
-    overskrider ``grade_diff_ratio_fail`` (default 50 %), flagges
-    diff-en som ikke-forklarbar — krever manuelt review.
-    """
-    if not bedrock_signals.exists():
-        return CheckResult(
-            name="signal_diff",
-            ok=False,
-            detail=f"bedrock signals.json mangler: {bedrock_signals}",
-        )
-
-    existing_old: list[Path] = [Path(p) for p in old_signals if Path(p).exists()]
-    if not existing_old:
-        # Sub-fase 12.9 D5: parallel-drift mot cot-explorer er over (bedrock-
-        # bot kjører på cTrader demo). Manglende old-signals er forventet,
-        # ikke en feil. Soft-skip; sjekken kan fjernes når 12.9 D6 lukker.
-        return CheckResult(
-            name="signal_diff",
-            ok=True,
-            detail="skipped: parallel-drift over (ingen gamle signal-filer)",
-            data={"old_signals_searched": [str(p) for p in old_signals]},
-        )
-
-    report: CompareReport = compare(
-        bedrock_path=bedrock_signals,
-        old_paths=existing_old,
-    )
-
-    grade_change_ratio = report.n_grade_diff / report.n_common if report.n_common else 0.0
-    ok = grade_change_ratio < grade_diff_ratio_fail
-
-    return CheckResult(
-        name="signal_diff",
-        ok=ok,
-        detail=(
-            f"{report.n_common} felles, {report.n_changed} endret, "
-            f"{report.n_grade_diff} grade-endring ({grade_change_ratio:.0%})"
-        ),
-        data={
-            "n_old": report.n_old,
-            "n_new": report.n_new,
-            "n_common": report.n_common,
-            "n_only_old": report.n_only_old,
-            "n_only_new": report.n_only_new,
-            "n_changed": report.n_changed,
-            "n_grade_diff": report.n_grade_diff,
-            "grade_change_ratio": grade_change_ratio,
-            "grade_diff_ratio_fail_threshold": grade_diff_ratio_fail,
-        },
-    )
-
-
 # ---------------------------------------------------------------------------
 # Orkestrering + formatering
 # ---------------------------------------------------------------------------
@@ -287,8 +216,6 @@ def run_monitor(
     db: Path = DEFAULT_DB,
     pipeline_log: Path = DEFAULT_PIPELINE_LOG,
     bot_log: Path = DEFAULT_BOT_LOG,
-    bedrock_signals: Path = DEFAULT_BEDROCK_SIGNALS,
-    old_signals: tuple[Path, ...] | list[Path] = DEFAULT_OLD_SIGNALS,
     now: datetime | None = None,
 ) -> MonitorReport:
     """Kjør alle delsjekker og bygg samlet MonitorReport."""
@@ -296,7 +223,6 @@ def run_monitor(
         check_fetcher_freshness(fetch_yaml=fetch_yaml, db=db, now=now),
         check_pipeline_log_errors(log_path=pipeline_log),
         check_agri_tp_override(log_path=bot_log),
-        check_signal_diff(bedrock_signals=bedrock_signals, old_signals=old_signals),
     ]
     resolved_now = (now or datetime.now(timezone.utc)).isoformat()
     return MonitorReport(
@@ -342,7 +268,6 @@ __all__ = [
     "check_agri_tp_override",
     "check_fetcher_freshness",
     "check_pipeline_log_errors",
-    "check_signal_diff",
     "format_monitor_json",
     "format_monitor_text",
     "run_monitor",
