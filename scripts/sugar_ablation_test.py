@@ -97,9 +97,9 @@ def run_ablation(family_to_zero: str | None) -> dict:
     )
     elapsed = time.time() - t0
 
-    a_plus_returns = [s.forward_return_pct for s in result.signals if s.grade == "A_plus"]
+    a_plus_returns = [s.forward_return_pct for s in result.signals if s.grade == "A+"]
     a_returns = [s.forward_return_pct for s in result.signals if s.grade == "A"]
-    a_plus_hits = sum(1 for s in result.signals if s.grade == "A_plus" and s.hit)
+    a_plus_hits = sum(1 for s in result.signals if s.grade == "A+" and s.hit)
 
     return {
         "family_dropped": family_to_zero or "(baseline)",

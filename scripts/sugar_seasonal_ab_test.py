@@ -75,7 +75,7 @@ def run_with_seasonal(monthly_scores: list[float], label: str) -> dict:
     )
     elapsed = time.time() - t0
 
-    a_plus = [s for s in result.signals if s.grade == "A_plus"]
+    a_plus = [s for s in result.signals if s.grade == "A+"]
     a_grade = [s for s in result.signals if s.grade == "A"]
     a_plus_returns = [s.forward_return_pct for s in a_plus]
     a_returns = [s.forward_return_pct for s in a_grade]
