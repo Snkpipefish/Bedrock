@@ -17,8 +17,13 @@ from pydantic import BaseModel, ConfigDict, Field
 DEFAULT_PORT = 5100
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_DATA_ROOT = Path("data")
-DEFAULT_TRADE_LOG_PATH = Path.home() / "bedrock" / "data" / "bot" / "signal_log.json"
-DEFAULT_BOT_STATE_DIR = Path.home() / "bedrock" / "data" / "bot"
+# Repo-relative paths slik at server-prosessen kan kjøre som hvilken som
+# helst bruker (root via /etc/systemd/system, eller pc via user-service)
+# uten at Path.home() peker feil sted. Server-unit har
+# WorkingDirectory=/home/pc/bedrock så relative stier resolver korrekt
+# og matcher det bot-prosessen skriver til.
+DEFAULT_TRADE_LOG_PATH = DEFAULT_DATA_ROOT / "bot" / "signal_log.json"
+DEFAULT_BOT_STATE_DIR = DEFAULT_DATA_ROOT / "bot"
 DEFAULT_WEB_ROOT = Path("web")
 
 
