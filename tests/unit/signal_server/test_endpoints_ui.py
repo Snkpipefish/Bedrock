@@ -573,6 +573,7 @@ def test_setups_agri_reads_agri_path(
         [
             {
                 "instrument": "Corn",
+                "asset_class": "grains",
                 "direction": "BUY",
                 "horizon": "MAKRO",
                 "score": 4.0,
@@ -580,6 +581,7 @@ def test_setups_agri_reads_agri_path(
             },
             {
                 "instrument": "Wheat",
+                "asset_class": "grains",
                 "direction": "SELL",
                 "horizon": "SWING",
                 "score": 2.5,
@@ -597,6 +599,80 @@ def test_setups_agri_empty_when_file_missing(client: FlaskClient) -> None:
     r = client.get("/api/ui/setups/agri?include_unpublished=1")
     assert r.status_code == 200
     assert r.get_json()["setups"] == []
+
+
+def test_setups_financial_filters_out_agri_asset_classes(
+    client: FlaskClient,
+    signals_path: Path,
+) -> None:
+    """Defensiv filter: signals.json polluted med softs/grains skal
+    ikke lekke til finans-fanen. Skjedde i praksis når et manuelt
+    `bedrock signals-all --no-split` overskrev fila."""
+    _write_signals(
+        signals_path,
+        [
+            {
+                "instrument": "EURUSD",
+                "asset_class": "fx",
+                "direction": "BUY",
+                "horizon": "SWING",
+                "score": 3.0,
+                "grade": "A",
+            },
+            {
+                "instrument": "Sugar",
+                "asset_class": "softs",
+                "direction": "BUY",
+                "horizon": "MAKRO",
+                "score": 4.0,
+                "grade": "A",
+            },
+            {
+                "instrument": "Corn",
+                "asset_class": "grains",
+                "direction": "SELL",
+                "horizon": "MAKRO",
+                "score": 3.5,
+                "grade": "B",
+            },
+        ],
+    )
+    r = client.get("/api/ui/setups/financial?include_unpublished=1")
+    data = r.get_json()
+    assert data["total_count"] == 1
+    assert [s["instrument"] for s in data["setups"]] == ["EURUSD"]
+
+
+def test_setups_agri_filters_out_financial_asset_classes(
+    client: FlaskClient,
+    agri_signals_path: Path,
+) -> None:
+    """Symmetri-test: agri-fanen viser kun softs/grains uansett."""
+    _write_signals(
+        agri_signals_path,
+        [
+            {
+                "instrument": "Corn",
+                "asset_class": "grains",
+                "direction": "BUY",
+                "horizon": "MAKRO",
+                "score": 4.0,
+                "grade": "A",
+            },
+            {
+                "instrument": "EURUSD",
+                "asset_class": "fx",
+                "direction": "BUY",
+                "horizon": "SWING",
+                "score": 3.0,
+                "grade": "A",
+            },
+        ],
+    )
+    r = client.get("/api/ui/setups/agri?include_unpublished=1")
+    data = r.get_json()
+    assert data["total_count"] == 1
+    assert [s["instrument"] for s in data["setups"]] == ["Corn"]
 
 
 def test_setups_passes_through_setup_dict(

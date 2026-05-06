@@ -216,6 +216,13 @@ def _grade_key(entry: dict) -> int:
     return _GRADE_RANK.get(entry.get("grade") or "", 99)
 
 
+# Asset-klasser som hører hjemme i agri-fanen. Speiler
+# `_AGRI_ASSET_CLASSES` i `cli/signals_all.py`. Defensiv filter slik at
+# finans-fanen aldri viser softs/grains selv om signals.json blir skrevet
+# uten --split (f.eks. ved manuelle CLI-kall).
+_AGRI_ASSET_CLASSES = frozenset({"grains", "softs"})
+
+
 def _read_signals_list(path: Path) -> list[dict]:
     """Les en signals.json-liste (financial eller agri).
 
@@ -280,11 +287,14 @@ def setups_financial() -> Response:
 
     Leser `config.signals_path`. Default skjuler ikke-publiserte
     setups (`published=False`); send `?include_unpublished=1` for
-    debug-visning. Invalidated-signaler skjules alltid.
+    debug-visning. Invalidated-signaler skjules alltid. Agri-asset-
+    klasser (softs/grains) filtreres alltid bort uansett hva fila
+    inneholder — agri vises kun via /api/ui/setups/agri.
     """
     from flask import request
 
     entries = _read_signals_list(_config().signals_path)
+    entries = [e for e in entries if e.get("asset_class") not in _AGRI_ASSET_CLASSES]
     include_unpub = request.args.get("include_unpublished", "").lower() in ("1", "true", "yes")
     return _setups_response(
         entries,
@@ -296,10 +306,12 @@ def setups_financial() -> Response:
 @ui_bp.get("/api/ui/setups/agri")
 def setups_agri() -> Response:
     """Agri setups (grains/softs). Samme kontrakt som financial,
-    leser `config.agri_signals_path`."""
+    leser `config.agri_signals_path`. Filtrerer alltid til kun
+    softs/grains (defensiv mot pollution fra ikke-split skriving)."""
     from flask import request
 
     entries = _read_signals_list(_config().agri_signals_path)
+    entries = [e for e in entries if e.get("asset_class") in _AGRI_ASSET_CLASSES]
     include_unpub = request.args.get("include_unpublished", "").lower() in ("1", "true", "yes")
     return _setups_response(
         entries,
