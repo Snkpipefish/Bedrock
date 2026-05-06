@@ -147,41 +147,48 @@ families:
   unica:
     # Sub-fase 12.5+ session 112 + 12.11+ analytiker D.5: kombinert
     # Brasil + India supply-familie. UNICA bi-ukentlig (Brasil ~40%
-    # global produksjon) + USDA PSD årlig (India ~30% produksjon,
-    # policy-swing-faktor).
+    # global produksjon) + USDA PSD årlig + UN Comtrade månedlig
+    # (India ~30% produksjon, policy-swing-faktor).
     #
-    # Sub-vekter (etter session 154 OOS 2023-funn — added EXPORTS):
-    # - unica_change sugar_production_yoy: 0.40 (Brasil cum YoY)
-    # - unica_change mix_sugar_pct: 0.20 (Brasil sukker/etanol-allokering)
-    # - usda_psd_yoy India PROD: 0.20 (offisiell PSD-produksjon)
-    # - usda_psd_yoy India EXPORTS: 0.20 (policy-effekt-fanger; OOS 2023
-    #   viste at PROD alene bommet på India-eksportforbud-regimet — høy
-    #   produksjon men null eksport ga PROD=BEAR mens MARKED=BULL).
+    # Sub-vekter (etter session 154 — Comtrade lagt til):
+    # - unica_change sugar_production_yoy: 0.35 (Brasil cum YoY)
+    # - unica_change mix_sugar_pct: 0.15 (Brasil sukker/etanol-allokering)
+    # - usda_psd_yoy India PROD: 0.15 (offisiell PSD-produksjon, årlig)
+    # - usda_psd_yoy India EXPORTS: 0.10 (offisiell PSD-eksport, årlig)
+    # - comtrade_export_yoy India: 0.25 (UN Comtrade månedlig export, ~2-4
+    #   mnd lag — fanger policy-events kvartal-tidlig vs USDA PSD oktober-rapport)
     #
-    # Brasil 0.60 vs India 0.40 reflekterer eksport-impact (Brasil
-    # ~45% global eksport, India 0-15% avhengig av policy).
+    # Brasil 0.50 vs India 0.50 — India fikk høyere vekt etter Comtrade-
+    # tillegget siden den real-time leveransen utvider observasjons-vinduet.
     weight: 2
     drivers:
       - name: unica_change
-        weight: 0.40
+        weight: 0.35
         params:
           metric: sugar_production_yoy
       - name: unica_change
-        weight: 0.20
+        weight: 0.15
         params:
           metric: mix_sugar_pct
       - name: usda_psd_yoy
-        weight: 0.20
+        weight: 0.15
         params:
           series_id: USDA_PSD_INDIA_SUGAR_PROD_KMT
           bull_when: low  # mindre India-prod = supply tight = bull
         horizons:
           - MAKRO
       - name: usda_psd_yoy
-        weight: 0.20
+        weight: 0.10
         params:
           series_id: USDA_PSD_INDIA_SUGAR_EXPORTS_KMT
           bull_when: low  # mindre India-eksport = supply tight = bull
+        horizons:
+          - MAKRO
+      - name: comtrade_export_yoy
+        weight: 0.25
+        params:
+          series_id: COMTRADE_INDIA_SUGAR_EXPORTS_KG_MONTHLY
+          bull_when: low  # 12-mo trailing eksport ned vs forrige år = supply tight = bull
         horizons:
           - MAKRO
   cross:

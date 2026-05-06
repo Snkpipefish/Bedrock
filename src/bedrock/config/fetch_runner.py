@@ -347,9 +347,7 @@ def run_usda_psd_india_sugar(
 
     def _items():
         def _do():
-            df = fetch_india_sugar_history(
-                from_year=from_date.year, to_year=to_date.year
-            )
+            df = fetch_india_sugar_history(from_year=from_date.year, to_year=to_date.year)
             if df.empty:
                 return 0
             return store.append_fundamentals(df)
@@ -374,7 +372,7 @@ def run_isma_india(
     til fundamentals med series_id=ISMA_INDIA_SUGAR_PROD_LAKH_TONS.
     Instrument-uavhengig — kjører én gang per fetch-runde.
     """
-    from bedrock.fetch.isma_india import SERIES_ID, fetch_isma_india
+    from bedrock.fetch.isma_india import fetch_isma_india
 
     result = FetchRunResult(fetcher_name="isma_india")
 
@@ -383,15 +381,46 @@ def run_isma_india(
             df = fetch_isma_india()
             if df.empty:
                 return 0
-            mask = (df["date"] >= from_date.isoformat()) & (
-                df["date"] <= to_date.isoformat()
-            )
+            mask = (df["date"] >= from_date.isoformat()) & (df["date"] <= to_date.isoformat())
             windowed = df[mask]
             if windowed.empty:
                 return 0
             return store.append_fundamentals(windowed)
 
         yield "isma_india", _do
+
+    _safe_run(_items(), result)
+    return result
+
+
+@register_runner("comtrade_india_sugar")
+def run_comtrade_india_sugar(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """UN Comtrade månedlig India sugar exports (sub-fase 12.11+ session 154).
+
+    Henter månedlig eksport-data via Comtrade public preview-endpoint
+    (ingen API-key, ~500 records/call gratis tier). Aggregerer alle
+    1701-HS-koder (raw + refined cane sugar). Skriver til fundamentals
+    som COMTRADE_INDIA_SUGAR_EXPORTS_USD/KG_MONTHLY. Adresserer USDA
+    PSD årlig-lag (~6 mnd) for India policy-events (eksportforbud).
+    """
+    from bedrock.fetch.comtrade import fetch_india_sugar_exports
+
+    result = FetchRunResult(fetcher_name="comtrade_india_sugar")
+
+    def _items():
+        def _do():
+            df = fetch_india_sugar_exports(from_year=from_date.year, to_year=to_date.year)
+            if df.empty:
+                return 0
+            return store.append_fundamentals(df)
+
+        yield "comtrade_india_sugar", _do
 
     _safe_run(_items(), result)
     return result

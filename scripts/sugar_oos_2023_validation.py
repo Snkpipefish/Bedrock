@@ -46,15 +46,16 @@ STEP_DAYS = 7
 def make_baseline_yaml(src_yaml: Path, dst_yaml: Path) -> None:
     """Lag en kopi av sugar.yaml hvor India-drivere er null-vektet.
 
-    Konkrete endringer (post session 154 — etter EXPORTS-driver wiring):
+    Konkrete endringer (post session 154 v3 — Comtrade-driver lagt til):
     1. weather_stress.params.regions.india_maharashtra: 0.30 → 0.0,
-       brazil_centro_sul re-vektet 0.55 → 0.79, thailand 0.15 → 0.21
-       (sum=1.0)
-    2. unica-familien: zero begge usda_psd_yoy India-entries (PROD + EXPORTS)
-       og re-balanser unica_change-vektene til sum=1.00:
-       - sugar_production_yoy: 0.40 → 0.67
-       - mix_sugar_pct: 0.20 → 0.33
-       - usda_psd_yoy(*): 0.20 → 0.0
+       brazil_centro_sul re-vektet 0.55 → 0.79, thailand 0.15 → 0.21 (sum=1.0)
+    2. unica-familien: zero alle India-drivere (USDA PROD/EXPORTS + Comtrade)
+       og re-balanser unica_change Brasil-vektene til sum=1.00:
+       - sugar_production_yoy: 0.35 → 0.70
+       - mix_sugar_pct: 0.15 → 0.30
+       - usda_psd_yoy PROD: 0.15 → 0.0
+       - usda_psd_yoy EXPORTS: 0.10 → 0.0
+       - comtrade_export_yoy: 0.25 → 0.0
     """
     text = src_yaml.read_text(encoding="utf-8")
 
@@ -75,20 +76,32 @@ def make_baseline_yaml(src_yaml: Path, dst_yaml: Path) -> None:
         text,
     )
 
-    # 2. unica-familien: re-balanser usda_psd_yoy India (begge entries) → 0
+    # 2. unica-familien: re-balanser Brasil-drivere, zero alle India-drivere
     text = re.sub(
-        r"(\s+- name: unica_change\n\s+weight:\s+)0\.40(\n\s+params:\n\s+metric: sugar_production_yoy)",
-        r"\g<1>0.67\g<2>",
+        r"(\s+- name: unica_change\n\s+weight:\s+)0\.35(\n\s+params:\n\s+metric: sugar_production_yoy)",
+        r"\g<1>0.70\g<2>",
         text,
     )
     text = re.sub(
-        r"(\s+- name: unica_change\n\s+weight:\s+)0\.20(\n\s+params:\n\s+metric: mix_sugar_pct)",
-        r"\g<1>0.33\g<2>",
+        r"(\s+- name: unica_change\n\s+weight:\s+)0\.15(\n\s+params:\n\s+metric: mix_sugar_pct)",
+        r"\g<1>0.30\g<2>",
         text,
     )
-    # Match begge usda_psd_yoy-entries (PROD + EXPORTS) — bruk replace_all-mønster
+    # USDA PROD: 0.15 → 0.0
     text = re.sub(
-        r"(\s+- name: usda_psd_yoy\n\s+weight:\s+)0\.20",
+        r"(\s+- name: usda_psd_yoy\n\s+weight:\s+)0\.15(\n\s+params:\n\s+series_id: USDA_PSD_INDIA_SUGAR_PROD_KMT)",
+        r"\g<1>0.0\g<2>",
+        text,
+    )
+    # USDA EXPORTS: 0.10 → 0.0
+    text = re.sub(
+        r"(\s+- name: usda_psd_yoy\n\s+weight:\s+)0\.10(\n\s+params:\n\s+series_id: USDA_PSD_INDIA_SUGAR_EXPORTS_KMT)",
+        r"\g<1>0.0\g<2>",
+        text,
+    )
+    # Comtrade: 0.25 → 0.0
+    text = re.sub(
+        r"(\s+- name: comtrade_export_yoy\n\s+weight:\s+)0\.25",
         r"\g<1>0.0",
         text,
     )

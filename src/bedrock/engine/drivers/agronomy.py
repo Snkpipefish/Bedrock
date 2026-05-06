@@ -733,6 +733,94 @@ def usda_psd_yoy(store: Any, instrument: str, params: dict) -> float:
 
 
 # ---------------------------------------------------------------------------
+# comtrade_export_yoy (sub-fase 12.11++ session 154 — UN Comtrade monthly)
+# ---------------------------------------------------------------------------
+
+
+@register("comtrade_export_yoy")
+def comtrade_export_yoy(store: Any, instrument: str, params: dict) -> float:
+    """UN Comtrade YoY-eksport-endring (12-mo trailing sum vs forrige år), 0..1.
+
+    Designet for månedlige Comtrade-fundamentals-serier som
+    `COMTRADE_INDIA_SUGAR_EXPORTS_KG_MONTHLY`. I motsetning til usda_psd_yoy
+    (som bare tar siste-vs-forrige rad) bruker denne 12-måneders rullende
+    sum for å eliminere sesong og gi statistisk meningsfull YoY for trade-
+    flow-data. Samme step-mapping som usda_psd_yoy/conab_yoy så atferd er
+    konsistent.
+
+    Eksempel-bruk: India eksportforbud 2023 ga 12-mo trailing sum
+    Q3-2023 lavere enn Q3-2022 (selv om månedlige bidrag fortsatt var positive
+    fra start-året) → bull-signal kvartal-tidlig vs USDA PSD årlig-rapport.
+
+    Params:
+        series_id (REQUIRED): fundamentals-series, e.g.
+            "COMTRADE_INDIA_SUGAR_EXPORTS_KG_MONTHLY"
+        bull_when: "low" (default — drop = bull) eller "high"
+        thresholds: optional override (samme format som usda_psd_yoy)
+
+    Returnerer 0..1. Defensiv 0.5 (nøytral) hvis < 24 måneder data
+    (krever 12 mnd nåværende + 12 mnd forrige for YoY).
+    """
+    _horizon = params.get("_horizon")
+    import pandas as pd
+
+    series_id = params.get("series_id")
+    if not series_id:
+        _log.warning("comtrade_export_yoy.no_series_id", instrument=instrument)
+        return 0.5
+
+    try:
+        s = store.get_fundamentals(series_id)
+    except KeyError:
+        _log.debug(
+            "comtrade_export_yoy.data_missing",
+            instrument=instrument,
+            series_id=series_id,
+        )
+        return 0.5
+    except Exception as exc:
+        _log.warning(
+            "comtrade_export_yoy.fetch_failed",
+            instrument=instrument,
+            error=str(exc),
+        )
+        return 0.5
+
+    if s is None or len(s) < 24:
+        return 0.5
+
+    # 12-mo trailing sum: nåværende = sum siste 12 mnd; forrige = sum av 12 mnd
+    # før det.
+    current = float(s.iloc[-12:].sum())
+    previous = float(s.iloc[-24:-12].sum())
+    if previous == 0 or pd.isna(current) or pd.isna(previous):
+        return 0.5
+
+    yoy_pct = (current - previous) / previous * 100.0
+    bull_when = str(params.get("bull_when", "low")).lower()
+
+    user_thresholds = params.get("thresholds")
+    if user_thresholds is None:
+        steps: tuple[tuple[float, float], ...] = (
+            (-30.0, 1.00),
+            (-15.0, 0.85),
+            (-5.0, 0.65),
+            (0.0, 0.50),
+            (10.0, 0.35),
+        )
+    else:
+        steps = tuple((float(t), float(s)) for t, s in user_thresholds)
+
+    score = 0.15
+    for threshold, step_score in steps:
+        if yoy_pct <= threshold:
+            score = float(step_score)
+            break
+
+    return score if bull_when == "low" else 1.0 - score
+
+
+# ---------------------------------------------------------------------------
 # ethanol_parity_brl (sub-fase 12.11+ analytiker D.2)
 # ---------------------------------------------------------------------------
 

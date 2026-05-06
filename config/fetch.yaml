@@ -78,6 +78,19 @@ fetchers:
     table: fundamentals
     ts_column: date
 
+  # Sub-fase 12.11+ session 154: UN Comtrade månedlig India sugar exports.
+  # Public preview-endpoint (ingen API-key), aggregerer alle 1701-HS-koder
+  # for verdens-eksport. Adresserer USDA PSD årlig-lag — fanger India
+  # policy-events (eksportforbud) ~6 mnd tidligere. ~2-4 mnd lag fra UN.
+  # Kjører 15. i mnd for å fange forrige måneds publisering.
+  comtrade_india_sugar:
+    module: bedrock.fetch.comtrade
+    cron: "0 6 15 * *"           # 15. i mnd 06:00 Oslo
+    stale_hours: 720              # månedlig
+    on_failure: log_and_skip
+    table: fundamentals
+    ts_column: date
+
   # Sub-fase 12.11+ analytiker D.5: ISMA India sukker-produksjon.
   # API-basert fetcher (https://api.ismaindia.org/api/auth/getallresource).
   # Parser produksjons-tall fra press release-titler (X lakh tonnes).
