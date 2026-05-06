@@ -1,0 +1,20 @@
+# Manuelt-skrevet (ikke fra `bedrock systemd generate`) — kvartalsvis
+# rolling-floor analyse for sugar.yaml. Future-spor #3 fra session 153.
+[Unit]
+Description=Bedrock rolling-floor: sukker (kvartalsvis dry-run-rapport)
+After=network-online.target
+Wants=network-online.target
+OnFailure=bedrock-notify@%N.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/pc/bedrock
+# Dry-run: skriver state til data/_meta/sugar_rolling_floor.json + audit-log,
+# men oppdaterer IKKE sugar.yaml automatisk. Operator må kjøre --apply
+# manuelt etter review (Δ > 0.5 fanges, men strategi-impact må vurderes).
+ExecStart=/home/pc/bedrock/.venv/bin/python scripts/sugar_update_rolling_floor.py
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

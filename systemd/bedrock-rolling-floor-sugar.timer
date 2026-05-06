@@ -1,0 +1,14 @@
+# Kvartalsvis rolling-floor analyse for sugar.yaml.
+# Kjører 1. dag i hver mars/jun/sep/des kl 06:00 Oslo (etter at forrige
+# kvartals-data er fullstendig — gir representativt 5y-vindu).
+[Unit]
+Description=Bedrock rolling-floor timer: sugar (kvartalsvis)
+Requires=bedrock-rolling-floor-sugar.service
+
+[Timer]
+OnCalendar=*-03,06,09,12-01 06:00:00
+Persistent=true
+Unit=bedrock-rolling-floor-sugar.service
+
+[Install]
+WantedBy=timers.target
