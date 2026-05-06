@@ -53,6 +53,14 @@ data/bot/trade_log.jsonl
 data/bot/daily_loss_state.json
 data/bot/agri_symbol_info.json
 data/bot/*.tmp
+data/bot/confirmation_stats.json
+
+# Sub-fase 12.11+: signals_bot.json regenereres av hver fetcher's
+# ExecStartPost (signals-all). Kildekontrollering forårsaker konstante
+# auto-push-konflikter når laptop ligger bak origin.
+data/signals_bot.json
+data/signals.json
+data/agri_signals.json
 
 # Men behold mappene (via .gitkeep) + baseline-filer
 !data/parquet/.gitkeep

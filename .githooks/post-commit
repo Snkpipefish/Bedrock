@@ -27,7 +27,21 @@ fi
 
 # Sjekk om upstream er satt for gjeldende branch
 if git rev-parse --abbrev-ref "${branch}@{upstream}" >/dev/null 2>&1; then
-    # Upstream finnes — normal push
+    # Upstream finnes — normal push.
+    # Sub-fase 12.11+: pre-fetch + auto-rebase hvis bak origin. Forhindrer
+    # at laptop blir liggende bak når worktrees pusher commits til main.
+    git fetch --quiet origin "$branch" 2>/dev/null
+    behind=$(git rev-list --count "HEAD..origin/$branch" 2>/dev/null || echo 0)
+    if [ "$behind" -gt 0 ]; then
+        if git pull --rebase --quiet 2>/tmp/bedrock-rebase.log; then
+            echo "[auto-push] auto-rebased over $behind upstream commit(s)"
+        else
+            echo "[auto-push] auto-rebase feilet — push skipped. Detaljer:"
+            sed 's/^/  /' /tmp/bedrock-rebase.log
+            echo "[auto-push] Kjør manuelt: git rebase --abort; git stash; git pull --rebase; git stash pop"
+            exit 0
+        fi
+    fi
     if git push --quiet 2>/tmp/bedrock-push.log; then
         echo "[auto-push] → origin/$branch  ($(git rev-parse --short HEAD))"
     else
