@@ -145,14 +145,18 @@ def _parse_ts(raw: Any) -> datetime:
         # Unix-timestamp (sek)
         dt = datetime.fromtimestamp(float(raw), tz=timezone.utc)
     elif isinstance(raw, str):
-        # ISO-format; støtter 'YYYY-MM-DD' (dato-only) og full
+        # ISO-format; støtter 'YYYY-MM-DD' (dato-only), 'YYYY-MM'
+        # (måneds-aggregat for weather_monthly), og full
         # 'YYYY-MM-DDTHH:MM:SS[Z/+00:00]'
         cleaned = raw.replace(" ", "T").replace("Z", "+00:00")
         try:
             dt = datetime.fromisoformat(cleaned)
         except ValueError:
-            # Prøv date-only
-            dt = datetime.strptime(raw, "%Y-%m-%d")
+            # Prøv date-only først, deretter måned-only
+            try:
+                dt = datetime.strptime(raw, "%Y-%m-%d")
+            except ValueError:
+                dt = datetime.strptime(raw, "%Y-%m")
     else:
         raise FetchConfigError(f"Ukjent timestamp-format: {raw!r}")
 
