@@ -46,12 +46,15 @@ STEP_DAYS = 7
 def make_baseline_yaml(src_yaml: Path, dst_yaml: Path) -> None:
     """Lag en kopi av sugar.yaml hvor India-drivere er null-vektet.
 
-    Konkrete endringer:
+    Konkrete endringer (post session 154 — etter EXPORTS-driver wiring):
     1. weather_stress.params.regions.india_maharashtra: 0.30 → 0.0,
        brazil_centro_sul re-vektet 0.55 → 0.79, thailand 0.15 → 0.21
        (sum=1.0)
-    2. usda_psd_yoy India: weight 0.30 → 0.0, unica vekter re-balansert
-       (sugar_production_yoy 0.45 → 0.64, mix_sugar_pct 0.25 → 0.36).
+    2. unica-familien: zero begge usda_psd_yoy India-entries (PROD + EXPORTS)
+       og re-balanser unica_change-vektene til sum=1.00:
+       - sugar_production_yoy: 0.40 → 0.67
+       - mix_sugar_pct: 0.20 → 0.33
+       - usda_psd_yoy(*): 0.20 → 0.0
     """
     text = src_yaml.read_text(encoding="utf-8")
 
@@ -72,20 +75,20 @@ def make_baseline_yaml(src_yaml: Path, dst_yaml: Path) -> None:
         text,
     )
 
-    # 2. unica-familien: re-balanser usda_psd_yoy India 0.30 → 0.0
-    # Først finn unica-driver-blokken og rebalanser.
+    # 2. unica-familien: re-balanser usda_psd_yoy India (begge entries) → 0
     text = re.sub(
-        r"(\s+- name: unica_change\n\s+weight:\s+)0\.45(\n\s+params:\n\s+metric: sugar_production_yoy)",
-        r"\g<1>0.64\g<2>",
+        r"(\s+- name: unica_change\n\s+weight:\s+)0\.40(\n\s+params:\n\s+metric: sugar_production_yoy)",
+        r"\g<1>0.67\g<2>",
         text,
     )
     text = re.sub(
-        r"(\s+- name: unica_change\n\s+weight:\s+)0\.25(\n\s+params:\n\s+metric: mix_sugar_pct)",
-        r"\g<1>0.36\g<2>",
+        r"(\s+- name: unica_change\n\s+weight:\s+)0\.20(\n\s+params:\n\s+metric: mix_sugar_pct)",
+        r"\g<1>0.33\g<2>",
         text,
     )
+    # Match begge usda_psd_yoy-entries (PROD + EXPORTS) — bruk replace_all-mønster
     text = re.sub(
-        r"(\s+- name: usda_psd_yoy\n\s+weight:\s+)0\.30",
+        r"(\s+- name: usda_psd_yoy\n\s+weight:\s+)0\.20",
         r"\g<1>0.0",
         text,
     )
@@ -108,7 +111,7 @@ def grade_breakdown(signals: list, direction: str) -> dict[str, dict]:
             bucket["hits"] += 1
         bucket["ret_sum"] += float(s.forward_return_pct)
         bucket["score_sum"] += float(s.score or 0)
-    for g, b in out.items():
+    for _g, b in out.items():
         n = b["n"]
         b["hit_rate"] = b["hits"] / n if n else 0.0
         b["avg_return"] = b["ret_sum"] / n if n else 0.0
@@ -118,7 +121,9 @@ def grade_breakdown(signals: list, direction: str) -> dict[str, dict]:
 
 def fmt_table(prod: dict, base: dict, title: str) -> str:
     lines = [f"### {title}\n"]
-    lines.append("| Grade | n (prod) | hr (prod) | avg_score (prod) | n (baseline) | hr (baseline) | avg_score (baseline) |\n")
+    lines.append(
+        "| Grade | n (prod) | hr (prod) | avg_score (prod) | n (baseline) | hr (baseline) | avg_score (baseline) |\n"
+    )
     lines.append("|---|---:|---:|---:|---:|---:|---:|\n")
     grades = sorted(set(prod.keys()) | set(base.keys()))
     for g in ["A+", "A", "B", "C"]:
@@ -127,9 +132,9 @@ def fmt_table(prod: dict, base: dict, title: str) -> str:
         p = prod.get(g, {})
         b = base.get(g, {})
         lines.append(
-            f"| {g} | {p.get('n', 0)} | {p.get('hit_rate', 0)*100:.1f}% | "
+            f"| {g} | {p.get('n', 0)} | {p.get('hit_rate', 0) * 100:.1f}% | "
             f"{p.get('avg_score', 0):.2f} | {b.get('n', 0)} | "
-            f"{b.get('hit_rate', 0)*100:.1f}% | {b.get('avg_score', 0):.2f} |\n"
+            f"{b.get('hit_rate', 0) * 100:.1f}% | {b.get('avg_score', 0):.2f} |\n"
         )
     lines.append("\n")
     return "".join(lines)
@@ -142,14 +147,18 @@ def main() -> int:
     print(f"=== Kjører prod (med India-drivere) for h={HORIZON_DAYS}d ===", flush=True)
     prod_buy = run_orchestrator_replay(
         store,
-        BacktestConfig(instrument="Sugar", horizon_days=HORIZON_DAYS, from_date=FROM_DATE, to_date=TO_DATE),
+        BacktestConfig(
+            instrument="Sugar", horizon_days=HORIZON_DAYS, from_date=FROM_DATE, to_date=TO_DATE
+        ),
         instruments_dir=str(INSTRUMENTS_DIR),
         direction="buy",
         step_days=STEP_DAYS,
     )
     prod_sell = run_orchestrator_replay(
         store,
-        BacktestConfig(instrument="Sugar", horizon_days=HORIZON_DAYS, from_date=FROM_DATE, to_date=TO_DATE),
+        BacktestConfig(
+            instrument="Sugar", horizon_days=HORIZON_DAYS, from_date=FROM_DATE, to_date=TO_DATE
+        ),
         instruments_dir=str(INSTRUMENTS_DIR),
         direction="sell",
         step_days=STEP_DAYS,
@@ -171,14 +180,18 @@ def main() -> int:
         print(f"=== Kjører baseline (uten India-drivere) for h={HORIZON_DAYS}d ===", flush=True)
         base_buy = run_orchestrator_replay(
             store,
-            BacktestConfig(instrument="Sugar", horizon_days=HORIZON_DAYS, from_date=FROM_DATE, to_date=TO_DATE),
+            BacktestConfig(
+                instrument="Sugar", horizon_days=HORIZON_DAYS, from_date=FROM_DATE, to_date=TO_DATE
+            ),
             instruments_dir=str(baseline_dir),
             direction="buy",
             step_days=STEP_DAYS,
         )
         base_sell = run_orchestrator_replay(
             store,
-            BacktestConfig(instrument="Sugar", horizon_days=HORIZON_DAYS, from_date=FROM_DATE, to_date=TO_DATE),
+            BacktestConfig(
+                instrument="Sugar", horizon_days=HORIZON_DAYS, from_date=FROM_DATE, to_date=TO_DATE
+            ),
             instruments_dir=str(baseline_dir),
             direction="sell",
             step_days=STEP_DAYS,
@@ -216,8 +229,12 @@ def main() -> int:
     md.append(fmt_table(prod_buy_grades, base_buy_grades, "h=180d BUY"))
 
     # Sammendrag
-    prod_a_sell_n = prod_sell_grades.get("A+", {}).get("n", 0) + prod_sell_grades.get("A", {}).get("n", 0)
-    base_a_sell_n = base_sell_grades.get("A+", {}).get("n", 0) + base_sell_grades.get("A", {}).get("n", 0)
+    prod_a_sell_n = prod_sell_grades.get("A+", {}).get("n", 0) + prod_sell_grades.get("A", {}).get(
+        "n", 0
+    )
+    base_a_sell_n = base_sell_grades.get("A+", {}).get("n", 0) + base_sell_grades.get("A", {}).get(
+        "n", 0
+    )
     delta = prod_a_sell_n - base_a_sell_n
 
     md.append("## Konklusjon\n\n")
@@ -225,11 +242,17 @@ def main() -> int:
     md.append(f"- A+/A SELL-antall (baseline u/India): {base_a_sell_n}\n")
     md.append(f"- Δ (prod − baseline): {delta:+d}\n\n")
     if delta < 0:
-        md.append("**RESULTAT: India-drivere svekket A SELL-signaler (færre A+/A SELL i 2023).** Suksess-kriterium oppfylt.\n")
+        md.append(
+            "**RESULTAT: India-drivere svekket A SELL-signaler (færre A+/A SELL i 2023).** Suksess-kriterium oppfylt.\n"
+        )
     elif delta == 0:
-        md.append("**RESULTAT: India-drivere endret ikke A SELL-antall.** Marginalt — sjekk avg_score endringer.\n")
+        md.append(
+            "**RESULTAT: India-drivere endret ikke A SELL-antall.** Marginalt — sjekk avg_score endringer.\n"
+        )
     else:
-        md.append("**RESULTAT: India-drivere ØKTE A SELL-signaler.** Mot-intuitivt — verifiser bull_when-konfig.\n")
+        md.append(
+            "**RESULTAT: India-drivere ØKTE A SELL-signaler.** Mot-intuitivt — verifiser bull_when-konfig.\n"
+        )
 
     OUT_MD.parent.mkdir(parents=True, exist_ok=True)
     OUT_MD.write_text("".join(md), encoding="utf-8")

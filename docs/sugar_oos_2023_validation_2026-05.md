@@ -15,23 +15,23 @@
 ### h=180d SELL
 | Grade | n (prod) | hr (prod) | avg_score (prod) | n (baseline) | hr (baseline) | avg_score (baseline) |
 |---|---:|---:|---:|---:|---:|---:|
-| A+ | 4 | 25.0% | 10.20 | 3 | 33.3% | 10.27 |
-| A | 19 | 73.7% | 8.72 | 18 | 72.2% | 8.80 |
-| B | 4 | 75.0% | 7.52 | 6 | 66.7% | 7.51 |
+| A+ | 4 | 25.0% | 10.23 | 4 | 25.0% | 10.41 |
+| A | 19 | 73.7% | 8.71 | 19 | 73.7% | 8.84 |
+| B | 4 | 75.0% | 7.47 | 4 | 75.0% | 7.52 |
 
 ## BUY-distribusjon (kontrastsjekk)
 
 ### h=180d BUY
 | Grade | n (prod) | hr (prod) | avg_score (prod) | n (baseline) | hr (baseline) | avg_score (baseline) |
 |---|---:|---:|---:|---:|---:|---:|
-| A+ | 3 | 33.3% | 10.17 | 5 | 20.0% | 10.27 |
-| A | 18 | 22.2% | 8.66 | 17 | 35.3% | 8.56 |
-| B | 6 | 66.7% | 7.84 | 5 | 40.0% | 7.75 |
+| A+ | 2 | 0.0% | 10.32 | 2 | 0.0% | 10.30 |
+| A | 18 | 27.8% | 8.78 | 15 | 33.3% | 8.83 |
+| B | 7 | 57.1% | 7.84 | 10 | 40.0% | 7.71 |
 
 ## Konklusjon
 
 - A+/A SELL-antall (prod): 23
-- A+/A SELL-antall (baseline u/India): 21
-- Δ (prod − baseline): +2
+- A+/A SELL-antall (baseline u/India): 23
+- Δ (prod − baseline): +0
 
-**RESULTAT: India-drivere ØKTE A SELL-signaler.** Mot-intuitivt — verifiser bull_when-konfig.
+**RESULTAT: India-drivere endret ikke A SELL-antall.** Marginalt — sjekk avg_score endringer.

@@ -150,28 +150,38 @@ families:
     # global produksjon) + USDA PSD årlig (India ~30% produksjon,
     # policy-swing-faktor).
     #
-    # Sub-vekter:
-    # - unica_change sugar_production_yoy: 0.45 (Brasil cum YoY)
-    # - unica_change mix_sugar_pct: 0.25 (Brasil sukker/etanol-allokering)
-    # - usda_psd_yoy India: 0.30 (offisiell PSD, 16 års historikk)
+    # Sub-vekter (etter session 154 OOS 2023-funn — added EXPORTS):
+    # - unica_change sugar_production_yoy: 0.40 (Brasil cum YoY)
+    # - unica_change mix_sugar_pct: 0.20 (Brasil sukker/etanol-allokering)
+    # - usda_psd_yoy India PROD: 0.20 (offisiell PSD-produksjon)
+    # - usda_psd_yoy India EXPORTS: 0.20 (policy-effekt-fanger; OOS 2023
+    #   viste at PROD alene bommet på India-eksportforbud-regimet — høy
+    #   produksjon men null eksport ga PROD=BEAR mens MARKED=BULL).
     #
-    # Brasil 0.70 vs India 0.30 reflekterer eksport-impact (Brasil
+    # Brasil 0.60 vs India 0.40 reflekterer eksport-impact (Brasil
     # ~45% global eksport, India 0-15% avhengig av policy).
     weight: 2
     drivers:
       - name: unica_change
-        weight: 0.45
+        weight: 0.40
         params:
           metric: sugar_production_yoy
       - name: unica_change
-        weight: 0.25
+        weight: 0.20
         params:
           metric: mix_sugar_pct
       - name: usda_psd_yoy
-        weight: 0.30
+        weight: 0.20
         params:
           series_id: USDA_PSD_INDIA_SUGAR_PROD_KMT
           bull_when: low  # mindre India-prod = supply tight = bull
+        horizons:
+          - MAKRO
+      - name: usda_psd_yoy
+        weight: 0.20
+        params:
+          series_id: USDA_PSD_INDIA_SUGAR_EXPORTS_KMT
+          bull_when: low  # mindre India-eksport = supply tight = bull
         horizons:
           - MAKRO
   cross:
