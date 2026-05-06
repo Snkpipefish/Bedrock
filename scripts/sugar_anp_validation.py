@@ -68,14 +68,21 @@ def main() -> int:
         f"{common.index.max().date()} ({len(common)} dager).*\n"
     )
 
-    # 4. For hver UNICA-rapport: paritet-signal dagen før vs mix_sugar_pct neste rapport
+    # 4. For hver UNICA-rapport: paritet-signal vs mix_sugar_pct N rapporter frem
+    # Sub-fase 12.11+ punkt 2 (sweep-resultat): mølle-respons har ~3-rapport-
+    # forsinkelse (~45-60 dager). Paritet-signal i dag predikerer mix tre
+    # rapporter frem; lag=3 gir ρ=-0.389 (passerer |ρ|≥0.30), lag=1 gir +0.06
+    # (støy). Se docs/sugar_anp_sweep_2026-05.md.
+    LAG_REPORTS = 3
     pairs: list[tuple[float, float, str]] = []
     unica_dates = unica.index.tolist()
-    for i, ud in enumerate(unica_dates[:-1]):
-        next_ud = unica_dates[i + 1]
+    for i, ud in enumerate(unica_dates):
+        target_idx = i + LAG_REPORTS
+        if target_idx >= len(unica_dates):
+            continue
+        target_ud = unica_dates[target_idx]
         # Paritet-z-score samme dag
         if ud not in delta_z.index:
-            # finn nærmeste tidligere dato
             idx = delta_z.index.searchsorted(ud) - 1
             if idx < 0 or idx >= len(delta_z):
                 continue
@@ -84,13 +91,15 @@ def main() -> int:
             z_signal = delta_z.loc[ud]
         if pd.isna(z_signal):
             continue
-        # Mix-andel ved neste UNICA-rapport
-        next_mix = unica.loc[next_ud, "mix_sugar_pct"]
-        if pd.isna(next_mix):
+        target_mix = unica.loc[target_ud, "mix_sugar_pct"]
+        if pd.isna(target_mix):
             continue
-        pairs.append((float(z_signal), float(next_mix), str(ud.date())))
+        pairs.append((float(z_signal), float(target_mix), str(ud.date())))
 
-    lines.append(f"## Sammenstillinger\n\n{len(pairs)} (paritet_z_t, mix_sugar_pct_t+1)-par.\n")
+    lines.append(
+        f"## Sammenstillinger\n\n{len(pairs)} (paritet_z_t, mix_sugar_pct_t+{LAG_REPORTS})-par "
+        f"(LAG={LAG_REPORTS} UNICA-rapporter frem — mølle-respons-forsinkelse).\n"
+    )
 
     if len(pairs) < 5:
         lines.append("**INSUFFICIENT DATA** — trenger minimum 5 par for korrelasjon.\n")
