@@ -156,21 +156,17 @@ def main() -> int:
     )
     print(f"prod buy={len(prod_buy.signals)} sell={len(prod_sell.signals)}", flush=True)
 
-    # Lag baseline (ingen India-drivere) i temp-mappe
+    # Lag baseline (ingen India-drivere) i temp-mappe.
+    # `inherits:` refererer til config/defaults/ (sibling-dir i repo-root)
+    # — load_all_instruments leser den separat fra DEFAULT_DEFAULTS_DIR,
+    # så vi trenger bare å kopiere instruments/-filene.
     with tempfile.TemporaryDirectory() as tmp_dir:
         baseline_dir = Path(tmp_dir)
-        # Kopier hele instruments-dir, overskrive sugar.yaml med baseline
         for f in INSTRUMENTS_DIR.iterdir():
-            shutil.copy(f, baseline_dir / f.name)
+            if f.is_file():
+                shutil.copy(f, baseline_dir / f.name)
         baseline_sugar = baseline_dir / "sugar.yaml"
         make_baseline_yaml(SUGAR_YAML, baseline_sugar)
-
-        # Kopier defaults også
-        defaults_src = INSTRUMENTS_DIR / "_defaults"
-        if defaults_src.exists():
-            (baseline_dir / "_defaults").mkdir(exist_ok=True)
-            for f in defaults_src.iterdir():
-                shutil.copy(f, baseline_dir / "_defaults" / f.name)
 
         print(f"=== Kjører baseline (uten India-drivere) for h={HORIZON_DAYS}d ===", flush=True)
         base_buy = run_orchestrator_replay(
