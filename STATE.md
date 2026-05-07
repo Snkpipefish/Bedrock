@@ -1,5 +1,46 @@
 # Bedrock — state
 
+## Session log (most recent first)
+
+### 2026-05-07 — cross-repo cleanup fra cot-explorer
+
+Bruker rapporterte 4 funn fra cot-explorer som hørte hjemme på bedrock-siden.
+
+**EIA cron Wed → Wed+Thu** (commit `04a28a0`). Observert: NW2_EPG0_SWO_R48_BCF
+(NatGas) sto på 2026-04-24, og WCESTUS1/WGTSTUS1 også én uke bak. Cron `30 17
+* * 3` fanget aldri torsdag-publiserte NatGas-data, og hadde ingen
+publiserings-delay-resilience for petroleum. Endret til `30 17 * * 3,4`.
+Smart-skip-logikken sikrer at torsdag-fyringen koster ingenting når
+petroleum allerede er ferskt. Manuell EIA-fetch i dag oppdaterte petroleum
+til 2026-05-01; torsdag 17:30 (dagens fyring) vil hente NatGas.
+
+**ADPMNUSNERNSA lagt til FRED-backfill** (commit `03d426e`). cot-explorer
+fetchet ADP direkte fra FRED selv om alle andre fundamentale serier er
+speilet i bedrocks `fundamentals`-tabell. Lagt inn i
+`scripts/backfill/fred_econ_surprise.py` SERIES-tuplet. Backfilt 120 rader
+(2016-05 → 2026-04). Lagres i absolutte personer (~133M, FRED-original)
+— konsumenter må selv konvertere mot PAYEMS (tusen).
+
+**Kanonisk DB-path dokumentert i CLAUDE.md** (commit `ea83964`). cot-explorer
+hadde default DB-path `~/bedrock/bedrock.db` (684KB stub i repo-rot, gammel
+test-rest) i stedet for `~/bedrock/data/bedrock.db` (213MB aktiv DB) — eksporterte
+rows=0 i ukevis. Ny "Kanoniske paths"-seksjon i CLAUDE.md angir explicit
+canonical path så fremtidige konsumenter + Claude-sessions ikke trår i
+samme felle.
+
+**crop_progress-kolonnen `week_ending`** er korrekt NASS-original (ikke
+`report_date`). Ingen bedrock-endring; cot-explorer's import-skript må
+oppdateres på sin side.
+
+**Stub-DB ~/bedrock/bedrock.db**: 684KB, ingen unike rader (alle tabeller
+har eldre dato + lavere row count enn aktiv DB). Ingen bedrock-kode
+refererer til den. Sletting krever operatør-bekreftelse — venter.
+
+Pyright: 13 errors (uendret pre-eksisterende). Ruff: clean. Scoped
+pytest 95/95 grønt.
+
+---
+
 ## Current state
 
 - **Phase:** 12 **ÅPEN 2026-04-25** — parallell-drift (PLAN § 12). Observasjonsvinduet (sub-session 68) er **PAUSET** per bruker-beslutning 2026-04-25: gjelden fra tidligere faser (placeholder-drivere, kun 2 instrumenter, pyright-feil) gjorde at compare-script viste 0 felles signals — observasjon var meningsløs. Sub-fase 12.5 (debt-rydding) startet i stedet, drivere før instrumenter.
