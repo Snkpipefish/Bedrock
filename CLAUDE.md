@@ -144,3 +144,15 @@ avbrutt-for-å-spørre koster brukerens oppmerksomhet hver gang.
 - Driver-forfattelse: `docs/driver_authoring.md`
 - Rule-forfattelse: `docs/rule_authoring.md`
 - Arkitektur-beslutninger: `docs/decisions/`
+
+## Kanoniske paths
+
+- **SQLite-DB**: `data/bedrock.db` (relativt til repo-rot, dvs.
+  `~/bedrock/data/bedrock.db`). Alle interne komponenter (fetch-runners,
+  setup-generator, signal_server, web-UI) leser/skriver denne. Eksterne
+  konsumenter (f.eks. cot-explorer) skal også peke hit som default.
+  Repo-roten skal IKKE ha en `bedrock.db`-fil — hvis en dukker opp er
+  det stale stub fra eldre tester og kan slettes.
+- **Secrets**: `~/.bedrock/secrets.env` (env-var-format,
+  `BEDROCK_*_API_KEY=...` + `FRED_API_KEY=...`).
+- **Manuell CSV-fallback**: `data/manual/*.csv` per ADR-007 § 4.
