@@ -235,7 +235,10 @@ def test_fetch_yaml_has_eia_entry() -> None:
     config = load_fetch_config(Path("config/fetch.yaml"))
     assert "eia_inventories" in config.fetchers
     spec = config.fetchers["eia_inventories"]
-    assert spec.cron == "30 17 * * 3"
+    # 2026-05-07: cron utvidet fra "30 17 * * 3" til "30 17 * * 3,4" for å
+    # fange NatGas storage (publiseres torsdag) + gi resilience mot
+    # publiserings-delay onsdag.
+    assert spec.cron == "30 17 * * 3,4"
     assert spec.stale_hours == 264  # sub-fase 12.8 § 20.4: ukentlig + 4d buffer
     assert spec.table == "eia_inventory"
     assert spec.ts_column == "date"

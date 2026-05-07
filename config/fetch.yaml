@@ -204,11 +204,16 @@ fetchers:
 
   # Sub-fase 12.5+ session 107 (ADR-007/008): EIA weekly inventories
   # (petroleum + natural gas storage). Petroleum publiseres ons 10:30 ET
-  # = 16:30 Oslo; nat-gas ons-tor avhengig av helligdager. Smart-skip
+  # = 16:30 Oslo; NatGas storage tor 10:30 ET = 16:30 Oslo. Smart-skip
   # i runneren hopper HTTP-kall hvis DB allerede har siste onsdag.
+  # 2026-05-07: cron utvidet fra "* * 3" til "* * 3,4" (ons+tor 17:30).
+  # Forrige config hentet petroleum onsdag, men NatGas (publisert tor) ble
+  # liggende én uke bak. Torsdag-fyringen koster ingenting når petroleum
+  # er ferskt (smart-skip), men fanger NatGas + gir publiserings-resilience
+  # når petroleum-API har cache-delay forbi 17:30 Oslo onsdag.
   eia_inventories:
     module: bedrock.fetch.eia_inventories
-    cron: "30 17 * * 3"          # Ons 17:30 Oslo (etter EIA 16:30 + buffer)
+    cron: "30 17 * * 3,4"        # Ons+Tor 17:30 Oslo (etter EIA 16:30 + buffer)
     stale_hours: 264             # ukentlig + 4d buffer (sub-fase 12.8 § 20.4)
     on_failure: log_and_skip
     table: eia_inventory
