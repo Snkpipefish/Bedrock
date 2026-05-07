@@ -703,31 +703,36 @@ def vix9d_vix_ratio(store: Any, instrument: str, params: dict) -> float:
 # ---------------------------------------------------------------------------
 
 
-# DEX-serier orientering: hver serie er enten "USD/X" (USD pr enhet av X) eller
-# "X/USD" (X pr USD). For "USD strength", USD/X opp = USD strong, X/USD opp =
-# X strong = USD weak.
+# DEX-serier orientering: FRED quoter par i to retninger. For "USD strength
+# breadth" må vi flippe par der serien er kvotert som "USD per X" — der gir
+# stigning USD-svakhet, ikke USD-styrke.
 #
-# FRED-konvensjoner:
-#   DEXJPUS = JPY/USD     → opp = JPY weak vs USD = USD STRONG
-#   DEXCAUS = CAD/USD     → opp = CAD weak = USD STRONG
-#   DEXSDUS = SEK/USD     → opp = SEK weak = USD STRONG
-#   DEXSZUS = CHF/USD     → opp = CHF weak = USD STRONG
-#   DEXUSEU = USD/EUR     → opp = USD strong = USD STRONG  (per FRED, dollar/euro)
-#   DEXUSUK = USD/GBP     → opp = USD strong = USD STRONG
-#   DEXUSAL = USD/AUD     → opp = USD strong = USD STRONG
-#   DEXUSNZ = USD/NZD     → opp = USD strong = USD STRONG
+# FRED-konvensjoner (verifisert mot fred.stlouisfed.org series-metadata):
+#   DEXJPUS = "Japanese Yen / U.S. Dollar"   → JPY per USD; opp = USD STRONG
+#   DEXCAUS = "Canadian Dollars / U.S. $"    → CAD per USD; opp = USD STRONG
+#   DEXSDUS = "Swedish Kronor / U.S. $"      → SEK per USD; opp = USD STRONG
+#   DEXSZUS = "Swiss Francs / U.S. $"        → CHF per USD; opp = USD STRONG
+#   DEXUSEU = "U.S. Dollars / Euro"          → USD per EUR; opp = USD WEAK
+#   DEXUSUK = "U.S. Dollars / British Pound" → USD per GBP; opp = USD WEAK
+#   DEXUSAL = "U.S. Dollars / Australian $"  → USD per AUD; opp = USD WEAK
+#   DEXUSNZ = "U.S. Dollars / NZ Dollar"     → USD per NZD; opp = USD WEAK
 #
-# Alle 8 serier: stigning ⇒ USD STRONG. Breadth = andel av 8 som er opp over
-# `window`-dager.
-_DEX_SERIES: tuple[str, ...] = (
-    "DEXJPUS",
-    "DEXCAUS",
-    "DEXSDUS",
-    "DEXSZUS",
-    "DEXUSEU",
-    "DEXUSUK",
-    "DEXUSAL",
-    "DEXUSNZ",
+# Sub-fase 12.10 follow-up: pre-fix antok feilaktig at alle 8 par hadde samme
+# orientering (alle "opp = USD strong"). Det produserte 50 % feil-tegn på
+# breadth når USD beveget seg ensartet — fordi 4 av 8 par er kvotert
+# motsatt retning. Konsekvens: bull_when='low'-default ga f.eks. 0.0 (full
+# bear FX) i situasjoner der EUR/GBP/AUD/NZD steg samtidig som USD egentlig
+# svekket seg mot dem. _DEX_SERIES er nå et dict {series_id: orientation},
+# der orientation=+1 = "opp = USD strong", -1 = "opp = USD weak" (flipp).
+_DEX_SERIES: tuple[tuple[str, int], ...] = (
+    ("DEXJPUS", +1),
+    ("DEXCAUS", +1),
+    ("DEXSDUS", +1),
+    ("DEXSZUS", +1),
+    ("DEXUSEU", -1),
+    ("DEXUSUK", -1),
+    ("DEXUSAL", -1),
+    ("DEXUSNZ", -1),
 )
 
 
@@ -735,8 +740,15 @@ _DEX_SERIES: tuple[str, ...] = (
 def dollar_index_breadth(store: Any, instrument: str, params: dict) -> float:
     """Andel av 8 DEX-pairs som viser USD-styrke over window-dager.
 
-    1.0 = alle 8 pairs viser USD opp; 0.0 = ingen. Default bull_when='low'
-    (USD-styrke = bear FX/commodities; bull USDJPY).
+    1.0 = alle 8 pairs viser USD strengthening; 0.0 = ingen. Default
+    bull_when='low' (USD-styrke = bear FX/commodities; bull USDJPY).
+
+    Sub-fase 12.10 follow-up bug-fix: 4 av 8 FRED DEX-serier er kvotert som
+    "USD per X" (DEXUSEU/UK/AL/NZ), de øvrige 4 som "X per USD". Tidligere
+    versjon ignorerte forskjellen og talte alle "opp"-bevegelser som
+    USD-styrke, noe som ga ~50 % feil-tegn ved ensartede USD-bevegelser.
+    Hvert par bidrar nå en orientering-justert verdi (+1 hvis stigning =
+    USD strong, -1 hvis stigning = USD weak).
 
     Returns 0.5 hvis < 4 av 8 pairs er tilgjengelige.
     """
@@ -747,7 +759,7 @@ def dollar_index_breadth(store: Any, instrument: str, params: dict) -> float:
 
     up_count = 0
     available_count = 0
-    for series_id in _DEX_SERIES:
+    for series_id, orientation in _DEX_SERIES:
         s = _get_series(store, series_id)
         if s is None or len(s) < window + 1:
             continue
@@ -755,7 +767,10 @@ def dollar_index_breadth(store: Any, instrument: str, params: dict) -> float:
         recent = s.tail(window + 1).dropna()
         if len(recent) < 2:
             continue
-        if float(recent.iloc[-1]) > float(recent.iloc[0]):
+        change = float(recent.iloc[-1]) - float(recent.iloc[0])
+        # Flipp tegn for "USD per X"-par: stigning der = USD weak, så
+        # "USD strong" = endring < 0.
+        if change * orientation > 0:
             up_count += 1
 
     if available_count < min_pairs:

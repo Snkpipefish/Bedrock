@@ -446,42 +446,53 @@ def test_vix9d_vix_ratio_fear_spike_bear() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_dollar_index_breadth_all_up_strong_usd() -> None:
-    """Alle 8 DEX-pairs stiger → breadth=1.0. bull_when='low' default → 0.0."""
+_DEX_SERIES_X_PER_USD = ("DEXJPUS", "DEXCAUS", "DEXSDUS", "DEXSZUS")
+_DEX_SERIES_USD_PER_X = ("DEXUSEU", "DEXUSUK", "DEXUSAL", "DEXUSNZ")
+
+
+def test_dollar_index_breadth_all_strong_usd() -> None:
+    """USD strong overalt: X-per-USD-par stiger, USD-per-X-par faller.
+    breadth=1.0 → bull_when='low' (default) → 0.0."""
     fn = get("dollar_index_breadth")
     series_dict = {}
-    for series_id in (
-        "DEXJPUS",
-        "DEXCAUS",
-        "DEXSDUS",
-        "DEXSZUS",
-        "DEXUSEU",
-        "DEXUSUK",
-        "DEXUSAL",
-        "DEXUSNZ",
-    ):
+    # X per USD (JPY/CAD/SEK/CHF) — opp = USD strong
+    for series_id in _DEX_SERIES_X_PER_USD:
         series_dict[series_id] = _daily_series([1.0] * 5 + [1.05])
+    # USD per X (EUR/GBP/AUD/NZD) — ned = USD strong (foreign currency weakens)
+    for series_id in _DEX_SERIES_USD_PER_X:
+        series_dict[series_id] = _daily_series([1.05] * 5 + [1.0])
     store = _MockStore(series_dict)
-    # 8 av 8 stigende = USD strong = bear FX (default bull_when='low')
+    # 8 av 8 USD strong = breadth=1.0; default bull_when='low' → 0.0
     assert fn(store, "SP500", {}) == 0.0
 
 
-def test_dollar_index_breadth_all_down_weak_usd() -> None:
+def test_dollar_index_breadth_all_weak_usd() -> None:
+    """USD weak overalt: X-per-USD-par faller, USD-per-X-par stiger.
+    breadth=0.0 → bull_when='low' (default) → 1.0."""
     fn = get("dollar_index_breadth")
     series_dict = {}
-    for series_id in (
-        "DEXJPUS",
-        "DEXCAUS",
-        "DEXSDUS",
-        "DEXSZUS",
-        "DEXUSEU",
-        "DEXUSUK",
-        "DEXUSAL",
-        "DEXUSNZ",
-    ):
-        series_dict[series_id] = _daily_series([1.05] * 5 + [1.0])
+    for series_id in _DEX_SERIES_X_PER_USD:
+        series_dict[series_id] = _daily_series([1.05] * 5 + [1.0])  # ned = USD weak
+    for series_id in _DEX_SERIES_USD_PER_X:
+        series_dict[series_id] = _daily_series([1.0] * 5 + [1.05])  # opp = USD weak
     store = _MockStore(series_dict)
     assert fn(store, "SP500", {}) == 1.0
+
+
+def test_dollar_index_breadth_orientation_flip() -> None:
+    """Regresjons-vakt: alle 8 DEX-serier stiger samtidig.
+
+    Tidligere bug regnet alle stigende som "USD strong" (breadth=1.0). Korrekt
+    tolkning: 4 av 8 (JPY/CAD/SEK/CHF) er USD-strong; 4 av 8 (EUR/GBP/AUD/NZD)
+    er USD-weak fordi de er kvotert "USD per X". Riktig breadth = 0.5.
+    """
+    fn = get("dollar_index_breadth")
+    series_dict = {}
+    for series_id in _DEX_SERIES_X_PER_USD + _DEX_SERIES_USD_PER_X:
+        series_dict[series_id] = _daily_series([1.0] * 5 + [1.05])
+    store = _MockStore(series_dict)
+    # bull_when='low' default; breadth=0.5 → 1.0 - 0.5 = 0.5
+    assert fn(store, "SP500", {}) == 0.5
 
 
 def test_dollar_index_breadth_returns_neutral_below_min_pairs() -> None:
