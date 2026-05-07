@@ -1,18 +1,23 @@
 """Backfill FRED-serier for *_surprise-drivere (sub-fase 12.10 follow-up Spor B, session 138).
 
-Engangs-skript per ADR-014. Henter 4 FRED-serier som "actual"-kilde for
-econ_surprise-drivere:
+Engangs-skript per ADR-014. Henter FRED-serier som "actual"-kilde for
+econ_surprise-drivere + speiler ADP for ekstern konsumenter (cot-explorer):
 
 - PAYEMS — Total Nonfarm Employment (månedlig, MoM Δ tusen)
 - CPIAUCSL — Consumer Price Index All Urban Consumers (månedlig, MoM %)
 - GDP — Gross Domestic Product (kvartalsvis, QoQ %)
 - PCEPI — Personal Consumption Expenditures Price Index (månedlig, MoM %)
+- ADPMNUSNERNSA — ADP National Employment Report private payrolls
+  (månedlig). NB: lagres i ABSOLUTTE PERSONER (ikke tusen) som FRED
+  publiserer det — konsumenter må selv konvertere til samme enhet
+  som PAYEMS (tusen). Lagt til 2026-05-07 etter forespørsel fra
+  cot-explorer som tidligere fetchet ADP direkte fra FRED.
 
 Per ADR-011 § 1: 10-år rolling cutoff (~2016-05-02 → 2026-05-02).
 
 Kjør: PYTHONPATH=src .venv/bin/python scripts/backfill/fred_econ_surprise.py
 
-Forventet kjøretid: ~30s (4 serier × ~120 obs hver).
+Forventet kjøretid: ~30s (5 serier × ~120 obs hver).
 """
 
 from __future__ import annotations
@@ -41,6 +46,10 @@ ECON_SURPRISE_SERIES: tuple[str, ...] = (
     "CPIAUCSL",
     "GDP",
     "PCEPI",
+    # 2026-05-07: ADP private payrolls. Speiles for cot-explorer som
+    # konsumerer fundamentals-tabellen direkte. PAYEMS er i tusen,
+    # ADPMNUSNERNSA er i absolutte personer — konsument-side må håndtere.
+    "ADPMNUSNERNSA",
 )
 
 
