@@ -102,19 +102,19 @@ families:
         params: {invert: true}  # build = bear marginalt
       - name: eia_refinery_utilization_z
         weight: 0.10
-        params: {bull_when: high}  # høy utilization = sterk demand
+        params: {}  # default invert=False (flow-metrikk: høy utilization = bullish)
       - name: eia_imports_crude
         weight: 0.05
-        params: {bull_when: high}  # økt import = økt US demand
+        params: {}  # default invert=False (US-balanse: økt import = bullish)
       - name: eia_petroleum_supplied
         weight: 0.05
-        params: {bull_when: high}  # total US demand-proxy
+        params: {}  # default invert=False (total US-demand-proxy = bullish)
       # Sub-fase 12.10 follow-up A10 (session 142): eia_gasoline_demand@0.05
       # (bunke6 #22, siste EIA-driver). Gasoline-supplied (WGFUPUS2) er
       # konsumentenes demand-proxy. eia_stock 0.20→0.15 for sum=1.00.
       - name: eia_gasoline_demand
         weight: 0.05
-        params: {bull_when: high}
+        params: {}  # default invert=False (gasoline-demand = bullish)
   structure:
     drivers:
       - name: range_position

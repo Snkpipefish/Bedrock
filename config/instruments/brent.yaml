@@ -93,18 +93,18 @@ families:
         params: {invert: true}
       - name: eia_refinery_utilization_z
         weight: 0.10
-        params: {bull_when: high}
+        params: {}  # default invert=False (flow-metrikk: høy WoW% = bullish crude)
       - name: eia_imports_crude
         weight: 0.05
-        params: {bull_when: high}
+        params: {}  # default invert=False (US-balanse-signal: høy import = bullish)
       - name: eia_petroleum_supplied
         weight: 0.05
-        params: {bull_when: high}
+        params: {}  # default invert=False (demand-proxy: høy supply = bullish)
       # Sub-fase 12.10 follow-up A10 (session 142): eia_gasoline_demand@0.05
       # (bunke6 #22, siste EIA-driver). eia_stock 0.20→0.15 for sum=1.00.
       - name: eia_gasoline_demand
         weight: 0.05
-        params: {bull_when: high}
+        params: {}  # default invert=False (gasoline-demand: høy WoW% = bullish)
       # Spor C #25 IIP REMIT supply-unavailability — event-stress på
       # europeisk gas-supply-infrastruktur. Aktive infrastrukturutfall
       # signaliserer geopolitisk/teknisk risk-on for energy-prising
