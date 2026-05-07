@@ -245,6 +245,6 @@ def test_fetch_yaml_has_comex_entry() -> None:
     assert "comex" in config.fetchers
     spec = config.fetchers["comex"]
     assert spec.cron == "0 22 * * 1-5"
-    assert spec.stale_hours == 30
+    assert spec.stale_hours == 60
     assert spec.table == "comex_inventory"
     assert spec.ts_column == "date"
