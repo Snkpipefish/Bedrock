@@ -1,3 +1,7 @@
+# pyright: reportArgumentType=false, reportCallIssue=false
+# pandas-stubs har dårlig dekning av DataFrame(columns=list[str]) +
+# sort_values(by=...) overload-resolusjon.
+
 """ISMA India sugar production fetcher (sub-fase 12.11+ analytiker D.5).
 
 Henter ISMA's offentlige resource API og parser indisk sukker-produksjons-

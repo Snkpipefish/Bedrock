@@ -892,10 +892,12 @@ class ExitEngine:
         en fersk state (forhindrer at "død" LIMIT-state holder igjen
         dedup-blokken på samme instrument+retning+horisont).
         """
-        # Lat-import for å unngå avhengighet under test-stub-flyten
+        # Lat-import for å unngå avhengighet under test-stub-flyten.
+        # protobuf-genererte symboler er ikke i stub-filer; pyright ser
+        # ProtoOAExecutionType som ukjent — runtime-import fungerer fint.
         try:
-            from ctrader_open_api.messages.OpenApiModelMessages_pb2 import (  # type: ignore
-                ProtoOAExecutionType,
+            from ctrader_open_api.messages.OpenApiModelMessages_pb2 import (
+                ProtoOAExecutionType,  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
             )
 
             _ACCEPTED = ProtoOAExecutionType.ORDER_ACCEPTED

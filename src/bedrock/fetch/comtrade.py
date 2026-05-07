@@ -1,3 +1,7 @@
+# pyright: reportArgumentType=false
+# pandas-stubs har dårlig dekning av DataFrame(columns=list[str]) +
+# http_get_with_retry params-typen aksepterer dict[str, str|int] runtime.
+
 """UN Comtrade fetcher — månedlig handelsdata via gratis preview-endpoint.
 
 Adresserer USDA PSD årlig-lag-problem (sub-fase 12.11+ punkt 3 / OOS 2023):

@@ -1,3 +1,6 @@
+# pyright: reportArgumentType=false
+# pandas-stubs har dårlig dekning av DataFrame(columns=list[str]).
+
 """ANP Brasil etanol pumpe-pris fetcher (sub-fase 12.11+ analytiker D.2).
 
 Henter månedlige CSV/XLSX-filer fra ANP "dados abertos" og aggregerer

@@ -1,3 +1,7 @@
+# pyright: reportArgumentType=false
+# pandas-stubs har dårlig dekning av DataFrame(columns=list[str]) +
+# Mapping.get(key) når key er Optional[T].
+
 """USDA FAS PSD (Production, Supply, Distribution) fetcher.
 
 Henter årlig sukker-PSD-data per land via FAS API. Erstatter ISMA-

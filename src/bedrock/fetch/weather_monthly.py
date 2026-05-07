@@ -1,4 +1,6 @@
-# pyright: reportArgumentType=false, reportReturnType=false
+# pyright: reportArgumentType=false, reportReturnType=false, reportAttributeAccessIssue=false
+# pandas-stubs feilklassifiserer DataFrame[bool-mask].copy() som NDArray
+# slik at .empty / .reset_index gir falske attribute-errors.
 
 """Månedlig vær-fetcher mot Open-Meteo Archive.
 
