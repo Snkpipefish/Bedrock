@@ -32,12 +32,22 @@ samme felle.
 `report_date`). Ingen bedrock-endring; cot-explorer's import-skript må
 oppdateres på sin side.
 
-**Stub-DB ~/bedrock/bedrock.db**: 684KB, ingen unike rader (alle tabeller
-har eldre dato + lavere row count enn aktiv DB). Ingen bedrock-kode
-refererer til den. Sletting krever operatør-bekreftelse — venter.
+**Stub-DB ~/bedrock/bedrock.db slettet** (operatør-bekreftet). 684KB,
+ingen unike rader (alle tabeller hadde eldre dato + lavere row count
+enn aktiv DB). Ingen bedrock-kode refererte til den.
 
-Pyright: 13 errors (uendret pre-eksisterende). Ruff: clean. Scoped
-pytest 95/95 grønt.
+**Pyright 13 → 0** (commit `96fbf6f`). Pre-live-audit (session 149,
+2026-05-02) hadde 0 pyright-feil; 13 har sneket seg inn via nye
+fetch-moduler. Alle var pandas-stubs false positives
+(`pd.DataFrame(columns=list[str])` Axes-typing,
+`df[mask].copy()`-resultat klassifisert som NDArray) + én protobuf-
+import (`ProtoOAExecutionType`) som mangler i ctrader-stubs. Ryddet
+via modul-nivå `# pyright: report*=false`-pragmaer i 5 fetch-moduler
+(matcher mønster fra `data/store.py` + `eia_inventories.py`) og inline
+`# pyright: ignore[reportAttributeAccessIssue]` på protobuf-importen.
+Ingen runtime-endring.
+
+Verifikasjon: pyright 0/0, ruff clean, **pytest 2929/2929 grønt** (5 min).
 
 ---
 
