@@ -2,6 +2,45 @@
 
 ## Session log (most recent first)
 
+### 2026-05-11 — venv rebygget (Python 3.10 → 3.12 etter distro-bump)
+
+**Hva:** Etter PC-boot kl 00:25:38 feilet alle 27 user-services + 3 system-services
+(bedrock-fetch-* + bedrock-signals-all) med `ModuleNotFoundError: No module named
+'bedrock'`. Operatør så feilmeldinger ved oppstart.
+
+**Hvorfor:** Linux Mint 22 hadde fjernet Python 3.10 fra systemet. Venvet ble laget
+24. april med 3.10.12 (`pyvenv.cfg` lock-et til den versjonen, 158 pakker i
+`lib/python3.10/site-packages/`). Symlinken `.venv/bin/python3.10` peker til
+`/usr/bin/python3` som nå er 3.12.3 — som leter etter `lib/python3.12/site-packages/`
+som ikke finnes. Hele Python-import-stien brøt.
+
+**Hva fikser:**
+1. Operatør installerte `python3.12-venv`-pakken via `sudo apt`.
+2. Gammelt venv flyttet til `.venv.broken-py3.10/` så slettet etter verifikasjon.
+3. Nytt venv bygget: `python3.12 -m venv .venv`.
+4. `pip install -e ".[dev]"` for core + dev-deps. **Bot-deps installert manuelt**
+   per pyproject.toml-kommentar: `pip install --no-deps ctrader-open-api` så
+   `pip install twisted protobuf>=6.0 service_identity inputimeout pyOpenSSL`.
+   ctrader-open-api 0.9.2 pin-er `protobuf==3.20.1` hardt, bedrock krever
+   `protobuf>=6.0` — kommentar i pyproject.toml dokumenterer at den fungerer fint
+   mot protobuf 6.x på tross av pinninga.
+5. `systemctl --user reset-failed` + `sudo systemctl reset-failed`.
+6. Sanity-test: `bedrock-fetch-prices.service` kjørte gjennom med
+   `status=0/SUCCESS` for både fetch og signals-all post-exec.
+
+**Verifikasjon:** `bash scripts/session_health.sh` → **GRØNN**. 0 failed services
+(både user og system). `bedrock` CLI svarer normalt.
+
+**Datatap:** Ingen. Helgen-DNS-feil (`publicreporting.cftc.gov` resolve-feil
+lørdag 23:22) og venv-feilen mandag 00:25 traff bare _retry-forsøk_ av timere
+som allerede hadde fyrt fredag kveld. Fredagens (2026-05-08) COT-rapport ligger
+i DB med `report_date=2026-05-05` (cot_disaggregated/legacy/ice), intervall
+mellom siste 4 rapporter er konsekvent 7 dager — ingen huller.
+
+**Ikke en ordinær "session"** — incident-respons utenfor PLAN-flyten. Ingen
+kodeendringer, kun infrastruktur-rebuild. Ingen commits. STATE.md får denne
+entry-en for fremtidig sporbarhet (hvorfor venvet ble rebygget midt i Fase 12).
+
 ### 2026-05-07 — cross-repo cleanup fra cot-explorer
 
 Bruker rapporterte 4 funn fra cot-explorer som hørte hjemme på bedrock-siden.
