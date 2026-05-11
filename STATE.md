@@ -2,6 +2,65 @@
 
 ## Session log (most recent first)
 
+### 2026-05-11 — boot-CPU-storm fix + sugar rolling-floor parser
+
+**Hva:** To tilbakemeldinger fra operatør ved morgen-oppstart:
+
+1. **CPU-storm ved boot** (~100 % CPU i fleire minutter). Task Manager
+   viste 25 parallelle `bedrock signals-all --bot-only --output
+   data/signals_bot.json`-prosesser, hver med 3-7 % CPU.
+
+2. **`bedrock-rolling-floor-sugar` feilet** (desktop-notifikasjon
+   `exit-code != 0`).
+
+**Hvorfor:**
+
+- *Storm:* 26 fetch-service-filer hadde hver
+  `ExecStartPost={bedrock} signals-all --bot-only ...` (Mål 1 i
+  plan_event_driven_signals_and_ui.md). På boot etter helga fyrte alle
+  missed timer-runs (Persistent=true) tilnærma samtidig → 26 parallelle
+  signals-all. Hver kjøring tek ~45-50 s sekvensielt, så stormen
+  okkuperte CPU i 1-2 min.
+- *Sugar:* `scripts/sugar_update_rolling_floor.py::read_current_floor`
+  hadde streng linje-parser som ikkje tolererte trailing YAML-
+  kommentar. Etter session 102 (`min_score_publish: {buy: 7.0, sell: 7.0}
+  # rolling 5y, oppdatert 2026-05-06`) feila `float()`-konverteringa
+  fordi heile rest-av-line inkluderte `#`-kommentaren.
+
+**Hva fikser:**
+
+1. **Sugar parser** — strip trailing `#`-kommentar før dict/float-parse.
+   Verifisert: `bedrock-rolling-floor-sugar.service` kjørte gjennom i
+   ~60 s med `Result=success, ExecMainStatus=0`. Δ buy/sell = 0.00, så
+   ingen sugar.yaml-oppdatering.
+2. **Debounce-wrapper** — `scripts/signals_bot_regen.sh` (flock + dirty-bit
+   + while-loop). Når mange fires kjem nær-samtidig, tek første låsen og
+   coalescer 5 s før signals-all; resten exit umiddelbart. Re-loop hvis
+   dirty-bit blei satt under kjøring → max 2 sequential runs i staden for
+   26 parallelle. Verifisert lokalt: 5 wrappers fyrt samtidig → 1 kjørte
+   signals-all, 4 exited tomt (lock-skip).
+3. **Generator-oppdatering** — `src/bedrock/systemd/generator.py` byttar
+   `ExecStartPost={bedrock} signals-all ...` → `ExecStartPost={working_dir}/
+   scripts/signals_bot_regen.sh`. Regenererte 26 fetch-service-filer
+   (symlinka inn i `~/.config/systemd/user/`); `systemctl --user
+   daemon-reload`.
+4. **Morning safety-run** — `bedrock-signals-bot-morning.service` ruta
+   òg gjennom wrapperen (Persistent=true morning-timer kan kollidere
+   med fetch-storm ved boot etter helg).
+5. **Test-oppdatering** — `tests/unit/test_systemd_generator.py`
+   assertion frå `ExecStartPost=... signals-all --bot-only ...` →
+   `ExecStartPost=.../scripts/signals_bot_regen.sh`. 39/39 grønne.
+
+**Verifikasjon:** `bash scripts/session_health.sh` → **GRØNN**. 0 failed
+services. `bedrock systemd generate` re-genererte alle 26 fetch-
+unit-filer med ny ExecStartPost.
+
+**Datatap:** Ingen.
+
+**Fase-kontekst:** Sub-fase 12.6 (operasjonell stabilitet) +
+plan_event_driven_signals_and_ui.md (Mål 1). Wrapperen bevarer event-
+drevet semantikk; berre serialiserer redundante samtidige fires.
+
 ### 2026-05-11 — venv rebygget (Python 3.10 → 3.12 etter distro-bump)
 
 **Hva:** Etter PC-boot kl 00:25:38 feilet alle 27 user-services + 3 system-services
