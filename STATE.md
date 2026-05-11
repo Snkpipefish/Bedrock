@@ -41,6 +41,21 @@ mellom siste 4 rapporter er konsekvent 7 dager — ingen huller.
 kodeendringer, kun infrastruktur-rebuild. Ingen commits. STATE.md får denne
 entry-en for fremtidig sporbarhet (hvorfor venvet ble rebygget midt i Fase 12).
 
+**Oppfølging samme dag (kl 09:30-09:52):**
+
+To nye desktop-notifikasjoner ved morgen-oppstart:
+- `bedrock-fetch-isma_india` (06:00): NameResolutionError mot `api.ismaindia.org`.
+  Verifisert som midlertidig DNS-feil hos ISMA (SERVFAIL fra autoritativ DNS
+  kl 09:30, normal A-record 13.201.158.229 kl 09:50). Re-fetch kl 09:52 →
+  success (0 rader er forventet, filter matcher kun produksjons-titler).
+  Ingen kodeendring.
+- `bedrock-monitor` (06:30): Overall=FAIL pga. 4 aging-fetchere
+  (comex/fundamentals/shipping/weather_monthly). Aging er normalt for
+  mandagsmorgen (helg → ingen fredag+1 data). Re-trigget alle 4 fetchers
+  manuelt for å oppdatere timestamps, monitor re-kjørt → Overall=OK.
+
+Endelig status: 0 failed services (user + system), session_health.sh=GRØNN.
+
 ### 2026-05-07 — cross-repo cleanup fra cot-explorer
 
 Bruker rapporterte 4 funn fra cot-explorer som hørte hjemme på bedrock-siden.
