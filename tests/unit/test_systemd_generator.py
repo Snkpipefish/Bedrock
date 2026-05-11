@@ -166,16 +166,19 @@ def test_generate_service_without_fail_tolerance_default() -> None:
 
 
 def test_generate_service_includes_signals_bot_regen_by_default() -> None:
-    """Mål 1: ExecStartPost regenererer signals_bot.json etter fetcher."""
+    """Mål 1: ExecStartPost regenererer signals_bot.json etter fetcher.
+
+    ExecStartPost peker på en flock/dirty-bit-wrapper (scripts/signals_bot_regen.sh)
+    som coalesce-r nær-samtidige fires til én signals-all-kjøring; rå direkte-kall
+    til `bedrock signals-all` ble erstattet etter at boot-storm spawnet 25
+    parallelle prosesser (2026-05-11).
+    """
     content = generate_service_unit(
         "prices",
         working_dir=Path("/repo"),
         bedrock_executable="/bin/bedrock",
     )
-    assert (
-        "ExecStartPost=/bin/bedrock signals-all --bot-only --output data/signals_bot.json"
-        in content
-    )
+    assert "ExecStartPost=/repo/scripts/signals_bot_regen.sh" in content
     # Må ligge i [Service]-seksjonen, ikke [Unit]
     service_section = content.split("[Service]", 1)[1]
     assert "ExecStartPost=" in service_section
@@ -230,10 +233,7 @@ def test_generate_units_every_fetcher_has_signals_bot_regen() -> None:
     )
 
     services = {name: content for name, content in units.items() if name.endswith(".service")}
-    expected_post = (
-        "ExecStartPost=/home/pc/bedrock/.venv/bin/bedrock signals-all "
-        "--bot-only --output data/signals_bot.json"
-    )
+    expected_post = "ExecStartPost=/home/pc/bedrock/scripts/signals_bot_regen.sh"
     missing = [name for name, content in services.items() if expected_post not in content]
     assert not missing, f"Disse fetcher-services mangler ExecStartPost: {missing}"
 

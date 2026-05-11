@@ -196,11 +196,18 @@ def generate_service_unit(
     feil-rater.
 
     `signals_bot_regen` (Mål 1, plan_event_driven_signals_and_ui.md):
-    legg til `ExecStartPost=... signals-all --bot-only` slik at
+    legg til `ExecStartPost=scripts/signals_bot_regen.sh` slik at
     `data/signals_bot.json` regenereres umiddelbart når fetcher har lagt
     til ny data. systemd kjører ExecStartPost kun hvis ExecStart exited
     0, så fail-runs blokkerer regen automatisk. Cache-skip i
     `_write_if_changed` beskytter mot disk-IO på no-op runs.
+
+    Wrapperen (`scripts/signals_bot_regen.sh`) bruker flock + dirty-bit
+    for å coalesce nær-samtidige fires til én signals-all-kjøring.
+    Uten dette: 26 fetch-services som fyrer parallelt på boot
+    (Persistent=true etter helg) spawner 26 parallelle signals-all-prosesser
+    som hver bruker ~6% CPU = full CPU-storm i flere minutter. Med
+    wrapperen kollapser stormen til 1-2 sequential runs.
     """
     description = f"Bedrock fetch: {fetcher_name}"
     if module_hint:
@@ -212,10 +219,8 @@ def generate_service_unit(
 
     post_line = ""
     if signals_bot_regen:
-        post_line = (
-            f"ExecStartPost={bedrock_executable} signals-all "
-            "--bot-only --output data/signals_bot.json\n"
-        )
+        wrapper = f"{working_dir}/scripts/signals_bot_regen.sh"
+        post_line = f"ExecStartPost={wrapper}\n"
 
     return (
         "# Auto-generert av `bedrock systemd generate`.\n"

@@ -16,6 +16,12 @@
 # Output:
 #   data/signals_bot.json (cache-skip i _write_if_changed beskytter mot
 #   no-op disk-writes hvis ExecStartPost-regen allerede har dekket alt)
+#
+# Boot-storm-defens (2026-05-11): morning-timer er Persistent=true. Etter
+# en helg kan PC boote mandag morgen kl 09 → da fyrer morning (08:00 missed)
+# + alle 22+ fetchere (missed) samtidig. Uten flock: 23 parallelle
+# signals-all = full CPU. Vi router gjennom samme wrapper som fetch-
+# services, som coalesce-r til 1 sequential run.
 [Unit]
 Description=Bedrock signals-bot morning safety-run (08:00 Mon-Fri)
 After=network-online.target
@@ -23,7 +29,7 @@ After=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=/home/pc/bedrock
-ExecStart=/home/pc/bedrock/.venv/bin/bedrock signals-all --bot-only --output data/signals_bot.json
+ExecStart=/home/pc/bedrock/scripts/signals_bot_regen.sh
 StandardOutput=journal
 StandardError=journal
 

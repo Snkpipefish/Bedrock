@@ -10,7 +10,7 @@ OnFailure=bedrock-notify@%N.service
 Type=oneshot
 WorkingDirectory=/home/pc/bedrock
 ExecStart=/home/pc/bedrock/.venv/bin/bedrock fetch run fundamentals --fail-tolerance-pct 50
-ExecStartPost=/home/pc/bedrock/.venv/bin/bedrock signals-all --bot-only --output data/signals_bot.json
+ExecStartPost=/home/pc/bedrock/scripts/signals_bot_regen.sh
 StandardOutput=journal
 StandardError=journal
 
