@@ -119,7 +119,12 @@ def read_current_floor(yaml_path: Path) -> dict[str, float]:
     for line in text.splitlines():
         s = line.strip()
         if s.startswith("min_score_publish:"):
-            payload = s.split(":", 1)[1].strip()
+            payload = s.split(":", 1)[1]
+            # Strip trailing YAML-comment ("{...}  # rolling 5y, oppdatert ...").
+            comment_idx = payload.find("#")
+            if comment_idx >= 0:
+                payload = payload[:comment_idx]
+            payload = payload.strip()
             if payload.startswith("{") and payload.endswith("}"):
                 inner = payload[1:-1]
                 out: dict[str, float] = {}
