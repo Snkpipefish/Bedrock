@@ -1438,17 +1438,17 @@ class EntryEngine:
             # SL/TP festes atomisk på ordre-requesten slik at posisjonen
             # er beskyttet fra fill-tidspunkt selv om boten kobles fra.
             # cTrader avviser absolutt SL/TP på MARKET (INVALID_REQUEST);
-            # vi sender relative offset i points (1/10^price_digits) fra
-            # fyllingsprisen i stedet. Server beregner absolutt SL/TP fra
-            # faktisk fill og fester atomisk. Etterfølgende `amend_sl_tp`
-            # i exit.on_execution er idempotent backup som holder
-            # eksisterende trail/BE/giveback-flyt uendret.
-            pip_size = 10**-price_digits
+            # vi sender relative offset som heltall i 1/100000 av price
+            # unit (cTrader-konstant uansett price_digits) i stedet.
+            # Server beregner absolutt SL/TP fra faktisk fill og fester
+            # atomisk. Etterfølgende `amend_sl_tp` i exit.on_execution
+            # er idempotent backup som holder trail/BE/giveback-flyt
+            # uendret.
             sl_dist = abs(float(sig["stop"]) - entry_price)
-            order_kwargs["relative_stop_loss"] = max(1, round(sl_dist / pip_size))
+            order_kwargs["relative_stop_loss"] = max(1, round(sl_dist * 100000))
             if sig.get("t1") and sig["t1"] > 0:
                 tp_dist = abs(float(sig["t1"]) - entry_price)
-                order_kwargs["relative_take_profit"] = max(1, round(tp_dist / pip_size))
+                order_kwargs["relative_take_profit"] = max(1, round(tp_dist * 100000))
             # MAKRO har trail-active fra entry (ingen T1-pause). Aktiver
             # server-side trailing direkte — cTrader ratchet'er SL videre
             # på server selv om bot/PC slås av. SCALP/SWING er pre-T1

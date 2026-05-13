@@ -1229,6 +1229,59 @@ def test_execute_trade_market_makro_enables_server_trailing(
     assert kwargs["trailing_stop_loss"] is True
 
 
+def test_execute_trade_market_relative_sl_uses_fixed_100k_scale(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """relative_stop_loss skal bruke konstant 1/100000-skala uansett
+    symbol-digits. Regresjons-test: tidligere brukte koden price_digits-
+    avhengig pip_size, som ga riktig resultat for 5-digit FX men feil
+    for 2/3-digit instrumenter (USDJPY, Gold osv) → cTrader avviste med
+    'Relative stop loss has invalid precision' i live demo 2026-05-13.
+    """
+    # USDJPY-lignende 3-digit symbol: entry 157.854, SL 157.008 → diff
+    # 0.846. Riktig relative = 0.846 × 100_000 = 84_600.
+    client = _make_client_stub(
+        symbol_map={"USDJPY": 7},
+        last_bid={7: 157.853},
+        last_ask={7: 157.854},
+        account_balance=100_000.0,
+    )
+    client.symbol_info = {7: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}}
+    client.symbol_price_digits = {7: 3}
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    state = _make_state(
+        signal_id="usdjpy-1", symbol_id=7, instrument="USDJPY", stop=157.008, t1=159.500
+    )
+    active_states.append(state)
+    sig = _make_signal(
+        sig_id="usdjpy-1",
+        instrument="USDJPY",
+        alert=157.85,
+        stop=157.008,
+        t1=159.500,
+        base_risk=40,
+    )
+    candle = Candle(
+        open=157.85,
+        high=157.86,
+        low=157.84,
+        close=157.854,
+        volume=1,
+        timestamp=datetime.now(timezone.utc),
+    )
+    engine._execute_trade_impl(sig, state, candle)
+
+    kwargs = client.send_new_order.call_args.kwargs
+    assert kwargs["order_type"] == "MARKET"
+    # entry=157.854 (ask), SL=157.008 → diff=0.846 × 100_000 = 84_600
+    assert kwargs["relative_stop_loss"] == 84_600
+    # entry=157.854, T1=159.500 → diff=1.646 × 100_000 = 164_600
+    assert kwargs["relative_take_profit"] == 164_600
+
+
 def test_execute_trade_sends_limit_order_when_rule_set(
     safety: SafetyMonitor,
     config: ReloadableConfig,
