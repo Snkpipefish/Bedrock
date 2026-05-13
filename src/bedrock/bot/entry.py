@@ -1435,8 +1435,14 @@ class EntryEngine:
             )
         else:
             order_kwargs["order_type"] = "MARKET"
-            # SL/TP settes via amend_sl_tp etter fill — ikke tillatt
-            # på MARKET i ProtoOANewOrderReq
+            # SL/TP festes atomisk på ordre-requesten slik at posisjonen
+            # er beskyttet fra fill-tidspunkt selv om boten kobles fra.
+            # Etterfølgende `amend_sl_tp` i exit.on_execution er
+            # idempotent backup (samme verdier) og holder eksisterende
+            # trail/BE/giveback-flyt uendret.
+            order_kwargs["stop_loss"] = round(sig["stop"], price_digits)
+            if sig.get("t1") and sig["t1"] > 0:
+                order_kwargs["take_profit"] = round(sig["t1"], price_digits)
 
         state.entry_price = entry_price
         state.full_volume = volume_units

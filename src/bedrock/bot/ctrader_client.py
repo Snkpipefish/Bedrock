@@ -517,9 +517,10 @@ class CtraderClient:
         """Send ProtoOANewOrderReq. MARKET eller LIMIT.
 
         `trade_side` er "BUY" | "SELL"; `order_type` er "MARKET" | "LIMIT".
-        SL/TP settes direkte på request for LIMIT; MARKET må bruke
-        `amend_sl_tp` etter fill (cTrader tillater ikke SL/TP på
-        ProtoOANewOrderReq for MARKET).
+        SL/TP settes direkte på request for både MARKET og LIMIT —
+        cTrader Open API støtter `stopLoss`/`takeProfit` på begge
+        ordretyper, slik at SL/TP festes atomisk ved fill og er
+        beskyttet selv om boten kobles fra umiddelbart etter ordre-ack.
 
         `limit_price` er påkrevd for LIMIT; `expiration_ms` valgfri
         (unix ms). Caller er ansvarlig for å avrunde priser til riktig
@@ -540,12 +541,12 @@ class CtraderClient:
         if order_type == "LIMIT":
             assert limit_price is not None  # håndheves over
             req.limitPrice = limit_price
-            if stop_loss is not None:
-                req.stopLoss = stop_loss
-            if take_profit is not None:
-                req.takeProfit = take_profit
             if expiration_ms is not None:
                 req.expirationTimestamp = expiration_ms
+        if stop_loss is not None:
+            req.stopLoss = stop_loss
+        if take_profit is not None:
+            req.takeProfit = take_profit
         return self.send(req)
 
     def amend_sl_tp(

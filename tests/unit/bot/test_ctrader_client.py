@@ -504,9 +504,36 @@ def test_send_new_order_market(client: CtraderClient) -> None:
     assert req.label == "SE-foo"
     assert req.comment == "foo"
     assert req.ctidTraderAccountId == 12345
-    # MARKET: ingen limitPrice / stopLoss satt
-    # (protobuf har default 0.0 for unset float, men vi verifiserer at
-    # limitPrice/stopLoss ikke blir truthy)
+    # MARKET uten SL/TP: feltene står på protobuf-default (0.0)
+    assert req.stopLoss == 0
+    assert req.takeProfit == 0
+    assert req.limitPrice == 0
+
+
+def test_send_new_order_market_with_sl_tp(client: CtraderClient) -> None:
+    """MARKET-ordrer skal kunne sette SL/TP atomisk på request.
+
+    cTrader Open API støtter `stopLoss`/`takeProfit` direkte på MARKET-
+    ordrer; uten dette må SL/TP amendes etter fill, og posisjonen er
+    ubeskyttet i vinduet mellom fill og amend (og permanent ubeskyttet
+    hvis amend avvises av TRADING_BAD_STOPS).
+    """
+    with patch.object(client, "send") as send:
+        client.send_new_order(
+            symbol_id=33,
+            trade_side="SELL",
+            volume=2000,
+            label="SE-bar",
+            order_type="MARKET",
+            stop_loss=1.1750,
+            take_profit=1.1600,
+        )
+    req = send.call_args.args[0]
+    assert req.symbolId == 33
+    assert req.volume == 2000
+    assert abs(req.stopLoss - 1.1750) < 1e-9
+    assert abs(req.takeProfit - 1.1600) < 1e-9
+    assert req.limitPrice == 0  # MARKET → ingen limit-pris
 
 
 def test_send_new_order_limit_with_sl_tp_and_expiry(client: CtraderClient) -> None:

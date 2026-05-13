@@ -1170,7 +1170,10 @@ def test_execute_trade_sends_market_order(
     assert kwargs["trade_side"] == "BUY"
     assert kwargs["volume"] == 2000  # 0.02 lot (SWING) × 100000 = 2000
     assert kwargs["order_type"] == "MARKET"
-    assert "stop_loss" not in kwargs  # MARKET: SL settes via amend etter fill
+    # SL/TP festes atomisk på MARKET-ordren → posisjonen er beskyttet
+    # fra fill-tidspunkt selv om boten kobles fra umiddelbart etter.
+    assert kwargs["stop_loss"] == 1.0780
+    assert kwargs["take_profit"] == 1.0850
     # State oppdatert
     assert state.full_volume == 2000
     assert state.entry_price == 1.0801  # ask for buy
