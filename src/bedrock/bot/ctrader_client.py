@@ -512,16 +512,25 @@ class CtraderClient:
         limit_price: float | None = None,
         stop_loss: float | None = None,
         take_profit: float | None = None,
+        relative_stop_loss: int | None = None,
+        relative_take_profit: int | None = None,
         expiration_ms: int | None = None,
         trailing_stop_loss: bool | None = None,
     ) -> Any:
         """Send ProtoOANewOrderReq. MARKET eller LIMIT.
 
         `trade_side` er "BUY" | "SELL"; `order_type` er "MARKET" | "LIMIT".
-        SL/TP settes direkte på request for både MARKET og LIMIT —
-        cTrader Open API støtter `stopLoss`/`takeProfit` på begge
-        ordretyper, slik at SL/TP festes atomisk ved fill og er
-        beskyttet selv om boten kobles fra umiddelbart etter ordre-ack.
+
+        SL/TP-konvensjon (cTrader Open API-spesifikk):
+        - LIMIT/STOP/STOP_LIMIT: `stop_loss`/`take_profit` (absolutt pris)
+        - MARKET: `relative_stop_loss`/`relative_take_profit` (heltall i
+          1/10^price_digits av prisen — dvs. avstand fra fyllingsprisen).
+          cTrader avviser absolutt SL/TP på MARKET med INVALID_REQUEST.
+          Server beregner absolutt SL/TP fra faktisk fill og fester
+          atomisk — ingen race mellom fill og separat amend.
+
+        `trailing_stop_loss=True` aktiverer server-side trailing fra
+        SL-distansen som er satt på ordren.
 
         `limit_price` er påkrevd for LIMIT; `expiration_ms` valgfri
         (unix ms). Caller er ansvarlig for å avrunde priser til riktig
@@ -544,10 +553,16 @@ class CtraderClient:
             req.limitPrice = limit_price
             if expiration_ms is not None:
                 req.expirationTimestamp = expiration_ms
-        if stop_loss is not None:
-            req.stopLoss = stop_loss
-        if take_profit is not None:
-            req.takeProfit = take_profit
+            if stop_loss is not None:
+                req.stopLoss = stop_loss
+            if take_profit is not None:
+                req.takeProfit = take_profit
+        else:
+            # MARKET (og STOP/STOP_LIMIT som ikke brukes i dag) — relative
+            if relative_stop_loss is not None:
+                req.relativeStopLoss = relative_stop_loss
+            if relative_take_profit is not None:
+                req.relativeTakeProfit = relative_take_profit
         if trailing_stop_loss is not None:
             req.trailingStopLoss = trailing_stop_loss
         return self.send(req)

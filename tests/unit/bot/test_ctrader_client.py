@@ -504,19 +504,19 @@ def test_send_new_order_market(client: CtraderClient) -> None:
     assert req.label == "SE-foo"
     assert req.comment == "foo"
     assert req.ctidTraderAccountId == 12345
-    # MARKET uten SL/TP: feltene står på protobuf-default (0.0)
+    # MARKET uten SL/TP: feltene står på protobuf-default (0)
+    assert req.relativeStopLoss == 0
+    assert req.relativeTakeProfit == 0
     assert req.stopLoss == 0
     assert req.takeProfit == 0
     assert req.limitPrice == 0
 
 
-def test_send_new_order_market_with_sl_tp(client: CtraderClient) -> None:
-    """MARKET-ordrer skal kunne sette SL/TP atomisk på request.
-
-    cTrader Open API støtter `stopLoss`/`takeProfit` direkte på MARKET-
-    ordrer; uten dette må SL/TP amendes etter fill, og posisjonen er
-    ubeskyttet i vinduet mellom fill og amend (og permanent ubeskyttet
-    hvis amend avvises av TRADING_BAD_STOPS).
+def test_send_new_order_market_with_relative_sl_tp(client: CtraderClient) -> None:
+    """MARKET-ordrer må bruke relativeStopLoss/relativeTakeProfit
+    (offset i points fra fyllingsprisen). cTrader avviser absolutt
+    SL/TP på MARKET med INVALID_REQUEST: 'SL/TP in absolute values are
+    allowed only for order types: [LIMIT, STOP, STOP_LIMIT]'.
     """
     with patch.object(client, "send") as send:
         client.send_new_order(
@@ -525,33 +525,57 @@ def test_send_new_order_market_with_sl_tp(client: CtraderClient) -> None:
             volume=2000,
             label="SE-bar",
             order_type="MARKET",
-            stop_loss=1.1750,
-            take_profit=1.1600,
+            relative_stop_loss=135,
+            relative_take_profit=1162,
         )
     req = send.call_args.args[0]
     assert req.symbolId == 33
     assert req.volume == 2000
-    assert abs(req.stopLoss - 1.1750) < 1e-9
-    assert abs(req.takeProfit - 1.1600) < 1e-9
-    assert req.limitPrice == 0  # MARKET → ingen limit-pris
+    assert req.relativeStopLoss == 135
+    assert req.relativeTakeProfit == 1162
+    # absolutt SL/TP skal IKKE være satt på MARKET
+    assert req.stopLoss == 0
+    assert req.takeProfit == 0
+    assert req.limitPrice == 0
+
+
+def test_send_new_order_market_ignores_absolute_sl_tp(client: CtraderClient) -> None:
+    """Defense-in-depth: hvis caller feilaktig sender absolutt SL/TP
+    sammen med MARKET, skal de IKKE havne på request (cTrader ville
+    avvist med INVALID_REQUEST). Caller skal bruke relative i stedet.
+    """
+    with patch.object(client, "send") as send:
+        client.send_new_order(
+            symbol_id=11,
+            trade_side="BUY",
+            volume=1000,
+            order_type="MARKET",
+            stop_loss=1.0780,  # feilaktig — skulle vært relative
+            take_profit=1.0900,
+        )
+    req = send.call_args.args[0]
+    assert req.stopLoss == 0
+    assert req.takeProfit == 0
 
 
 def test_send_new_order_market_with_trailing_stop_loss(client: CtraderClient) -> None:
     """MAKRO-horisonten aktiverer server-side trailing fra fill-tidspunkt
-    slik at SL ratchet'er videre uten bot-tilstedeværelse."""
+    slik at SL ratchet'er videre uten bot-tilstedeværelse. Distansen
+    leveres som relativeStopLoss."""
     with patch.object(client, "send") as send:
         client.send_new_order(
             symbol_id=44,
             trade_side="BUY",
             volume=1000,
             order_type="MARKET",
-            stop_loss=1.0780,
-            take_profit=1.0900,
+            relative_stop_loss=200,
+            relative_take_profit=500,
             trailing_stop_loss=True,
         )
     req = send.call_args.args[0]
     assert req.trailingStopLoss is True
-    assert abs(req.stopLoss - 1.0780) < 1e-9
+    assert req.relativeStopLoss == 200
+    assert req.relativeTakeProfit == 500
 
 
 def test_amend_sl_tp_with_trailing_stop_loss(client: CtraderClient) -> None:

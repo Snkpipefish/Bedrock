@@ -1170,10 +1170,15 @@ def test_execute_trade_sends_market_order(
     assert kwargs["trade_side"] == "BUY"
     assert kwargs["volume"] == 2000  # 0.02 lot (SWING) × 100000 = 2000
     assert kwargs["order_type"] == "MARKET"
-    # SL/TP festes atomisk på MARKET-ordren → posisjonen er beskyttet
-    # fra fill-tidspunkt selv om boten kobles fra umiddelbart etter.
-    assert kwargs["stop_loss"] == 1.0780
-    assert kwargs["take_profit"] == 1.0850
+    # SL/TP festes atomisk på MARKET-ordren via relative offset (cTrader
+    # avviser absolutt SL/TP på MARKET). Posisjonen er beskyttet fra
+    # fill-tidspunkt selv om boten kobles fra umiddelbart etter.
+    # entry=1.0801 (ask), SL=1.0780 → diff=0.0021 / pip_size 1e-5 = 210
+    # entry=1.0801, T1=1.0850 → diff=0.0049 / 1e-5 = 490
+    assert kwargs["relative_stop_loss"] == 210
+    assert kwargs["relative_take_profit"] == 490
+    assert "stop_loss" not in kwargs
+    assert "take_profit" not in kwargs
     # SWING-horisont har trail-active fra T1-hit, ikke fra entry →
     # ingen server-trail-flag ved order-send (engasjeres via amend
     # i ExitEngine etter T1).
@@ -1219,7 +1224,8 @@ def test_execute_trade_market_makro_enables_server_trailing(
 
     kwargs = client.send_new_order.call_args.kwargs
     assert kwargs["order_type"] == "MARKET"
-    assert kwargs["stop_loss"] == 1.0780
+    # MARKET bruker relative offset (cTrader avviser absolutt på MARKET)
+    assert kwargs["relative_stop_loss"] == 210  # entry 1.0801 − SL 1.0780 = 0.0021
     assert kwargs["trailing_stop_loss"] is True
 
 
