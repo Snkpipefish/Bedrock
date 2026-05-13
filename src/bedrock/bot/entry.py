@@ -1443,6 +1443,13 @@ class EntryEngine:
             order_kwargs["stop_loss"] = round(sig["stop"], price_digits)
             if sig.get("t1") and sig["t1"] > 0:
                 order_kwargs["take_profit"] = round(sig["t1"], price_digits)
+            # MAKRO har trail-active fra entry (ingen T1-pause). Aktiver
+            # server-side trailing direkte — cTrader ratchet'er SL videre
+            # på server selv om bot/PC slås av. SCALP/SWING er pre-T1
+            # statisk; server-trail engasjeres via amend i ExitEngine når
+            # bot setter `trail_active=True` etter T1-hit.
+            if sig.get("horizon", "SWING").upper() == "MAKRO":
+                order_kwargs["trailing_stop_loss"] = True
 
         state.entry_price = entry_price
         state.full_volume = volume_units

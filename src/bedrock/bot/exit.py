@@ -479,7 +479,14 @@ class ExitEngine:
                 effective_sl = min(state.trail_level, state.stop_price)
         if effective_sl is not None:
             effective_sl = self._round_price(state.symbol_id, effective_sl)
-        self._client.amend_sl_tp(position_id=state.position_id, stop_loss=effective_sl)
+        # Hver trail-amend (re)aktiverer server-side trailing fra ny
+        # SL-distanse. Når bot/PC går av etter dette, fortsetter cTrader
+        # å ratchet'e SL videre uten bot-tilstedeværelse.
+        self._client.amend_sl_tp(
+            position_id=state.position_id,
+            stop_loss=effective_sl,
+            trailing_stop_loss=True,
+        )
 
     def _set_break_even(self, state: TradeState, symbol_id: int) -> None:
         """Flytt SL til break-even + ATR-buffer (post-T1).
@@ -533,7 +540,14 @@ class ExitEngine:
         # state.position_id satt før BE-flytting (krever åpen posisjon).
         assert state.position_id is not None
         be_stop = self._round_price(state.symbol_id, be_stop)
-        self._client.amend_sl_tp(position_id=state.position_id, stop_loss=be_stop)
+        # BE-move skjer ved T1-hit og markerer overgang til trail-fase
+        # for SCALP/SWING. Aktiver server-side trailing slik at SL
+        # ratchet'er videre fra BE selv om bot/PC slås av etterpå.
+        self._client.amend_sl_tp(
+            position_id=state.position_id,
+            stop_loss=be_stop,
+            trailing_stop_loss=True,
+        )
         state.stop_price = be_stop
         log.info(
             "[BE] %s — stop til %s (buffer=%.5f spread=%.5f atr=%.5f)",

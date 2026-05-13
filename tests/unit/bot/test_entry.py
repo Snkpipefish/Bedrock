@@ -1174,12 +1174,53 @@ def test_execute_trade_sends_market_order(
     # fra fill-tidspunkt selv om boten kobles fra umiddelbart etter.
     assert kwargs["stop_loss"] == 1.0780
     assert kwargs["take_profit"] == 1.0850
+    # SWING-horisont har trail-active fra T1-hit, ikke fra entry →
+    # ingen server-trail-flag ved order-send (engasjeres via amend
+    # i ExitEngine etter T1).
+    assert "trailing_stop_loss" not in kwargs
     # State oppdatert
     assert state.full_volume == 2000
     assert state.entry_price == 1.0801  # ask for buy
     assert state.lots_used == 0.02
     assert state.risk_pct_used == 1.0
     assert state.horizon == "SWING"
+
+
+def test_execute_trade_market_makro_enables_server_trailing(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """MAKRO har trail-active fra entry; server-side trailing skal
+    aktiveres på ordre-send slik at SL ratchet'er videre selv om PC
+    slås av rett etter fill."""
+    client = _make_client_stub(
+        symbol_map={"EURUSD": 1},
+        last_bid={1: 1.0799},
+        last_ask={1: 1.0801},
+        account_balance=100_000.0,
+    )
+    client.symbol_info = {1: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}}
+    client.symbol_price_digits = {1: 5}
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    state = _make_state()
+    active_states.append(state)
+    sig = _make_signal(horizon="MAKRO")
+    candle = Candle(
+        open=1.08,
+        high=1.0805,
+        low=1.0798,
+        close=1.0801,
+        volume=1,
+        timestamp=datetime.now(timezone.utc),
+    )
+    engine._execute_trade_impl(sig, state, candle)
+
+    kwargs = client.send_new_order.call_args.kwargs
+    assert kwargs["order_type"] == "MARKET"
+    assert kwargs["stop_loss"] == 1.0780
+    assert kwargs["trailing_stop_loss"] is True
 
 
 def test_execute_trade_sends_limit_order_when_rule_set(

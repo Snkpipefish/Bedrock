@@ -513,6 +513,7 @@ class CtraderClient:
         stop_loss: float | None = None,
         take_profit: float | None = None,
         expiration_ms: int | None = None,
+        trailing_stop_loss: bool | None = None,
     ) -> Any:
         """Send ProtoOANewOrderReq. MARKET eller LIMIT.
 
@@ -547,6 +548,8 @@ class CtraderClient:
             req.stopLoss = stop_loss
         if take_profit is not None:
             req.takeProfit = take_profit
+        if trailing_stop_loss is not None:
+            req.trailingStopLoss = trailing_stop_loss
         return self.send(req)
 
     def amend_sl_tp(
@@ -555,8 +558,14 @@ class CtraderClient:
         position_id: int,
         stop_loss: float | None = None,
         take_profit: float | None = None,
+        trailing_stop_loss: bool | None = None,
     ) -> Any:
-        """Endre SL og/eller TP på åpen posisjon."""
+        """Endre SL og/eller TP på åpen posisjon.
+
+        `trailing_stop_loss=True` aktiverer server-side trailing fra
+        nåværende SL-distanse — cTrader ratchet'er SL videre selv om
+        boten kobles fra. Settes til `False` for å deaktivere.
+        """
         req = ProtoOAAmendPositionSLTPReq()
         req.ctidTraderAccountId = self._creds.account_id
         req.positionId = position_id
@@ -564,6 +573,8 @@ class CtraderClient:
             req.stopLoss = stop_loss
         if take_profit is not None:
             req.takeProfit = take_profit
+        if trailing_stop_loss is not None:
+            req.trailingStopLoss = trailing_stop_loss
         return self.send(req)
 
     def close_position(self, *, position_id: int, volume: int) -> Any:

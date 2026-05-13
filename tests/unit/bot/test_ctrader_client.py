@@ -536,6 +536,39 @@ def test_send_new_order_market_with_sl_tp(client: CtraderClient) -> None:
     assert req.limitPrice == 0  # MARKET → ingen limit-pris
 
 
+def test_send_new_order_market_with_trailing_stop_loss(client: CtraderClient) -> None:
+    """MAKRO-horisonten aktiverer server-side trailing fra fill-tidspunkt
+    slik at SL ratchet'er videre uten bot-tilstedeværelse."""
+    with patch.object(client, "send") as send:
+        client.send_new_order(
+            symbol_id=44,
+            trade_side="BUY",
+            volume=1000,
+            order_type="MARKET",
+            stop_loss=1.0780,
+            take_profit=1.0900,
+            trailing_stop_loss=True,
+        )
+    req = send.call_args.args[0]
+    assert req.trailingStopLoss is True
+    assert abs(req.stopLoss - 1.0780) < 1e-9
+
+
+def test_amend_sl_tp_with_trailing_stop_loss(client: CtraderClient) -> None:
+    """Bot engasjerer server-trail via amend ved T1-hit (BE-move) og hver
+    påfølgende trail-ratchet for SCALP/SWING."""
+    with patch.object(client, "send") as send:
+        client.amend_sl_tp(
+            position_id=12345,
+            stop_loss=1.0820,
+            trailing_stop_loss=True,
+        )
+    req = send.call_args.args[0]
+    assert req.positionId == 12345
+    assert abs(req.stopLoss - 1.0820) < 1e-9
+    assert req.trailingStopLoss is True
+
+
 def test_send_new_order_limit_with_sl_tp_and_expiry(client: CtraderClient) -> None:
     with patch.object(client, "send") as send:
         client.send_new_order(
