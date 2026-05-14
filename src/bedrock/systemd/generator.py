@@ -222,6 +222,24 @@ def generate_service_unit(
         wrapper = f"{working_dir}/scripts/signals_bot_regen.sh"
         post_line = f"ExecStartPost={wrapper}\n"
 
+    # network-online.target garanterer at en interface er konfigurert, men
+    # ikke at DNS-resolveren er klar. Ved boot-catch-up (Persistent=true)
+    # raser fetchere ofte i gang før systemd-resolved eller upstream-DNS er
+    # naabar, og alle 22 prices-instrumenter feiler med "Name or service not
+    # known". Vi venter derfor inntil 60 sek på at DNS svarer for et stabilt
+    # vert (cloudflare.com — anycast, høy uptime), så går fetcheren videre.
+    # Exit 0 selv om DNS aldri ble klar: ekte feil rapporteres uansett av
+    # selve fetchen, og vi vil ikke maskere reelle outages som ExecStartPre-
+    # feil. 30×2s i stedet for én lang sleep gir rask oppstart i normalcase.
+    dns_check = (
+        "ExecStartPre=/bin/sh -c '"
+        "for _ in $(seq 1 30); do "
+        "getent ahosts cloudflare.com >/dev/null 2>&1 && exit 0; "
+        "sleep 2; "
+        "done; "
+        "exit 0'\n"
+    )
+
     return (
         "# Auto-generert av `bedrock systemd generate`.\n"
         "# Ikke rediger manuelt — kjør CLI-kommandoen på nytt hvis config endrer seg.\n"
@@ -234,6 +252,7 @@ def generate_service_unit(
         "[Service]\n"
         "Type=oneshot\n"
         f"WorkingDirectory={working_dir}\n"
+        f"{dns_check}"
         f"ExecStart={bedrock_executable} {exec_args}\n"
         f"{post_line}"
         "StandardOutput=journal\n"

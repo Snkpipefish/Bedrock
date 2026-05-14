@@ -130,6 +130,29 @@ def test_generate_service_unit_contains_required_fields() -> None:
     assert "WantedBy=default.target" in content
 
 
+def test_generate_service_unit_has_dns_wait_pre() -> None:
+    """Post-2026-05-14: ExecStartPre venter på DNS-resolver før fetcher kjører.
+
+    Boot-catch-up trigget fetch-prices før systemd-resolved/upstream-DNS var
+    klart; alle 22 instrumenter feilet med "Name or service not known". Pre-
+    sjekken venter inntil 60 sek på en HA-host og fortsetter uansett (exit 0)
+    så reelle outages fortsatt rapporteres via fetcher selv.
+    """
+    content = generate_service_unit(
+        "prices",
+        working_dir=Path("/repo"),
+        bedrock_executable="/bin/bedrock",
+    )
+    assert "ExecStartPre=" in content
+    assert "getent ahosts cloudflare.com" in content
+    # Pre må komme før ExecStart i [Service]-seksjonen
+    service_section = content.split("[Service]", 1)[1]
+    pre_pos = service_section.find("ExecStartPre=")
+    exec_pos = service_section.find("ExecStart=")
+    assert pre_pos != -1 and exec_pos != -1
+    assert pre_pos < exec_pos
+
+
 def test_generate_service_unit_has_notify_on_failure() -> None:
     """Sub-fase 12.6: hver fetch-service skal trigger notify-send ved fail."""
     content = generate_service_unit(

@@ -9,6 +9,7 @@ OnFailure=bedrock-notify@%N.service
 [Service]
 Type=oneshot
 WorkingDirectory=/home/pc/bedrock
+ExecStartPre=/bin/sh -c 'for _ in $(seq 1 30); do getent ahosts cloudflare.com >/dev/null 2>&1 && exit 0; sleep 2; done; exit 0'
 ExecStart=/home/pc/bedrock/.venv/bin/bedrock fetch run cot_legacy
 ExecStartPost=/home/pc/bedrock/scripts/signals_bot_regen.sh
 StandardOutput=journal

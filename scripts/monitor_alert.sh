@@ -21,8 +21,19 @@ notify() {
     "Bedrock monitor: $1" "$2"
 }
 
+# Retry hvis fila mangler: håndterer race ved boot-catch-up der system-
+# scope bedrock-monitor.service (06:30) og user-scope -alert.service (06:40)
+# triggres samtidig som "missed jobs" og kjører innen sekunder av hverandre.
+# Uten retry rakk alert å lese før monitor rakk å skrive, og sendte falsk
+# "rapport mangler"-varsel. 4×30s = inntil 2 min er nok for en treg
+# monitor-kjøring, og fanger fortsatt en ekte outage på neste run.
+for _ in 1 2 3 4; do
+  [ -f "$report" ] && break
+  sleep 30
+done
+
 if [ ! -f "$report" ]; then
-  echo "[monitor_alert] mangler $report — varsler"
+  echo "[monitor_alert] mangler $report etter retry — varsler"
   notify "rapport mangler" "Filen $report ble ikke skrevet i dag. Kjørte bedrock-monitor.service?"
   exit 0
 fi
