@@ -1282,6 +1282,64 @@ def test_execute_trade_market_relative_sl_uses_fixed_100k_scale(
     assert kwargs["relative_take_profit"] == 164_600
 
 
+def test_execute_trade_market_rounds_sl_to_tick_before_relative(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """SL fra signalet kan ha mer presisjon enn symbolets tick. For
+    USDJPY (3-digit, tick=0.001) som får SL=157.29406 fra signalet, må
+    bot avrunde til 157.294 før relative beregnes — ellers gir det
+    51_494 som ikke er tick-multiplum, og cTrader avviser med
+    "Relative stop loss has invalid precision" (live demo 2026-05-14
+    01:15:01).
+    """
+    client = _make_client_stub(
+        symbol_map={"USDJPY": 7},
+        last_bid={7: 157.808},
+        last_ask={7: 157.809},
+        account_balance=100_000.0,
+    )
+    client.symbol_info = {7: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}}
+    client.symbol_price_digits = {7: 3}
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    state = _make_state(
+        signal_id="usdjpy-precise",
+        symbol_id=7,
+        instrument="USDJPY",
+        stop=157.29406,  # 5 desimaler — over tick-presisjon
+        t1=159.78400,
+    )
+    active_states.append(state)
+    sig = _make_signal(
+        sig_id="usdjpy-precise",
+        instrument="USDJPY",
+        alert=157.81,
+        stop=157.29406,
+        t1=159.78400,
+        base_risk=40,
+    )
+    candle = Candle(
+        open=157.81,
+        high=157.82,
+        low=157.80,
+        close=157.809,
+        volume=1,
+        timestamp=datetime.now(timezone.utc),
+    )
+    engine._execute_trade_impl(sig, state, candle)
+
+    kwargs = client.send_new_order.call_args.kwargs
+    # SL avrundet til 157.294 → diff = 157.809 - 157.294 = 0.515
+    # 0.515 × 100_000 = 51_500 (multiplum av 100 = tick-aligned for 3-digit)
+    assert kwargs["relative_stop_loss"] == 51_500
+    assert kwargs["relative_stop_loss"] % 100 == 0
+    # T1 = 159.784 (allerede tick-aligned) → diff = 1.975 × 100_000 = 197_500
+    assert kwargs["relative_take_profit"] == 197_500
+    assert kwargs["relative_take_profit"] % 100 == 0
+
+
 def test_execute_trade_sends_limit_order_when_rule_set(
     safety: SafetyMonitor,
     config: ReloadableConfig,

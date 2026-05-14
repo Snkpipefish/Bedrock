@@ -1444,10 +1444,19 @@ class EntryEngine:
             # atomisk. Etterfølgende `amend_sl_tp` i exit.on_execution
             # er idempotent backup som holder trail/BE/giveback-flyt
             # uendret.
-            sl_dist = abs(float(sig["stop"]) - entry_price)
+            #
+            # SL/T1 fra signalet kan ha mer presisjon enn symbolets
+            # tick (eks. USDJPY SL=157.29406 mens tick=0.001). Avrund
+            # først til price_digits så distansen blir tick-multiplum
+            # — ellers avviser cTrader med "Relative stop loss has
+            # invalid precision".
+            sl_rounded = round(float(sig["stop"]), price_digits)
+            entry_rounded = round(entry_price, price_digits)
+            sl_dist = abs(sl_rounded - entry_rounded)
             order_kwargs["relative_stop_loss"] = max(1, round(sl_dist * 100000))
             if sig.get("t1") and sig["t1"] > 0:
-                tp_dist = abs(float(sig["t1"]) - entry_price)
+                t1_rounded = round(float(sig["t1"]), price_digits)
+                tp_dist = abs(t1_rounded - entry_rounded)
                 order_kwargs["relative_take_profit"] = max(1, round(tp_dist * 100000))
             # MAKRO har trail-active fra entry (ingen T1-pause). Aktiver
             # server-side trailing direkte — cTrader ratchet'er SL videre
