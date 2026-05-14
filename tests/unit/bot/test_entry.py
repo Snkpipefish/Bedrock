@@ -1518,6 +1518,216 @@ def test_execute_trade_blocks_oil_geo_warning_with_tight_sl(
     client.send_new_order.assert_not_called()
 
 
+# ─────────────────────────────────────────────────────────────
+# SL-vs-spread guard (NATGAS-bug 2026-05-14)
+# ─────────────────────────────────────────────────────────────
+
+
+def test_execute_trade_blocks_when_sl_inside_spread_swing(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """NATGAS-reproduksjon: SWING-trade med risk_per_unit < 2.0 × spread
+    blokkeres så vi ikke åpner posisjon med SL inne i spread."""
+    client = _make_client_stub(
+        symbol_map={"NATGAS": 7},
+        last_bid={7: 2.835},
+        last_ask={7: 2.850},  # spread 0.015
+        account_balance=100_000.0,
+    )
+    client.symbol_info = {7: {"lot_size": 100_000, "min_volume": 1, "step_volume": 1}}
+    client.symbol_price_digits = {7: 3}
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    # risk_per_unit = 2.850 - 2.82248 = 0.02752; 2.0 × 0.015 = 0.030 → blokkert
+    state = _make_state(signal_id="ng-1", symbol_id=7, instrument="NATGAS", stop=2.82248)
+    active_states.append(state)
+    sig = _make_signal(
+        sig_id="ng-1", instrument="NATGAS", alert=2.85, stop=2.82248, t1=3.211, horizon="SWING"
+    )
+    engine.signal_data = {"signals": [], "global_state": {}, "rules": {}}
+    candle = Candle(
+        open=2.85,
+        high=2.852,
+        low=2.848,
+        close=2.85,
+        volume=1,
+        timestamp=datetime.now(timezone.utc),
+    )
+    engine._execute_trade_impl(sig, state, candle)
+    client.send_new_order.assert_not_called()
+    assert state not in active_states
+
+
+def test_execute_trade_passes_when_sl_well_outside_spread(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Sanity check: når risk_per_unit >> spread, slipper trade gjennom
+    den nye guarden (ingen regresjon på sunne trades)."""
+    client = _make_client_stub(
+        symbol_map={"EURUSD": 1},
+        last_bid={1: 1.0799},
+        last_ask={1: 1.0801},  # spread 0.0002
+        account_balance=100_000.0,
+    )
+    client.symbol_info = {1: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}}
+    client.symbol_price_digits = {1: 5}
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    # risk_per_unit = 1.0801 - 1.0780 = 0.0021; 10.5× spread → passerer
+    state = _make_state()
+    active_states.append(state)
+    sig = _make_signal()
+    engine.signal_data = {"signals": [], "global_state": {}, "rules": {}}
+    candle = Candle(
+        open=1.08,
+        high=1.081,
+        low=1.079,
+        close=1.0801,
+        volume=1,
+        timestamp=datetime.now(timezone.utc),
+    )
+    engine._execute_trade_impl(sig, state, candle)
+    client.send_new_order.assert_called_once()
+
+
+def test_execute_trade_sl_spread_guard_uses_lower_mult_for_scalp(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Per-horisont split: samme risk/spread blokkeres SWING (2.0×) men
+    slipper gjennom SCALP (1.5×)."""
+    # spread = 0.010, risk = 0.017 → 1.7× spread
+    # SWING (2.0×) blokkerer; SCALP (1.5×) slipper gjennom.
+    state_swing = _make_state(signal_id="ng-sw", symbol_id=7, instrument="NATGAS", stop=2.833)
+    state_scalp = _make_state(signal_id="ng-sc", symbol_id=7, instrument="NATGAS", stop=2.833)
+
+    def _fresh_client() -> MagicMock:
+        c = _make_client_stub(
+            symbol_map={"NATGAS": 7},
+            last_bid={7: 2.840},
+            last_ask={7: 2.850},
+            account_balance=100_000.0,
+        )
+        c.symbol_info = {7: {"lot_size": 100_000, "min_volume": 1, "step_volume": 1}}
+        c.symbol_price_digits = {7: 3}
+        return c
+
+    candle = Candle(
+        open=2.85,
+        high=2.852,
+        low=2.848,
+        close=2.85,
+        volume=1,
+        timestamp=datetime.now(timezone.utc),
+    )
+
+    # SWING — blokkert
+    client_sw = _fresh_client()
+    states_sw = [state_swing]
+    eng_sw = _exec_engine(safety, config, states_sw, tmp_path=tmp_path, client=client_sw)
+    eng_sw.signal_data = {"signals": [], "global_state": {}, "rules": {}}
+    sig_sw = _make_signal(
+        sig_id="ng-sw", instrument="NATGAS", alert=2.85, stop=2.833, t1=2.95, horizon="SWING"
+    )
+    eng_sw._execute_trade_impl(sig_sw, state_swing, candle)
+    client_sw.send_new_order.assert_not_called()
+
+    # SCALP — slipper gjennom (1.7 > 1.5)
+    client_sc = _fresh_client()
+    states_sc = [state_scalp]
+    eng_sc = _exec_engine(safety, config, states_sc, tmp_path=tmp_path, client=client_sc)
+    eng_sc.signal_data = {"signals": [], "global_state": {}, "rules": {}}
+    sig_sc = _make_signal(
+        sig_id="ng-sc", instrument="NATGAS", alert=2.85, stop=2.833, t1=2.90, horizon="SCALP"
+    )
+    eng_sc._execute_trade_impl(sig_sc, state_scalp, candle)
+    client_sc.send_new_order.assert_called_once()
+
+
+def test_execute_trade_skips_sl_spread_guard_for_oil_under_geo(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Oil + geo-warning → eksisterende oil-blokk fyrer (strengere 3.0×).
+    Negativ branch-test: ny universell guard skal IKKE dobbel-blokkere
+    eller endre oil-geo-flow."""
+    client = _make_client_stub(
+        symbol_map={"OIL BRENT": 3},
+        last_bid={3: 85.00},
+        last_ask={3: 85.05},
+        account_balance=100_000.0,
+    )
+    client.symbol_info = {3: {"lot_size": 100, "min_volume": 1, "step_volume": 1}}
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    # Tett SL: 85.04 → risk 0.01, under oil min_sl_pips 25×0.01=0.25
+    state = _make_state(signal_id="oil-1", symbol_id=3, instrument="OIL BRENT", stop=85.04)
+    active_states.append(state)
+    sig = _make_signal(sig_id="oil-1", instrument="OIL BRENT", alert=85.05, stop=85.04, t1=85.40)
+    engine.signal_data = {
+        "signals": [],
+        "global_state": {"oil_geo_warning": True},
+        "rules": {},
+    }
+    candle = Candle(
+        open=85.03,
+        high=85.06,
+        low=85.01,
+        close=85.04,
+        volume=1,
+        timestamp=datetime.now(timezone.utc),
+    )
+    engine._execute_trade_impl(sig, state, candle)
+    # Oil-blokk fyrer (med min_sl_pips først). Trade blokkert uansett —
+    # poenget er at flow er uendret (ingen unntak fra eksisterende test).
+    client.send_new_order.assert_not_called()
+
+
+def test_execute_trade_sl_spread_guard_respects_rules_override(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """rules.sl_min_spread_mult overstyrer SpreadConfig-default. Lar
+    signal-server justere terskelen uten bot-redeploy."""
+    client = _make_client_stub(
+        symbol_map={"EURUSD": 1},
+        last_bid={1: 1.0799},
+        last_ask={1: 1.0801},  # spread 0.0002
+        account_balance=100_000.0,
+    )
+    client.symbol_info = {1: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}}
+    client.symbol_price_digits = {1: 5}
+    engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    state = _make_state()  # stop=1.0780 → risk=0.0021 = 10.5× spread
+    active_states.append(state)
+    sig = _make_signal()  # SWING, ville passert default 2.0×
+    # Override til 50× → 50 × 0.0002 = 0.010 > risk 0.0021 → blokkert
+    engine.signal_data = {
+        "signals": [],
+        "global_state": {},
+        "rules": {"sl_min_spread_mult": 50.0},
+    }
+    candle = Candle(
+        open=1.08,
+        high=1.081,
+        low=1.079,
+        close=1.0801,
+        volume=1,
+        timestamp=datetime.now(timezone.utc),
+    )
+    engine._execute_trade_impl(sig, state, candle)
+    client.send_new_order.assert_not_called()
+
+
 def test_execute_trade_blocks_total_correlation_limit(
     safety: SafetyMonitor,
     config: ReloadableConfig,

@@ -103,7 +103,23 @@ class SpreadConfig(BaseModel):
     agri_multiplier: float = 2.5
     non_agri_multiplier_of_stop: float = 2.0  # mult × stop_multiplier
 
+    # SL-vs-spread guard (NATGAS-bug 2026-05-14): risk_per_unit må være
+    # >= mult × current_spread, ellers blokkeres trade. Per horisont
+    # fordi SCALP-SL er naturlig tettere; SWING/MAKRO bør ha større
+    # margin før normal bid-ask-bevegelse alene utløser stop.
+    sl_min_spread_mult_scalp: float = 1.5
+    sl_min_spread_mult_swing: float = 2.0
+    sl_min_spread_mult_makro: float = 2.0
+
     model_config = ConfigDict(extra="forbid")
+
+    def sl_min_spread_mult_for_horizon(self, horizon: str) -> float:
+        h = (horizon or "SWING").upper()
+        if h == "SCALP":
+            return self.sl_min_spread_mult_scalp
+        if h == "MAKRO":
+            return self.sl_min_spread_mult_makro
+        return self.sl_min_spread_mult_swing
 
 
 class HorizonTTLConfig(BaseModel):

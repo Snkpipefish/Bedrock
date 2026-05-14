@@ -1214,6 +1214,34 @@ class EntryEngine:
                 self._remove_state(state)
                 return
 
+        # ── SL-vs-spread guard (universell) ───────────────────
+        # Hindrer at SL ligger så tett på entry at normal bid-ask-
+        # spread alene utløser stop (NATGAS-bug 2026-05-14). Oil under
+        # geo håndteres av strengere blokk over (skip-condition speiler
+        # den så vi ikke dobbel-blokkerer).
+        if not (is_oil and gs.get("oil_geo_warning", False)):
+            spread_now = self._client.last_ask.get(state.symbol_id, 0) - self._client.last_bid.get(
+                state.symbol_id, 0
+            )
+            horizon = (sig.get("horizon") or "SWING").upper()
+            sl_spread_mult = self._config.spread.sl_min_spread_mult_for_horizon(horizon)
+            rule_override = rules.get("sl_min_spread_mult")
+            if rule_override is not None:
+                sl_spread_mult = float(rule_override)
+            if spread_now > 0 and risk_per_unit < sl_spread_mult * spread_now:
+                log.warning(
+                    "[SL-SPREAD BLOKKERT] %s [%s] — risk %.5f < %.2f× spread %.5f "
+                    "(eff. SL-avstand etter spread = %.5f).",
+                    sig["id"],
+                    horizon,
+                    risk_per_unit,
+                    sl_spread_mult,
+                    spread_now,
+                    risk_per_unit - spread_now,
+                )
+                self._remove_state(state)
+                return
+
         # ── Daglig tapsgrense ─────────────────────────────────
         balance = self._client.account_balance
         if balance > 0 and self._safety.daily_loss_exceeded(balance, self._config.daily_loss):

@@ -62,6 +62,13 @@ reloadable:
     min_samples: 10                    # cold-start-vern
     agri_multiplier: 2.5               # agri: 2.5 × snitt-spread
     non_agri_multiplier_of_stop: 2.0   # non-agri: stop_multiplier × 2
+    # SL-vs-spread guard: blokker trade hvis risk_per_unit < N × current_spread.
+    # Forhindrer at SL ligger så tett på entry at normal bid-ask alene
+    # utløser stop (NATGAS-bug 2026-05-14). SCALP får lavere terskel
+    # fordi SCALP-SL er naturlig tettere (~1×ATR(M5)).
+    sl_min_spread_mult_scalp: 1.5
+    sl_min_spread_mult_swing: 2.0
+    sl_min_spread_mult_makro: 2.0
 
   # Per-horisont TTL i sekunder. Signaler eldre enn dette ignoreres.
   horizon_ttl:

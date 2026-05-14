@@ -22,6 +22,7 @@ from bedrock.bot.config import (
     BotConfig,
     GroupParams,
     ReloadableConfig,
+    SpreadConfig,
     StartupOnlyConfig,
     diff_startup_only,
     load_bot_config,
@@ -272,3 +273,41 @@ def test_group_params_extra_forbidden() -> None:
                 "bonus_field": "not allowed",
             }
         )
+
+
+# ─────────────────────────────────────────────────────────────
+# SpreadConfig — SL-vs-spread guard (NATGAS-bug 2026-05-14)
+# ─────────────────────────────────────────────────────────────
+
+
+def test_spread_config_sl_min_spread_mult_defaults() -> None:
+    cfg = SpreadConfig()
+    assert cfg.sl_min_spread_mult_scalp == 1.5
+    assert cfg.sl_min_spread_mult_swing == 2.0
+    assert cfg.sl_min_spread_mult_makro == 2.0
+    assert cfg.sl_min_spread_mult_for_horizon("SCALP") == 1.5
+    assert cfg.sl_min_spread_mult_for_horizon("SWING") == 2.0
+    assert cfg.sl_min_spread_mult_for_horizon("MAKRO") == 2.0
+    # case-insensitive + ukjent fallback til SWING-default
+    assert cfg.sl_min_spread_mult_for_horizon("scalp") == 1.5
+    assert cfg.sl_min_spread_mult_for_horizon("makro") == 2.0
+    assert cfg.sl_min_spread_mult_for_horizon("UNKNOWN") == 2.0
+    assert cfg.sl_min_spread_mult_for_horizon("") == 2.0
+
+
+def test_spread_config_yaml_roundtrip_without_new_keys() -> None:
+    """Backwards-compat: bot.yaml uten nye nøkler skal gi defaults +
+    extra='forbid' bryter ikke."""
+    yaml_text = """
+startup_only:
+  signal_url: "http://localhost:5100"
+reloadable:
+  spread:
+    min_samples: 10
+    agri_multiplier: 2.5
+    non_agri_multiplier_of_stop: 2.0
+"""
+    cfg = load_bot_config_from_yaml_string(yaml_text)
+    assert cfg.reloadable.spread.sl_min_spread_mult_scalp == 1.5
+    assert cfg.reloadable.spread.sl_min_spread_mult_swing == 2.0
+    assert cfg.reloadable.spread.sl_min_spread_mult_makro == 2.0
