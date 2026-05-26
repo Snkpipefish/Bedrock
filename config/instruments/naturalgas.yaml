@@ -42,20 +42,23 @@ families:
       - {name: momentum_z, weight: 0.5, params: {window: 20}}
   positioning:
     # Sub-fase 12.5+ session 106: NaturalGas (NG=F = Henry Hub NYMEX) er
-    # primær CFTC, men ICE TTF Gas er det viktigste EU-benchmarket.
-    # Splitt: 0.7 CFTC / 0.3 ICE-TTF (CFTC dominerer fordi NG=F er Henry
-    # Hub-prising; TTF gir cross-region-positioning-signal som
-    # secondary).
+    # primær CFTC. ICE TTF Gas-overlay var planlagt @0.3, men ICE har
+    # droppet TTF Gas fra sin public COT-CSV (verifisert 2026-05-26:
+    # COTHist2025.csv + COTHist2026.csv inneholder kun 6 markets —
+    # brent, gasoil, cocoa, coffee, sugar, wheat). Vi har ingen
+    # alternativ gratis-feed for TTF positioning. Vekt omfordelt:
+    # 0.42→0.60 (positioning_mm_pct) + 0.28→0.40 (cot_z_score).
     drivers:
       - name: positioning_mm_pct
-        weight: 0.42  # 0.6 * 0.7 — CFTC NYMEX NG
+        weight: 0.6   # CFTC NYMEX NG (var 0.42)
         params: {metric: mm_net_pct, lookback_weeks: 52}
       - name: cot_z_score
-        weight: 0.28  # 0.4 * 0.7 — CFTC NYMEX NG
+        weight: 0.4   # CFTC NYMEX NG (var 0.28)
         params: {metric: mm_net_pct, lookback_weeks: 52}
-      - name: cot_ice_mm_pct
-        weight: 0.3   # ICE TTF overlay (cross-region)
-        params: {contract: ice ttf gas, metric: mm_net_pct, lookback_weeks: 52}
+      # cot_ice_mm_pct ICE TTF Gas droppet — ICE public-CSV inneholder
+      # ikke TTF lenger. Hvis ICE re-publiserer eller alternativ kilde
+      # dukker opp, legg tilbake driver med weight 0.3 og juster
+      # positioning_mm_pct → 0.42 og cot_z_score → 0.28.
   macro:
     # Sub-fase 12.5+ session 107: US Working Natural Gas Storage Lower 48
     # er primær fundamental for Henry Hub-prising.

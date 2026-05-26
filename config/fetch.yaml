@@ -37,6 +37,20 @@ fetchers:
     table: cot_legacy
     ts_column: report_date
 
+  # Sub-fase 12.7 D1 A4 (session 128): TFF = Traders in Financial Futures
+  # (CFTC's mer detaljerte rapport for FX/indices/crypto med dealer/
+  # asset_mgr/lev_funds/other-bryning). Wired som ukentlig fetcher
+  # 2026-05-26 etter operatør-spørsmål om stale data. positioning_tff-
+  # driver eksisterer i koden men er ikke aktivt wired i instrument-
+  # config; fetcher kjører likevel for å holde data fersk.
+  cot_tff:
+    module: bedrock.fetch.cot_cftc
+    cron: "0 22 * * 5"         # fredag 22:00 UTC (samme som legacy/disaggregated)
+    stale_hours: 264           # ukentlig + 4d buffer
+    on_failure: log_and_skip
+    table: cot_tff
+    ts_column: report_date
+
   fundamentals:
     module: bedrock.fetch.fred
     cron: "30 2 * * *"          # daglig 02:30 UTC

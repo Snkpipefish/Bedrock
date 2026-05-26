@@ -67,7 +67,11 @@ ICE_MARKETS: dict[str, str] = {
     # Energy (eksisterende)
     "brent crude": "ice brent crude",
     "low sulphur gasoil": "ice gasoil",
-    "ttf natural gas": "ice ttf gas",
+    # NB: "ttf natural gas" / "ice ttf gas" — droppet fra ICE public-CSV
+    # senest 2025 (verifisert 2026-05-26: hverken COTHist2025.csv eller
+    # COTHist2026.csv inneholder TTF Gas). Mapping fjernet. Hvis ICE
+    # re-publiserer eller alternativ gratis-feed dukker opp, legg
+    # tilbake "ttf natural gas": "ice ttf gas" + "ttf": "ice ttf gas".
     # Softs (Bunke 2 #4) — ICE Futures Europe public CSV inkluderer:
     # White Sugar (No.5), Cocoa, Robusta Coffee, Wheat (Feed Wheat).
     # Match-nøkler er presise for å unngå overlapp.
@@ -78,8 +82,6 @@ ICE_MARKETS: dict[str, str] = {
     # Varianter (kortform)
     "brent": "ice brent crude",
     "gasoil": "ice gasoil",
-    "ttf": "ice ttf gas",
-    "natural gas": "ice ttf gas",
 }
 
 

@@ -260,6 +260,62 @@ def run_cot_legacy(
     return result
 
 
+# Hardkodet liste av TFF-kontrakter som holdes ferske. Bruker
+# eksisterende DB-historikk som "kanonisk liste" (8 kontrakter
+# backfillet i session 128). Disse er CFTC's Financial-futures-segment
+# (FX, indices, crypto) som har TFF-rapport tilgjengelig — ikke alle
+# CFTC-kontrakter har det (råvarer bruker disaggregated).
+#
+# Ingen instrument-rule har cot_report: tff i config/instruments/* per
+# 2026-05-26, men positioning_tff-driveren kan aktiveres når som helst
+# uten backfill-stub fordi denne fetcheren holder data fersk ukentlig.
+_TFF_CONTRACTS: tuple[str, ...] = (
+    "AUSTRALIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE",
+    "BITCOIN - CHICAGO MERCANTILE EXCHANGE",
+    "BRITISH POUND - CHICAGO MERCANTILE EXCHANGE",
+    "E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE",
+    "ETHER CASH SETTLED - CHICAGO MERCANTILE EXCHANGE",
+    "EURO FX - CHICAGO MERCANTILE EXCHANGE",
+    "JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE",
+    "NASDAQ-100 Consolidated - CHICAGO MERCANTILE EXCHANGE",
+)
+
+
+@register_runner("cot_tff")
+def run_cot_tff(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """Traders in Financial Futures-rapporter (FX/indices/crypto).
+
+    Itererer over hardkodet ``_TFF_CONTRACTS``-liste i stedet for
+    instrument-config (per session 2026-05-26 har ingen rule
+    ``cot_report: tff``; alle FX bruker ``legacy``). Holder tabellen
+    fersk så ``positioning_tff``-driveren kan wires senere uten
+    backfill-stub. ``instruments``-parameter ignoreres bevisst.
+    """
+    from bedrock.fetch.cot_cftc import fetch_cot_tff
+
+    result = FetchRunResult(fetcher_name="cot_tff")
+
+    def _items():
+        for contract in _TFF_CONTRACTS:
+
+            def _do(contract=contract):
+                df = fetch_cot_tff(contract, from_date, to_date)
+                if df.empty:
+                    return 0
+                return store.append_cot_tff(df)
+
+            yield contract, _do
+
+    _safe_run(_items(), result)
+    return result
+
+
 @register_runner("weather")
 def run_weather(
     spec: FetcherSpec,
