@@ -1500,7 +1500,12 @@ class EntryEngine:
         state.lots_used = desired_lots
         state.risk_pct_used = risk_pct
         state.horizon = sig.get("horizon", "SWING")
-        state.grade = sig.get("character", "B")
+        # Signal-server schema 2.x bruker feltet "grade" (A+/A/B/C).
+        # Historisk navn fra scalp_edge-bot var "character"; det er aldri
+        # sendt fra bedrock signal_server. Default "B" beholdes som
+        # konservativ fallback hvis et eldre format en gang skulle dukke
+        # opp (lavere risk-tier enn "A" via sizing.get_risk_pct).
+        state.grade = sig.get("grade", "B")
         state.horizon_config = sig.get("horizon_config", {})
         state.correlation_group = sig.get("correlation_group")
         if use_limit:

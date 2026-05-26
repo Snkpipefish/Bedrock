@@ -15,15 +15,15 @@ def _run(
     *,
     geo: bool = False,
     vix: str = "normal",
-    character: str | None = None,
+    grade: str | None = None,
     outside_session: bool = False,
     cfg: RiskPctConfig | None = None,
     rules: dict | None = None,
 ) -> float:
     cfg = cfg or RiskPctConfig()
     sig: dict = {}
-    if character is not None:
-        sig["character"] = character
+    if grade is not None:
+        sig["grade"] = grade
     if outside_session:
         sig["_outside_session"] = True
     gs = {"geo_active": geo, "vix_regime": vix}
@@ -38,8 +38,8 @@ def test_geo_active_gives_quarter() -> None:
     assert _run(geo=True) == 0.25
 
 
-def test_character_c_gives_quarter() -> None:
-    assert _run(character="C") == 0.25
+def test_grade_c_gives_quarter() -> None:
+    assert _run(grade="C") == 0.25
 
 
 def test_vix_extreme_gives_quarter() -> None:
@@ -50,8 +50,8 @@ def test_vix_elevated_gives_half() -> None:
     assert _run(vix="elevated") == 0.5
 
 
-def test_character_b_gives_half() -> None:
-    assert _run(character="B") == 0.5
+def test_grade_b_gives_half() -> None:
+    assert _run(grade="B") == 0.5
 
 
 def test_outside_session_gives_half() -> None:
@@ -63,8 +63,8 @@ def test_geo_beats_vix_elevated() -> None:
     assert _run(geo=True, vix="elevated") == 0.25
 
 
-def test_character_a_normal_full() -> None:
-    assert _run(character="A") == 1.0
+def test_grade_a_normal_full() -> None:
+    assert _run(grade="A") == 1.0
 
 
 def test_rules_override_full() -> None:

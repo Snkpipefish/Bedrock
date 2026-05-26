@@ -31,22 +31,27 @@ def get_risk_pct(
     i stedet for `rules.get("risk_pct_*", ...)` med hardkodede fallback.
 
     Reglene (prioriteringsrekkefølge):
-    - geo aktiv ELLER character="C" ELLER vix="extreme" → quarter
-    - vix="elevated" ELLER character="B" ELLER utenfor session → half
-    - ellers → full
+    - geo aktiv ELLER grade="C" ELLER vix="extreme" → quarter
+    - vix="elevated" ELLER grade="B" ELLER utenfor session → half
+    - ellers (grade A/A+) → full
 
     Merk: `rules.get("risk_pct_*", ...)` respekteres fortsatt slik at
     per-instrument YAML-overrides fungerer. `cfg` gir prosess-nivå
     default.
+
+    Feltnavn-historikk: scalp_edge-bot brukte "character"; bedrock
+    signal_server bruker "grade" (A+/A/B/C i schema v2.x). Vi leser
+    "grade" her — eldre "character"-baserte signal-payloads vil falle
+    gjennom til full risk (sig.get returnerer None).
     """
     geo = global_state.get("geo_active", False)
     vix = global_state.get("vix_regime", "normal")
-    char_c = sig.get("character") == "C"
+    grade = sig.get("grade")
     outside = sig.get("_outside_session", False)
 
-    if geo or char_c or vix == "extreme":
+    if geo or grade == "C" or vix == "extreme":
         return rules.get("risk_pct_quarter", cfg.quarter)
-    if vix == "elevated" or sig.get("character") == "B" or outside:
+    if vix == "elevated" or grade == "B" or outside:
         return rules.get("risk_pct_half", cfg.half)
     return rules.get("risk_pct_full", cfg.full)
 

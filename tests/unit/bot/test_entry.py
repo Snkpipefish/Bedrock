@@ -1101,7 +1101,7 @@ def _make_signal(
     t1: float = 1.0850,
     horizon: str = "SWING",
     base_risk: int = 40,
-    character: str = "A",
+    grade: str = "A",
 ) -> dict:
     return {
         "id": sig_id,
@@ -1111,7 +1111,7 @@ def _make_signal(
         "stop": stop,
         "t1": t1,
         "horizon": horizon,
-        "character": character,
+        "grade": grade,
         "horizon_config": {"sizing_base_risk_usd": base_risk},
     }
 
