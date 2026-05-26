@@ -379,8 +379,13 @@ def _collect_xml_paths_from_index(
         # ESMIS bruker to URL-formater:
         # - Nyeste: /sites/default/release-files/<numerisk_id>/wasdeMMYY.xml
         # - Eldre: /sites/default/release-files/<id>/<dir>/<subdir>/wasdeMMYY.xml
+        # Noen rapporter har en `v<N>`-suffix når USDA reviderer (f.eks.
+        # wasde0526v2.xml for mai-2026 revisjonen). Vi matcher disse også
+        # og lar drop_duplicates på (report_date, marketing_year, region,
+        # commodity, metric) sørge for at en evt. nyere v2 overskriver v1.
         paths = re.findall(
-            r'href="(/sites/default/release-files/[\w\-/]+/wasde\d{4}\.xml)"', resp.text
+            r'href="(/sites/default/release-files/[\w\-/]+/wasde\d{4}(?:v\d+)?\.xml)"',
+            resp.text,
         )
         new_count = sum(1 for p in paths if p not in seen)
         seen.update(paths)
@@ -415,9 +420,10 @@ def fetch_wasde_xml_index(
 
     all_dfs: list[pd.DataFrame] = []
     for path in xml_paths:
-        # File-navn-pattern: wasdeMMYY.xml — MM=måned, YY=2-siffer-år.
+        # File-navn-pattern: wasdeMMYY[vN].xml — MM=måned, YY=2-siffer-år,
+        # optional revision-suffix v1/v2/...
         # Filter på years hvis spesifisert.
-        m = re.search(r"wasde(\d{2})(\d{2})\.xml$", path)
+        m = re.search(r"wasde(\d{2})(\d{2})(?:v\d+)?\.xml$", path)
         if not m:
             continue
         yy = int(m.group(2))
