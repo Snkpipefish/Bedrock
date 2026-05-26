@@ -38,6 +38,12 @@ dependencies = [
     # er primær via subprocess; pypdf er pure-python fallback når
     # poppler-utils mangler (ADR-007 § 6).
     "pypdf>=4.0",
+
+    # US-bank-holidays til staleness-sjekk for US-marked-avhengige
+    # fetchere (FRED, COMEX, EIA, NASS, USDA WASDE, Yahoo BDRY).
+    # Brukes til å unngå false-positive monitor-alarmer på Memorial
+    # Day, Independence Day, Thanksgiving osv.
+    "holidays>=0.50",
 ]
 
 [project.optional-dependencies]

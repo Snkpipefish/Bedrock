@@ -16,6 +16,7 @@ from bedrock.config.fetch import (
     FetchConfig,
     FetchConfigError,
     FetcherSpec,
+    business_hours_between,
     check_staleness,
     latest_observation_ts,
     load_fetch_config,
@@ -225,6 +226,88 @@ def test_check_staleness_old_data(tmp_path: Path) -> None:
     assert status.has_data is True
     assert status.is_stale is True
     assert status.age_hours == pytest.approx(50.0, abs=0.1)
+
+
+# ---------------------------------------------------------------------------
+# US business-day calendar
+# ---------------------------------------------------------------------------
+
+
+def test_business_hours_weekend_excluded() -> None:
+    # Fre 2026-05-22 12:00 UTC → Man 2026-05-25 12:00 UTC = 72 kalender-t
+    # Med us_calendar: fre 12-23:59 (12t) + lør+søn 0 + man 00-12 (12t, men
+    # 25.05 er Memorial Day → 0t) = 12.0 t
+    start = datetime(2026, 5, 22, 12, 0, tzinfo=timezone.utc)
+    end = datetime(2026, 5, 25, 12, 0, tzinfo=timezone.utc)
+    assert business_hours_between(start, end) == pytest.approx(12.0, abs=0.01)
+
+
+def test_business_hours_memorial_day_excluded() -> None:
+    # 2026-05-25 (Memorial Day) er en mandag-holiday
+    start = datetime(2026, 5, 25, 0, 0, tzinfo=timezone.utc)
+    end = datetime(2026, 5, 26, 0, 0, tzinfo=timezone.utc)
+    assert business_hours_between(start, end) == pytest.approx(0.0, abs=0.01)
+
+
+def test_business_hours_normal_weekday() -> None:
+    # Tir 2026-05-19 00:00 → Ons 2026-05-20 06:00 = 30 timer business
+    start = datetime(2026, 5, 19, 0, 0, tzinfo=timezone.utc)
+    end = datetime(2026, 5, 20, 6, 0, tzinfo=timezone.utc)
+    assert business_hours_between(start, end) == pytest.approx(30.0, abs=0.01)
+
+
+def test_check_staleness_memorial_day_us_calendar(tmp_path: Path) -> None:
+    """Regresjon for session 2026-05-26: FRED siste-data fredag 22.05,
+    monitor kjørte tirsdag 26.05 04:30 UTC etter Memorial Day mandag.
+    Med us_calendar=true skal status være fresh (business-hours < 48)."""
+    store = DataStore(tmp_path / "bedrock.db")
+    spec = FetcherSpec(
+        module="bedrock.fetch.fred",
+        cron="30 2 * * *",
+        stale_hours=48,
+        table="fundamentals",
+        ts_column="date",
+        us_calendar=True,
+    )
+    # Skriv én fundamentals-rad datert fredag 22.05
+    fred_df = pd.DataFrame(
+        {
+            "date": ["2026-05-22"],
+            "series_id": ["DGS10"],
+            "value": [4.2],
+        }
+    )
+    store.append_fundamentals(fred_df)
+
+    now = datetime(2026, 5, 26, 4, 30, tzinfo=timezone.utc)
+    status = check_staleness("fundamentals", spec, store, now=now)
+    # Business-tid: fre 22 00:00-23:59 = 24t, lør+søn+man(holiday) = 0,
+    # tir 26 00:00-04:30 = 4.5t → 28.5t ≪ 48t-stale_hours
+    assert status.has_data is True
+    assert status.is_stale is False
+    assert status.age_hours is not None
+    assert status.age_hours < 30.0
+
+
+def test_check_staleness_us_calendar_still_stale_when_truly_old(tmp_path: Path) -> None:
+    """us_calendar=true skal IKKE skjule reell staleness (data 2 uker gammel)."""
+    store = DataStore(tmp_path / "bedrock.db")
+    spec = FetcherSpec(
+        module="bedrock.fetch.fred",
+        cron="30 2 * * *",
+        stale_hours=48,
+        table="fundamentals",
+        ts_column="date",
+        us_calendar=True,
+    )
+    fred_df = pd.DataFrame({"date": ["2026-05-08"], "series_id": ["DGS10"], "value": [4.2]})
+    store.append_fundamentals(fred_df)
+
+    now = datetime(2026, 5, 26, 4, 30, tzinfo=timezone.utc)
+    status = check_staleness("fundamentals", spec, store, now=now)
+    assert status.is_stale is True
+    assert status.age_hours is not None
+    assert status.age_hours > 48.0
 
 
 def test_status_report_iterates_all_fetchers(tmp_path: Path) -> None:

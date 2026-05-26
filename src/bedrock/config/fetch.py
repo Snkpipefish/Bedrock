@@ -29,7 +29,7 @@ fetchers:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -62,6 +62,12 @@ class FetcherSpec(BaseModel):
     on_failure: OnFailure = "log_and_skip"
     table: str
     ts_column: str = "ts"
+    # Sett til true for fetchere som henter US-marked-avhengig data
+    # (FRED, COMEX, NASS, USDA WASDE, EIA, Yahoo-listede US-ETF-er).
+    # Staleness regnes da i US-business-day-timer, så weekends + US-bank-
+    # holidays ikke bidrar til alder. Eliminerer false-positive monitor-
+    # alarmer som Memorial Day → tirsdag-morgen-alert (session 2026-05-26).
+    us_calendar: bool = False
 
     model_config = ConfigDict(extra="forbid")
 
@@ -165,6 +171,56 @@ def _parse_ts(raw: Any) -> datetime:
     return dt
 
 
+_US_HOLIDAYS_CACHE: Any = None
+
+
+def _us_holidays() -> Any:
+    """Lazy-init US-bank-holiday-kalender (cachet på modul-nivå).
+
+    `holidays.US()` returnerer en dict-lignende objekt som auto-utvider
+    seg når nye år aksesseres — én instans dekker hele kjøretiden.
+    """
+    global _US_HOLIDAYS_CACHE
+    if _US_HOLIDAYS_CACHE is None:
+        import holidays as _holidays
+
+        _US_HOLIDAYS_CACHE = _holidays.US()
+    return _US_HOLIDAYS_CACHE
+
+
+def _is_us_business_day(d: date) -> bool:
+    """True hvis dato er hverdag (Mon-Fri) OG ikke US-bank-holiday."""
+    if d.weekday() >= 5:
+        return False
+    return d not in _us_holidays()
+
+
+def business_hours_between(start: datetime, end: datetime) -> float:
+    """Timer mellom `start` og `end` som faller på US-business-days.
+
+    Brukes for `us_calendar=true`-fetchere så weekend + US-holidays
+    ikke bidrar til staleness-alder. Beregner per døgn-segment;
+    helligdager (Sat/Sun + US-bank) gir 0 timer. Akseptabelt O(N)
+    der N er antall døgn mellom — i praksis < 7 for ferskhets-sjekk.
+    """
+    if end <= start:
+        return 0.0
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+
+    total_seconds = 0.0
+    cur = start
+    while cur < end:
+        next_midnight = cur.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        seg_end = min(next_midnight, end)
+        if _is_us_business_day(cur.date()):
+            total_seconds += (seg_end - cur).total_seconds()
+        cur = seg_end
+    return total_seconds / 3600.0
+
+
 def check_staleness(
     name: str,
     spec: FetcherSpec,
@@ -190,9 +246,11 @@ def check_staleness(
             has_data=False,
         )
 
-    age = resolved_now - latest
-    age_hours = age.total_seconds() / 3600.0
-    is_stale = age > timedelta(hours=spec.stale_hours)
+    if spec.us_calendar:
+        age_hours = business_hours_between(latest, resolved_now)
+    else:
+        age_hours = (resolved_now - latest).total_seconds() / 3600.0
+    is_stale = age_hours > spec.stale_hours
 
     return FetcherStatus(
         name=name,

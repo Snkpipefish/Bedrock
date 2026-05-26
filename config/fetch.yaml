@@ -44,6 +44,7 @@ fetchers:
     on_failure: retry_with_backoff
     table: fundamentals
     ts_column: date
+    us_calendar: true           # FRED publiserer kun US-bank-business-days
 
   weather:
     module: bedrock.fetch.weather
@@ -156,6 +157,7 @@ fetchers:
     on_failure: log_and_skip
     table: wasde
     ts_column: report_date
+    us_calendar: true           # USDA publiserer på US-bus-days; juli-rapport landes f.eks. 11. juli (etter 4. juli holiday)
 
   crop_progress:
     module: bedrock.fetch.nass
@@ -164,6 +166,7 @@ fetchers:
     on_failure: log_and_skip
     table: crop_progress
     ts_column: week_ending
+    us_calendar: true           # NASS US-publisering — Memorial Day forskyver mandags-rapport
 
   # Sub-fase 12.5+ session 113: bdi-runner rebrandet til shipping
   # (full Baltic-suite BDI+BCI+BPI+BSI, long-format `shipping_indices`).
@@ -176,6 +179,7 @@ fetchers:
     on_failure: retry_with_backoff
     table: shipping_indices
     ts_column: date
+    us_calendar: true           # BDRY ETF tradres på NYSE Arca — stengt på US-holidays
 
   # Sub-fase 12.5+ session 105 (ADR-007/008): Forex Factory økonomisk
   # kalender. JSON-en endrer seg når nye events legges til eller når
@@ -218,6 +222,7 @@ fetchers:
     on_failure: log_and_skip
     table: eia_inventory
     ts_column: date
+    us_calendar: true            # EIA publiserer på US-bus-days; Independence Day forskyver release
 
   # Sub-fase 12.5+ session 108 (ADR-007/008): COMEX warehouse-inventories
   # for gull/sølv/kobber via metalcharts.org's JSON-API. Daglig publisering
@@ -230,6 +235,7 @@ fetchers:
     on_failure: log_and_skip
     table: comex_inventory
     ts_column: date
+    us_calendar: true            # COMEX/CME stengt på US-bank-holidays
 
   # Sub-fase 12.5+ session 109 (ADR-007/008): USGS seismic events M≥4.5
   # i mining-regioner. Daglig refresh; USGS oppdaterer feeden hvert
