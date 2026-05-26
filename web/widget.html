@@ -123,6 +123,69 @@
     .setup-row .dir.buy  { color: var(--green); }
     .setup-row .dir.sell { color: var(--red); }
     .setup-row .horizon { font-size: 10px; color: var(--muted); }
+    .panel.decisions { grid-column: 1 / span 2; }
+    .panel.decisions .summary {
+      display: flex;
+      gap: 10px;
+      font-size: 11px;
+      color: var(--muted);
+      flex-wrap: wrap;
+      margin-bottom: 2px;
+    }
+    .panel.decisions .summary .stat {
+      display: inline-flex;
+      gap: 4px;
+      align-items: center;
+    }
+    .panel.decisions .summary .stat strong { color: var(--text); }
+    .decision-list {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      margin-top: 4px;
+    }
+    .decision-row {
+      display: grid;
+      grid-template-columns: 1fr 70px 60px 60px 60px;
+      gap: 6px;
+      align-items: center;
+      padding: 4px 6px;
+      background: var(--panel-2);
+      border-radius: 4px;
+      font-size: 11px;
+    }
+    .decision-row .instr-cell { font-weight: 600; }
+    .decision-row .instr-cell .dir { font-size: 10px; margin-left: 4px; }
+    .decision-row .instr-cell .dir.buy { color: var(--green); }
+    .decision-row .instr-cell .dir.sell { color: var(--red); }
+    .decision-row .horizon-tag {
+      font-size: 9px;
+      color: var(--muted);
+      letter-spacing: 0.5px;
+    }
+    .decision-row .count {
+      font-size: 11px;
+      text-align: right;
+      color: var(--muted);
+    }
+    .decision-row .count.alerts { color: var(--blue); }
+    .decision-row .count.blocked { color: var(--red); }
+    .decision-row .count.opened { color: var(--green); }
+    .reason-pill {
+      font-size: 9px;
+      padding: 1px 4px;
+      border-radius: 3px;
+      background: var(--bg);
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      white-space: nowrap;
+    }
+    .reason-pill.sl-spread { color: var(--amber); }
+    .reason-pill.agri-spread { color: var(--amber); }
+    .reason-pill.agri-session { color: var(--muted); }
+    .reason-pill.cooldown { color: var(--red); }
+    .reason-pill.daily-loss { color: var(--red); }
     .footer {
       display: flex;
       justify-content: space-between;
@@ -189,6 +252,19 @@
           <span class="empty">laster…</span>
         </div>
       </div>
+
+      <div class="panel decisions">
+        <span class="label">Dagens beslutninger</span>
+        <div class="summary" id="dec-summary">
+          <span class="stat"><strong id="dec-alerts">0</strong> entry-zone-treff</span>
+          <span class="stat"><strong id="dec-confirmed">0</strong> bekreftet</span>
+          <span class="stat"><strong id="dec-blocked">0</strong> blokkert</span>
+          <span class="stat"><strong id="dec-opened">0</strong> ordrer plassert</span>
+        </div>
+        <div class="decision-list" id="dec-list">
+          <span class="empty">laster…</span>
+        </div>
+      </div>
     </div>
 
     <div class="footer">
@@ -219,16 +295,67 @@
 
     async function tick() {
       try {
-        const resp = await fetch("/api/ui/widget", { cache: "no-store" });
-        if (!resp.ok) throw new Error("HTTP " + resp.status);
-        const data = await resp.json();
+        const [wResp, dResp] = await Promise.all([
+          fetch("/api/ui/widget", { cache: "no-store" }),
+          fetch("/api/ui/decisions", { cache: "no-store" }),
+        ]);
+        if (!wResp.ok) throw new Error("widget HTTP " + wResp.status);
+        const data = await wResp.json();
         render(data);
+        if (dResp.ok) {
+          const dec = await dResp.json();
+          renderDecisions(dec);
+        }
         document.getElementById("error-line").textContent = "";
         document.getElementById("last-update").textContent =
           "oppdatert " + new Date().toLocaleTimeString("nb-NO", { hour: "2-digit", minute: "2-digit" });
       } catch (err) {
         document.getElementById("error-line").textContent = "feil: " + err.message;
       }
+    }
+
+    const REASON_LABELS = {
+      sl_spread: "SL-SPREAD",
+      agri_spread: "AGRI-SPREAD",
+      agri_session: "OFF-SESSION",
+      cooldown: "COOLDOWN",
+      daily_loss: "DAILY-LOSS",
+      usd_conflict: "USD-KONFLIKT",
+    };
+
+    function renderDecisions(d) {
+      const totals = d.totals || {};
+      document.getElementById("dec-alerts").textContent = totals.alerts ?? 0;
+      document.getElementById("dec-confirmed").textContent = totals.confirmed ?? 0;
+      document.getElementById("dec-blocked").textContent = totals.blocked ?? 0;
+      document.getElementById("dec-opened").textContent = totals.opened ?? 0;
+
+      const list = document.getElementById("dec-list");
+      const rows = (d.per_setup || []).slice(0, 6);
+      if (rows.length === 0) {
+        list.innerHTML = '<span class="empty">ingen entry-aktivitet i dag enda</span>';
+        return;
+      }
+      list.innerHTML = rows.map(r => {
+        const dirCls = r.direction === "buy" ? "buy" : (r.direction === "sell" ? "sell" : "");
+        const reasonKey = r.last_block_reason;
+        const reasonHtml = reasonKey
+          ? `<span class="reason-pill ${reasonKey.replace('_','-')}">${escapeHtml(REASON_LABELS[reasonKey] || reasonKey)}</span>`
+          : (r.opened > 0 ? '<span class="reason-pill" style="color:var(--green)">ÅPNET</span>' : '<span class="reason-pill">—</span>');
+        return `
+          <div class="decision-row">
+            <div class="instr-cell">
+              ${escapeHtml(r.instrument)}
+              <span class="dir ${dirCls}">${escapeHtml((r.direction || '').toUpperCase())}</span>
+              <span class="horizon-tag">${escapeHtml(r.horizon || '')}</span>
+            </div>
+            <span class="count alerts">${r.alerts}× zone</span>
+            <span class="count">${r.confirmed}× ✓</span>
+            <span class="count blocked">${r.blocked}× ⊘</span>
+            ${reasonHtml}
+          </div>
+        `;
+      }).join("");
     }
 
     function render(d) {

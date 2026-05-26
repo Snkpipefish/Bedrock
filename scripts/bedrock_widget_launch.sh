@@ -36,7 +36,7 @@ mkdir -p "$(dirname "$LOG_FILE")"
   # widget-sesjonen ikke kolliderer med vanlig Edge-bruk.
   exec "$EDGE_BIN" \
     --app="$WIDGET_URL" \
-    --window-size=540,420 \
+    --window-size=620,640 \
     --window-position=20,20 \
     --user-data-dir="$PROFILE_DIR" \
     --no-first-run \

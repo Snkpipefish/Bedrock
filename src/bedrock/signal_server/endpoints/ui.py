@@ -392,6 +392,178 @@ def widget_payload() -> Response:
 
 
 # ─────────────────────────────────────────────────────────────
+# Decision-log: parser bot-journal for dagens entry-evalueringer
+# ─────────────────────────────────────────────────────────────
+
+# Regex for å hente setup_id (12-hex) og horizon fra log-linjer.
+import re  # noqa: E402
+
+_RE_SETUP_ID = re.compile(r"\b([0-9a-f]{12})\b")
+_RE_HORIZON = re.compile(r"\[(SCALP|SWING|MAKRO)\]")
+_BLOCK_PATTERNS: list[tuple[str, re.Pattern]] = [
+    ("sl_spread", re.compile(r"\[SL-SPREAD BLOKKERT\]")),
+    ("agri_spread", re.compile(r"\[AGRI\].*spread for vid")),
+    ("agri_session", re.compile(r"\[AGRI\].*utenfor session")),
+    ("cooldown", re.compile(r"\[COOLDOWN\].*tap")),
+    ("daily_loss", re.compile(r"\[DAGLIG TAP\] Grense passert")),
+    ("usd_conflict", re.compile(r"\[USD-KONFLIKT\]")),
+]
+
+
+def _read_bot_journal_today() -> list[str]:
+    """Last dagens bot-journal-linjer via journalctl.
+
+    Bruker `_SYSTEMD_USER_UNIT=bedrock-bot.service`-filter fordi
+    server-prosessen kjører som root og må eksplisitt peke på pc-
+    brukerens user-unit (ikke `--user`-flagg som krever XDG_RUNTIME_DIR).
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            [
+                "journalctl",
+                "_SYSTEMD_USER_UNIT=bedrock-bot.service",
+                "--since",
+                "today",
+                "--no-pager",
+                "-q",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        log.warning("[DECISIONS] journalctl utilgjengelig: %s", exc)
+        return []
+    if result.returncode != 0:
+        return []
+    return result.stdout.splitlines()
+
+
+def _parse_decisions(journal_lines: list[str], signals_bot: list[dict]) -> dict[str, Any]:
+    """Aggreger journal-linjer til per-setup statistikk.
+
+    Returns:
+        {
+          "totals": {"alerts": N, "confirmed": N, "blocked": N, "opened": N, "cooldown": N},
+          "block_reasons": {"sl_spread": N, "agri_spread": N, ...},
+          "per_setup": [
+            {"setup_id": "...", "instrument": "Corn", "direction": "sell",
+             "horizon": "SWING", "alerts": N, "confirmed": N, "blocked": N,
+             "opened": N, "last_block_reason": "sl_spread", "last_seen": "..."},
+            ...
+          ]
+        }
+    """
+    # Bygg setup_id → metadata-lookup fra signals_bot.json
+    id_to_meta: dict[str, dict] = {}
+    for it in signals_bot:
+        if not isinstance(it, dict):
+            continue
+        setup_outer = it.get("setup")
+        if isinstance(setup_outer, dict):
+            sid = setup_outer.get("setup_id")
+            if sid:
+                id_to_meta[sid] = {
+                    "instrument": it.get("instrument", "?"),
+                    "direction": it.get("direction", "?"),
+                    "horizon": (it.get("horizon") or "?").upper(),
+                    "grade": it.get("grade"),
+                    "score": it.get("score"),
+                }
+
+    per_setup: dict[str, dict] = {}
+    totals = {"alerts": 0, "confirmed": 0, "blocked": 0, "opened": 0, "cooldown": 0}
+    block_reasons: dict[str, int] = {}
+
+    def _ensure(sid: str) -> dict:
+        if sid not in per_setup:
+            meta = id_to_meta.get(sid, {})
+            per_setup[sid] = {
+                "setup_id": sid,
+                "instrument": meta.get("instrument", "?"),
+                "direction": meta.get("direction", "?"),
+                "horizon": meta.get("horizon", "?"),
+                "grade": meta.get("grade"),
+                "score": meta.get("score"),
+                "alerts": 0,
+                "confirmed": 0,
+                "blocked": 0,
+                "opened": 0,
+                "cooldown": 0,
+                "last_block_reason": None,
+                "last_seen": None,
+            }
+        return per_setup[sid]
+
+    for line in journal_lines:
+        m = _RE_SETUP_ID.search(line)
+        if not m:
+            continue
+        sid = m.group(1)
+        entry = _ensure(sid)
+        # Timestamp i journal-format: "May 26 11:30:31 host python[..]: ..."
+        # Vi tar bare første 15 tegn for "last_seen"
+        if len(line) >= 15:
+            entry["last_seen"] = line[:15]
+
+        if "[ALERT]" in line and "entry_zone" in line:
+            entry["alerts"] += 1
+            totals["alerts"] += 1
+        elif "[BEKREFTET]" in line and "✅" in line:
+            entry["confirmed"] += 1
+            totals["confirmed"] += 1
+        elif "[ORDRE]" in line and "enheter @" in line:
+            entry["opened"] += 1
+            totals["opened"] += 1
+        else:
+            for reason, pat in _BLOCK_PATTERNS:
+                if pat.search(line):
+                    if reason == "cooldown":
+                        entry["cooldown"] += 1
+                        totals["cooldown"] += 1
+                    else:
+                        entry["blocked"] += 1
+                        totals["blocked"] += 1
+                    entry["last_block_reason"] = reason
+                    block_reasons[reason] = block_reasons.get(reason, 0) + 1
+                    break
+
+    # Sort: setups med flest alerts først (de "aktive" i dag)
+    rows = sorted(per_setup.values(), key=lambda r: -r["alerts"])
+    return {
+        "totals": totals,
+        "block_reasons": block_reasons,
+        "per_setup": rows,
+        "n_setups_seen": len(rows),
+    }
+
+
+@ui_bp.get("/api/ui/decisions")
+def decisions_payload() -> Response:
+    """Aggregert beslutnings-log for dagens bot-aktivitet.
+
+    Parser bot-journal og krysser med signals_bot.json for å vise hvert
+    setup som har blitt evaluert: hvor mange ganger pris matchet entry-
+    zone, hvor mange ganger bekreftelses-mønsteret traff, hvor mange
+    ganger en safety-gate blokkerte, og om noen ble eksekvert.
+    """
+    journal_lines = _read_bot_journal_today()
+    signals_bot: list[dict] = []
+    sb_path = _config().signals_bot_path
+    if sb_path.exists():
+        try:
+            raw = json.loads(sb_path.read_text(encoding="utf-8"))
+            if isinstance(raw, list):
+                signals_bot = raw
+        except (json.JSONDecodeError, OSError):
+            pass
+    decisions = _parse_decisions(journal_lines, signals_bot)
+    return jsonify({"ts": datetime.now(timezone.utc).isoformat(), **decisions})
+
+
+# ─────────────────────────────────────────────────────────────
 # Setups-endepunkter (sessions 48-49)
 # ─────────────────────────────────────────────────────────────
 
