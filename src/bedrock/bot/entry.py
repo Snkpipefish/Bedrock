@@ -78,6 +78,24 @@ DEFAULT_CONFIRMATION_STATS_PATH = (
 
 DEFAULT_TRADE_LOG_PATH = Path.home() / "bedrock" / "data" / "bot" / "signal_log.json"
 
+# ─────────────────────────────────────────────────────────────
+# Permanent-disabled-guard (session 2026-05-26)
+# ─────────────────────────────────────────────────────────────
+# Bot-side last-line-of-defense. Selv om signal-server/whitelist/YAML-
+# config skulle slippe disse instrumentene gjennom, blokkeres de her
+# før entry-evaluering. For å reaktivere må navn fjernes både her OG
+# fra PERMANENTLY_DISABLED i src/bedrock/cli/signals_all.py (synlig
+# PR-endring i begge steder).
+#
+# Bot-navn (uppercase, etter INSTRUMENT_MAP-translasjon).
+_PERMANENTLY_DISABLED_BOT_INSTRUMENTS: frozenset[str] = frozenset(
+    {
+        "PLATINUM",  # negativ swap begge veier + tap-historikk
+        "BTC",  # 35% av margin, lav PnL-bidrag
+        "ETH",  # 1.5% spread + lav PnL-bidrag
+    }
+)
+
 
 def _noop(*_args: Any, **_kwargs: Any) -> None:  # pragma: no cover
     pass
@@ -154,6 +172,7 @@ class EntryEngine:
         self._ttl_logged: set[str] = set()
         self._last_expiry_log: datetime | None = None
         self._daily_loss_logged: bool = False
+        self._permanently_disabled_logged: set[str] = set()
 
         # Loss-cooldown: signal_ids som har stengt i tap. Blokkerer
         # re-entry på samme signal_id fra orchestrator. Setup-id
@@ -600,6 +619,23 @@ class EntryEngine:
         self, sig: dict[str, Any], symbol_id: int, candle: Candle
     ) -> None:
         instrument = sig.get("instrument", "")
+
+        # ── Hard-disabled-guard (session 2026-05-26) ─────────────
+        # Selv om signal-server eller bot_whitelist skulle slippe
+        # disse igjennom, blokkeres de her som siste line-of-defense.
+        # Tilsvarende guard i src/bedrock/cli/signals_all.py:
+        # PERMANENTLY_DISABLED. For å reaktivere må navn fjernes
+        # FRA BÅDE STEDENE (synlig PR-endring).
+        if instrument.upper() in _PERMANENTLY_DISABLED_BOT_INSTRUMENTS:
+            if instrument not in self._permanently_disabled_logged:
+                log.warning(
+                    "[PERM-DISABLED] %s — ignoreres (se entry.py "
+                    "_PERMANENTLY_DISABLED_BOT_INSTRUMENTS for hvorfor).",
+                    instrument,
+                )
+                self._permanently_disabled_logged.add(instrument)
+            return
+
         # Varsel hvis FX-par mangler USD-retningsmapping
         if looks_like_fx_pair(instrument) and instrument not in FX_USD_DIRECTION:
             if instrument not in self._usd_dir_missing_logged:

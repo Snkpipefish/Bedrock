@@ -105,11 +105,38 @@ def _read_asset_class(yaml_path: Path) -> str | None:
         return None
 
 
+# ─────────────────────────────────────────────────────────────
+# Permanent-disabled-guard (session 2026-05-26)
+# ─────────────────────────────────────────────────────────────
+# Hardkodet kill-switch for instrumenter som ALDRI skal pushes til
+# boten — uavhengig av YAML-config eller per-instrument bot_whitelist.
+# Brukes for instrumenter som er strukturelt ulønnsomme (negativ swap
+# i begge retninger, etc.) eller har dårlig kapital-effektivitet.
+#
+# Ved et uhell-reaktiverings-forsøk: selv om noen legger til linjer i
+# bot_whitelist.yaml eller rename'r en _disabled_xxx.yaml tilbake, vil
+# disse fortsatt filtreres bort fra bot-feeden. For å faktisk reaktivere
+# må man fjerne navnet fra dette settet (eksplisitt kode-endring,
+# pull-request-synlig).
+#
+# Tilsvarende guard finnes i src/bedrock/bot/entry.py som siste-line-
+# of-defense på selve bot-siden.
+PERMANENTLY_DISABLED: frozenset[str] = frozenset(
+    {
+        "Platinum",  # negativ swap begge veier + tap-historikk
+        "BTC",  # 35% av margin, lav PnL-bidrag
+        "ETH",  # 1.5% spread + lav PnL-bidrag
+    }
+)
+
+
 def _load_bot_whitelist(path: Path) -> dict[str, str]:
     """Last bot-whitelist + navne-mapping fra YAML.
 
     Returns mapping bedrock-id → bot-name. Kaster ClickException hvis
-    filen mangler eller ikke har 'mapping'-key.
+    filen mangler eller ikke har 'mapping'-key. Filtrerer alltid bort
+    instrumenter i ``PERMANENTLY_DISABLED`` — også hvis de skulle ha
+    sneket seg tilbake inn i YAML-en.
     """
     if not path.exists():
         raise click.ClickException(
@@ -119,7 +146,17 @@ def _load_bot_whitelist(path: Path) -> dict[str, str]:
     mapping = data.get("mapping") if isinstance(data, dict) else None
     if not isinstance(mapping, dict):
         raise click.ClickException(f"{path}: mangler 'mapping:' dict.")
-    return {str(k): str(v) for k, v in mapping.items()}
+    result: dict[str, str] = {}
+    for k, v in mapping.items():
+        if k in PERMANENTLY_DISABLED:
+            _log.warning(
+                "bot_whitelist.permanently_disabled_blocked",
+                instrument=k,
+                note="fjern fra PERMANENTLY_DISABLED i signals_all.py for å reaktivere",
+            )
+            continue
+        result[str(k)] = str(v)
+    return result
 
 
 _log = structlog.get_logger(__name__)

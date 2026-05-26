@@ -24,8 +24,15 @@ mapping:
   # Metals
   Gold: GOLD
   Silver: SILVER
-  Platinum: PLATINUM
   Copper: COPPER
+  # Platinum permanent disabled (session 2026-05-26): negativ swap
+  # i begge retninger (-$60 LONG / -$45 SHORT per natt for 0.03 lot) +
+  # konsistent tap-historikk (16 trades, -$291 netto, 25 % WR).
+  # Strukturell broker-rente-arbitrasje gjør instrumentet ulønnsomt
+  # uavhengig av marked-regime. Ikke reaktiverbar uten å fjerne
+  # PERMANENTLY_DISABLED-guard i src/bedrock/cli/signals_all.py +
+  # src/bedrock/bot/entry.py.
+  # Platinum: PLATINUM
 
   # Energy
   CrudeOil: "OIL WTI"
@@ -36,9 +43,14 @@ mapping:
   SP500: SPX500
   Nasdaq: US100
 
-  # Crypto
-  BTC: BTC
-  ETH: ETH
+  # Crypto permanent disabled (session 2026-05-26): operatør-beslutning.
+  # BTC binder $10.6k margin per 0.03 lot (35 % av total bot-margin) med
+  # netto -$101 PnL på 14 trades. ETH har 1.5 % spread (10x tettere
+  # instrumenter) og lav PnL-bidrag. Ikke reaktiverbar uten å fjerne
+  # PERMANENTLY_DISABLED-guard i src/bedrock/cli/signals_all.py +
+  # src/bedrock/bot/entry.py.
+  # BTC: BTC
+  # ETH: ETH
 
   # Agri (7 stk — bedrock-id matcher bot-navn nøyaktig)
   Corn: Corn
