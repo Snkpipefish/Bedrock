@@ -2112,15 +2112,18 @@ def test_loss_cooldown_loaded_from_signal_log_at_startup(
     tmp_path: Path,
 ) -> None:
     """Cooldown må overleve restart. Ved oppstart skal EntryEngine
-    laste alle signal_ids med result='loss' fra signal_log.json."""
+    laste signal_ids med result='loss' som er innenfor TTL-vinduet
+    fra signal_log.json."""
     log_path = tmp_path / "signal_log.json"
+    now = datetime.now(timezone.utc)
+    fresh = now.strftime("%Y-%m-%d %H:%M timezone.utc")
     log_path.write_text(
         json.dumps(
             {
                 "entries": [
-                    {"result": "loss", "signal": {"id": "lost-1"}},
-                    {"result": "win", "signal": {"id": "won-1"}},
-                    {"result": "loss", "signal": {"id": "lost-2"}},
+                    {"result": "loss", "closed_at": fresh, "signal": {"id": "lost-1"}},
+                    {"result": "win", "closed_at": fresh, "signal": {"id": "won-1"}},
+                    {"result": "loss", "closed_at": fresh, "signal": {"id": "lost-2"}},
                     {"result": None, "signal": {"id": "open-1"}},
                 ]
             }
@@ -2140,6 +2143,105 @@ def test_loss_cooldown_loaded_from_signal_log_at_startup(
     assert "lost-2" in engine._lost_signal_ids
     assert "won-1" not in engine._lost_signal_ids
     assert "open-1" not in engine._lost_signal_ids
+
+
+def test_loss_cooldown_drops_entries_older_than_ttl(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list,
+    tmp_path: Path,
+) -> None:
+    """Regresjons-vakt for commit 6acb609-bugen: tap eldre enn
+    `loss_ttl_hours` skal IKKE lastes inn ved oppstart, ellers
+    blacklister vi setups evig når orchestrator gjenfinner samme nivå.
+    """
+    log_path = tmp_path / "signal_log.json"
+    now = datetime.now(timezone.utc)
+    fresh = now.strftime("%Y-%m-%d %H:%M timezone.utc")
+    # 16 dager gammelt = klart utenfor 72t default-TTL
+    stale = (now - timedelta(days=16)).strftime("%Y-%m-%d %H:%M timezone.utc")
+    log_path.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {"result": "loss", "closed_at": fresh, "signal": {"id": "fresh-loss"}},
+                    {"result": "loss", "closed_at": stale, "signal": {"id": "stale-loss"}},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    client = _make_client_stub(symbol_map={"EURUSD": 1})
+    engine = _make_engine(
+        client,
+        safety,
+        config,
+        active_states,
+        stats_path=tmp_path / "s.json",
+        trade_log_path=log_path,
+    )
+    assert "fresh-loss" in engine._lost_signal_ids
+    assert "stale-loss" not in engine._lost_signal_ids
+
+
+def test_loss_cooldown_expires_after_ttl_without_restart(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list,
+    tmp_path: Path,
+) -> None:
+    """TTL-utløp må gjelde også for in-memory entries (ikke bare ved
+    load). Etter at TTL har passert, skal cooldown slippe taket og
+    samme signal_id kunne åpne trade igjen — uten bot-restart."""
+    log_path = tmp_path / "signal_log.json"
+    client = _make_client_stub(
+        symbol_map={"EURUSD": 1},
+        last_bid={1: 1.0800},
+        last_ask={1: 1.0802},
+        spread_history={1: deque([0.00002] * 15, maxlen=20)},
+    )
+    engine = _make_engine(
+        client,
+        safety,
+        config,
+        active_states,
+        stats_path=tmp_path / "s.json",
+        trade_log_path=log_path,
+    )
+    engine.on_symbols_ready(client)
+    # Plant et "tap" eldre enn TTL direkte i dict (simulerer at
+    # `record_lost_signal` ble kalt for lenge siden).
+    ttl_h = config.cooldown.loss_ttl_hours
+    engine._lost_signal_ids["eurusd-buy-1"] = datetime.now(timezone.utc) - timedelta(
+        hours=ttl_h + 1
+    )
+    signal = {
+        "id": "eurusd-buy-1",
+        "instrument": "EURUSD",
+        "direction": "buy",
+        "status": "watchlist",
+        "alert_level": 1.0801,
+        "stop": 1.0750,
+        "t1": 1.0900,
+        "entry_zone": [1.0800, 1.0803],
+        "horizon": "SCALP",
+        "horizon_config": {},
+    }
+    engine.signal_data = {"signals": [signal], "global_state": {}, "rules": {}}
+    engine._on_candle_closed(
+        1,
+        Candle(
+            open=1.0801,
+            high=1.0802,
+            low=1.0800,
+            close=1.0801,
+            volume=1,
+            timestamp=datetime.now(timezone.utc),
+        ),
+    )
+    # TTL utløpt → cooldown skal være ryddet og state opprettet
+    assert len(active_states) == 1
+    assert "eurusd-buy-1" not in engine._lost_signal_ids
 
 
 def test_loss_cooldown_does_not_block_different_signal_id(

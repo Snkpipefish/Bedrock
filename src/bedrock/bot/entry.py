@@ -174,13 +174,17 @@ class EntryEngine:
         self._daily_loss_logged: bool = False
         self._permanently_disabled_logged: set[str] = set()
 
-        # Loss-cooldown: signal_ids som har stengt i tap. Blokkerer
-        # re-entry på samme signal_id fra orchestrator. Setup-id
-        # persisteres på tvers av dager via hysterese — uten dette
+        # Loss-cooldown: signal_id → tap-tidspunkt (UTC). Blokkerer
+        # re-entry på samme signal_id fra orchestrator inntil
+        # `config.cooldown.loss_ttl_hours` har passert. Setup-id
+        # persisteres på tvers av dager via hysterese — uten cooldown
         # ender vi i loss → re-entry → loss-loop i sideways-marked.
+        # Uten TTL ender vi derimot i evig blacklist når orchestrator
+        # gjenfinner samme nivå (regresjons-bug commit 6acb609, 2026-05-05;
+        # låste FX/indices i 16 dager før detection 2026-05-26).
         # Lastes fra signal_log ved oppstart, oppdateres av ExitEngine
         # via `record_lost_signal()` ved hver loss-close.
-        self._lost_signal_ids: set[str] = set()
+        self._lost_signal_ids: dict[str, datetime] = {}
         self._cooldown_logged: set[str] = set()
         self._load_lost_signal_ids_from_log()
 
@@ -703,19 +707,24 @@ class EntryEngine:
             if in_zone and state is None:
                 dirn = sig.get("direction", "")
                 sig_id = sig.get("id", "")
-                # Loss-cooldown: hvis denne signal_id allerede har stengt
-                # i tap, ikke ta på nytt. Orchestrator persisterer setup_id
-                # via hysterese — i sideways-marked får vi samme signal_id
-                # om og om igjen, og uten cooldown ender vi i en
-                # loss → re-entry → loss-loop. Cooldown clearer kun når
-                # orchestrator rotere setup_id (= ny tese).
-                if sig_id and sig_id in self._lost_signal_ids:
+                # Loss-cooldown: hvis denne signal_id stengte i tap
+                # innenfor TTL-vinduet, ikke ta på nytt. Orchestrator
+                # persisterer setup_id via hysterese — i sideways-marked
+                # får vi samme signal_id om og om igjen, og uten cooldown
+                # ender vi i en loss → re-entry → loss-loop. TTL slipper
+                # fri etter `config.cooldown.loss_ttl_hours` slik at
+                # cooldown ikke blir evig blacklist når orchestrator
+                # gjenfinner samme nivå over uker.
+                if sig_id and self._is_in_loss_cooldown(sig_id):
                     if sig_id not in self._cooldown_logged:
+                        ttl_h = self._config.cooldown.loss_ttl_hours
+                        lost_at = self._lost_signal_ids[sig_id]
                         log.info(
-                            "[COOLDOWN] %s [%s] — har stengt i tap; "
-                            "blokkerer re-entry til orchestrator roterer setup_id.",
+                            "[COOLDOWN] %s [%s] — tap %s; blokkerer re-entry i %dt (TTL).",
                             sig_id,
                             horizon,
+                            lost_at.strftime("%Y-%m-%d %H:%M UTC"),
+                            ttl_h,
                         )
                         self._cooldown_logged.add(sig_id)
                     return
@@ -1046,11 +1055,47 @@ class EntryEngine:
     # Helpers
     # ─────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _parse_log_timestamp(ts: str) -> datetime | None:
+        """Parse `_log_trade_closed`-format: "YYYY-MM-DD HH:MM timezone.utc".
+
+        Returnerer None hvis input er tom/uventet — kaller skal da
+        behandle entry som "ukjent alder" og normalt skippe den.
+        """
+        if not isinstance(ts, str) or len(ts) < 16:
+            return None
+        try:
+            return datetime.strptime(ts[:16], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+
+    def _is_in_loss_cooldown(self, signal_id: str) -> bool:
+        """True hvis signal_id har et tap registrert innenfor TTL-vinduet.
+
+        Sjekkes ved hver entry-evaluering så cooldown utløper også uten
+        bot-restart. Side-effekt: utløpte entries fjernes fra både
+        `_lost_signal_ids` og `_cooldown_logged` slik at en ny info-log
+        kan trigges hvis samme id taper igjen senere.
+        """
+        lost_at = self._lost_signal_ids.get(signal_id)
+        if lost_at is None:
+            return False
+        ttl_h = self._config.cooldown.loss_ttl_hours
+        age_h = (datetime.now(timezone.utc) - lost_at).total_seconds() / 3600.0
+        if age_h < ttl_h:
+            return True
+        # Utløpt: rydd opp så neste tap får frisk log + ny TTL-klokke.
+        self._lost_signal_ids.pop(signal_id, None)
+        self._cooldown_logged.discard(signal_id)
+        return False
+
     def _load_lost_signal_ids_from_log(self) -> None:
         """Last signal_ids med result='loss' fra signal_log.json ved oppstart.
 
-        Sikrer at loss-cooldown overlever bot-restart. Trygt no-op hvis
-        loggen ikke finnes eller er korrupt — tom set er gyldig start-tilstand.
+        Sikrer at loss-cooldown overlever bot-restart. Bare entries
+        innenfor `loss_ttl_hours` lastes — eldre tap droppes (uten dette
+        akkumulerer cooldown evig blacklist; se commit 6acb609 / regress
+        2026-05-26). Trygt no-op hvis loggen ikke finnes eller er korrupt.
         """
         path = self._trade_log_path
         if not path.exists():
@@ -1061,25 +1106,54 @@ class EntryEngine:
             log.warning("[COOLDOWN] kunne ikke lese %s: %s", path, exc)
             return
         entries = data.get("entries", []) if isinstance(data, dict) else []
+        ttl_h = self._config.cooldown.loss_ttl_hours
+        now = datetime.now(timezone.utc)
         loaded = 0
+        skipped_old = 0
+        skipped_unparsed = 0
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
             if entry.get("result") != "loss":
                 continue
             sig_id = (entry.get("signal") or {}).get("id")
-            if isinstance(sig_id, str) and sig_id:
-                self._lost_signal_ids.add(sig_id)
-                loaded += 1
-        if loaded:
-            log.info("[COOLDOWN] Lastet %d tap-signal_ids fra logg.", loaded)
+            if not isinstance(sig_id, str) or not sig_id:
+                continue
+            closed_at = self._parse_log_timestamp(entry.get("closed_at") or "")
+            if closed_at is None:
+                # Fallback: prøv timestamp (åpningstidspunkt). Bedre å
+                # underestimere alder enn å la et ukjent tap låse i evig.
+                closed_at = self._parse_log_timestamp(entry.get("timestamp") or "")
+            if closed_at is None:
+                skipped_unparsed += 1
+                continue
+            age_h = (now - closed_at).total_seconds() / 3600.0
+            if age_h >= ttl_h:
+                skipped_old += 1
+                continue
+            # Behold yngste tap-tid per signal_id (i tilfelle flere closes).
+            prev = self._lost_signal_ids.get(sig_id)
+            if prev is None or closed_at > prev:
+                self._lost_signal_ids[sig_id] = closed_at
+                if prev is None:
+                    loaded += 1
+        if loaded or skipped_old or skipped_unparsed:
+            log.info(
+                "[COOLDOWN] Lastet %d aktive tap-signal_ids (TTL=%dt); "
+                "droppet %d eldre, %d uten parsbar dato.",
+                loaded,
+                ttl_h,
+                skipped_old,
+                skipped_unparsed,
+            )
 
     def record_lost_signal(self, signal_id: str) -> None:
         """Registrer at et signal stengte i tap. ExitEngine kaller denne
         fra `_log_trade_closed` slik at re-entry blokkeres umiddelbart
-        — uten å vente på neste log-reload."""
+        — uten å vente på neste log-reload. TTL-klokken starter nå."""
         if signal_id:
-            self._lost_signal_ids.add(signal_id)
+            self._lost_signal_ids[signal_id] = datetime.now(timezone.utc)
+            self._cooldown_logged.discard(signal_id)
 
     def _horizon_ttl_seconds(self, horizon: str) -> int:
         ttl_cfg = self._config.horizon_ttl

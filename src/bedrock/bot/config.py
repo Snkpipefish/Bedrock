@@ -132,6 +132,22 @@ class HorizonTTLConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class CooldownConfig(BaseModel):
+    """Loss-cooldown TTL (reloadable).
+
+    Etter et tap blokkeres re-entry på samme signal_id i `loss_ttl_hours`
+    timer. Verner mot loss → re-entry → loss-loop i sideways-marked
+    (orchestrator persisterer setup_id via hysterese), men slipper fri
+    etter at markedet sannsynligvis har beveget seg utenfor det
+    opprinnelige nivået. Settes for høyt → setups dør permanent (bug
+    før denne config-en eksisterte); for lavt → loss-loop.
+    """
+
+    loss_ttl_hours: int = 72
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class HorizonMinRRConfig(BaseModel):
     """Per-horisont minimum R:R-gate (reloadable).
 
@@ -288,6 +304,7 @@ class ReloadableConfig(BaseModel):
     spread: SpreadConfig = Field(default_factory=SpreadConfig)
     horizon_ttl: HorizonTTLConfig = Field(default_factory=HorizonTTLConfig)
     horizon_min_rr: HorizonMinRRConfig = Field(default_factory=HorizonMinRRConfig)
+    cooldown: CooldownConfig = Field(default_factory=CooldownConfig)
     polling: PollingConfig = Field(default_factory=PollingConfig)
     weekend: WeekendConfig = Field(default_factory=WeekendConfig)
     monday_gap: MondayGapConfig = Field(default_factory=MondayGapConfig)
