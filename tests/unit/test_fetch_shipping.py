@@ -4,7 +4,9 @@
 """Tester for ``bedrock.fetch.shipping`` (sub-fase 12.5+ session 113).
 
 Verifiserer at BDI hentes via BDRY-ETF (Yahoo, mocket) og at manuell
-CSV-fallback håndterer BCI/BPI/BSI. Ingen network-IO i tester.
+CSV-fallback håndterer BDI som backup. Per session 2026-05-26 er BCI/
+BPI/BSI droppet — ``_VALID_INDICES = ("BDI",)`` filtrerer ut alt annet
+fra manuell CSV. Ingen network-IO i tester.
 """
 
 from __future__ import annotations
@@ -89,27 +91,38 @@ def _write_csv(path: Path, rows: list[tuple[str, str, float, str]]) -> None:
     df.to_csv(path, index=False)
 
 
-def test_manual_csv_reads_all_indices(tmp_path: Path) -> None:
+def test_manual_csv_reads_bdi_only(tmp_path: Path) -> None:
+    csv = tmp_path / "shipping_indices.csv"
+    _write_csv(csv, [("BDI", "2026-05-22", 1850.0, "MANUAL")])
+    df = fetch_shipping_manual_csv(csv)
+    assert len(df) == 1
+    assert df["index_code"].iloc[0] == "BDI"
+    assert list(df.columns) == list(SHIPPING_INDICES_COLS)
+
+
+def test_manual_csv_drops_legacy_baltic_subindices(tmp_path: Path) -> None:
+    # Per session 2026-05-26: BCI/BPI/BSI er ikke lenger i _VALID_INDICES,
+    # så manual CSV-rader med disse kodene skal stille filtreres bort.
     csv = tmp_path / "shipping_indices.csv"
     _write_csv(
         csv,
         [
+            ("BDI", "2026-05-22", 1850.0, "MANUAL"),
             ("BCI", "2026-04-22", 3850.0, "MANUAL"),
             ("BPI", "2026-04-22", 1620.0, "MANUAL"),
             ("BSI", "2026-04-22", 1150.0, "MANUAL"),
         ],
     )
     df = fetch_shipping_manual_csv(csv)
-    assert len(df) == 3
-    assert set(df["index_code"]) == {"BCI", "BPI", "BSI"}
-    assert list(df.columns) == list(SHIPPING_INDICES_COLS)
+    assert len(df) == 1
+    assert df["index_code"].iloc[0] == "BDI"
 
 
 def test_manual_csv_uppercase_index_codes(tmp_path: Path) -> None:
     csv = tmp_path / "shipping_indices.csv"
-    _write_csv(csv, [("bpi", "2026-04-22", 1620.0, "MANUAL")])
+    _write_csv(csv, [("bdi", "2026-05-22", 1850.0, "MANUAL")])
     df = fetch_shipping_manual_csv(csv)
-    assert df["index_code"].iloc[0] == "BPI"
+    assert df["index_code"].iloc[0] == "BDI"
 
 
 def test_manual_csv_filters_unknown_codes(tmp_path: Path) -> None:
@@ -117,13 +130,13 @@ def test_manual_csv_filters_unknown_codes(tmp_path: Path) -> None:
     _write_csv(
         csv,
         [
-            ("BPI", "2026-04-22", 1620.0, "MANUAL"),
+            ("BDI", "2026-05-22", 1850.0, "MANUAL"),
             ("XYZ", "2026-04-22", 9999.0, "MANUAL"),
         ],
     )
     df = fetch_shipping_manual_csv(csv)
     assert len(df) == 1
-    assert df["index_code"].iloc[0] == "BPI"
+    assert df["index_code"].iloc[0] == "BDI"
 
 
 def test_manual_csv_missing_file_returns_empty(tmp_path: Path) -> None:
@@ -144,21 +157,17 @@ def test_manual_csv_missing_columns_raises(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_fetch_shipping_indices_combines_bdi_and_manual(tmp_path: Path) -> None:
+def test_fetch_shipping_indices_combines_yahoo_bdi_and_manual_bdi(tmp_path: Path) -> None:
+    # Yahoo gir 3 BDI-rader fra apr-2025; manual gir 1 BDI-rad fra mai-2026
+    # (typisk backup-scenario hvis Yahoo skulle ha hull en periode).
     csv = tmp_path / "shipping.csv"
-    _write_csv(
-        csv,
-        [
-            ("BCI", "2026-04-22", 3850.0, "MANUAL"),
-            ("BPI", "2026-04-22", 1620.0, "MANUAL"),
-        ],
-    )
+    _write_csv(csv, [("BDI", "2026-05-22", 1850.0, "MANUAL")])
     fake = _make_yahoo_df(3)
     with patch("bedrock.fetch.yahoo.fetch_yahoo_prices", return_value=fake):
         df = fetch_shipping_indices(start_date="2025-04-01", csv_path=csv)
 
-    assert len(df) == 5  # 3 BDI + 2 manual
-    assert set(df["index_code"]) == {"BDI", "BCI", "BPI"}
+    assert len(df) == 4  # 3 yahoo-BDI + 1 manual-BDI
+    assert (df["index_code"] == "BDI").all()
     assert list(df.columns) == list(SHIPPING_INDICES_COLS)
 
 
@@ -172,7 +181,7 @@ def test_fetch_shipping_indices_yahoo_only_when_csv_missing(tmp_path: Path) -> N
 
 def test_fetch_shipping_indices_csv_only_when_yahoo_fails(tmp_path: Path) -> None:
     csv = tmp_path / "shipping.csv"
-    _write_csv(csv, [("BPI", "2026-04-22", 1620.0, "MANUAL")])
+    _write_csv(csv, [("BDI", "2026-05-22", 1850.0, "MANUAL")])
 
     def _raise(*args, **kwargs):
         raise RuntimeError("yahoo down")
@@ -180,7 +189,7 @@ def test_fetch_shipping_indices_csv_only_when_yahoo_fails(tmp_path: Path) -> Non
     with patch("bedrock.fetch.yahoo.fetch_yahoo_prices", side_effect=_raise):
         df = fetch_shipping_indices(start_date="2025-04-01", csv_path=csv)
     assert len(df) == 1
-    assert df["index_code"].iloc[0] == "BPI"
+    assert df["index_code"].iloc[0] == "BDI"
 
 
 def test_fetch_shipping_indices_empty_when_both_fail(tmp_path: Path) -> None:

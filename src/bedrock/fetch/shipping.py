@@ -4,20 +4,23 @@
 
 """Shipping-indices fetcher (sub-fase 12.5+ session 113).
 
-Henter Baltic-suiten av tørrbulk-fraktindekser:
+Henter Baltic-suiten av tørrbulk-fraktindekser. Per session 2026-05-26
+har vi droppet BCI/BPI/BSI fra aktiv fyling — kun BDI vedlikeholdes:
 
 - **BDI** (Baltic Dry Index, composite) — auto-fetch via BDRY ETF på Yahoo
   (~0.9 korrelasjon med ekte BDI). Lansert 2018; full historikk derfra.
-- **BCI** (Baltic Capesize, kull/jernmalm) — manuell CSV-fallback fra dag 1.
-- **BPI** (Baltic Panamax, korn/kull) — manuell CSV-fallback fra dag 1.
-  Primær for grain-eksport-kostnader (kornprodusenter laster typisk
-  Panamax-størrelse).
-- **BSI** (Baltic Supramax, korn/stål/fosfat) — manuell CSV-fallback.
+  Alle eksisterende rules (wheat/corn/soybean/cotton/cocoa) bruker
+  eksplisitt ``index=BDI`` for shipping_pressure-driveren.
 
-BCI/BPI/BSI publiseres av Baltic Exchange og er betalt-only via offisielle
-feeds. Cot-explorer's fetch_shipping.py forsøker Stooq (^bci/^bpi/^bsi)
-men Stooq krever nå API-key (per session 58) og symbolene er upålitelige.
-Vi følger ADR-007 § 4: manuell CSV som primær fra dag 1.
+BCI/BPI/BSI er Baltic Exchange-publiserte og kun tilgjengelig via betalte
+feeds. Tidligere holdt vi en manuell CSV-fallback (``data/manual/
+shipping_indices.csv``), men den ble ikke vedlikeholdt — de tre kodene
+ble frosset på 2026-04-24-data, noe som ga falskt inntrykk av "4 indekser
+aktive" mot downstream-konsumenter (cot-explorer). Per ADR-007 § 4
+beholder vi muligheten for manuell CSV i koden (``fetch_shipping_manual_csv``),
+men ``_VALID_INDICES`` ekskluderer nå BCI/BPI/BSI så ingen død data fylles
+inn. Schema-konstanten ``_VALID_SHIPPING_INDEX_CODES`` i data/schemas.py
+beholdes for forward-compat hvis en ekte feed dukker opp.
 
 Schema for output: ``SHIPPING_INDICES_COLS`` (index_code, date, value, source).
 
@@ -39,7 +42,10 @@ _log = structlog.get_logger(__name__)
 
 _MANUAL_CSV = Path("data/manual/shipping_indices.csv")
 
-_VALID_INDICES = ("BDI", "BCI", "BPI", "BSI")
+# BCI/BPI/BSI er fjernet fra aktiv fyling (session 2026-05-26): ingen
+# vedlikeholdt feed, manuell CSV ble ikke oppdatert. BDI er den eneste
+# koden som faktisk forbrukes av drivere (alle rules: index=BDI).
+_VALID_INDICES = ("BDI",)
 
 
 def fetch_bdi_via_bdry(
@@ -87,12 +93,11 @@ def fetch_shipping_manual_csv(csv_path: Path = _MANUAL_CSV) -> pd.DataFrame:
 
     Forventet format:
         index_code,date,value,source
-        BCI,2026-04-22,3850.0,MANUAL
-        BPI,2026-04-22,1620.0,MANUAL
-        BSI,2026-04-22,1150.0,MANUAL
+        BDI,2026-05-22,1850.0,MANUAL
 
-    Filtrerer ut ukjente index_code (case-insensitive). Returnerer tom
-    DataFrame hvis filen ikke finnes (no-op).
+    Filtrerer mot ``_VALID_INDICES`` (case-insensitive). Per session
+    2026-05-26 er det kun BDI som aksepteres; rader med andre koder
+    ignoreres lydløst. Returnerer tom DataFrame hvis filen ikke finnes.
 
     Raises:
         ValueError: hvis CSV-en mangler påkrevde kolonner.

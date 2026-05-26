@@ -11,7 +11,7 @@ gratis API-tilgang eller er paid-only.
 | `wasde.csv` | report_date, marketing_year, region, commodity, metric, value, unit | https://www.usda.gov/oce/commodity-markets/wasde |
 | `export_events.csv` | event_date, country, commodity, event_type, severity, bull_bear, description, source_url | News-monitoring (manuelt) — Reuters, Bloomberg, USDA FAS |
 | `disease_alerts.csv` | alert_date, region, commodity, pathogen, severity, yield_impact_pct, description, source_url | PestMon, CABI, FAO Crop Prospects |
-| `shipping_indices.csv` | index_code (BDI/BCI/BPI/BSI), date, value, source | Baltic Exchange offentlige sammendrag, Trading Economics, eller manuell registrering. BDI hentes auto via BDRY ETF (Yahoo) — manuell CSV brukes primært for sub-indeksene BCI/BPI/BSI hvor gratis API-er mangler. |
+| `shipping_indices.csv` | index_code (kun BDI per session 2026-05-26), date, value, source | BDI hentes auto via BDRY ETF (Yahoo). Manuell CSV støtter kun BDI som backup hvis Yahoo-fetcher feiler over lengre periode. BCI/BPI/BSI er droppet — Baltic Exchange er paid-only og ingen gratis-feed eksisterer. |
 | `cot_ice.csv` | report_date, contract, mm_long/short, other_long/short, comm_long/short, nonrep_long/short, open_interest | https://www.ice.com/publicdocs/futures/COTHist{YEAR}.csv (manuell nedlasting hvis prod-host blokkeres) |
 | `eia_inventory.csv` | series_id, date, value, units | https://www.eia.gov/petroleum/supply/weekly/ + https://ir.eia.gov/ngs/ngs.html (kun hvis API-key mangler) |
 | `comex_inventory.csv` | metal, date, registered, eligible, total, units | https://metalcharts.org/ eller CME-publiserte daglige stats (kun hvis primær HTTP-kilde feiler) |
