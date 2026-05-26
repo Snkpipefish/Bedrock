@@ -102,6 +102,23 @@ def index() -> Response:
     return send_from_directory(root, "index.html")
 
 
+@ui_bp.get("/widget")
+def widget() -> Response:
+    """Kompakt status-widget for desktop-overvåking (session 2026-05-26).
+
+    Serveres som en standalone-side `web/widget.html` som poller
+    `/api/ui/widget` hvert 30s for bot-status, dagens P&L, publiserte
+    setups, og pipeline-helse. Brukes via Edge/Brave `--app=`-modus
+    for chromeless vindu ved login (`~/.config/autostart/
+    bedrock-widget.desktop`).
+    """
+    root = _web_root()
+    widget_path = root / "widget.html"
+    if not widget_path.exists():
+        abort(404, description=f"widget.html ikke funnet i {root}")
+    return send_from_directory(root, "widget.html")
+
+
 @ui_bp.get("/admin")
 def admin() -> Response:
     """Admin-rule-editor (Fase 9 runde 3 session 54).
@@ -198,6 +215,178 @@ def trade_log_summary() -> Response:
             "total_pnl_usd": round(total_pnl, 2),
             "win_rate": win_rate,
             "last_updated": data["last_updated"],
+        }
+    )
+
+
+# ─────────────────────────────────────────────────────────────
+# Widget-API (session 2026-05-26): kompakt status for desktop-widget
+# ─────────────────────────────────────────────────────────────
+
+
+def _today_utc_iso_date() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _read_widget_monitor() -> dict[str, Any]:
+    """Les dagens monitor-rapport for pipeline-helse.
+
+    Filen ligger i `data/_meta/monitor_<YYYY-MM-DD>.json`. Fraværende
+    fil → ukjent status (widget viser grå indikator i stedet for å
+    breake).
+    """
+    today = _today_utc_iso_date()
+    path = _config().data_root / "_meta" / f"monitor_{today}.json"
+    if not path.exists():
+        return {"overall_ok": None, "detail": "ingen monitor-rapport i dag enda"}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        checks = data.get("checks", [])
+        first_red = next((c for c in checks if not c.get("ok")), None)
+        return {
+            "overall_ok": data.get("overall_ok"),
+            "detail": first_red.get("detail") if first_red else "alle sjekker OK",
+            "generated_utc": data.get("generated_utc"),
+        }
+    except (json.JSONDecodeError, OSError) as exc:
+        log.warning("[WIDGET] monitor lese-feil: %s", exc)
+        return {"overall_ok": None, "detail": f"feil: {exc}"}
+
+
+def _read_widget_signals() -> dict[str, Any]:
+    """Les `signals_bot.json` for published setups + top 3 by grade.
+
+    Same fil som boten leser. published=true → bot vurderer entry.
+    Top 3 sorteres etter grade (A+ > A > B > C) deretter score desc.
+    """
+    path = _config().signals_bot_path
+    if not path.exists():
+        return {"n_published": 0, "n_total": 0, "top3": []}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        log.warning("[WIDGET] signals_bot lese-feil: %s", exc)
+        return {"n_published": 0, "n_total": 0, "top3": []}
+    if not isinstance(raw, list):
+        return {"n_published": 0, "n_total": 0, "top3": []}
+    published = [it for it in raw if isinstance(it, dict) and it.get("published")]
+    top = sorted(
+        published,
+        key=lambda it: (_GRADE_RANK.get(it.get("grade") or "", 99), -(it.get("score") or 0)),
+    )[:3]
+    return {
+        "n_published": len(published),
+        "n_total": len(raw),
+        "top3": [
+            {
+                "instrument": it.get("instrument"),
+                "direction": it.get("direction"),
+                "horizon": it.get("horizon"),
+                "grade": it.get("grade"),
+                "score": round(it.get("score") or 0, 2),
+            }
+            for it in top
+        ],
+    }
+
+
+def _read_widget_pnl_today(trade_log: dict[str, Any]) -> dict[str, Any]:
+    """Aggreger trade-log: P&L i dag (UTC), åpne posisjoner, siste close."""
+    today = _today_utc_iso_date()
+    entries = trade_log.get("entries", [])
+
+    pnl_today = 0.0
+    closes_today = 0
+    wins_today = 0
+    losses_today = 0
+    for e in entries:
+        closed_at = e.get("closed_at") or ""
+        if not closed_at.startswith(today):
+            continue
+        closes_today += 1
+        if e.get("result") == "win":
+            wins_today += 1
+        elif e.get("result") == "loss":
+            losses_today += 1
+        val = (e.get("pnl") or {}).get("pnl_usd")
+        if isinstance(val, (int, float)):
+            pnl_today += val
+
+    pnl_total = 0.0
+    for e in entries:
+        if not e.get("closed_at"):
+            continue
+        val = (e.get("pnl") or {}).get("pnl_usd")
+        if isinstance(val, (int, float)):
+            pnl_total += val
+
+    return {
+        "pnl_today_usd": round(pnl_today, 2),
+        "closes_today": closes_today,
+        "wins_today": wins_today,
+        "losses_today": losses_today,
+        "pnl_total_usd": round(pnl_total, 2),
+    }
+
+
+def _read_widget_bot_status(trade_log: dict[str, Any]) -> dict[str, Any]:
+    """Bot-status: kjører? siste close? open count?
+
+    bedrock-server kjører som system-service (root) og kan ikke spørre
+    --user systemctl direkte. Vi bruker pgrep -f på modul-pathen
+    `bedrock.bot` i stedet; det fungerer på tvers av root/user.
+    """
+    import shutil
+    import subprocess
+
+    status = "unknown"
+    if shutil.which("pgrep"):
+        try:
+            result = subprocess.run(
+                ["pgrep", "-f", "python.*bedrock\\.bot"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            status = "active" if result.returncode == 0 and result.stdout.strip() else "inactive"
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            log.debug("[WIDGET] pgrep call feilet: %s", exc)
+
+    entries = trade_log.get("entries", [])
+    last_close = None
+    for e in entries:
+        closed_at = e.get("closed_at")
+        if closed_at:
+            sig = e.get("signal") or {}
+            last_close = {
+                "closed_at": closed_at,
+                "instrument": sig.get("instrument"),
+                "direction": sig.get("direction"),
+                "result": e.get("result"),
+                "pnl_usd": (e.get("pnl") or {}).get("pnl_usd"),
+            }
+            break  # entries er nyeste-først
+
+    open_count = sum(1 for e in entries if not e.get("closed_at"))
+
+    return {
+        "service_status": status,
+        "open_positions": open_count,
+        "last_close": last_close,
+    }
+
+
+@ui_bp.get("/api/ui/widget")
+def widget_payload() -> Response:
+    """Komprimert status-payload for desktop-widget. Poll-friendly (~30s)."""
+    tl = _read_trade_log()
+    return jsonify(
+        {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "bot": _read_widget_bot_status(tl),
+            "pnl": _read_widget_pnl_today(tl),
+            "signals": _read_widget_signals(),
+            "monitor": _read_widget_monitor(),
         }
     )
 

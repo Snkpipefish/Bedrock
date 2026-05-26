@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <title>Bedrock — status</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    :root {
+      --bg: #0e1116;
+      --panel: #161b22;
+      --panel-2: #1c222b;
+      --border: #2a313c;
+      --text: #d6dce5;
+      --muted: #7a8492;
+      --green: #3fb950;
+      --red: #f85149;
+      --amber: #d29922;
+      --blue: #58a6ff;
+      --grade-aplus: #79c0ff;
+      --grade-a: #56d364;
+      --grade-b: #d29922;
+      --grade-c: #f85149;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .app {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      height: 100vh;
+      padding: 10px;
+      gap: 8px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 4px;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    .header .last-update {
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto auto;
+      gap: 8px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-height: 0;
+    }
+    .panel .label {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+    .panel .value {
+      font-size: 22px;
+      font-weight: 600;
+      line-height: 1.1;
+    }
+    .panel .sub {
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .panel.bot .value.up { color: var(--green); }
+    .panel.bot .value.down { color: var(--red); }
+    .panel.bot .value.unknown { color: var(--amber); }
+    .panel.pnl .value.pos { color: var(--green); }
+    .panel.pnl .value.neg { color: var(--red); }
+    .panel.health .value.green { color: var(--green); }
+    .panel.health .value.red { color: var(--red); }
+    .panel.health .value.unknown { color: var(--muted); }
+    .panel.setups { grid-column: 1 / span 2; }
+    .setup-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 2px;
+    }
+    .setup-row {
+      display: grid;
+      grid-template-columns: 30px 1fr auto auto;
+      gap: 8px;
+      align-items: center;
+      padding: 4px 6px;
+      background: var(--panel-2);
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .setup-row .grade {
+      font-weight: 700;
+      font-size: 11px;
+      text-align: center;
+    }
+    .setup-row .grade[data-grade="A+"] { color: var(--grade-aplus); }
+    .setup-row .grade[data-grade="A"]  { color: var(--grade-a); }
+    .setup-row .grade[data-grade="B"]  { color: var(--grade-b); }
+    .setup-row .grade[data-grade="C"]  { color: var(--grade-c); }
+    .setup-row .instr { font-weight: 600; }
+    .setup-row .dir { font-size: 11px; color: var(--muted); }
+    .setup-row .dir.buy  { color: var(--green); }
+    .setup-row .dir.sell { color: var(--red); }
+    .setup-row .horizon { font-size: 10px; color: var(--muted); }
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 4px;
+      font-size: 10px;
+      color: var(--muted);
+    }
+    .footer a { color: var(--blue); text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+    .empty {
+      color: var(--muted);
+      font-size: 11px;
+      font-style: italic;
+    }
+    .dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      vertical-align: middle;
+      margin-right: 4px;
+    }
+    .dot.green { background: var(--green); }
+    .dot.red { background: var(--red); }
+    .dot.amber { background: var(--amber); }
+    .dot.unknown { background: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <h1>Bedrock</h1>
+      <span class="last-update" id="last-update">laster…</span>
+    </div>
+
+    <div class="grid">
+      <div class="panel bot">
+        <span class="label">Bot</span>
+        <span class="value" id="bot-status">—</span>
+        <span class="sub" id="bot-sub">venter på data</span>
+      </div>
+
+      <div class="panel pnl">
+        <span class="label">P&amp;L i dag</span>
+        <span class="value" id="pnl-today">$0.00</span>
+        <span class="sub" id="pnl-sub">total: $0.00</span>
+      </div>
+
+      <div class="panel health">
+        <span class="label">Pipeline</span>
+        <span class="value" id="health-status">—</span>
+        <span class="sub" id="health-sub">venter på data</span>
+      </div>
+
+      <div class="panel sigs">
+        <span class="label">Setups</span>
+        <span class="value" id="sigs-count">—</span>
+        <span class="sub" id="sigs-sub">publisert til bot</span>
+      </div>
+
+      <div class="panel setups">
+        <span class="label">Topp 3</span>
+        <div class="setup-list" id="top3-list">
+          <span class="empty">laster…</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span id="error-line"></span>
+      <a href="http://localhost:5100/" target="_blank" rel="noopener">Full UI</a>
+    </div>
+  </div>
+
+  <script>
+    const POLL_MS = 30_000;
+    const fmtUsd = (v) => {
+      const n = typeof v === "number" ? v : 0;
+      const sign = n >= 0 ? "" : "-";
+      return sign + "$" + Math.abs(n).toFixed(2);
+    };
+    const fmtTimeAgo = (iso) => {
+      if (!iso) return "—";
+      const t = new Date(iso);
+      if (Number.isNaN(t.getTime())) return iso;
+      const s = Math.max(0, Math.round((Date.now() - t.getTime()) / 1000));
+      if (s < 90) return `${s}s siden`;
+      const m = Math.round(s / 60);
+      if (m < 90) return `${m}m siden`;
+      const h = Math.round(m / 60);
+      if (h < 36) return `${h}t siden`;
+      return `${Math.round(h / 24)}d siden`;
+    };
+
+    async function tick() {
+      try {
+        const resp = await fetch("/api/ui/widget", { cache: "no-store" });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        const data = await resp.json();
+        render(data);
+        document.getElementById("error-line").textContent = "";
+        document.getElementById("last-update").textContent =
+          "oppdatert " + new Date().toLocaleTimeString("nb-NO", { hour: "2-digit", minute: "2-digit" });
+      } catch (err) {
+        document.getElementById("error-line").textContent = "feil: " + err.message;
+      }
+    }
+
+    function render(d) {
+      // Bot-panel
+      const botEl = document.getElementById("bot-status");
+      const botSubEl = document.getElementById("bot-sub");
+      const status = d.bot?.service_status || "unknown";
+      const cls = status === "active" ? "up" : (status === "unknown" ? "unknown" : "down");
+      botEl.className = "value " + cls;
+      botEl.textContent = status === "active" ? "kjører" : status;
+      const open = d.bot?.open_positions ?? 0;
+      const last = d.bot?.last_close;
+      if (last) {
+        const grade = last.result === "win" ? "✓ win" : (last.result === "loss" ? "✗ loss" : last.result);
+        botSubEl.textContent = `${open} åpne · sist ${last.instrument} ${last.direction} ${grade} ${fmtTimeAgo(last.closed_at)}`;
+      } else {
+        botSubEl.textContent = `${open} åpne posisjoner`;
+      }
+
+      // P&L
+      const pnlEl = document.getElementById("pnl-today");
+      const pnlSubEl = document.getElementById("pnl-sub");
+      const pnlToday = d.pnl?.pnl_today_usd ?? 0;
+      pnlEl.className = "value " + (pnlToday >= 0 ? "pos" : "neg");
+      pnlEl.textContent = fmtUsd(pnlToday);
+      const closes = d.pnl?.closes_today ?? 0;
+      const wins = d.pnl?.wins_today ?? 0;
+      const losses = d.pnl?.losses_today ?? 0;
+      const total = d.pnl?.pnl_total_usd ?? 0;
+      pnlSubEl.textContent = `${closes} trades i dag (${wins}W/${losses}L) · total ${fmtUsd(total)}`;
+
+      // Pipeline-helse
+      const hEl = document.getElementById("health-status");
+      const hSubEl = document.getElementById("health-sub");
+      const ok = d.monitor?.overall_ok;
+      if (ok === true) {
+        hEl.className = "value green";
+        hEl.textContent = "GRØNN";
+      } else if (ok === false) {
+        hEl.className = "value red";
+        hEl.textContent = "RØD";
+      } else {
+        hEl.className = "value unknown";
+        hEl.textContent = "—";
+      }
+      hSubEl.textContent = d.monitor?.detail || "ingen data";
+
+      // Setups
+      const sigsEl = document.getElementById("sigs-count");
+      const sigsSubEl = document.getElementById("sigs-sub");
+      const nPub = d.signals?.n_published ?? 0;
+      const nTotal = d.signals?.n_total ?? 0;
+      sigsEl.textContent = nPub;
+      sigsSubEl.textContent = `av ${nTotal} totalt`;
+
+      // Top 3
+      const listEl = document.getElementById("top3-list");
+      const top = d.signals?.top3 || [];
+      if (top.length === 0) {
+        listEl.innerHTML = '<span class="empty">ingen publiserte setups</span>';
+      } else {
+        listEl.innerHTML = top.map(s => `
+          <div class="setup-row">
+            <span class="grade" data-grade="${escapeHtml(s.grade || '')}">${escapeHtml(s.grade || '?')}</span>
+            <span class="instr">${escapeHtml(s.instrument || '?')}</span>
+            <span class="dir ${escapeHtml(s.direction || '')}">${escapeHtml((s.direction || '').toUpperCase())}</span>
+            <span class="horizon">${escapeHtml((s.horizon || '').toUpperCase())} · ${s.score}</span>
+          </div>
+        `).join("");
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[c]));
+    }
+
+    tick();
+    setInterval(tick, POLL_MS);
+  </script>
+</body>
+</html>

@@ -34,6 +34,7 @@ def web_root(tmp_path: Path) -> Path:
     root.mkdir()
     (root / "index.html").write_text("<html><body>Skipsloggen</body></html>")
     (root / "admin.html").write_text("<html><body>Admin rule editor</body></html>")
+    (root / "widget.html").write_text("<html><body>Widget panel</body></html>")
     (root / "assets").mkdir()
     (root / "assets" / "app.js").write_text("console.log('hei');")
     (root / "assets" / "style.css").write_text("body { color: red; }")
@@ -101,6 +102,18 @@ def db_path(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def signals_bot_path(tmp_path: Path) -> Path:
+    return tmp_path / "signals_bot.json"
+
+
+@pytest.fixture
+def data_root(tmp_path: Path) -> Path:
+    root = tmp_path / "data"
+    root.mkdir()
+    return root
+
+
+@pytest.fixture
 def app_with_config(
     web_root: Path,
     trade_log_path: Path,
@@ -108,6 +121,8 @@ def app_with_config(
     agri_signals_path: Path,
     fetch_config_path: Path,
     db_path: Path,
+    signals_bot_path: Path,
+    data_root: Path,
 ):
     cfg = ServerConfig(
         web_root=web_root,
@@ -116,6 +131,8 @@ def app_with_config(
         agri_signals_path=agri_signals_path,
         fetch_config_path=fetch_config_path,
         db_path=db_path,
+        signals_bot_path=signals_bot_path,
+        data_root=data_root,
     )
     return create_app(cfg)
 
@@ -1277,3 +1294,146 @@ def test_events_format_sse_helper() -> None:
     data_line = next(line for line in msg.split("\n") if line.startswith("data: "))
     payload = json.loads(data_line[len("data: ") :])
     assert payload == {"path": "/x", "mtime": 1.5}
+
+
+# ─────────────────────────────────────────────────────────────
+# Widget (session 2026-05-26)
+# ─────────────────────────────────────────────────────────────
+
+
+def test_widget_serves_html(client: FlaskClient) -> None:
+    """/widget serverer web/widget.html (kompakt status-side)."""
+    r = client.get("/widget")
+    assert r.status_code == 200
+    assert b"Widget panel" in r.data
+
+
+def test_widget_404_when_missing(tmp_path: Path) -> None:
+    """web_root finnes men widget.html mangler → 404."""
+    empty = tmp_path / "web_no_widget"
+    empty.mkdir()
+    (empty / "index.html").write_text("<html></html>")
+    cfg = ServerConfig(web_root=empty, trade_log_path=tmp_path / "x.json")
+    app = create_app(cfg)
+    r = app.test_client().get("/widget")
+    assert r.status_code == 404
+
+
+def test_widget_payload_empty_state(client: FlaskClient) -> None:
+    """Ingen filer → defaults i alle felt; ingen 500."""
+    r = client.get("/api/ui/widget")
+    assert r.status_code == 200
+    payload = r.get_json()
+    assert "ts" in payload
+    assert payload["bot"]["open_positions"] == 0
+    assert payload["bot"]["last_close"] is None
+    assert payload["pnl"]["pnl_today_usd"] == 0.0
+    assert payload["pnl"]["pnl_total_usd"] == 0.0
+    assert payload["signals"]["n_published"] == 0
+    assert payload["signals"]["n_total"] == 0
+    assert payload["signals"]["top3"] == []
+    # monitor: ingen fil i dag → overall_ok=None
+    assert payload["monitor"]["overall_ok"] is None
+
+
+def test_widget_payload_top3_grade_sorted(client: FlaskClient, signals_bot_path: Path) -> None:
+    """Topp 3 sorteres A+ > A > B > C, score desc innen samme grade."""
+    signals_bot_path.write_text(
+        json.dumps(
+            [
+                {
+                    "instrument": "Sugar",
+                    "direction": "sell",
+                    "horizon": "swing",
+                    "grade": "B",
+                    "score": 8.0,
+                    "published": True,
+                },
+                {
+                    "instrument": "Wheat",
+                    "direction": "buy",
+                    "horizon": "makro",
+                    "grade": "A+",
+                    "score": 12.0,
+                    "published": True,
+                },
+                {
+                    "instrument": "Coffee",
+                    "direction": "sell",
+                    "horizon": "makro",
+                    "grade": "A",
+                    "score": 11.0,
+                    "published": True,
+                },
+                {
+                    "instrument": "Cocoa",
+                    "direction": "buy",
+                    "horizon": "swing",
+                    "grade": "C",
+                    "score": 5.0,
+                    "published": True,
+                },
+                {
+                    "instrument": "AUDUSD",
+                    "direction": "sell",
+                    "horizon": "scalp",
+                    "grade": "A",
+                    "score": 4.0,
+                    "published": False,  # ikke publisert → skal ekskluderes
+                },
+            ]
+        )
+    )
+    r = client.get("/api/ui/widget")
+    payload = r.get_json()
+    assert payload["signals"]["n_published"] == 4
+    assert payload["signals"]["n_total"] == 5
+    top = payload["signals"]["top3"]
+    assert len(top) == 3
+    assert top[0]["instrument"] == "Wheat"  # A+
+    assert top[1]["instrument"] == "Coffee"  # A
+    assert top[2]["instrument"] == "Sugar"  # B (C lavere)
+
+
+def test_widget_payload_pnl_today(client: FlaskClient, trade_log_path: Path) -> None:
+    """P&L i dag-felt summerer kun trades closed today (UTC)."""
+    from datetime import datetime, timezone
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    trade_log_path.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {
+                        "timestamp": f"{today} 09:00 timezone.utc",
+                        "closed_at": f"{today} 14:30 timezone.utc",
+                        "result": "win",
+                        "signal": {"instrument": "EURUSD", "direction": "buy"},
+                        "pnl": {"pnl_usd": 25.50},
+                    },
+                    {
+                        "timestamp": f"{today} 10:00 timezone.utc",
+                        "closed_at": f"{today} 15:00 timezone.utc",
+                        "result": "loss",
+                        "signal": {"instrument": "GOLD", "direction": "sell"},
+                        "pnl": {"pnl_usd": -10.0},
+                    },
+                    {
+                        "timestamp": "2025-01-01 10:00 timezone.utc",
+                        "closed_at": "2025-01-01 12:00 timezone.utc",
+                        "result": "win",
+                        "signal": {"instrument": "SILVER", "direction": "buy"},
+                        "pnl": {"pnl_usd": 100.0},
+                    },
+                ],
+                "last_updated": f"{today} 15:00 timezone.utc",
+            }
+        )
+    )
+    r = client.get("/api/ui/widget")
+    payload = r.get_json()
+    assert payload["pnl"]["pnl_today_usd"] == pytest.approx(15.50)
+    assert payload["pnl"]["closes_today"] == 2
+    assert payload["pnl"]["wins_today"] == 1
+    assert payload["pnl"]["losses_today"] == 1
+    assert payload["pnl"]["pnl_total_usd"] == pytest.approx(115.50)
