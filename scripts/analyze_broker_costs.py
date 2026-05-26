@@ -162,14 +162,40 @@ class BrokerCostScanner:
     def _handle_symbol_detail(self, payload: bytes) -> None:
         res = ProtoOASymbolByIdRes()
         res.ParseFromString(payload)
-        sid_to_lotsize: dict[int, int] = {s.symbolId: s.lotSize for s in res.symbol}
+        # Lagre flere felt for swap-beregning. swapLong/swapShort er
+        # vanligvis i pips (FX) eller %/100 (CFDs); cTrader's
+        # swapCalculationType angir hvilken enhet. digits/pipPosition
+        # trengs for å konvertere pips til USD.
+        sid_to_info: dict[int, dict] = {}
+        for s in res.symbol:
+            sid_to_info[s.symbolId] = {
+                "lot_size": s.lotSize,
+                "digits": s.digits,
+                "pip_position": s.pipPosition,
+                "swap_long": s.swapLong,
+                "swap_short": s.swapShort,
+                "swap_calc_type": s.swapCalculationType,  # 0=PIPS, 1=PERCENTAGE
+                "swap_period": s.swapPeriod if s.HasField("swapPeriod") else 1,
+                "swap_rollover_3days": s.swapRollover3Days,
+            }
         for bedrock_name, sid in self.bedrock_to_sid.items():
-            lot_size = sid_to_lotsize.get(sid, 0)
+            info = sid_to_info.get(sid, {})
+            lot_size = info.get("lot_size", 0)
             volume_units = int(MAX_LOT * lot_size)
             if bedrock_name not in self.results:
                 continue
-            self.results[bedrock_name]["lot_size"] = lot_size
-            self.results[bedrock_name]["volume_at_0_03_lot"] = volume_units
+            self.results[bedrock_name].update(
+                {
+                    "lot_size": lot_size,
+                    "volume_at_0_03_lot": volume_units,
+                    "digits": info.get("digits"),
+                    "pip_position": info.get("pip_position"),
+                    "swap_long_raw": info.get("swap_long"),
+                    "swap_short_raw": info.get("swap_short"),
+                    "swap_calc_type": info.get("swap_calc_type"),
+                    "swap_rollover_3days": info.get("swap_rollover_3days"),
+                }
+            )
             if lot_size > 0 and volume_units > 0:
                 self._margin_queue.append((bedrock_name, sid, volume_units))
         log.info("[MARGIN] henter ExpectedMargin for %d symboler", len(self._margin_queue))
@@ -231,11 +257,14 @@ class BrokerCostScanner:
             self.spread_bid_ask[ev.symbolId].append((ev.bid, ev.ask))
 
     def _finish_spread_sampling(self) -> None:
-        log.info("[SPREAD] sampling ferdig — beregner snitt")
+        log.info("[SPREAD] sampling ferdig — beregner snitt + swap-kostnader")
         sid_to_name = {sid: name for name, sid in self.bedrock_to_sid.items()}
+        sid_to_mid: dict[int, float] = {}
         for sid, samples in self.spread_bid_ask.items():
             if not samples:
                 continue
+            last_bid, last_ask = samples[-1]
+            sid_to_mid[sid] = (last_bid + last_ask) / 2.0
             spreads_pct = [
                 (ask - bid) / ((ask + bid) / 2) * 100.0 for bid, ask in samples if (ask + bid) > 0
             ]
@@ -246,6 +275,53 @@ class BrokerCostScanner:
             if name in self.results:
                 self.results[name]["spread_pct_avg"] = round(avg, 5)
                 self.results[name]["spread_samples"] = len(samples)
+                digits = self.results[name].get("digits") or 0
+                mid_human = sid_to_mid[sid] / (10**digits) if digits else sid_to_mid[sid]
+                self.results[name]["mid_price"] = round(mid_human, 5)
+
+        # Beregn USD-swap per natt
+        for info in self.results.values():
+            self._compute_swap_costs(info)
+
+    def _compute_swap_costs(self, info: dict) -> None:
+        """USD-swap per natt for long/short per 0.03 lot.
+
+        - swapCalculationType=0 (PIPS): swap er pips per natt per lot
+        - swapCalculationType=1 (PERCENTAGE): swap er %/år av notional
+
+        For PIPS-modus: pip-bevegelsen er i quote-currency. For
+        XXX/USD-par (EURUSD, GOLD, OIL) er quote=USD og pip-verdi er
+        direkte i USD. For USD/JPY er quote=JPY og pip-verdi må deles
+        på mid-prisen for å konvertere til USD.
+
+        Negativ swap = du betaler.
+        """
+        swap_long = info.get("swap_long_raw")
+        swap_short = info.get("swap_short_raw")
+        swap_type = info.get("swap_calc_type")
+        pip_position = info.get("pip_position") or 0
+        volume = info.get("volume_at_0_03_lot") or 0
+        mid = info.get("mid_price")
+        symbol = info.get("symbol_name") or ""
+        if swap_long is None or swap_short is None or volume == 0 or mid is None:
+            return
+
+        # JPY-quote: USDJPY, EURJPY, GBPJPY osv. har quote=JPY.
+        # Pip-value må deles på mid for å få USD-ekvivalent.
+        # Vi har kun USDJPY i INSTRUMENT_MAP nå, men sjekker generisk.
+        is_jpy_quote = symbol.endswith("JPY")
+        usd_conversion = (1.0 / mid) if is_jpy_quote else 1.0
+
+        if swap_type == 1:
+            notional_usd = mid * volume if not is_jpy_quote else volume
+            cost_long = swap_long / 100.0 / 365.0 * notional_usd
+            cost_short = swap_short / 100.0 / 365.0 * notional_usd
+        else:
+            pip_value_per_unit = 10 ** (-pip_position) if pip_position else 0.0001
+            cost_long = swap_long * pip_value_per_unit * volume * usd_conversion
+            cost_short = swap_short * pip_value_per_unit * volume * usd_conversion
+        info["swap_long_usd_per_night"] = round(cost_long, 3)
+        info["swap_short_usd_per_night"] = round(cost_short, 3)
         self._finish()
 
     def _finish(self) -> None:
@@ -260,52 +336,72 @@ class BrokerCostScanner:
 
 def _print_report(results: dict[str, dict]) -> None:
     print()
-    print("=" * 100)
+    print("=" * 110)
     print(" BEDROCK BOT — BROKER-KOSTNADER (cTrader demo, 0.03 lot per posisjon)")
-    print("=" * 100)
+    print("=" * 110)
     print(
-        f" {'Instrument':<12} {'Symbol':<14} {'LotSize':>12} {'Vol@0.03':>10}"
-        f" {'BuyMargin':>11} {'SellMargin':>11} {'Spread%':>10}"
+        f" {'Instrument':<11} {'BuyMargin':>10} {'SellMargin':>11} {'Spread%':>9}"
+        f"  {'SwapL/natt':>11} {'SwapS/natt':>11} {'14d Long':>10} {'14d Short':>10}"
     )
-    print(" " + "-" * 95)
+    print(" " + "-" * 100)
 
     total_buy = 0.0
     total_sell = 0.0
+    total_swap_long_per_night = 0.0
+    total_swap_short_per_night = 0.0
     for name, info in sorted(results.items()):
-        sym = info.get("symbol_name", "?")
-        lot = info.get("lot_size", 0)
-        vol = info.get("volume_at_0_03_lot", 0)
         bm = info.get("buy_margin_usd")
         sm = info.get("sell_margin_usd")
         sp = info.get("spread_pct_avg")
+        sl = info.get("swap_long_usd_per_night")
+        ss = info.get("swap_short_usd_per_night")
         bm_str = f"${bm:>7.2f}" if bm is not None else "    —  "
         sm_str = f"${sm:>7.2f}" if sm is not None else "    —  "
         sp_str = f"{sp:>6.4f}%" if sp is not None else "    —  "
-        print(f" {name:<12} {sym:<14} {lot:>12} {vol:>10} {bm_str:>11} {sm_str:>11} {sp_str:>10}")
+        sl_str = f"${sl:>+7.3f}" if sl is not None else "    —  "
+        ss_str = f"${ss:>+7.3f}" if ss is not None else "    —  "
+        # 14-dagers SWING-estimat (typisk hold-tid for SWING/MAKRO).
+        # Onsdag har 3x swap i cTrader-konvensjon → ~16 swap-treff per 14d.
+        days_long = (sl * 14 * (16 / 14)) if sl is not None else None
+        days_short = (ss * 14 * (16 / 14)) if ss is not None else None
+        dl_str = f"${days_long:>+7.2f}" if days_long is not None else "    —  "
+        ds_str = f"${days_short:>+7.2f}" if days_short is not None else "    —  "
+        print(
+            f" {name:<11} {bm_str:>10} {sm_str:>11} {sp_str:>9}"
+            f"  {sl_str:>11} {ss_str:>11} {dl_str:>10} {ds_str:>10}"
+        )
         if bm is not None:
             total_buy += bm
         if sm is not None:
             total_sell += sm
-    print(" " + "-" * 95)
+        if sl is not None:
+            total_swap_long_per_night += sl
+        if ss is not None:
+            total_swap_short_per_night += ss
+    print(" " + "-" * 100)
     print(
-        f" {'TOTALT (alle 22 åpne samtidig)':<39}{'':>12}{'':>10}"
-        f"  ${total_buy:>8.2f}  ${total_sell:>8.2f}"
+        f" {'TOTALT (alle 22 åpne samtidig)':<22} ${total_buy:>7.2f} ${total_sell:>9.2f}"
+        f"{'':>11}  ${total_swap_long_per_night:>+7.2f} ${total_swap_short_per_night:>+7.2f}"
+        f"  ${total_swap_long_per_night * 16:>+7.2f} ${total_swap_short_per_night * 16:>+7.2f}"
     )
     print()
     print(" Forklaring:")
-    print(" - Vol@0.03: faktisk volum-tall sendt til broker for 0.03 lot")
-    print(" - BuyMargin: USD låst av broker for at en BUY-posisjon eksisterer (0.03 lot)")
-    print(" - SellMargin: tilsvarende for SELL")
-    print(" - Spread%: relativ spread (ask-bid)/midpoint × 100, snitt over ~25 sek")
-    print(" - TOTALT: max samtidig margin hvis bot åpner i alle 22 samtidig")
+    print(" - BuyMargin/SellMargin: USD låst av broker for 0.03 lot")
+    print(" - Spread%: relativ spread (ask-bid)/midpoint, snitt over 25 sek")
+    print(" - SwapL/SwapS per natt: USD-kost (neg = du betaler, pos = du får)")
+    print("   for å holde long/short over midnatt server-tid")
+    print(" - 14d Long/Short: estimert 2-ukers swap-akkumulering (typisk")
+    print("   SWING/MAKRO hold-tid), inkludert ekstra 3x onsdag-rollover")
+    print(" - TOTALT: hypotetisk worst case ALLE 22 åpne, alle long eller short")
     print()
-    print(" NB: Tall er fra cTrader DEMO. Skilling live har typisk:")
-    print(" - 10-30 %% bredere spreads på CFDs (oil, indices, commodities)")
-    print(" - Strammere spreads på majors FX")
-    print(" - Samme margin-krav (basert på cTrader leverage-tiers)")
+    print(" Tolkning:")
+    print(" - Negative swaps DOMINERER hos retail-brokere. Carry-tap er")
+    print("   en reell skjult kostnad — særlig for MAKRO-trades (>1 uke)")
+    print(" - Hvis sum 14d-swap > netto-PnL fra en kategori, så er")
+    print("   strategien i praksis subsidiert av broker-renta")
     print()
-    print(" For live-konto: budsjetter ~120 %% av total-margin pluss risk-buffer.")
-    print("=" * 100)
+    print(" NB: Demo vs Skilling live spreads kan avvike 10-30 %% på CFDs.")
+    print("=" * 110)
 
 
 def main() -> int:
