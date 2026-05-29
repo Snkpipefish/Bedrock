@@ -2,6 +2,49 @@
 
 ## Session log (most recent first)
 
+### 2026-05-29 — POSITION_NOT_FOUND-kaskade fikset + signal_log re-synket
+
+**Hva:** Operatør rapporterte at boten hadde 5 åpne trades på cTrader,
+men UI viste kun 2.
+
+**Hvorfor:** `ExitEngine.on_order_error` masse-lukket ALLE `IN_TRADE`-
+states på én enkelt `POSITION_NOT_FOUND` (typisk fra en posisjon som
+nettopp ble lukket legitimt — T1/GEO-SPIKE). Den logget dem som lukket
+og fjernet dem fra `active_states`, men **lukket dem aldri på cTrader**
+(POSITION_NOT_FOUND-grenen kaller ikke `close_position`). Eventet bærer
+`positionId` + `orderId`, men handleren ignorerte begge. Observert i dag
+kl 16:45 CET: kaskaden traff 5 posisjoner — 3 (Coffee #16698677, SPX500
+#16699182, SPX500 #16699184) levde videre på broker, mens US100 #16691413
+og GBPUSD #16694003 reelt var lukket (men reason/PnL ble gjettet).
+Samme mønster i backup `signal_log.json.bak-20260526T093756` (7→0 åpne
+på 3 min). UI er trofast — den teller `entries med result==None`.
+
+**Hva fikser:**
+1. **Kodefiks** (`src/bedrock/bot/exit.py`, commit `9c8bffc`): grenen
+   scoper nå til staten som matcher `event.positionId` (fallback
+   `orderId`). Ingen match → warning, ingen state fjernet. 2
+   regresjonstester (`does_not_cascade`, `no_match_keeps_states`). 59/59
+   i `test_exit.py` grønne, ruff + pyright rene.
+2. **Re-sync:** restart `bedrock-bot.service` → reconcile tok over alle
+   5 åpne SE-posisjoner.
+3. **Logg-opprydding:** gjenåpnet de 3 falskt lukkede originaloppføringene
+   (bevarte grade/t1/risk_pct/åpningstid) og fjernet de metadata-fattige
+   reconcile-duplikatene. Matchet på `position_id` (signal-id-er gjenbrukes
+   på tvers av dager!). Backup: `signal_log.json.bak-precleanup-20260529T211229`.
+
+**Verifikasjon:** Loggen viser nå 5 åpne, ingen duplikate position_ids/
+signal_ids, og position-id-ene matcher cTrader-reconcile eksakt. Restart
+etter opprydding ga "allerede i logg" for alle 5 (ingen nye dups).
+
+**Uavklart (flagget til operatør):** US100 #16691413 (+5.05) og GBPUSD
+#16694003 (+2.74) står som "TP win" — posisjonene er reelt lukket, men
+reason/PnL var kaskade-gjetning, ikke ekte cTrader-deal. Lot stå urørt.
+
+**Datatap:** Ingen (3 falske lukkinger reversert, ekte lukkinger beholdt).
+
+**Fase-kontekst:** Sub-fase 12.6 (operasjonell stabilitet) — bot-state-
+synk mot cTrader.
+
 ### 2026-05-11 — boot-CPU-storm fix + sugar rolling-floor parser
 
 **Hva:** To tilbakemeldinger fra operatør ved morgen-oppstart:
