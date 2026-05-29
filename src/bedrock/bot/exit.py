@@ -1101,30 +1101,64 @@ class ExitEngine:
         log.error("[ORDRE FEIL] %s (kode %s)", desc, code)
         with self._lock:
             if code == "POSITION_NOT_FOUND":
-                closed = [s for s in list(self._active_states) if s.phase == TradePhase.IN_TRADE]
-                for s in closed:
-                    is_tp = s.t1_price_reached
-                    if not is_tp and s.t1_price:
-                        bid = self._client.last_bid.get(s.symbol_id, 0)
-                        ask = self._client.last_ask.get(s.symbol_id, 0)
-                        last_price = bid or ask or 0.0
-                        if last_price:
-                            dist_t1 = abs(last_price - s.t1_price)
-                            dist_stop = (
-                                abs(last_price - s.stop_price) if s.stop_price else float("inf")
-                            )
-                            if dist_t1 < dist_stop:
-                                is_tp = True
-                    reason = "TP" if is_tp else "SL"
-                    exit_prc = s.t1_price if is_tp else s.stop_price
-                    log.info(
-                        "[STENGT EKSTERNT] %s — %s truffet. Fjerner.",
-                        s.signal_id,
-                        reason,
+                # Scope lukkingen til DEN posisjonen eventet gjelder. Tidligere
+                # masse-lukket vi alle IN_TRADE-states på én POSITION_NOT_FOUND
+                # (typisk fra en posisjon som nettopp ble lukket legitimt) — uten
+                # å faktisk lukke dem på cTrader. Resultat: logg/UI ut av sync og
+                # live-posisjoner som boten sluttet å manage (kun hard SL igjen).
+                pos_id = getattr(event, "positionId", 0) or 0
+                order_id = getattr(event, "orderId", 0) or 0
+                target: TradeState | None = None
+                if pos_id:
+                    target = next(
+                        (
+                            s
+                            for s in self._active_states
+                            if s.phase == TradePhase.IN_TRADE and s.position_id == pos_id
+                        ),
+                        None,
                     )
-                    self._log_trade_closed(s, reason, exit_prc)
-                    if s in self._active_states:
-                        self._active_states.remove(s)
+                if target is None and order_id:
+                    target = next(
+                        (
+                            s
+                            for s in self._active_states
+                            if s.phase == TradePhase.IN_TRADE and s.order_id == order_id
+                        ),
+                        None,
+                    )
+                if target is None:
+                    log.warning(
+                        "[ORDRE FEIL] POSITION_NOT_FOUND uten match "
+                        "(posId=%s orderId=%s) — ingen state fjernet.",
+                        pos_id or "?",
+                        order_id or "?",
+                    )
+                    return
+                is_tp = target.t1_price_reached
+                if not is_tp and target.t1_price:
+                    bid = self._client.last_bid.get(target.symbol_id, 0)
+                    ask = self._client.last_ask.get(target.symbol_id, 0)
+                    last_price = bid or ask or 0.0
+                    if last_price:
+                        dist_t1 = abs(last_price - target.t1_price)
+                        dist_stop = (
+                            abs(last_price - target.stop_price)
+                            if target.stop_price
+                            else float("inf")
+                        )
+                        if dist_t1 < dist_stop:
+                            is_tp = True
+                reason = "TP" if is_tp else "SL"
+                exit_prc = target.t1_price if is_tp else target.stop_price
+                log.info(
+                    "[STENGT EKSTERNT] %s — %s truffet. Fjerner.",
+                    target.signal_id,
+                    reason,
+                )
+                self._log_trade_closed(target, reason, exit_prc)
+                if target in self._active_states:
+                    self._active_states.remove(target)
                 return
             # Rydd stuck states (aldri fikk posisjon)
             stuck = [

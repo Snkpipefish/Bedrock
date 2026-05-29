@@ -1655,11 +1655,99 @@ def test_on_order_error_position_not_found_detects_tp(
     active_states.append(state)
     event = MagicMock()
     event.errorCode = "POSITION_NOT_FOUND"
+    event.positionId = state.position_id
+    event.orderId = 0
     event.description = "Posisjon stengt eksternt"
     ex.on_order_error(event)
     data = json.loads(log_path.read_text())
     assert data["entries"][0]["exit_reason"] == "TP"
     assert state not in active_states
+
+
+def test_on_order_error_position_not_found_does_not_cascade(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """POSITION_NOT_FOUND scopes til DEN posisjonen — andre åpne states
+    skal IKKE masse-lukkes (regresjonsvern mot logg/cTrader-desync)."""
+    log_path = tmp_path / "signal_log.json"
+    log_path.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {"signal": {"id": "eur-1"}, "result": None},
+                    {"signal": {"id": "eur-2"}, "result": None},
+                ]
+            }
+        )
+    )
+    client = _make_client_stub(symbol_map={"EURUSD": 1}, symbol_price_digits={1: 5})
+    entry = EntryEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        stats_path=tmp_path / "s.json",
+    )
+    ex = ExitEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        entry=entry,
+        trade_log_path=log_path,
+    )
+    closing = _in_trade_state(position_id=42)
+    closing.signal_id = "eur-1"
+    surviving = _in_trade_state(position_id=99)
+    surviving.signal_id = "eur-2"
+    active_states.extend([closing, surviving])
+    event = MagicMock()
+    event.errorCode = "POSITION_NOT_FOUND"
+    event.positionId = 42
+    event.orderId = 0
+    ex.on_order_error(event)
+    assert closing not in active_states
+    assert surviving in active_states
+    data = json.loads(log_path.read_text())
+    by_id = {e["signal"]["id"]: e for e in data["entries"]}
+    assert by_id["eur-1"]["result"] is not None
+    assert by_id["eur-2"]["result"] is None
+
+
+def test_on_order_error_position_not_found_no_match_keeps_states(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """POSITION_NOT_FOUND for ukjent posId → ingen state fjernes."""
+    client = _make_client_stub(symbol_map={"EURUSD": 1}, symbol_price_digits={1: 5})
+    entry = EntryEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        stats_path=tmp_path / "s.json",
+    )
+    ex = ExitEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        entry=entry,
+        trade_log_path=tmp_path / "l.json",
+    )
+    state = _in_trade_state(position_id=42)
+    active_states.append(state)
+    event = MagicMock()
+    event.errorCode = "POSITION_NOT_FOUND"
+    event.positionId = 12345  # ikke i active_states
+    event.orderId = 0
+    ex.on_order_error(event)
+    assert state in active_states
 
 
 def test_on_order_error_cleans_stuck_state(
