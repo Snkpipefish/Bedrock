@@ -29,6 +29,7 @@ from pathlib import Path
 import click
 import structlog
 import yaml
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
 from bedrock.cli._instrument_lookup import (
     DEFAULT_DEFAULTS_DIR,
@@ -160,6 +161,74 @@ def _load_bot_whitelist(path: Path) -> dict[str, str]:
 
 
 _log = structlog.get_logger(__name__)
+
+
+# Grade-rangering for gate-sammenligning. Høyere = bedre.
+_GRADE_RANK: dict[str, int] = {"C": 0, "B": 1, "A": 2, "A+": 3}
+
+_VALID_GATE_HORIZONS = frozenset({"scalp", "swing", "makro"})
+
+
+class BotGates(BaseModel):
+    """`gates:`-seksjonen i bot_whitelist.yaml.
+
+    `min_grade_by_horizon`: minimum setup-grade per horisont for at
+    entryen skal med i bot-feeden. Horisonter som ikke er listet
+    gates ikke. YAML velger terskler; sammenligningen skjer her.
+    """
+
+    min_grade_by_horizon: dict[str, str] = {}
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("min_grade_by_horizon")
+    @classmethod
+    def _check_keys_and_grades(cls, v: dict[str, str]) -> dict[str, str]:
+        normalized: dict[str, str] = {}
+        for horizon, grade in v.items():
+            h = str(horizon).lower()
+            g = str(grade).upper().replace("PLUS", "+")
+            if h not in _VALID_GATE_HORIZONS:
+                raise ValueError(
+                    f"ukjent horisont {horizon!r}, gyldig: {sorted(_VALID_GATE_HORIZONS)}"
+                )
+            if g not in _GRADE_RANK:
+                raise ValueError(f"ukjent grade {grade!r}, gyldig: {sorted(_GRADE_RANK)}")
+            normalized[h] = g
+        return normalized
+
+
+def _load_bot_gates(path: Path) -> BotGates:
+    """Last `gates:`-seksjonen fra bot_whitelist.yaml.
+
+    Manglende seksjon → tom BotGates (ingen gating, bakoverkompatibelt).
+    Ugyldig seksjon → hard fail per YAML-regelen i CLAUDE.md.
+    """
+    data = yaml.safe_load(path.read_text())
+    gates_raw = data.get("gates") if isinstance(data, dict) else None
+    if gates_raw is None:
+        return BotGates()
+    try:
+        return BotGates.model_validate(gates_raw)
+    except ValidationError as exc:
+        raise click.ClickException(f"{path}: ugyldig 'gates:'-seksjon: {exc}") from exc
+
+
+def _passes_grade_gate(entry: dict, gates: BotGates) -> bool:
+    """True hvis entryens grade møter minimum for sin horisont.
+
+    Horisont uten konfigurert minimum slipper gjennom. Ukjent/manglende
+    grade blokkeres (konservativt) når horisonten har et minimum.
+    """
+    horizon = str(entry.get("horizon", "")).lower()
+    min_grade = gates.min_grade_by_horizon.get(horizon)
+    if min_grade is None:
+        return True
+    grade = str(entry.get("grade", "")).upper()
+    rank = _GRADE_RANK.get(grade)
+    if rank is None:
+        return False
+    return rank >= _GRADE_RANK[min_grade]
 
 
 def _discover_instrument_ids(instruments_dir: Path) -> list[str]:
@@ -296,10 +365,12 @@ def signals_all_cmd(
             f"DB-fil finnes ikke: {db_path}. Kjør `bedrock backfill prices` først."
         )
 
-    # Last whitelist hvis --bot-only er på
+    # Last whitelist + grade-gates hvis --bot-only er på
     whitelist_mapping: dict[str, str] | None = None
+    bot_gates: BotGates | None = None
     if bot_only:
         whitelist_mapping = _load_bot_whitelist(whitelist_path)
+        bot_gates = _load_bot_gates(whitelist_path)
         # Filtrer instrumenter til de som er i whitelist (case-insensitive)
         wl_lower = {k.lower() for k in whitelist_mapping}
         instruments = [i for i in instruments if i.lower() in wl_lower]
@@ -347,6 +418,8 @@ def signals_all_cmd(
                 if horizons_lower is not None:
                     if str(e_dict.get("horizon", "")).lower() not in horizons_lower:
                         continue
+                if bot_gates is not None and not _passes_grade_gate(e_dict, bot_gates):
+                    continue
                 if bot_name is not None:
                     e_dict["instrument"] = bot_name
                 if asset_class is not None:

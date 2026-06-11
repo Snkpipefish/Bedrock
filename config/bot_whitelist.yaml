@@ -91,3 +91,27 @@ mapping:
 #
 # Bot-handel kjører på SWING/MAKRO-horisontene per default. SCALP-signaler
 # fra signal_server filtreres ut til Plan-S leverer scalp-arkitektur.
+# (NB: SCALP-filteret over ble aldri implementert — boten har handlet
+# SCALP siden 2026-05-04. Grade-gaten under er nå den faktiske
+# kvalitets-kontrollen per horisont.)
+
+# ---------------------------------------------------------------------------
+# Grade-gates per horisont (session 2026-06-11)
+# ---------------------------------------------------------------------------
+# Minimum setup-grade for at en entry skal med i bot-feeden
+# (`signals-all --bot-only`). Horisonter som ikke er listet gates ikke.
+# Gyldige grades: A+, A, B, C. Valideres av BotGates-schema i
+# src/bedrock/cli/signals_all.py — ukjent nøkkel/verdi = hard fail.
+#
+# Begrunnelse (live-data 2026-05-04 → 2026-06-10, 201 graderte trades):
+# - SCALP: A — scalp-eksekvering har vært korrekt hele perioden, og
+#   A/SCALP hadde 50 % winrate mot 28 % (B) og 40 % på tynt grunnlag (C).
+#   B/C-scalps var netto tapende.
+# - SWING/MAKRO: B — disse horisontene fikk aldri en ærlig test (SWING
+#   hadde scalp-stops fra generator-buggen, MAKRO ble kvalt av 1H-trail).
+#   C droppes overalt (19 % winrate, ingen horisont i pluss).
+gates:
+  min_grade_by_horizon:
+    scalp: A
+    swing: B
+    makro: B
