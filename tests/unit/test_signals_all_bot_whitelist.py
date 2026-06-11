@@ -87,10 +87,128 @@ def test_repo_whitelist_yaml_is_valid() -> None:
     assert mapping.get("Nasdaq") == "US100"
     # Agri matcher seg selv
     assert mapping.get("Corn") == "Corn"
-    # Observasjons-vindu (alle 22 instrumenter): crypto, base metals
-    # og NatGas inkludert for å samle data til rebalansering.
-    assert mapping.get("BTC") == "BTC"
-    assert mapping.get("ETH") == "ETH"
+    # Fortsatt aktive fra observasjons-vinduet
     assert mapping.get("Copper") == "COPPER"
-    assert mapping.get("Platinum") == "PLATINUM"
     assert mapping.get("NaturalGas") == "NATGAS"
+    # Permanent disabled (session 2026-05-26): skal IKKE være i mapping —
+    # PERMANENTLY_DISABLED-guarden filtrerer dem selv om YAML skulle
+    # inneholde dem.
+    assert mapping.get("BTC") is None
+    assert mapping.get("ETH") is None
+    assert mapping.get("Platinum") is None
+
+
+# ─────────────────────────────────────────────────────────────
+# Grade-gates (session 2026-06-11)
+# ─────────────────────────────────────────────────────────────
+
+
+def test_load_bot_gates_missing_section_returns_empty(tmp_path) -> None:
+    """Manglende `gates:` → ingen gating (bakoverkompatibelt)."""
+    from bedrock.cli.signals_all import _load_bot_gates
+
+    wl = tmp_path / "wl.yaml"
+    wl.write_text(yaml.safe_dump({"mapping": {"Gold": "GOLD"}}))
+    gates = _load_bot_gates(wl)
+    assert gates.min_grade_by_horizon == {}
+
+
+def test_load_bot_gates_parses_and_normalizes(tmp_path) -> None:
+    from bedrock.cli.signals_all import _load_bot_gates
+
+    wl = tmp_path / "wl.yaml"
+    wl.write_text(
+        yaml.safe_dump(
+            {
+                "mapping": {"Gold": "GOLD"},
+                "gates": {"min_grade_by_horizon": {"SCALP": "a", "swing": "B"}},
+            }
+        )
+    )
+    gates = _load_bot_gates(wl)
+    assert gates.min_grade_by_horizon == {"scalp": "A", "swing": "B"}
+
+
+def test_load_bot_gates_invalid_grade_raises(tmp_path) -> None:
+    import click
+
+    from bedrock.cli.signals_all import _load_bot_gates
+
+    wl = tmp_path / "wl.yaml"
+    wl.write_text(
+        yaml.safe_dump(
+            {
+                "mapping": {"Gold": "GOLD"},
+                "gates": {"min_grade_by_horizon": {"scalp": "S"}},
+            }
+        )
+    )
+    with pytest.raises(click.ClickException, match="ugyldig 'gates:'"):
+        _load_bot_gates(wl)
+
+
+def test_load_bot_gates_invalid_horizon_raises(tmp_path) -> None:
+    import click
+
+    from bedrock.cli.signals_all import _load_bot_gates
+
+    wl = tmp_path / "wl.yaml"
+    wl.write_text(
+        yaml.safe_dump(
+            {
+                "mapping": {"Gold": "GOLD"},
+                "gates": {"min_grade_by_horizon": {"intradag": "A"}},
+            }
+        )
+    )
+    with pytest.raises(click.ClickException, match="ugyldig 'gates:'"):
+        _load_bot_gates(wl)
+
+
+def test_passes_grade_gate_filters_below_minimum() -> None:
+    from bedrock.cli.signals_all import BotGates, _passes_grade_gate
+
+    gates = BotGates(min_grade_by_horizon={"scalp": "A", "swing": "B", "makro": "B"})
+
+    # SCALP: kun A/A+ slipper gjennom
+    assert _passes_grade_gate({"horizon": "scalp", "grade": "A+"}, gates)
+    assert _passes_grade_gate({"horizon": "scalp", "grade": "A"}, gates)
+    assert not _passes_grade_gate({"horizon": "scalp", "grade": "B"}, gates)
+    assert not _passes_grade_gate({"horizon": "scalp", "grade": "C"}, gates)
+
+    # SWING/MAKRO: B og bedre
+    assert _passes_grade_gate({"horizon": "swing", "grade": "B"}, gates)
+    assert not _passes_grade_gate({"horizon": "swing", "grade": "C"}, gates)
+    assert _passes_grade_gate({"horizon": "makro", "grade": "A"}, gates)
+    assert not _passes_grade_gate({"horizon": "makro", "grade": "C"}, gates)
+
+
+def test_passes_grade_gate_unknown_grade_blocked() -> None:
+    """Ukjent/manglende grade blokkeres når horisonten har minimum."""
+    from bedrock.cli.signals_all import BotGates, _passes_grade_gate
+
+    gates = BotGates(min_grade_by_horizon={"swing": "B"})
+    assert not _passes_grade_gate({"horizon": "swing", "grade": None}, gates)
+    assert not _passes_grade_gate({"horizon": "swing"}, gates)
+    assert not _passes_grade_gate({"horizon": "swing", "grade": "X"}, gates)
+
+
+def test_passes_grade_gate_unlisted_horizon_passes() -> None:
+    from bedrock.cli.signals_all import BotGates, _passes_grade_gate
+
+    gates = BotGates(min_grade_by_horizon={"scalp": "A"})
+    assert _passes_grade_gate({"horizon": "swing", "grade": "C"}, gates)
+
+
+def test_repo_whitelist_yaml_gates_are_valid() -> None:
+    """Den faktiske bot_whitelist.yaml skal ha gyldige gates (A/B/B)."""
+    from pathlib import Path
+
+    from bedrock.cli.signals_all import _load_bot_gates
+
+    repo_wl = Path("config/bot_whitelist.yaml")
+    if not repo_wl.exists():
+        pytest.skip("config/bot_whitelist.yaml mangler i denne kjøringen")
+
+    gates = _load_bot_gates(repo_wl)
+    assert gates.min_grade_by_horizon == {"scalp": "A", "swing": "B", "makro": "B"}
