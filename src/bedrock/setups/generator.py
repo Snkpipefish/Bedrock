@@ -100,9 +100,14 @@ class Setup(BaseModel):
 class SetupConfig(BaseModel):
     """Bygger-parametre. Overstyres per instrument i senere fase via YAML.
 
-    Defaults matcher PLAN § 5.2-5.3:
+    Defaults matcher PLAN § 5.2-5.3 (k per horisont — ATR er D1 i
+    produksjon, så buffer må skalere med forventet holdetid):
     - `cluster_atr_multiplier=0.3`: nivåer innenfor 0.3×ATR cluster sammen
-    - `sl_atr_multiplier=0.3`: SL-avstand for SCALP/SWING (×ATR forbi entry)
+    - `sl_atr_multiplier=0.3`: SL-avstand for SCALP (×ATR forbi entry)
+    - `sl_atr_multiplier_swing=1.0`: SL-avstand for SWING. En 7-21-dagers
+       trade må overleve minst én normal dagsrange mot seg fra nivået;
+       0.3×dATR ga scalp-stops på swing-horisont (live-data 2026-05/06:
+       median holdetid 2.8t mot forventet 168-504t, SL-exits dominerte)
     - `sl_atr_multiplier_makro=1.5`: SL-avstand for MAKRO. Bredere buffer
        hindrer at trailing aktiveres på støy — makro-tese trenger plass til
        normal volatilitet uten å stenges på første mot-bevegelse
@@ -112,6 +117,7 @@ class SetupConfig(BaseModel):
 
     cluster_atr_multiplier: float = Field(default=0.3, gt=0.0)
     sl_atr_multiplier: float = Field(default=0.3, gt=0.0)
+    sl_atr_multiplier_swing: float = Field(default=1.0, gt=0.0)
     sl_atr_multiplier_makro: float = Field(default=1.5, gt=0.0)
     min_entry_strength: float = Field(default=0.6, ge=0.0, le=1.0)
     min_rr_scalp: float = Field(default=1.5, gt=0.0)
@@ -120,9 +126,11 @@ class SetupConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     def sl_atr_multiplier_for(self, horizon: Horizon) -> float:
-        """MAKRO trenger bredere SL-buffer enn SCALP/SWING."""
+        """SL-buffer skalerer med horisont — lengre hold = bredere buffer."""
         if horizon == Horizon.MAKRO:
             return self.sl_atr_multiplier_makro
+        if horizon == Horizon.SWING:
+            return self.sl_atr_multiplier_swing
         return self.sl_atr_multiplier
 
     def min_rr_for(self, horizon: Horizon) -> float | None:

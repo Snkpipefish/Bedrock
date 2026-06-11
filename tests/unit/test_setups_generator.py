@@ -479,16 +479,39 @@ def test_setup_config_min_rr_for_makro_is_none() -> None:
     assert cfg.min_rr_for(Horizon.SWING) == 2.5
 
 
-def test_setup_config_sl_atr_multiplier_for_makro_is_wider() -> None:
-    """MAKRO bruker bredere SL-buffer (1.5×ATR) enn SCALP/SWING (0.3×ATR).
+def test_setup_config_sl_atr_multiplier_scales_with_horizon() -> None:
+    """SL-buffer skalerer med horisont: SCALP 0.3 < SWING 1.0 < MAKRO 1.5.
 
-    Asymmetri-prinsipp: makro-tese trenger plass til normal volatilitet
-    før trailing aktiveres. Tett SL gir tidlig trail-aktivering på støy.
+    Lengre forventet holdetid krever bredere buffer mot normal
+    volatilitet. Felles 0.3×dATR for SCALP+SWING ga scalp-stops på
+    swing-horisont (live-data 2026-05/06: median holdetid 2.8t mot
+    forventet 168-504t).
     """
     cfg = SetupConfig()
     assert cfg.sl_atr_multiplier_for(Horizon.SCALP) == 0.3
-    assert cfg.sl_atr_multiplier_for(Horizon.SWING) == 0.3
+    assert cfg.sl_atr_multiplier_for(Horizon.SWING) == 1.0
     assert cfg.sl_atr_multiplier_for(Horizon.MAKRO) == 1.5
+
+
+def test_build_setup_swing_uses_horizon_scaled_sl() -> None:
+    """SWING-setup skal ha SL = entry - 1.0×ATR (BUY), ikke 0.3×ATR."""
+    levels = [
+        _lvl(100.0, LevelType.SWING_LOW, strength=0.8),
+        _lvl(104.0, LevelType.PRIOR_HIGH, strength=0.8),
+        _lvl(108.0, LevelType.PRIOR_HIGH, strength=0.8),
+    ]
+    setup = build_setup(
+        instrument="Gold",
+        direction=Direction.BUY,
+        horizon=Horizon.SWING,
+        current_price=102.0,
+        atr=1.0,
+        levels=levels,
+    )
+    assert setup is not None
+    assert setup.sl == pytest.approx(99.0)  # 100 - 1.0×ATR
+    # R:R mot 2. klynge (108): reward=8, risk=1 → 8.0 ≥ 2.5
+    assert setup.rr == pytest.approx(8.0)
 
 
 def test_build_setup_makro_uses_wider_sl_buffer() -> None:
