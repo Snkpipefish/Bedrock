@@ -2,6 +2,52 @@
 
 ## Session log (most recent first)
 
+### 2026-06-11 — trading-ytelse: SWING-stops, MAKRO-trail og grade-gate
+
+**Hva:** Operatør spurte hvilke setup-grades som har funket, og delegerte
+deretter beslutningene: «output skal generere best mulig vinnende trades»
+(demo-konto, tap aksepteres). Analyse av signal_log.json (324 lukkede
+trades, hvorav 201 graderte 2026-05-04 → 2026-06-10) avdekket tre
+strukturelle feil — og fikset dem.
+
+**Funn fra loggen (R-multipler, eks. GEO-SPIKE-tvangslukkinger):**
+- Grade A: 47 % winrate — klart best. B: 26 %, C: 26 %, alle netto negative.
+- SWING: median holdetid 2.8t (forventet 168-504t) — generatoren ga
+  SCALP og SWING samme SL-buffer (0.3×dagsATR), så FX-SWING fikk 7-9
+  pips stops. Matematisk garantert stop-out.
+- MAKRO: median holdetid 1.2t (forventet 720-2160t), 10 % winrate —
+  bot-side trail fra entry på 2.5-3.5×ATR(1H) amendet bort den brede
+  1.5×dagsATR generator-stoppen umiddelbart.
+- B/MAKRO alene: -92R av totalt -178R.
+
+**Hva fikser (commits 15b613b, 754fa60, 0d697a6, 542d5e6):**
+1. `SetupConfig.sl_atr_multiplier_swing=1.0` — SWING-stops skalerer nå
+   med horisont. Bieffekt etter intensjon: fantasi-R:R-setups (30-40)
+   forkastes av asymmetri-gaten.
+2. ExitEngine P3.5 scoped til `not is_makro` — MAKRO eies av cTrader
+   server-side trailing (aktivert ved entry på original SL-distanse).
+3. Grade-gate i `signals-all --bot-only` via ny `gates:`-seksjon i
+   bot_whitelist.yaml (Pydantic-validert): scalp=A, swing=B, makro=B.
+   Prod-feed gikk 100 → 67 entries (alle C + B-scalps borte).
+4. Stale whitelist-test (BTC/ETH/Platinum) rettet til permanent-disable.
+   (NB: gate-testene havnet ved uhell i test-commit 0d697a6, før
+   gate-koden i 542d5e6 — 0d697a6 er ikke selvstendig grønn.)
+
+**Verifikasjon:** 115 tester i berørte filer + snapshot/logical-suitene
+(112) + bot/signal_server (409) grønne. Ruff + pyright rene. Regenerert
+prod-feed manuelt og inspisert: SWING-stops nå 1.2-3.6 % (var 0.07-0.11 %
+for FX), kun A/B-entries per gate.
+
+**UTESTÅENDE — krever operatør:** `bedrock-bot.service` må restartes for
+at MAKRO-trail-fiksen (exit.py) skal lastes — permission-classifier
+blokkerte restart fra session. Feed-endringene (gate + stops) er live
+allerede (boten poller signals_bot.json). Kommando:
+`sudo systemctl restart bedrock-bot.service` (reconcile tar over åpne
+posisjoner, verifisert flyt fra 2026-05-29).
+
+**Fase-kontekst:** Sub-fase 12.6 — trading-ytelse på demo, datadrevet
+innstramming etter 5 ukers observasjon.
+
 ### 2026-05-29 — POSITION_NOT_FOUND-kaskade fikset + signal_log re-synket
 
 **Hva:** Operatør rapporterte at boten hadde 5 åpne trades på cTrader,
@@ -727,6 +773,22 @@ ferdig og 12.6-rebalansering er gjort.
   `git status` før retry; aldri `git add -u`.
 
 ## Open questions to user
+
+### Session 2026-06-11 — trading-ytelse
+
+- **Bot-restart utestående:** `sudo systemctl restart bedrock-bot.service`
+  må kjøres for at MAKRO-trail-fiksen lastes (se session-entry).
+- **`BEDROCK_BOT_INCLUDE_UNPUBLISHED=true`** står fortsatt i
+  bedrock-server.service — boten handler setups under publiserings-
+  gulvet (bevisst fra observasjonsvinduet). Bevisst IKKE endret nå for
+  ren attribusjon av grade-gate-effekten. Kandidat for neste
+  innstramming når gate-effekten er målbar (~2 uker).
+- **Per-horisont timeframes i generator:** alle horisonter deler én
+  D1-ATR og én D1-nivåliste (orchestrator/signals.py:243-250). SCALP
+  burde bygge på 15m/1H-nivåer, MAKRO på W1 (jf. base.yaml entry_tfs).
+  Strukturelt riktig fix, men stor — egen sub-fase-beslutning.
+- **Grade-gate-terskler er YAML-justerbare:** stram til scalp=A+ eller
+  swing=A med én linje i bot_whitelist.yaml hvis A-setups beviser seg.
 
 ### Sub-fase 12.7 — koordinering med 12.6 (åpnet 2026-04-28)
 
