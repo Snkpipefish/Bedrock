@@ -2,6 +2,33 @@
 
 ## Session log (most recent first)
 
+### 2026-06-11 (c) — 40 duplikate position_ids merget mot ekte deal-data
+
+**Hva:** Reparerte funnet fra session (b): 40 position_ids (2026-05-04 →
+05-29) med 2-14 logg-entries hver — POSITION_NOT_FOUND-kaskade-rester
+(buggen selv fikset i 9c8bffc). 150 entries dobbeltalte i statistikk
+med gjettede, motstridende resultater.
+
+**Hvordan:** Nytt skript `scripts/merge_duplicate_log_entries.py`
+(commit 7a09890): henter ekte close-deals fra cTrader, velger kanonisk
+entry (graded original; 5 pids fra 5. mai manglet graded → eldste),
+overskriver med ekte result/pnl/closed_at, fjerner duplikatene.
+Alle 40 pids matchet close-deals, 0 urørt. 342 → 232 entries.
+Sannheten avvek kraftig: SILVER 16567454 egentlig +$423 (logget ~+$30
+over 3 entries), BTC-parene egentlig -$154/-$308, OIL BRENT-spikene
+4.-5. mai var enkelt-tap, ikke dobbelt. De to «uavklarte» fra 29. mai
+(US100 #16691413, GBPUSD #16694003) fikk også ekte tall (+$51.15,
++$38.35). Backup: signal_log.json.bak-premerge-20260611T141759.
+
+**I tillegg:** EURUSD SWING #16786254 ble lukket hos broker (12:23 UTC,
++$61.17 trail-SL) uten at close-eventet nådde loggen — backfillet med
+`--position-ids`. Logg-state etter alt: 232 entries, 0 duplikater,
+6 åpne = eksakt broker-state (reconcile-verifisert etter restart).
+
+**Konsekvens for analyse:** All statistikk basert på signal_log før
+denne datoen (inkl. grade/horisont-analysen fra session 2026-06-11 a)
+er beregnet på dobbeltalte data og bør re-kjøres ved neste korsvei.
+
 ### 2026-06-11 (b) — stale logg-entries lukket med ekte cTrader-deal-data
 
 **Hva:** Etter bot-restart (samme dag, se entry under) viste reconcile
