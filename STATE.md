@@ -2,6 +2,31 @@
 
 ## Session log (most recent first)
 
+### 2026-06-11 (b) — stale logg-entries lukket med ekte cTrader-deal-data
+
+**Hva:** Etter bot-restart (samme dag, se entry under) viste reconcile
+7 reelt åpne posisjoner hos cTrader mens signal_log.json hadde 18
+entries uten result. De 11 stale ble lukket med ekte deal-data.
+
+**Hvordan:** Utvidet `scripts/backfill_lost_close_pnl.py` med
+`--position-ids`-flagg (commit 631728d) — målretter åpne-i-logg-entries
+direkte. `cleanup_dangling_trades.py` var IKKE trygg her: den markerer
+alle dangling eldre enn min-age og ville truffet reelt åpne USDJPY
+MAKRO #16742929. Alle 11 matchet close-deals fra ProtoOADealListReq;
+4 var faktisk vinnere lukket av server-trail/manuelt (SPX500 +$105,
+US100 +$108, OIL WTI +$39, Coffee +$0.45). Bot stoppet under kjøring
+(dual-session), restartet og verifisert: loggen viser nå nøyaktig 7
+åpne = broker-state. Backup: signal_log.json.bak-20260611T140651.
+
+**NYTT FUNN — 40 duplikate position_ids i eldre logg-data:** Samme
+position_id (og signal-id) logget to ganger med motstridende resultater
+(f.eks. pos 16562576 OIL BRENT 2026-05-04: -$450 "TP" + -$80 "SL" —
+begge teller i statistikk). Mønster: original graded entry + metadata-
+fattig reconcile-duplikat (grade=None, horizon=None). Samme klasse
+feil som 2026-05-29-oppryddingen, men fra eldre hendelser. Alle 40 er
+fra 2026-05-04 → 2026-05-29. Flagget som egen oppgave — krever
+per-posisjon sannhets-oppslag i deal-historikk + merge-beslutninger.
+
 ### 2026-06-11 — trading-ytelse: SWING-stops, MAKRO-trail og grade-gate
 
 **Hva:** Operatør spurte hvilke setup-grades som har funket, og delegerte
