@@ -2539,3 +2539,111 @@ def test_amend_sl_tp_rounds_break_even_to_symbol_price_digits(
     kwargs = client.amend_sl_tp.call_args.kwargs
     sent_sl = kwargs["stop_loss"]
     assert sent_sl == round(sent_sl, 2), f"BE-SL {sent_sl} har flere desimaler enn price_digits=2"
+
+
+# ─────────────────────────────────────────────────────────────
+# P3.5: MAKRO skal IKKE bot-trail'es (session 2026-06-11)
+# ─────────────────────────────────────────────────────────────
+
+
+def test_p3_5_makro_skips_bot_side_trail(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """MAKRO med trail_active=True skal IKKE få bot-side 1H-ATR-trail.
+
+    cTrader server-side trailing (aktivert ved entry på original
+    SL-distanse, 1.5×ATR(D1)) eier MAKRO-exiten. Bot-side trail på
+    2.5-3.5×ATR(1H) amendet bort den brede generator-SL-en umiddelbart:
+    live-data 2026-05/06 viste median holdetid 1.2t (forventet 720-2160t)
+    og 10 % winrate. Regresjonsvern for exit.py P3.5-scoping.
+    """
+    client = _make_client_stub(
+        symbol_map={"EURUSD": 1},
+        last_bid={1: 1.0805},
+        last_ask={1: 1.0807},
+        symbol_price_digits={1: 5},
+    )
+    entry, ex = _make_engines(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        tmp_path=tmp_path,
+    )
+    # 1H-ATR tilgjengelig — gammel oppførsel ville trail'et på denne
+    entry.atr14_h1[1] = [0.0010] * 20
+    entry.atr14[1] = [0.0010] * 20
+    # MAKRO: ingen T1, bred SL, trail_active fra entry (som i entry.py)
+    state = _in_trade_state(
+        horizon="MAKRO",
+        entry_price=1.0800,
+        stop_price=1.0650,  # 1.5×dATR-aktig bred SL
+        t1_price=0.0,
+    )
+    state.trail_active = True
+    state.t1_hit = True
+    state.t1_price_reached = True
+    active_states.append(state)
+
+    # Liten bevegelse mot posisjonen — gammel bot-trail ville amendet SL
+    # til ~close - 2.5×ATR(1H) og stengt på neste candle under trail
+    candle = Candle(
+        open=1.0808,
+        high=1.0810,
+        low=1.0800,
+        close=1.0805,
+        volume=0,
+        timestamp=datetime.now(timezone.utc),
+    )
+    ex.manage_open_positions(1, candle)
+
+    # Ingen bot-side trail: ingen trail_level, ingen SL-amend, ingen close
+    assert state.trail_level is None
+    assert not client.amend_sl_tp.called
+    assert not client.close_position.called
+    assert state in active_states
+
+
+def test_p3_5_swing_still_trails_post_t1(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """SWING post-T1 beholder bot-side trail — kun MAKRO er unntatt."""
+    client = _make_client_stub(
+        symbol_map={"EURUSD": 1},
+        last_bid={1: 1.0860},
+        last_ask={1: 1.0862},
+        symbol_price_digits={1: 5},
+    )
+    entry, ex = _make_engines(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        tmp_path=tmp_path,
+    )
+    entry.atr14_h1[1] = [0.0010] * 20
+    entry.atr14[1] = [0.0010] * 20
+    state = _in_trade_state(horizon="SWING")
+    state.trail_active = True
+    state.t1_hit = True
+    state.t1_price_reached = True
+    active_states.append(state)
+
+    candle = Candle(
+        open=1.0858,
+        high=1.0862,
+        low=1.0855,
+        close=1.0860,
+        volume=0,
+        timestamp=datetime.now(timezone.utc),
+    )
+    ex.manage_open_positions(1, candle)
+
+    assert state.trail_level is not None
+    assert client.amend_sl_tp.called

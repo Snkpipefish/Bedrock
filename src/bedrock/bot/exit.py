@@ -40,7 +40,9 @@ Exit-prioritet (P1 → P5):
   P3  T1 nådd → partial-close (t1_close_pct) + break-even + trail-aktiv
        (kun SCALP/SWING — MAKRO har ingen fast T1)
   P3.5 Trailing-stop → close brøt trail_level → STENG
-       (post-T1 for SCALP/SWING; aktiv fra entry for MAKRO)
+       (post-T1, kun SCALP/SWING — MAKRO trailes server-side av cTrader
+        på original SL-distanse, satt ved entry; 1H-ATR-trail er for
+        trang for 30-90-dagers hold)
   P3.6 Give-back (pre-T1): peak ≥ gb_peak og progress ≤ gb_exit → STENG
        (kun SCALP/SWING — krever fast T1-mål)
   P4  EMA9-kryss (post-T1): close brøt EMA9 → STENG (hvis gp.ema9_exit)
@@ -270,8 +272,14 @@ class ExitEngine:
                         remove.append(state)
                     continue
 
-            # ── P3.5: Trailing stop (post-T1, eller fra entry for MAKRO) ──
-            if state.trail_active:
+            # ── P3.5: Trailing stop (post-T1, kun SCALP/SWING) ──────────
+            # MAKRO trailes server-side av cTrader på original SL-distanse
+            # (1.5×ATR(D1), aktivert via trailing_stop_loss=True ved entry
+            # — se entry.py). Bot-side trail bruker ATR(1H) og er for trang
+            # for en 30-90-dagers horisont: live-data 2026-05/06 viste
+            # median holdetid 1.2t og 10 % winrate fordi den brede
+            # generator-SL-en ble amendet bort umiddelbart etter entry.
+            if state.trail_active and not is_makro:
                 trail_mult = self._resolve_trail_mult(state, hcfg, rules, gp)
                 self._update_trail(state, close, symbol_id, trail_mult)
                 if state.trail_level is not None:
