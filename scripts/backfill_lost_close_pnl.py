@@ -16,6 +16,15 @@ Bruk (krever boten stoppet for å unngå dual-session-konflikt):
     .venv/bin/python scripts/backfill_lost_close_pnl.py --apply
     systemctl --user start bedrock-bot.service
 
+Med ``--position-ids`` (session 2026-06-11): målrett spesifikke
+fortsatt-åpne-i-logg-entries (result=None) i stedet for lost-close-
+seleksjonen. Brukes når loggen har stale åpne entries der posisjonen
+er reelt lukket hos broker, men close-eventet aldri ble logget:
+    .venv/bin/python scripts/backfill_lost_close_pnl.py \\
+        --position-ids 123,456 --apply
+NB: cleanup_dangling_trades.py er IKKE trygg for dette — den markerer
+alle dangling eldre enn min-age og kan treffe reelt åpne posisjoner.
+
 Trygt å kjøre flere ganger: idempotent. Backup tas før --apply.
 """
 
@@ -304,6 +313,15 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--log-path", type=Path, default=LOG_PATH)
     ap.add_argument("--apply", action="store_true", help="Skriv endringer (default dry-run)")
+    ap.add_argument(
+        "--position-ids",
+        type=str,
+        default=None,
+        help=(
+            "Komma-separerte position_ids. Velger åpne-i-logg-entries "
+            "(result=None) med disse id-ene i stedet for lost-close-seleksjonen."
+        ),
+    )
     args = ap.parse_args(argv)
 
     # Load secrets så env-vars er satt. load_secrets returnerer dict
@@ -320,12 +338,25 @@ def main(argv: list[str] | None = None) -> int:
 
     raw = json.loads(args.log_path.read_text(encoding="utf-8"))
     entries = raw.get("entries", [])
-    lost = [
-        e
-        for e in entries
-        if e.get("exit_reason") == "lost-close" and (e.get("signal") or {}).get("position_id")
-    ]
-    log.info("Fant %d lost-close-entries med position_id", len(lost))
+    if args.position_ids:
+        wanted = {int(p.strip()) for p in args.position_ids.split(",") if p.strip()}
+        lost = [
+            e
+            for e in entries
+            if e.get("result") is None and (e.get("signal") or {}).get("position_id") in wanted
+        ]
+        found_ids = {(e.get("signal") or {}).get("position_id") for e in lost}
+        missing = wanted - found_ids
+        if missing:
+            log.warning("Position_ids uten åpen logg-entry (hopper over): %s", sorted(missing))
+        log.info("Fant %d åpne entries som matcher --position-ids", len(lost))
+    else:
+        lost = [
+            e
+            for e in entries
+            if e.get("exit_reason") == "lost-close" and (e.get("signal") or {}).get("position_id")
+        ]
+        log.info("Fant %d lost-close-entries med position_id", len(lost))
     if not lost:
         return 0
 
