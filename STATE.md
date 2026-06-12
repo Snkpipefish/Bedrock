@@ -41,9 +41,10 @@ eldes 31-62d strukturelt), fred_macro 96h (H.15 D+1-D+2), agsi/alsi
 monitor OK, 467 tester grønne, signals_bot regen kjørt (ingen
 grade-endringer av ferskere data i dag).
 
-**Kjent rest:** `ISM_PMI` er manuell CSV (`data/manual/ism_pmi.csv`,
-ADR-007 § 4) og står på april — mai-PMI (publisert 1. juni) må legges
-inn av operatør. `ism_pmi_level` er wired i 2 instrumenter.
+**ISM_PMI (manuell CSV, ADR-007 § 4):** mai-verdien (54.0) lagt inn og
+ingestet samme session — avlest fra ISMs offisielle PRNewswire-
+pressemelding 2026-06-01 (ismworld.org krever innlogging). Serien er
+dermed også à jour.
 
 **Neste:** vurder fetch-run-logging (tabell med faktisk kjøretid per
 fetcher) slik at PSD-aktige kilder med fremtidsdatert data kan måles på
@@ -875,12 +876,12 @@ ferdig og 12.6-rebalansering er gjort.
 
 ### Session 2026-06-12 — datakilde-ferskhet
 
-- **ISM_PMI manuell oppdatering:** `data/manual/ism_pmi.csv` står på
-  april 2026. Mai-PMI ble publisert 1. juni (ismworld.org) og må legges
-  inn manuelt + ingestes via `PYTHONPATH=src /home/pc/bedrock/.venv/bin/python
-  /home/pc/bedrock/scripts/backfill/ism_pmi.py`. `ism_pmi_level` er
-  wired i 2 instrumenter. (FRED-serien NAPMPMI er død — ISM trakk
-  gratis-feeden, jf. ADR-007 § 4.)
+- **ISM_PMI mai lagt inn samme session** (54.0, avlest fra ISMs
+  PRNewswire-pressemelding 2026-06-01) — ingen rest. Merk for fremtidige
+  oppdateringer: verdien kan hentes fra ISMs månedlige pressemelding på
+  prnewswire.com (ismworld.org-rapporten ligger bak innlogging);
+  publiseres 1. virkedag i måneden. Ingest:
+  `cd /home/pc/bedrock && PYTHONPATH=src .venv/bin/python scripts/backfill/ism_pmi.py`
 
 ### Session 2026-06-11 — trading-ytelse
 
