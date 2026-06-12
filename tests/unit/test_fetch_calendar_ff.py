@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pandas as pd
 import pytest
 
 from bedrock.fetch.calendar_ff import (
@@ -90,11 +91,14 @@ def test_naive_datetime_treated_as_utc() -> None:
     assert "+00:00" in boj["event_ts"]
 
 
-def test_empty_strings_become_none() -> None:
+def test_empty_strings_become_missing() -> None:
+    """Tom-streng skal bli manglende verdi (None/NaN → NULL i SQLite).
+    pandas 3.0's str-dtype representerer missing som NaN, ikke None,
+    så vi asserter på pd.isna i stedet for identitet med None."""
     df = fetch_calendar_events(raw_response=_SAMPLE_FF_JSON)
     ecb = df[df["title"] == "ECB Press Conference"].iloc[0]
-    assert ecb["forecast"] is None
-    assert ecb["previous"] is None
+    assert pd.isna(ecb["forecast"])
+    assert pd.isna(ecb["previous"])
 
 
 def test_fetched_at_populated_on_all_rows() -> None:
