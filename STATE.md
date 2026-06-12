@@ -2,6 +2,53 @@
 
 ## Session log (most recent first)
 
+### 2026-06-12 — datakilde-ferskhet: tre systemiske hull tettet
+
+**Hva:** Operatør ba om sjekk av at datakildene ikke var stale. Monitor
+sa GRØNN, men dypdykk avdekket tre systemiske hull (commits e13fe62 +
+00c927c):
+
+1. **Monitor-blindsone:** ferskhet ble målt som `MAX(date)` over hele
+   tabellen. Seks fetchere deler `fundamentals`, og USDA PSDs marketing-
+   year-rader datert 2026-10-01 ga negativ alder → de seks kunne ALDRI
+   flagges stale. Fix: `series_filter`/`series_prefix` på FetcherSpec +
+   DataStore, og fremtidsdatert alder clampes til 0.
+2. **Hentevindu < publiserings-lag:** daglig FRED-fetch brukte
+   stale_hours×2 (~4d) vindu; NFCI (ukentlig, ~5d lag) og IRLTLT01*
+   (månedlig, 1-3 mnd lag) falt alltid utenfor → «OK → 0 rows» hver dag,
+   NFCI ble 56 dager gammel. Fix: `lookback_days` per fetcher
+   (fundamentals 150d, fred_macro 240d).
+3. **Driver-serier uten fetcher:** DX-Y.NYB (dxy_chg5d i 17 instrumenter!),
+   VIX-term, bunke3-FRED (DEX*-FX, HY-OAS, claims, månedsmakro) og DEXBZUS
+   hadde kun engangs-backfills og var 42-131 dager stale mens wired
+   drivere scoret på dem. Fix: nye runnere `fred_macro` (25 serier) +
+   `yahoo_macro` (10 tickere) med daglige systemd-timere (02:45/03:15),
+   aktivert `enabled --now`.
+
+**Backfill kjørt:** fundamentals 829 rader, fred_macro 2198, yahoo_macro
+501, enso 916, agsi/alsi re-fetch. Alle driver-konsumerte serier nå på
+naturlig publiserings-lag (daglig 0-2d, ukentlig 6-7d, månedlig 42-72d).
+
+**Terskel-rekalibrering** mot reelt publiserings-lag (var enten maskert
+av blindsonen eller kronisk falsk-flagging): enso 720→1900h (ONI er
+3-mnd snitt, publisert ~40-75d etter center-måned), comtrade 720→3360h
+(UN-lag 2-4 mnd), isma 168→4400h (indisk crushing-season okt-apr,
+offseason = ingen publisering), weather_monthly 720→1500h (måneds-label
+eldes 31-62d strukturelt), fred_macro 96h (H.15 D+1-D+2), agsi/alsi
+60→84h (GIE-lag 1-2d per ADR-015 — 60h lå midt i normalintervallet).
+
+**Verifisert:** `bedrock fetch status` 29/29 fresh (nå ærlig målt),
+monitor OK, 467 tester grønne, signals_bot regen kjørt (ingen
+grade-endringer av ferskere data i dag).
+
+**Kjent rest:** `ISM_PMI` er manuell CSV (`data/manual/ism_pmi.csv`,
+ADR-007 § 4) og står på april — mai-PMI (publisert 1. juni) må legges
+inn av operatør. `ism_pmi_level` er wired i 2 instrumenter.
+
+**Neste:** vurder fetch-run-logging (tabell med faktisk kjøretid per
+fetcher) slik at PSD-aktige kilder med fremtidsdatert data kan måles på
+«kjørte fetcheren», ikke data-dato.
+
 ### 2026-06-11 (c) — 40 duplikate position_ids merget mot ekte deal-data
 
 **Hva:** Reparerte funnet fra session (b): 40 position_ids (2026-05-04 →
@@ -825,6 +872,15 @@ ferdig og 12.6-rebalansering er gjort.
   `git status` før retry; aldri `git add -u`.
 
 ## Open questions to user
+
+### Session 2026-06-12 — datakilde-ferskhet
+
+- **ISM_PMI manuell oppdatering:** `data/manual/ism_pmi.csv` står på
+  april 2026. Mai-PMI ble publisert 1. juni (ismworld.org) og må legges
+  inn manuelt + ingestes via `PYTHONPATH=src /home/pc/bedrock/.venv/bin/python
+  /home/pc/bedrock/scripts/backfill/ism_pmi.py`. `ism_pmi_level` er
+  wired i 2 instrumenter. (FRED-serien NAPMPMI er død — ISM trakk
+  gratis-feeden, jf. ADR-007 § 4.)
 
 ### Session 2026-06-11 — trading-ytelse
 
