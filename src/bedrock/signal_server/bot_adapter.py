@@ -274,8 +274,14 @@ def _adapt_one(
         "horizon_config": defaults["horizon_config"],
         "correlation_group": correlation_group,
         "created_at": created_at,
-        # Bedrock-spesifikke felt — bot ignorerer ukjente, men beholdes for trace
+        # Bedrock-spesifikke felt — bot ignorerer ukjente, men beholdes for trace.
+        # max_score + publish_floor (session 2026-06-12): trengs for å
+        # normalisere score på tvers av horisonter i R-multiple-analyse —
+        # grade viste seg ikke-prediktiv, så fremtidig gating skal
+        # kalibreres på score-margin (krever at loggen fanger skalaen).
         "score": entry.get("score"),
+        "max_score": entry.get("max_score"),
+        "publish_floor": entry.get("min_score_publish"),
         "grade": entry.get("grade"),
         "rr": inner.get("rr"),
     }

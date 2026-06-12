@@ -104,10 +104,22 @@ def test_signal_fields_present():
         "correlation_group",
         "created_at",
         "score",
+        "max_score",
+        "publish_floor",
         "grade",
         "rr",
     }
     assert expected_keys.issubset(sig.keys())
+
+
+def test_score_scale_fields_passed_through():
+    """max_score + publish_floor følger med så R-analyse kan normalisere
+    score på tvers av horisonter (grade er ikke-prediktiv per 2026-06-12)."""
+    payload = adapt_to_bot_format([_make_entry()])
+    sig = payload["signals"][0]
+    assert sig["score"] == 4.29
+    assert sig["max_score"] == 5.8
+    assert sig["publish_floor"] == 3.5
 
 
 def test_entry_zone_is_atr_band_around_entry():

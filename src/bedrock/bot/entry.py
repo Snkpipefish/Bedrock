@@ -1616,6 +1616,8 @@ class EntryEngine:
         # konservativ fallback hvis et eldre format en gang skulle dukke
         # opp (lavere risk-tier enn "A" via sizing.get_risk_pct).
         state.grade = sig.get("grade", "B")
+        state.score = sig.get("score")
+        state.max_score = sig.get("max_score")
         state.horizon_config = sig.get("horizon_config", {})
         state.correlation_group = sig.get("correlation_group")
         if use_limit:
@@ -1683,6 +1685,8 @@ class EntryEngine:
                     "risk_pct": getattr(state, "risk_pct_used", None),
                     "horizon": getattr(state, "horizon", "SCALP"),
                     "grade": getattr(state, "grade", None),
+                    "score": getattr(state, "score", None),
+                    "max_score": getattr(state, "max_score", None),
                 },
             }
             data["entries"] = [entry, *data.get("entries", [])]

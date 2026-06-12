@@ -64,6 +64,11 @@ class TradeState:
     # ── Horizon-config (fra signal) ──────────────────────────────
     horizon: str = "SWING"
     grade: str | None = None
+    # Score-trace (session 2026-06-12): rå score + horisontens max —
+    # logges per trade slik at R-multiple-analyse kan gates på
+    # normalisert score (grade viste seg ikke-prediktiv på live-data).
+    score: float | None = None
+    max_score: float | None = None
     horizon_config: dict = field(default_factory=dict)
     correlation_group: str | None = None
     order_id: int | None = None  # for limit orders
