@@ -2,6 +2,63 @@
 
 ## Session log (most recent first)
 
+### 2026-06-12 (b) — setup-generator-overhaling: nivå-fundament + geometri + exits
+
+**Hva:** Operatør ba om analyse av setup-genererende trading-logikk +
+forbedringer. Analyse avdekket at nivå-fundamentet var strukturelt
+ødelagt; alle funn implementert samme session (commits 905d1ee,
+b240bcc, b0a2ae3, 1b3bd8e, 331e22c, 57e56b2).
+
+**Analysefunn (empirisk verifisert mot Gold-data + 234 lukkede trades):**
+
+1. **Nivå-flom:** `detect_prior_period_levels(period="D")` på D1-input
+   gjorde hver dags H/L til 0.8-nivå (242 av 263 nivåer for Gold).
+   100% av clusters passerte entry-gaten; transitiv kjeding ga
+   megasoner (185 nivåer over 6.6×ATR i ett cluster).
+2. **Grade ikke prediktiv:** R-multiple-analyse (nytt skript
+   `scripts/analyze_r_multiples.py`) viste A-grade som dårligste
+   gruppe i BEGGE regimer (avg -0.36R juni); B best. USD-aggregater
+   hadde maskert dette (lot-størrelse-bias).
+3. **GEO-SPIKE-enhets-mismatch:** exit-vakt i intradag-ATR (2×15m/1H)
+   mot SL i dags-ATR → fyrte FØR planlagt SL. 44 exits, 0% win,
+   -94.7R. SL-BREACH (18 juni-exits, avg -1.46R) viser at server-SL
+   ofte mangler/avvises — rotårsak IKKE undersøkt (åpen).
+4. **Indeks-TP inkonsistent med horisont:** "SWING=2. klynge" ga TP
+   1-3 dagers reise, ikke 7-21; sultet SWING etter span-cap.
+
+**Endringer:**
+
+- **levels.py:** prior-W (0.8) + prior-M (0.9) erstatter prior-D;
+  `apply_age_decay` (half-life 90d, gulv 0.6×, forankret i siste
+  bar-ts); konfluens-bonus kun distinkte typer.
+- **generator.py:** cluster-span-cap 0.5×ATR; strength-vektet
+  sentroid-pris; entry-avstandsbånd (maks 2×ATR bak pris); TP =
+  nærmeste klynge med R:R ≥ floor innenfor horisont-vindu (SCALP
+  2×ATR, SWING 6×ATR fra nåpris).
+- **hysteresis.py:** entry stabiliseres nå også — entry+SL beholdes
+  som par når ny entry er innenfor 0.3×ATR.
+- **signals.py:** konflikt-vinner velges på score/max_score (ikke rå
+  score på tvers av ulike horisont-skalaer); analog-K-NN beregnes 1×
+  per instrument (var 4-6×); round_number_step wires fra YAML (var
+  død kode — nytt metadata-felt, steg satt i alle 19 YAMLs).
+- **bot:** score+max_score+publish_floor i adapter-payload og
+  signal_log per trade (grunnlag for fremtidig score-basert gating);
+  GEO-SPIKE-terskel = max(geo_mult×ATR, 1.1×SL-avstand).
+
+**Bevisst IKKE gjort:** grade-terskler/gates urørt — nesten hele
+loggen er fra før SWING-SL-fiksen (15b613b, i går), rekalibrering
+ville tilpasset et dødt regime. Scalp beholdt (juni ≈ breakeven i R;
+mai-tallene som så negative ut var sizing-artefakter).
+
+**Verifisert:** full suite 2984 passed (6 cot_ice-failures er
+pre-eksisterende, feiler på ren main). Dry-run + prod-regen:
+100 entries, 99 med setup (var 64), 22 published (var 14), alle
+flips forklarbare. signals.json + agri + signals_bot regenerert.
+
+**Neste:** re-kjør `analyze_r_multiples.py --since <dato>` når 4-6
+uker post-fix-data foreligger; undersøk SL-BREACH-rotårsak; vurder
+samme-retning multi-horisont-eksponering (se open questions).
+
 ### 2026-06-12 — datakilde-ferskhet: tre systemiske hull tettet
 
 **Hva:** Operatør ba om sjekk av at datakildene ikke var stale. Monitor
@@ -873,6 +930,29 @@ ferdig og 12.6-rebalansering er gjort.
   `git status` før retry; aldri `git add -u`.
 
 ## Open questions to user
+
+### Session 2026-06-12 (b) — setup-generator-overhaling
+
+- **SL-BREACH-rotårsak:** 18 av 80 juni-trades (22%) exitet via
+  software-SL-breach-vakten med avg -1.46R — dvs. server-side SL
+  manglet eller amend ble avvist (TRADING_BAD_STOPS?) og lukking
+  skjedde FORBI planlagt SL. Trenger dypdykk i bot-ordreflyt/logger.
+- **Samme-retning multi-horisont-eksponering:** alle horisonter deler
+  samme entry-cluster → bot kan åpne 2-3 posisjoner på identisk
+  entry (observert: Cocoa SWING+MAKRO, SPX500 SCALP+MAKRO 4. mai —
+  duplikerte tap, men Brent-vinneren 5. mai var også trippel).
+  Effektivt en sizing-beslutning; ikke endret nå. Alternativer:
+  dedupe i orchestrator, per-instrument eksponeringstak i bot, eller
+  horisont-differensierte entries (dypere pullback for lengre horisont).
+- **horizon.py er fortsatt ukoblet:** classify_horizon /
+  estimate_expected_hold_days / apply_horizon_hysteresis (PLAN § 5.5)
+  brukes ikke — horisont kommer fra YAML-iterasjon. Beholdt som
+  dokumentert fremtidig kobling siden PLAN refererer § 5.5 (PLAN-
+  endring krever samtale). Enten wire ved fase 13, eller stryk fra PLAN.
+- **Grade-rekalibrering venter på data:** gates/terskler bevisst urørt;
+  re-analyser med `scripts/analyze_r_multiples.py --since 2026-06-12`
+  når 4-6 uker post-SL-fix-data foreligger. Score logges nå per trade
+  (max_score + publish_floor i signal_log) så analysen kan normalisere.
 
 ### Session 2026-06-12 — datakilde-ferskhet
 
