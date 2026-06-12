@@ -46,6 +46,10 @@ from bedrock.setups.generator import Direction, Horizon, Setup
 class HysteresisConfig(BaseModel):
     """Parametre for stabilitets-filtre. Defaults matcher PLAN § 5.4.
 
+    - `entry_atr_multiplier=0.3`: behold forrige entry (og dens SL —
+      de er et par; å beholde SL mens entry flytter seg lar faktisk
+      risiko-avstand drifte vekk fra konfigurert k×ATR) hvis ny entry
+      ligger innenfor 0.3×ATR av den
     - `sl_atr_multiplier=0.3`: behold forrige SL hvis ny SL ligger
       innenfor 0.3×ATR av den
     - `tp_atr_multiplier=0.5`: behold forrige TP hvis ny TP er
@@ -54,6 +58,7 @@ class HysteresisConfig(BaseModel):
     - `enabled=True`: kan slås av for debugging
     """
 
+    entry_atr_multiplier: float = Field(default=0.3, ge=0.0)
     sl_atr_multiplier: float = Field(default=0.3, ge=0.0)
     tp_atr_multiplier: float = Field(default=0.5, ge=0.0)
     enabled: bool = True
@@ -137,12 +142,17 @@ def stabilize_setup(
 
     - Hvis `previous` er `None`: ingen historikk; returnerer nytt
       `StableSetup` med `first_seen = last_updated = now`.
-    - Hvis `previous` finnes og ny SL er innenfor `sl_atr_multiplier ×
-      atr`: behold forrige SL.
+    - Hvis ny entry er innenfor `entry_atr_multiplier × atr` av forrige:
+      behold forrige entry OG forrige SL som par (session 2026-06-12 —
+      tidligere ble SL stabilisert mens entry alltid var ny, så faktisk
+      risiko-avstand driftet vekk fra konfigurert k×ATR). Traceability-
+      feltene for entry-klyngen beholdes fra forrige.
+    - Ellers: hvis ny SL er innenfor `sl_atr_multiplier × atr`: behold
+      forrige SL.
     - Hvis `previous` finnes og ny TP er innenfor `tp_atr_multiplier ×
       atr`: behold forrige TP. (Kun hvis begge TP-er er ikke-None —
       MAKRO-setups har `tp=None` og går rett gjennom.)
-    - R:R regnes ut på nytt hvis SL eller TP ble substituert.
+    - R:R regnes ut på nytt hvis entry, SL eller TP ble substituert.
     - `first_seen` bevares fra `previous` når slot matcher; `last_updated`
       settes til `now`.
 
@@ -167,11 +177,23 @@ def stabilize_setup(
             f"match new setup's slot ({setup_id}). Did you pass the wrong previous?"
         )
 
-    stable_sl = _stabilize_value(
-        new_value=new_setup.sl,
-        previous_value=previous.setup.sl,
-        buffer=cfg.sl_atr_multiplier * new_setup.atr,
+    stable_entry = _stabilize_value(
+        new_value=new_setup.entry,
+        previous_value=previous.setup.entry,
+        buffer=cfg.entry_atr_multiplier * new_setup.atr,
     )
+    entry_kept = stable_entry == previous.setup.entry and stable_entry != new_setup.entry
+
+    if entry_kept:
+        # Entry+SL beholdes som par — geometrien (k×ATR-avstand) er
+        # definert relativt til entry, ikke til nåpris.
+        stable_sl = previous.setup.sl
+    else:
+        stable_sl = _stabilize_value(
+            new_value=new_setup.sl,
+            previous_value=previous.setup.sl,
+            buffer=cfg.sl_atr_multiplier * new_setup.atr,
+        )
 
     stable_tp = new_setup.tp
     if new_setup.tp is not None and previous.setup.tp is not None:
@@ -183,18 +205,21 @@ def stabilize_setup(
 
     # Bygg stabilisert Setup. Bruker model_copy for å bevare traceability-felter.
     rr_recomputed = _recompute_rr(
-        entry=new_setup.entry,
+        entry=stable_entry,
         sl=stable_sl,
         tp=stable_tp,
         direction=new_setup.direction,
     )
-    stabilized_setup = new_setup.model_copy(
-        update={
-            "sl": stable_sl,
-            "tp": stable_tp,
-            "rr": rr_recomputed,
-        }
-    )
+    updates: dict[str, object] = {
+        "entry": stable_entry,
+        "sl": stable_sl,
+        "tp": stable_tp,
+        "rr": rr_recomputed,
+    }
+    if entry_kept:
+        updates["entry_cluster_price"] = previous.setup.entry_cluster_price
+        updates["entry_cluster_types"] = list(previous.setup.entry_cluster_types)
+    stabilized_setup = new_setup.model_copy(update=updates)
 
     return StableSetup(
         setup_id=setup_id,

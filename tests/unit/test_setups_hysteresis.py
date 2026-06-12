@@ -174,6 +174,51 @@ def test_stabilize_recomputes_rr_after_substitution() -> None:
 
 
 # ---------------------------------------------------------------------------
+# stabilize_setup — entry-stabilitet (entry+SL som par)
+# ---------------------------------------------------------------------------
+
+
+def test_stabilize_keeps_old_entry_and_sl_as_pair_when_within_buffer() -> None:
+    """Ny entry 100.2 vs forrige 100.0; buffer = 0.3×1.0. Innenfor →
+    behold forrige entry OG forrige SL (paret), selv om ny SL isolert
+    sett ligger utenfor SL-bufferen ville vært irrelevant."""
+    prev_setup = _basic_buy_setup()  # entry=100, sl=99.7
+    prev = _prev_with(prev_setup)
+
+    # Entry flyttet 0.2 (innenfor 0.3-buffer); SL fulgte med til 99.9
+    new = prev_setup.model_copy(update={"entry": 100.2, "sl": 99.9, "entry_cluster_price": 100.2})
+    stable = stabilize_setup(new, previous=prev, now=LATER)
+    assert stable.setup.entry == 100.0
+    assert stable.setup.sl == 99.7
+    # Traceability følger beholdt entry
+    assert stable.setup.entry_cluster_price == 100.0
+
+
+def test_stabilize_uses_new_entry_when_delta_exceeds_buffer() -> None:
+    """Ny entry 100.5 vs 100.0; delta=0.5 > buffer 0.3 → bruk ny entry
+    (og ny SL — nivået har reelt flyttet seg)."""
+    prev_setup = _basic_buy_setup()
+    prev = _prev_with(prev_setup)
+
+    new = prev_setup.model_copy(update={"entry": 100.5, "sl": 100.2, "entry_cluster_price": 100.5})
+    stable = stabilize_setup(new, previous=prev, now=LATER)
+    assert stable.setup.entry == 100.5
+    assert stable.setup.sl == 100.2
+    assert stable.setup.entry_cluster_price == 100.5
+
+
+def test_stabilize_entry_kept_recomputes_rr_from_stable_values() -> None:
+    """R:R beregnes fra stabilisert entry+SL, ikke fra ny entry."""
+    prev_setup = _basic_buy_setup()  # entry=100, sl=99.7, tp=106 → rr=20
+    prev = _prev_with(prev_setup)
+
+    new = prev_setup.model_copy(update={"entry": 100.2, "sl": 99.9})
+    stable = stabilize_setup(new, previous=prev, now=LATER)
+    # entry 100.0 beholdt, sl 99.7 beholdt, tp 106 → rr = 6/0.3 = 20
+    assert stable.setup.rr == pytest.approx(20.0)
+
+
+# ---------------------------------------------------------------------------
 # stabilize_setup — MAKRO + edge cases
 # ---------------------------------------------------------------------------
 

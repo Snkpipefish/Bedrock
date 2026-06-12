@@ -263,6 +263,11 @@ def generate_signals(
         cfg, store, horizons_list, directions_list, engine, now=run_ts
     )
 
+    # Analog-trace (K-NN) er identisk for alle (horisont, retning)-
+    # kombinasjoner — beregn én gang, ikke per entry (var 4-6× K-NN
+    # per instrument per kjøring).
+    analog_trace = _build_analog_trace(cfg, store) if store is not None else None
+
     # Generer entries
     entries: list[SignalEntry] = []
     new_stable_setups: list[StableSetup] = []
@@ -281,7 +286,7 @@ def generate_signals(
                 run_ts=run_ts,
                 setup_config=setup_config,
                 hysteresis_config=hysteresis_config,
-                store=store,
+                analog_trace=analog_trace,
             )
             entries.append(entry)
             if entry.setup is not None:
@@ -318,14 +323,25 @@ def _resolve_direction_conflicts(entries: list[SignalEntry]) -> list[SignalEntry
     holdes samtidig.
 
     Regel: for hvert instrument — hvis både BUY og SELL har `published=True`
-    og setup ≠ None (uavhengig av horisont), behold den med høyest score;
-    sett `published=False` + `skip_reason="opposite_direction_dominates"` på
-    øvrige. Setup-objektet bevares så hysterese / UI fortsatt ser kandidaten.
+    og setup ≠ None (uavhengig av horisont), behold den med høyest
+    NORMALISERT score (score/max_score); sett `published=False` +
+    `skip_reason="opposite_direction_dominates"` på øvrige. Setup-objektet
+    bevares så hysterese / UI fortsatt ser kandidaten.
+
+    Normalisering (session 2026-06-12): horisonter har ulik max_score
+    (Gold: SCALP 4.8 vs MAKRO 5.9) — rå score-sammenligning på tvers ga
+    systematisk fordel til horisonter med stor skala. Pct-of-max er
+    sammenlignbar på tvers.
     """
     by_instrument: dict[str, list[int]] = {}
     for idx, e in enumerate(entries):
         if e.published and e.setup is not None:
             by_instrument.setdefault(e.instrument, []).append(idx)
+
+    def _normalized_score(e: SignalEntry) -> float:
+        if e.max_score <= 0:
+            return 0.0
+        return e.score / e.max_score
 
     out = list(entries)
     for indices in by_instrument.values():
@@ -334,7 +350,7 @@ def _resolve_direction_conflicts(entries: list[SignalEntry]) -> list[SignalEntry
         directions_present = {out[i].direction for i in indices}
         if Direction.BUY not in directions_present or Direction.SELL not in directions_present:
             continue
-        winner = max(indices, key=lambda i: out[i].score)
+        winner = max(indices, key=lambda i: _normalized_score(out[i]))
         for i in indices:
             if i == winner:
                 continue
@@ -606,18 +622,17 @@ def _build_entry(
     run_ts: datetime,
     setup_config: SetupConfig | None,
     hysteresis_config: HysteresisConfig | None,
-    store: Any | None = None,
+    analog_trace: AnalogTrace | None = None,
 ) -> SignalEntry:
     """Bygg én SignalEntry — score + (kanskje) stabilisert setup.
 
-    `store` brukes til å hente analog-trace (K-NN) hvis instrumentet
-    har en `analog`-familie i YAML. None → analog-trace skippes (matcher
-    eldre call-sites + tester som ikke trenger K-NN).
+    `analog_trace` beregnes av caller (én gang per instrument — K-NN-
+    resultatet er identisk for alle horisont/retning-kombinasjoner) og
+    persisteres uendret på hver entry. None = ingen analog-familie i
+    YAML eller K-NN feilet.
     """
     min_publish = _get_min_score_publish(cfg, horizon, direction)
     published = group_result.score >= min_publish
-
-    analog_trace = _build_analog_trace(cfg, store) if store is not None else None
 
     # Bygg rå setup
     raw_setup: Setup | None = build_setup(
