@@ -9,6 +9,7 @@ instrument:
   id: NaturalGas
   asset_class: energy
   ticker: XNGUSD
+  round_number_step: 0.25   # psykologiske runde tall (setup-generator)
   cfd_ticker: NaturalGas
   yahoo_ticker: NG=F
   cot_contract: "NAT GAS NYME - NEW YORK MERCANTILE EXCHANGE"

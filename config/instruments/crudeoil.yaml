@@ -7,6 +7,7 @@ instrument:
   id: CrudeOil
   asset_class: energy
   ticker: XTIUSD
+  round_number_step: 5.0   # psykologiske runde tall (setup-generator)
   cfd_ticker: CrudeOil
   yahoo_ticker: CL=F
   cot_contract: "WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE"

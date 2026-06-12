@@ -9,6 +9,7 @@ instrument:
   id: Cocoa
   asset_class: softs
   ticker: CC
+  round_number_step: 100   # psykologiske runde tall (setup-generator)
   cfd_ticker: Cocoa
   yahoo_ticker: CC=F
   cot_contract: "COCOA - ICE FUTURES U.S."

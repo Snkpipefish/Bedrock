@@ -9,6 +9,7 @@ instrument:
   id: Coffee
   asset_class: softs
   ticker: KC
+  round_number_step: 10   # psykologiske runde tall (setup-generator)
   cfd_ticker: Coffee
   yahoo_ticker: KC=F
   cot_contract: "COFFEE C - ICE FUTURES U.S."

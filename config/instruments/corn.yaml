@@ -7,6 +7,7 @@ instrument:
   id: Corn
   asset_class: grains
   ticker: ZC
+  round_number_step: 25   # psykologiske runde tall (setup-generator)
   cfd_ticker: Corn
   yahoo_ticker: ZC=F   # CBOT Corn continuous futures
   cot_contract: "CORN - CHICAGO BOARD OF TRADE"

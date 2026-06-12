@@ -13,6 +13,7 @@ instrument:
   id: Cotton
   asset_class: softs
   ticker: CT
+  round_number_step: 5.0   # psykologiske runde tall (setup-generator)
   cfd_ticker: Cotton
   yahoo_ticker: CT=F
   cot_contract: "COTTON NO. 2 - ICE FUTURES U.S."

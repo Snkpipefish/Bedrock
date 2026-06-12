@@ -8,6 +8,7 @@ instrument:
   id: Silver
   asset_class: metals
   ticker: XAGUSD
+  round_number_step: 1.0   # psykologiske runde tall (setup-generator)
   cfd_ticker: Silver
   yahoo_ticker: SI=F
   cot_contract: "SILVER - COMMODITY EXCHANGE INC."

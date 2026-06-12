@@ -7,6 +7,7 @@ instrument:
   id: Gold
   asset_class: metals
   ticker: XAUUSD
+  round_number_step: 50   # psykologiske runde tall (setup-generator)
   cfd_ticker: Gold
   yahoo_ticker: GC=F   # COMEX Gold continuous futures (samme kilde cot-explorer bruker)
   cot_contract: "GOLD - COMMODITY EXCHANGE INC."

@@ -8,6 +8,7 @@ instrument:
   id: Brent
   asset_class: energy
   ticker: XBRUSD
+  round_number_step: 5.0   # psykologiske runde tall (setup-generator)
   cfd_ticker: "OIL BRENT"
   yahoo_ticker: BZ=F
   cot_contract: "BRENT LAST DAY - NEW YORK MERCANTILE EXCHANGE"

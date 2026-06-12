@@ -9,6 +9,7 @@ instrument:
   id: Sugar
   asset_class: softs
   ticker: SB
+  round_number_step: 0.5   # psykologiske runde tall (setup-generator)
   cfd_ticker: Sugar
   yahoo_ticker: SB=F
   cot_contract: "SUGAR NO. 11 - ICE FUTURES U.S."

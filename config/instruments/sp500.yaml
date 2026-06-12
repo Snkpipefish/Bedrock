@@ -8,6 +8,7 @@ instrument:
   id: SP500
   asset_class: indices
   ticker: ES
+  round_number_step: 100   # psykologiske runde tall (setup-generator)
   cfd_ticker: SPX500
   yahoo_ticker: ES=F
   cot_contract: "E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE"

@@ -8,6 +8,7 @@ instrument:
   id: Soybean
   asset_class: grains
   ticker: ZS
+  round_number_step: 50   # psykologiske runde tall (setup-generator)
   cfd_ticker: Soybean
   yahoo_ticker: ZS=F
   cot_contract: "SOYBEANS - CHICAGO BOARD OF TRADE"

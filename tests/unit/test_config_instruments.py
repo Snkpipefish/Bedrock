@@ -125,6 +125,7 @@ def test_metadata_optional_fields_accepted(tmp_path: Path) -> None:
           weather_region: global
           weather_lat: 0.0
           weather_lon: 0.0
+          round_number_step: 50
           fred_series_ids:
             - DGS10
             - DTWEXBGS
@@ -155,6 +156,38 @@ def test_metadata_optional_fields_accepted(tmp_path: Path) -> None:
     assert cfg.instrument.cot_contract == "GOLD - COMMODITY EXCHANGE INC."
     assert cfg.instrument.cot_report == "disaggregated"
     assert cfg.instrument.fred_series_ids == ["DGS10", "DTWEXBGS"]
+    assert cfg.instrument.round_number_step == 50.0
+
+
+def test_metadata_round_number_step_defaults_to_none(tmp_path: Path) -> None:
+    """Uten feltet i YAML → None (ingen round-number-nivåer)."""
+    yaml_txt = dedent(
+        """\
+        instrument:
+          id: Corn
+          asset_class: grains
+          ticker: ZC
+
+        aggregation: additive_sum
+        max_score: 10
+        min_score_publish: 0.5
+
+        families:
+          outlook:
+            weight: 5
+            drivers:
+              - {name: sma200_align, weight: 1.0, params: {tf: D1}}
+
+        grade_thresholds:
+          A_plus: {min_score: 8, min_families_active: 1}
+          A: {min_score: 6, min_families_active: 1}
+          B: {min_score: 4, min_families_active: 1}
+        """
+    )
+    path = tmp_path / "corn.yaml"
+    path.write_text(yaml_txt)
+    cfg = load_instrument_config(path)
+    assert cfg.instrument.round_number_step is None
 
 
 def test_metadata_unknown_field_rejected(tmp_path: Path) -> None:

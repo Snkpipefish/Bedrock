@@ -8,6 +8,7 @@ instrument:
   id: Copper
   asset_class: metals
   ticker: XCUUSD
+  round_number_step: 0.1   # psykologiske runde tall (setup-generator)
   cfd_ticker: Copper
   yahoo_ticker: HG=F
   cot_contract: "COPPER- #1 - COMMODITY EXCHANGE INC."

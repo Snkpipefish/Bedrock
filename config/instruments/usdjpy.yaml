@@ -7,6 +7,7 @@ instrument:
   id: USDJPY
   asset_class: fx
   ticker: USDJPY
+  round_number_step: 1.0   # psykologiske runde tall (setup-generator)
   cfd_ticker: USDJPY
   yahoo_ticker: USDJPY=X
   cot_contract: "JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE"

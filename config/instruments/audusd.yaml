@@ -8,6 +8,7 @@ instrument:
   id: AUDUSD
   asset_class: fx
   ticker: AUDUSD
+  round_number_step: 0.01   # psykologiske runde tall (setup-generator)
   cfd_ticker: AUDUSD
   yahoo_ticker: AUDUSD=X
   cot_contract: "AUSTRALIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE"

@@ -8,6 +8,7 @@ instrument:
   id: Wheat
   asset_class: grains
   ticker: ZW
+  round_number_step: 25   # psykologiske runde tall (setup-generator)
   cfd_ticker: Wheat
   yahoo_ticker: ZW=F
   cot_contract: "WHEAT-SRW - CHICAGO BOARD OF TRADE"

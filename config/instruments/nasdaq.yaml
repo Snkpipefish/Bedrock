@@ -8,6 +8,7 @@ instrument:
   id: Nasdaq
   asset_class: indices
   ticker: NQ
+  round_number_step: 500   # psykologiske runde tall (setup-generator)
   cfd_ticker: NAS100
   yahoo_ticker: NQ=F  # E-mini Nasdaq-100 continuous
   cot_contract: "NASDAQ-100 Consolidated - CHICAGO MERCANTILE EXCHANGE"

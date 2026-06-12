@@ -69,6 +69,11 @@ class InstrumentMetadata(BaseModel):
     weather_lon: float | None = None
     fred_series_ids: list[str] = Field(default_factory=list)
 
+    # Setup-generator: avstand mellom psykologiske runde tall for
+    # detect_round_numbers (f.eks. 50 for Gold, 0.01 for EURUSD-big-
+    # figures). None = ingen round-number-nivåer for instrumentet.
+    round_number_step: float | None = Field(default=None, gt=0.0)
+
     model_config = ConfigDict(extra="forbid")
 
 

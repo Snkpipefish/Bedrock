@@ -248,7 +248,12 @@ def generate_signals(
         )
     current_price = float(ohlc["close"].iloc[-1])
     atr = compute_atr(ohlc)
-    levels = _build_level_list(ohlc, current_price, swing_window, round_number_step)
+    # Caller-param vinner; ellers instrument-YAML (round_number_step).
+    # None begge steder = ingen round-number-nivåer.
+    effective_rn_step = (
+        round_number_step if round_number_step is not None else cfg.instrument.round_number_step
+    )
+    levels = _build_level_list(ohlc, current_price, swing_window, effective_rn_step)
 
     # Snapshot for hysterese
     previous_snapshot = _load_previous_snapshot(snapshot_path)
