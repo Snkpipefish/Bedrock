@@ -313,6 +313,8 @@ def generate_units(
     # av seriene feiler i samme run.
     fail_tolerance_overrides: dict[str, float] = {
         "fundamentals": 50.0,  # FRED — kjent for transient 5xx på sub-sett
+        "fred_macro": 50.0,  # samme FRED-API som fundamentals
+        "yahoo_macro": 50.0,  # Yahoo chart-API — transient feil på enkelt-tickere
     }
 
     units: dict[str, str] = {}

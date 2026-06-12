@@ -3177,12 +3177,23 @@ class DataStore:
     # Generisk staleness-accessor (fase 6 session 28)
     # ------------------------------------------------------------------
 
-    def latest_observation_ts(self, table: str, ts_column: str = "ts") -> str | None:
+    def latest_observation_ts(
+        self,
+        table: str,
+        ts_column: str = "ts",
+        series_filter: Sequence[str] | None = None,
+        series_prefix: str | None = None,
+    ) -> str | None:
         """Returner `MAX(ts_column)` fra `table` som rå-streng, eller None
         hvis tabellen er tom/ikke finnes.
 
         Brukes av `bedrock.config.fetch` for staleness-sjekker. Caller
         ansvar for å parse resultatet til datetime.
+
+        `series_filter` (eksakt series_id-liste) eller `series_prefix`
+        (prefix-match) begrenser måling til én fetchers serier — uten
+        dette maskerer fetchere som deler tabell (fundamentals) hverandres
+        staleness via felles MAX.
         """
         with self._connect() as conn:
             # Sjekk at tabellen finnes (unngår SQL-feil)
@@ -3196,7 +3207,16 @@ class DataStore:
             # Tabell/kolonne-identifikatorer må interpoleres (sqlite
             # param-binding er kun for verdier). Verdier stammer fra
             # Pydantic-validert YAML, ikke request-input.
-            row = conn.execute(f"SELECT MAX({ts_column}) FROM {table}").fetchone()
+            sql = f"SELECT MAX({ts_column}) FROM {table}"
+            params: tuple = ()
+            if series_filter:
+                placeholders = ",".join("?" for _ in series_filter)
+                sql += f" WHERE series_id IN ({placeholders})"
+                params = tuple(series_filter)
+            elif series_prefix is not None:
+                sql += " WHERE series_id LIKE ? || '%'"
+                params = (series_prefix,)
+            row = conn.execute(sql, params).fetchone()
 
         if row is None or row[0] is None:
             return None

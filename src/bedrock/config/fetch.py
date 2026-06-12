@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 DEFAULT_FETCH_CONFIG_PATH = Path("config/fetch.yaml")
 
@@ -68,8 +68,26 @@ class FetcherSpec(BaseModel):
     # holidays ikke bidrar til alder. Eliminerer false-positive monitor-
     # alarmer som Memorial Day → tirsdag-morgen-alert (session 2026-05-26).
     us_calendar: bool = False
+    # Hente-vindu bakover i dager for `bedrock fetch run` (session
+    # 2026-06-12). Default (None) gir `stale_hours × 2`-vinduet fra
+    # `default_from_date`. Serier med publiserings-lag lengre enn
+    # vinduet (NFCI ukentlig ~5d lag, IRLTLT01* månedlig 1-3 mnd lag)
+    # faller ellers alltid utenfor og får aldri nye observasjoner.
+    lookback_days: float | None = Field(default=None, gt=0.0)
+    # Staleness-filter for fetchere som deler tabell (fundamentals):
+    # uten filter måles MAX(date) over hele tabellen, og én fetchers
+    # data kan maskere at en annen er død. `series_filter` = eksakt
+    # series_id-liste, `series_prefix` = prefix-match. Maks én av dem.
+    series_filter: list[str] | None = None
+    series_prefix: str | None = None
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _series_filter_xor_prefix(self) -> FetcherSpec:
+        if self.series_filter is not None and self.series_prefix is not None:
+            raise ValueError("series_filter og series_prefix kan ikke kombineres — velg én")
+        return self
 
 
 class FetchConfig(BaseModel):
@@ -130,14 +148,24 @@ def latest_observation_ts(
     store: Any,
     table: str,
     ts_column: str = "ts",
+    series_filter: list[str] | None = None,
+    series_prefix: str | None = None,
 ) -> datetime | None:
     """Returner `MAX(ts_column)` fra tabellen, eller None hvis tom.
 
     Delegerer til `DataStore.latest_observation_ts` (rå-streng) og
     parses til timezone-aware datetime. Timestamp-kolonner lagres som
     ISO-strings (prices) eller YYYY-MM-DD (cot/fundamentals/weather).
+
+    `series_filter`/`series_prefix` begrenser til rader med matchende
+    `series_id` — nødvendig for fetchere som deler fundamentals-tabellen.
     """
-    raw = store.latest_observation_ts(table, ts_column)
+    raw = store.latest_observation_ts(
+        table,
+        ts_column,
+        series_filter=series_filter,
+        series_prefix=series_prefix,
+    )
     if raw is None:
         return None
     return _parse_ts(raw)
@@ -232,7 +260,13 @@ def check_staleness(
     if resolved_now.tzinfo is None:
         resolved_now = resolved_now.replace(tzinfo=timezone.utc)
 
-    latest = latest_observation_ts(store, spec.table, spec.ts_column)
+    latest = latest_observation_ts(
+        store,
+        spec.table,
+        spec.ts_column,
+        series_filter=spec.series_filter,
+        series_prefix=spec.series_prefix,
+    )
 
     if latest is None:
         return FetcherStatus(
@@ -250,6 +284,10 @@ def check_staleness(
         age_hours = business_hours_between(latest, resolved_now)
     else:
         age_hours = (resolved_now - latest).total_seconds() / 3600.0
+    # Fremtidsdaterte observasjoner (USDA PSD lagrer marketing-year-
+    # projeksjoner datert frem i tid) ga negativ alder. Clamp til 0 —
+    # data som dekker fremtiden er per definisjon ikke stale.
+    age_hours = max(age_hours, 0.0)
     is_stale = age_hours > spec.stale_hours
 
     return FetcherStatus(

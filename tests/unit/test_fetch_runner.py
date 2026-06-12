@@ -688,6 +688,112 @@ def test_default_from_date_with_stale_hours() -> None:
     assert result == date(2024, 5, 30)
 
 
+def test_default_from_date_lookback_days_overrides_stale_window() -> None:
+    """Serier med publiserings-lag trenger vindu lengre enn stale_hours×2."""
+    now = datetime(2024, 6, 1, 12, 0, tzinfo=timezone.utc)
+    spec = FetcherSpec(
+        module="bedrock.fetch.fred",
+        cron="30 2 * * *",
+        stale_hours=48,
+        table="fundamentals",
+        ts_column="date",
+        lookback_days=150,
+    )
+    result = default_from_date(spec, now=now)
+    assert result == date(2024, 1, 3)  # 150 dager bak, ikke 4
+
+
+# ---------------------------------------------------------------------------
+# fred_macro / yahoo_macro (session 2026-06-12)
+# ---------------------------------------------------------------------------
+
+
+def test_run_fred_macro_fetches_module_owned_series(store: DataStore, configs_dir) -> None:
+    defaults, insts = configs_dir
+    os.environ["FRED_API_KEY"] = "test_key"
+
+    fetched: list[str] = []
+
+    def fake_fetch(series_id, api_key, from_date, to_date):
+        fetched.append(series_id)
+        return pd.DataFrame({"series_id": [series_id], "date": ["2024-01-02"], "value": [1.0]})
+
+    with (
+        patch("bedrock.fetch.fred.fetch_fred_series", side_effect=fake_fetch),
+        patch("time.sleep"),
+    ):
+        result = run_fetcher_by_name(
+            "fred_macro",
+            store,
+            _spec(),
+            from_date=date(2024, 1, 1),
+            instruments_dir=insts,
+            defaults_dir=defaults,
+        )
+
+    # Serieliste er modul-eid — uavhengig av instrument-YAMLs fred_series_ids
+    assert "DEXBZUS" in fetched
+    assert "BAMLH0A0HYM2" in fetched
+    assert "DGS3MO" in fetched
+    assert result.fail_count == 0
+    assert result.total_rows == len(fetched)
+
+
+def test_run_fred_macro_without_key_fails_gracefully(store: DataStore, configs_dir) -> None:
+    defaults, insts = configs_dir
+    with patch("bedrock.config.fetch_runner.get_secret", return_value=None):
+        result = run_fetcher_by_name(
+            "fred_macro",
+            store,
+            _spec(),
+            from_date=date(2024, 1, 1),
+            instruments_dir=insts,
+            defaults_dir=defaults,
+        )
+    assert result.fail_count >= 1
+    for item in result.items:
+        assert "FRED_API_KEY" in item.error
+
+
+def test_run_yahoo_macro_writes_pseudo_fred_series(store: DataStore, configs_dir) -> None:
+    defaults, insts = configs_dir
+
+    fetched: list[str] = []
+
+    def fake_yahoo(ticker, from_date, to_date, interval="1d"):
+        fetched.append(ticker)
+        return pd.DataFrame(
+            {
+                "ts": pd.to_datetime(["2024-01-02"], utc=True),
+                "open": [100.0],
+                "high": [101.0],
+                "low": [99.0],
+                "close": [100.5],
+                "volume": [0.0],
+            }
+        )
+
+    with (
+        patch("bedrock.fetch.yahoo.fetch_yahoo_prices", side_effect=fake_yahoo),
+        patch("time.sleep"),
+    ):
+        result = run_fetcher_by_name(
+            "yahoo_macro",
+            store,
+            _spec(),
+            from_date=date(2024, 1, 1),
+            instruments_dir=insts,
+            defaults_dir=defaults,
+        )
+
+    assert "DX-Y.NYB" in fetched
+    assert "^VIX9D" in fetched
+    assert result.fail_count == 0
+    # Close lagres som fundamentals-verdi med series_id uten ^-prefix
+    raw = store.latest_observation_ts("fundamentals", "date", series_filter=["VIX9D"])
+    assert raw == "2024-01-02"
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------

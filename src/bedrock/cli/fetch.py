@@ -113,7 +113,13 @@ class _DummyStore:
     trenger å instansiere en ekte DataStore (som ville opprettet filen).
     """
 
-    def latest_observation_ts(self, table: str, ts_column: str = "ts") -> str | None:
+    def latest_observation_ts(
+        self,
+        table: str,
+        ts_column: str = "ts",
+        series_filter: list[str] | None = None,
+        series_prefix: str | None = None,
+    ) -> str | None:
         return None
 
 

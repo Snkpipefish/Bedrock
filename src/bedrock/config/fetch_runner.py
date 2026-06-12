@@ -583,6 +583,172 @@ def run_fundamentals(
     return result
 
 
+# Session 2026-06-12: FRED-serier som brukes av makro-drivere (bunke 1/3 +
+# event_surprise) men ikke står i noen instrument-YAMLs `fred_series_ids`.
+# Disse ble historisk fylt av engangs-backfills (scripts/backfill/fred_b1.py,
+# fred_bunke3.py) og driftet stale i ukevis uten daglig refresh — DEX*-FX
+# og BAMLH0A0HYM2 var 6+ uker gamle mens dollar_index_breadth/hy_oas_change
+# scoret på dem. Serie → forbruker-driver er dokumentert i backfill-skriptene.
+_FRED_MACRO_SERIES: tuple[str, ...] = (
+    # Yields — t10y3m, t_bill_3mo_yield
+    "DGS2",
+    "DGS3MO",
+    "TB3MS",
+    # Credit — hy_oas_change
+    "BAMLH0A0HYM2",
+    # Labor — initial_claims_z, continuing_claims_z
+    "ICSA",
+    "CCSA",
+    # Growth/sentiment — industrial_production_yoy, cfnai_3mma,
+    # umich_sentiment_z, jolts_openings_yoy
+    "INDPRO",
+    "CFNAI",
+    "UMCSENT",
+    "JTSJOL",
+    # Liquidity — anfci_z, m2_yoy
+    "ANFCI",
+    "M2SL",
+    # FX — dollar_index_breadth (8 komponenter) + brl_chg5d
+    "DEXJPUS",
+    "DEXUSEU",
+    "DEXUSUK",
+    "DEXUSAL",
+    "DEXCAUS",
+    "DEXSDUS",
+    "DEXUSNZ",
+    "DEXSZUS",
+    "DEXBZUS",
+    # Event-surprise-drivere (nfp/cpi/gdp/pce_surprise)
+    "PAYEMS",
+    "CPIAUCSL",
+    "GDP",
+    "PCEPI",
+)
+
+
+@register_runner("fred_macro")
+def run_fred_macro(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """Daglig refresh av makro-FRED-serier utenfor `fred_series_ids`.
+
+    Samme pattern som `run_fundamentals`, men serielisten er modul-eid
+    (`_FRED_MACRO_SERIES`) i stedet for instrument-avledet. Pacing 250ms
+    per memory-feedback `free-api-no-parallel-requests`.
+    """
+    from bedrock.fetch.fred import fetch_fred_series
+
+    result = FetchRunResult(fetcher_name="fred_macro")
+
+    api_key = get_secret(_FRED_API_KEY_ENV)
+    if api_key is None:
+        for series_id in _FRED_MACRO_SERIES:
+            result.items.append(
+                ItemOutcome(
+                    item_id=series_id,
+                    ok=False,
+                    error=("Mangler FRED_API_KEY — sett env-var eller ~/.bedrock/secrets.env"),
+                )
+            )
+        return result
+
+    import time as _time
+
+    pacing_sec = 0.25
+
+    def _items():
+        first = True
+        for series_id in _FRED_MACRO_SERIES:
+
+            def _do(sid=series_id, _is_first=first):
+                if not _is_first:
+                    _time.sleep(pacing_sec)
+                df = fetch_fred_series(sid, api_key, from_date, to_date)
+                if df.empty:
+                    return 0
+                return store.append_fundamentals(df)
+
+            first = False
+            yield series_id, _do
+
+    _safe_run(_items(), result)
+    return result
+
+
+# Session 2026-06-12: Yahoo-tickere lagret som pseudo-FRED-serier i
+# fundamentals (presedens: D1 B3 session 128 for DX-Y.NYB). Tidligere kun
+# engangs-backfills (scripts/backfill/dxy_yahoo.py, vix_term.py,
+# bunke4_data.py) — DX-Y.NYB var 44 dager gammel mens dxy_chg5d scoret på
+# den i 17 instrumenter.
+_YAHOO_MACRO_TICKERS: dict[str, str] = {
+    # ticker → series_id i fundamentals
+    "DX-Y.NYB": "DX-Y.NYB",  # dxy_chg5d
+    "^VIX3M": "VIX3M",  # vix_term_ratio
+    "^VIX6M": "VIX6M",
+    "^VIX9D": "VIX9D",  # vix9d_vix_ratio
+    "^MOVE": "MOVE",  # move_index_z (bunke 4)
+    "^VVIX": "VVIX",
+    "^GVZ": "GVZ",
+    "^OVX": "OVX",
+    "^SKEW": "SKEW",
+    "^VXN": "VXN",
+}
+
+
+@register_runner("yahoo_macro")
+def run_yahoo_macro(
+    spec: FetcherSpec,
+    store: Any,
+    from_date: date,
+    to_date: date,
+    instruments: Iterable[InstrumentConfig],
+) -> FetchRunResult:
+    """Daglig refresh av Yahoo-vol/FX-indekser i fundamentals-tabellen.
+
+    Lagrer daglig close per ticker. Yahoo Chart-API bruker exclusive
+    end-dato, så vinduet utvides med én dag. Pacing 1.5s mellom tickere
+    (samme som backfill-skriptene; Yahoo er strengere enn FRED).
+    """
+    import time as _time
+
+    import pandas as pd
+
+    from bedrock.fetch.yahoo import fetch_yahoo_prices
+
+    result = FetchRunResult(fetcher_name="yahoo_macro")
+    yahoo_to = to_date + timedelta(days=1)
+    pacing_sec = 1.5
+
+    def _items():
+        first = True
+        for ticker, series_id in _YAHOO_MACRO_TICKERS.items():
+
+            def _do(t=ticker, sid=series_id, _is_first=first):
+                if not _is_first:
+                    _time.sleep(pacing_sec)
+                df = fetch_yahoo_prices(t, from_date=from_date, to_date=yahoo_to, interval="1d")
+                if df.empty:
+                    return 0
+                fund_df = pd.DataFrame(
+                    {
+                        "series_id": sid,
+                        "date": df["ts"].dt.strftime("%Y-%m-%d"),
+                        "value": df["close"].astype("float64"),
+                    }
+                )
+                return store.append_fundamentals(fund_df)
+
+            first = False
+            yield series_id, _do
+
+    _safe_run(_items(), result)
+    return result
+
+
 @register_runner("agsi")
 def run_agsi(
     spec: FetcherSpec,
@@ -1261,8 +1427,17 @@ def default_from_date(
     For daglige fetchere (stale_hours=24-30) gir dette 2-3 dager bak,
     nok til å fange gap ved forsinket kjøring uten å hente unødvendig
     langt bak.
+
+    `spec.lookback_days` overstyrer (session 2026-06-12): serier med
+    publiserings-lag lengre enn stale-vinduet (NFCI ukentlig ~5d lag,
+    IRLTLT01* månedlig 1-3 mnd, GDP kvartalsvis ~4 mnd) falt alltid
+    utenfor `stale_hours × 2`-vinduet og fikk aldri nye observasjoner —
+    loggen viste «OK → 0 rows» hver dag. Re-fetch av eksisterende rader
+    er trygt (INSERT OR REPLACE på (series_id, date)).
     """
     resolved_now = now or datetime.now(timezone.utc)
+    if spec.lookback_days is not None:
+        return (resolved_now - timedelta(days=spec.lookback_days)).date()
     hours = spec.stale_hours * buffer_multiplier
     return (resolved_now - timedelta(hours=hours)).date()
 

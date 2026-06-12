@@ -130,6 +130,13 @@ def test_load_fetch_config_on_checked_in_file() -> None:
     assert cfg.fetchers["news_intel"].cron == "30 6,18 * * *"  # 2× daglig
     assert cfg.fetchers["crypto_sentiment"].table == "crypto_sentiment"
     assert cfg.fetchers["crypto_sentiment"].cron == "0 7 * * *"  # daglig
+    # Session 2026-06-12: daglige makro-fetchere + serie-filtrert staleness
+    assert "fred_macro" in cfg.fetchers
+    assert "yahoo_macro" in cfg.fetchers
+    assert cfg.fetchers["fundamentals"].lookback_days == 150
+    assert cfg.fetchers["fundamentals"].series_filter is not None
+    assert cfg.fetchers["usda_psd_india_sugar"].series_prefix == "USDA_PSD_"
+    assert cfg.fetchers["enso"].series_filter == ["NOAA_ONI"]
 
 
 # ---------------------------------------------------------------------------
@@ -226,6 +233,86 @@ def test_check_staleness_old_data(tmp_path: Path) -> None:
     assert status.has_data is True
     assert status.is_stale is True
     assert status.age_hours == pytest.approx(50.0, abs=0.1)
+
+
+# ---------------------------------------------------------------------------
+# Serie-filtrert staleness for delt fundamentals-tabell (2026-06-12)
+# ---------------------------------------------------------------------------
+
+
+def _fundamentals_spec(**overrides) -> FetcherSpec:
+    base: dict = {
+        "module": "bedrock.fetch.fred",
+        "cron": "30 2 * * *",
+        "stale_hours": 48,
+        "table": "fundamentals",
+        "ts_column": "date",
+    }
+    base.update(overrides)
+    return FetcherSpec(**base)
+
+
+def _write_fundamentals(store: DataStore, rows: list[tuple[str, str]]) -> None:
+    df = pd.DataFrame(
+        {
+            "series_id": [r[0] for r in rows],
+            "date": [r[1] for r in rows],
+            "value": [1.0] * len(rows),
+        }
+    )
+    store.append_fundamentals(df)
+
+
+def test_fetcher_spec_rejects_filter_and_prefix_combo() -> None:
+    with pytest.raises(Exception, match="series_filter og series_prefix"):
+        _fundamentals_spec(series_filter=["DGS10"], series_prefix="USDA_")
+
+
+def test_latest_observation_ts_series_filter(tmp_path: Path) -> None:
+    """Filter måler kun egne serier — naboens ferske data maskerer ikke."""
+    store = DataStore(tmp_path / "bedrock.db")
+    _write_fundamentals(
+        store,
+        [("DGS10", "2024-06-01"), ("USDA_PSD_X", "2026-10-01")],
+    )
+    latest = latest_observation_ts(store, "fundamentals", "date", series_filter=["DGS10"])
+    assert latest is not None
+    assert latest.year == 2024
+
+
+def test_latest_observation_ts_series_prefix(tmp_path: Path) -> None:
+    store = DataStore(tmp_path / "bedrock.db")
+    _write_fundamentals(
+        store,
+        [("DGS10", "2026-01-01"), ("USDA_PSD_PROD", "2024-10-01"), ("USDA_PSD_EXP", "2024-09-01")],
+    )
+    latest = latest_observation_ts(store, "fundamentals", "date", series_prefix="USDA_PSD_")
+    assert latest is not None
+    assert (latest.year, latest.month) == (2024, 10)
+
+
+def test_check_staleness_uses_spec_series_filter(tmp_path: Path) -> None:
+    """Stale egen serie skal flagges selv om delt tabell har ferske rader."""
+    store = DataStore(tmp_path / "bedrock.db")
+    now = datetime(2024, 6, 1, 12, 0, tzinfo=timezone.utc)
+    _write_fundamentals(
+        store,
+        [("DGS10", "2024-05-31"), ("ANP_ETANOL", "2024-01-01")],
+    )
+    spec = _fundamentals_spec(series_prefix="ANP_", stale_hours=720)
+    status = check_staleness("anp_ethanol", spec, store, now=now)
+    assert status.is_stale is True  # 5 mnd > 720h — ikke maskert av DGS10
+
+
+def test_check_staleness_future_dated_clamps_to_zero(tmp_path: Path) -> None:
+    """USDA PSD marketing-year-rader er datert frem i tid → alder 0, ikke negativ."""
+    store = DataStore(tmp_path / "bedrock.db")
+    now = datetime(2024, 6, 1, 12, 0, tzinfo=timezone.utc)
+    _write_fundamentals(store, [("USDA_PSD_PROD", "2024-10-01")])
+    spec = _fundamentals_spec(series_prefix="USDA_PSD_", stale_hours=720)
+    status = check_staleness("usda_psd", spec, store, now=now)
+    assert status.age_hours == 0.0
+    assert status.is_stale is False
 
 
 # ---------------------------------------------------------------------------
