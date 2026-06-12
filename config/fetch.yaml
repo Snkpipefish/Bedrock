@@ -78,7 +78,10 @@ fetchers:
   fred_macro:
     module: bedrock.fetch.fred
     cron: "45 2 * * *"          # daglig 02:45 Oslo (etter fundamentals 02:30)
-    stale_hours: 48             # daglige serier (DGS2/DGS3MO/HY-OAS) er D+1
+    # H.15 (DGS2/DGS3MO) og HY-OAS publiseres D+1 til D+2 på FRED —
+    # observert business-alder midt på dagen er 36-66h. 96h skiller
+    # ekte feil fra normalt lag (us_calendar teller kun bus-timer).
+    stale_hours: 96
     on_failure: retry_with_backoff
     table: fundamentals
     ts_column: date
@@ -203,7 +206,10 @@ fetchers:
   agsi:
     module: bedrock.fetch.agsi
     cron: "0 6 * * *"           # daglig 06:00 Oslo
-    stale_hours: 60             # ENTSOG D+1 + observert 1-2 dagers publiserings-lag (ADR-015)
+    # ADR-015: D+1 + observert 1-2 dagers publiserings-lag. 60h lå midt
+    # i normal-intervallet (48-72h) og ga kronisk falsk STALE/aging —
+    # 84h (3.5d) flagger kun reelt avvik (2026-06-12).
+    stale_hours: 84
     on_failure: log_and_skip
     table: agsi_storage
     ts_column: gas_day_start
@@ -211,7 +217,7 @@ fetchers:
   alsi:
     module: bedrock.fetch.alsi
     cron: "5 6 * * *"           # daglig 06:05 Oslo (5 min etter agsi)
-    stale_hours: 60             # GIE D+1 + observert 1-2 dagers publiserings-lag (ADR-015)
+    stale_hours: 84             # samme begrunnelse som agsi (ADR-015 + 2026-06-12)
     on_failure: log_and_skip
     table: alsi_storage
     ts_column: gas_day_start
