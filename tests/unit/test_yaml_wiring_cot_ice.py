@@ -48,32 +48,25 @@ def test_brent_positioning_weights_sum_to_one(configs) -> None:
 
 
 # ---------------------------------------------------------------------------
-# NaturalGas: 0.7 CFTC / 0.3 ICE-TTF
+# NaturalGas: 100% CFTC (ICE TTF-overlay droppet i fix 18cd3fd, 2026-05-26 —
+# ICE public-CSV inneholder ikke TTF Gas lenger)
 # ---------------------------------------------------------------------------
 
 
-def test_naturalgas_positioning_has_all_three_drivers(configs) -> None:
+def test_naturalgas_positioning_is_cftc_only(configs) -> None:
     pos = configs["NaturalGas"].rules.families["positioning"]
     names = [d.name for d in pos.drivers]
-    assert sorted(names) == sorted(["positioning_mm_pct", "cot_z_score", "cot_ice_mm_pct"])
+    assert sorted(names) == sorted(["positioning_mm_pct", "cot_z_score"])
+    assert "cot_ice_mm_pct" not in names
 
 
-def test_naturalgas_cot_ice_targets_ttf_gas(configs) -> None:
+def test_naturalgas_split_is_60_40_cftc(configs) -> None:
+    """Vekt-split etter TTF-dropp: positioning_mm_pct 0.6 + cot_z_score 0.4
+    (var 0.42/0.28 + cot_ice_mm_pct 0.3)."""
     pos = configs["NaturalGas"].rules.families["positioning"]
-    ice = next(d for d in pos.drivers if d.name == "cot_ice_mm_pct")
-    assert ice.params["contract"] == "ice ttf gas"
-
-
-def test_naturalgas_split_is_70_cftc_30_ttf(configs) -> None:
-    """Vekt-split: 0.42 (positioning_mm_pct) + 0.28 (cot_z_score) = 0.7
-    CFTC-side. cot_ice_mm_pct = 0.3 TTF-side."""
-    pos = configs["NaturalGas"].rules.families["positioning"]
-    cftc_total = sum(
-        d.weight for d in pos.drivers if d.name in ("positioning_mm_pct", "cot_z_score")
-    )
-    ice_total = sum(d.weight for d in pos.drivers if d.name == "cot_ice_mm_pct")
-    assert abs(cftc_total - 0.7) < 1e-9
-    assert abs(ice_total - 0.3) < 1e-9
+    weights = {d.name: d.weight for d in pos.drivers}
+    assert abs(weights["positioning_mm_pct"] - 0.6) < 1e-9
+    assert abs(weights["cot_z_score"] - 0.4) < 1e-9
 
 
 def test_naturalgas_positioning_weights_sum_to_one(configs) -> None:
@@ -89,7 +82,8 @@ def test_naturalgas_positioning_weights_sum_to_one(configs) -> None:
 
 def test_other_instruments_not_using_cot_ice(configs) -> None:
     """cot_ice_mm_pct-instrumenter:
-    - Energy (session 106): Brent + NaturalGas
+    - Energy (session 106): Brent (NaturalGas mistet TTF-overlay i
+      fix 18cd3fd, 2026-05-26 — ICE public-CSV har ikke TTF Gas lenger)
     - Softs (12.10 Bunke 2 #4, 2026-05-02): Cocoa + Coffee + Sugar + Wheat
     """
     using_ice: list[str] = []
@@ -102,7 +96,6 @@ def test_other_instruments_not_using_cot_ice(configs) -> None:
         "Brent",
         "Cocoa",
         "Coffee",
-        "NaturalGas",
         "Sugar",
         "Wheat",
     ]

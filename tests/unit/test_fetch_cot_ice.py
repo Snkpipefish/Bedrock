@@ -65,7 +65,9 @@ def test_parse_recognizes_brent_crude() -> None:
     assert df["open_interest"].iloc[0] == 1_000_000
 
 
-def test_parse_recognizes_gasoil_and_ttf() -> None:
+def test_parse_recognizes_gasoil_and_skips_ttf() -> None:
+    """TTF Gas droppet fra ICE public-CSV (fix 18cd3fd, 2026-05-26) —
+    rader med TTF skal behandles som ukjent marked og hoppes over."""
     csv = _sample_csv(
         [
             _row("LOW SULPHUR GASOIL", "01/16/2024"),
@@ -74,7 +76,7 @@ def test_parse_recognizes_gasoil_and_ttf() -> None:
     )
     df = parse_ice_csv(csv)
     contracts = sorted(df["contract"].unique())
-    assert contracts == ["ice gasoil", "ice ttf gas"]
+    assert contracts == ["ice gasoil"]
 
 
 def test_parse_skips_unknown_markets() -> None:
@@ -307,7 +309,9 @@ def test_ice_markets_canonical_keys() -> None:
     canonicals = set(ICE_MARKETS.values())
     assert "ice brent crude" in canonicals
     assert "ice gasoil" in canonicals
-    assert "ice ttf gas" in canonicals
+    # "ice ttf gas" fjernet fra mappingen (fix 18cd3fd, 2026-05-26):
+    # ICE public-CSV inneholder ikke TTF Gas lenger.
+    assert "ice ttf gas" not in canonicals
     # Sub-fase 12.10 Bunke 2 #4: softs lagt til (cocoa/coffee/sugar/wheat)
     assert "ice cocoa" in canonicals
     assert "ice coffee" in canonicals
