@@ -181,6 +181,39 @@ def test_p1_geo_spike_closes_buy(
     assert state not in active_states
 
 
+def test_p1_geo_spike_respects_planned_sl_distance(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Backstop (session 2026-06-12): geo-vakten skal IKKE fyre når
+    mot-bevegelsen er forbi geo_mult×intradag-ATR men fortsatt godt
+    innenfor planlagt SL-avstand. Setup-SL er i dags-ATR; 2×15m/1H-ATR
+    er typisk mye trangere — vakten forhåndsstoppet geometrien (44
+    live-exits, 0% win). Terskel = max(geo_mult×ATR, 1.1×SL-avstand)."""
+    client = _make_client_stub(symbol_map={"EURUSD": 1}, last_bid={1: 1.075}, last_ask={1: 1.075})
+    entry, ex = _make_engines(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        tmp_path=tmp_path,
+    )
+    entry.atr14[1] = [0.0010] * 20  # intradag-ATR = 0.0010 (trang)
+    # Planlagt SL-avstand 0.010 (entry 1.08, stop 1.07) — 10× intradag-ATR
+    state = _in_trade_state(horizon="SCALP", stop_price=1.0700)
+    active_states.append(state)
+    # Mot-bevegelse 0.005: > 2×ATR (0.002) men godt innenfor SL (0.010)
+    # og over stop_price → verken P0-breach eller geo-spike skal stenge
+    candle = Candle(
+        open=1.08, high=1.08, low=1.075, close=1.075, volume=0, timestamp=datetime.now(timezone.utc)
+    )
+    ex.manage_open_positions(1, candle)
+    client.close_position.assert_not_called()
+    assert state in active_states
+
+
 def test_p1_geo_spike_does_not_trigger_in_favor(
     safety: SafetyMonitor,
     config: ReloadableConfig,

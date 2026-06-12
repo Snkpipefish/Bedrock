@@ -181,13 +181,27 @@ class ExitEngine:
                     continue
 
             # ── P1: Geo-spike ────────────────────────────────
+            # Backstop-kalibrering (session 2026-06-12): terskelen er i
+            # INTRADAG-ATR (15m/1H) mens setup-SL er satt i dags-ATR —
+            # 2×1H-ATR ≈ 0.4×dATR, så vakten fyrte FØR planlagt SL og
+            # forhåndsstoppet geometrien med tap hver gang (live-data:
+            # 44 GEO-SPIKE-exits, 0% win, -94.7R sum). Server-side SL
+            # finnes (P0 fanger breach), så vakten gir kun verdi
+            # BORTENFOR planlagt SL: terskel = max(geo_mult×ATR,
+            # 1.1×SL-avstand). For posisjoner uten SL (stop_price=0)
+            # gjelder rå geo-terskel som katastrofe-vern som før.
             if atr:
                 move_against = close - state.entry_price if is_sell else state.entry_price - close
-                if move_against > geo_mult * atr:
+                geo_threshold = geo_mult * atr
+                if state.stop_price and state.stop_price > 0:
+                    sl_distance = abs(state.entry_price - state.stop_price)
+                    geo_threshold = max(geo_threshold, 1.1 * sl_distance)
+                if move_against > geo_threshold:
                     log.warning(
-                        "[GEO-SPIKE] %s — %.5f > %.2f×ATR. STENGER.",
+                        "[GEO-SPIKE] %s — %.5f > terskel %.5f (%.2f×ATR, SL-backstop). STENGER.",
                         state.signal_id,
                         move_against,
+                        geo_threshold,
                         geo_mult,
                     )
                     self._close_all(state, close, "GEO-SPIKE")
