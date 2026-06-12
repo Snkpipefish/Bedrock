@@ -54,6 +54,7 @@ from bedrock.setups.hysteresis import (
 )
 from bedrock.setups.levels import (
     Level,
+    apply_age_decay,
     detect_prior_period_levels,
     detect_round_numbers,
     detect_swing_levels,
@@ -380,13 +381,23 @@ def _build_level_list(
 ) -> list[Level]:
     """Bygg samlet, rangert nivå-liste for setup-generering.
 
-    Inkluderer swing + prior-daily. Round numbers legges kun til hvis
-    `round_number_step` er angitt (avhengig av asset-klasse).
+    Inkluderer swing + prior-weekly (0.8) + prior-monthly (0.9).
+    Round numbers legges kun til hvis `round_number_step` er angitt
+    (avhengig av asset-klasse).
+
+    Session 2026-06-12: prior-D byttet til prior-W/M. På D1-input gjorde
+    period="D" hver dags H/L til 0.8-nivå (242 av 263 nivåer for Gold) —
+    nivålisten ble flommet, strength-gaten meningsløs og clusteringen
+    produserte megasoner. Alders-decay forankres i siste bar-timestamp
+    (deterministisk, backtest-trygg).
     """
     levels: list[Level] = []
     levels.extend(detect_swing_levels(ohlc, window=swing_window))
     if len(ohlc) >= 2:
-        levels.extend(detect_prior_period_levels(ohlc, period="D"))
+        levels.extend(detect_prior_period_levels(ohlc, period="W"))
+        levels.extend(detect_prior_period_levels(ohlc, period="M", strength=0.9))
+        ref_ts = ohlc.index[-1].to_pydatetime()
+        levels = apply_age_decay(levels, ref_ts=ref_ts)
     if round_number_step is not None:
         levels.extend(
             detect_round_numbers(

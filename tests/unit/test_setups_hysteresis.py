@@ -32,20 +32,26 @@ def _lvl(price: float, type_: LevelType, strength: float = 0.8) -> Level:
 
 
 def _basic_buy_setup() -> Setup:
-    """Gold BUY SCALP @ 102, entry 100, sl 99.7, tp 106."""
-    setup = build_setup(
+    """Gold BUY SCALP — entry 100, sl 99.7, tp 106, rr 20.
+
+    Konstruert direkte (ikke via `build_setup`): hysterese-testene
+    tester stabiliseringslogikk på et Setup-objekt og skal ikke
+    avhenge av generator-policy (TP-vinduer, entry-bånd etc.).
+    """
+    return Setup(
         instrument="Gold",
         direction=Direction.BUY,
         horizon=Horizon.SCALP,
-        current_price=102.0,
+        entry=100.0,
+        sl=99.7,
+        tp=106.0,
+        rr=20.0,
         atr=1.0,
-        levels=[
-            _lvl(100.0, LevelType.SWING_LOW, 0.8),
-            _lvl(106.0, LevelType.SWING_HIGH, 0.8),
-        ],
+        entry_cluster_price=100.0,
+        entry_cluster_types=[LevelType.SWING_LOW],
+        tp_cluster_price=106.0,
+        tp_cluster_types=[LevelType.SWING_HIGH],
     )
-    assert setup is not None
-    return setup
 
 
 # ---------------------------------------------------------------------------
@@ -245,18 +251,20 @@ def test_apply_batch_with_no_snapshot() -> None:
 def test_apply_batch_matches_setups_by_slot() -> None:
     """Snapshot med flere slots; hver setup skal matche sin egen."""
     buy = _basic_buy_setup()
-    sell_setup = build_setup(
+    sell_setup = Setup(
         instrument="Gold",
         direction=Direction.SELL,
         horizon=Horizon.SCALP,
-        current_price=98.0,
+        entry=100.0,
+        sl=100.3,
+        tp=94.0,
+        rr=20.0,
         atr=1.0,
-        levels=[
-            _lvl(100.0, LevelType.SWING_HIGH, 0.8),
-            _lvl(94.0, LevelType.SWING_LOW, 0.8),
-        ],
+        entry_cluster_price=100.0,
+        entry_cluster_types=[LevelType.SWING_HIGH],
+        tp_cluster_price=94.0,
+        tp_cluster_types=[LevelType.SWING_LOW],
     )
-    assert sell_setup is not None
 
     snapshot = SetupSnapshot(
         run_ts=NOW,

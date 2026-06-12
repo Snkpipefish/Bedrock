@@ -111,9 +111,9 @@ def test_cluster_levels_close_merge() -> None:
     assert len(out) == 1
     cluster = out[0]
     assert cluster.source_count == 2
-    # Pris = sterkestes pris
-    assert cluster.price == 100.2
-    # Konfluens: strongest=0.9 + 0.1 → 1.0 cap
+    # Pris = strength-vektet sentroid: (0.7×100.0 + 0.9×100.2) / 1.6
+    assert cluster.price == pytest.approx(100.1125)
+    # Konfluens: strongest=0.9 + 0.1 (2 distinkte typer) → 1.0 cap
     assert cluster.strength == pytest.approx(1.0)
     # Begge typer bevart
     assert set(cluster.types) == {LevelType.SWING_HIGH, LevelType.ROUND_NUMBER}
@@ -129,8 +129,52 @@ def test_cluster_levels_transitive_single_link() -> None:
     out = cluster_levels(levels, buffer=0.3)
     assert len(out) == 1
     assert out[0].source_count == 3
-    # Konfluens-bonus: strongest 0.8 + 0.2 (2 ekstra) = 1.0
+    # Konfluens-bonus: strongest 0.8 + 0.2 (3 distinkte typer) = 1.0
     assert out[0].strength == pytest.approx(1.0)
+
+
+def test_cluster_levels_max_span_breaks_chain() -> None:
+    """Kjede som ville passert buffer brytes når total-spennet
+    overstiger max_span — hindrer megasoner."""
+    levels = [
+        _lvl(100.0, LevelType.PRIOR_HIGH, strength=0.8),
+        _lvl(100.4, LevelType.PRIOR_HIGH, strength=0.8),
+        _lvl(100.8, LevelType.PRIOR_HIGH, strength=0.8),
+        _lvl(101.2, LevelType.PRIOR_HIGH, strength=0.8),
+    ]
+    # Uten span-cap: alt kjedes (hver avstand 0.4 ≤ buffer 0.5)
+    unbounded = cluster_levels(levels, buffer=0.5)
+    assert len(unbounded) == 1
+    assert unbounded[0].source_count == 4
+    # Med max_span=0.5: 101.2-100.0=1.2 > 0.5 → kjeden brytes
+    capped = cluster_levels(levels, buffer=0.5, max_span=0.5)
+    assert len(capped) > 1
+    assert all((c.source_count <= 2) for c in capped)
+
+
+def test_cluster_confluence_bonus_only_for_distinct_types() -> None:
+    """N nivåer av SAMME type gir ingen konfluens-bonus — to nabodagers
+    highs er ikke konfluens."""
+    levels = [
+        _lvl(100.0, LevelType.PRIOR_HIGH, strength=0.8),
+        _lvl(100.1, LevelType.PRIOR_HIGH, strength=0.8),
+        _lvl(100.2, LevelType.PRIOR_HIGH, strength=0.8),
+    ]
+    out = cluster_levels(levels, buffer=0.3)
+    assert len(out) == 1
+    # Ingen bonus: 1 distinkt type → strength = max = 0.8
+    assert out[0].strength == pytest.approx(0.8)
+
+
+def test_cluster_price_is_strength_weighted_centroid() -> None:
+    """Ved lik strength = aritmetisk midtpunkt (ikke lavest pris)."""
+    levels = [
+        _lvl(100.0, LevelType.PRIOR_HIGH, strength=0.8),
+        _lvl(100.4, LevelType.PRIOR_LOW, strength=0.8),
+    ]
+    out = cluster_levels(levels, buffer=0.5)
+    assert len(out) == 1
+    assert out[0].price == pytest.approx(100.2)
 
 
 def test_cluster_levels_buffer_zero_no_merging() -> None:
@@ -160,11 +204,16 @@ def test_cluster_types_stable_order() -> None:
 
 
 def _buy_scenario() -> list[Level]:
-    """Scenario: nåpris ~102; støtte på 100 (entry), motstand på 106+108."""
+    """Scenario: nåpris ~102, atr=1.0; støtte på 101 (entry).
+
+    Motstand 103.2 (1.2 ATR over nåpris): innenfor SCALP-vinduet (2 ATR)
+    og gir SCALP-R:R 7.3 — men SWING-R:R bare 2.2 (< 2.5), så SWING
+    hopper videre til 107 (5 ATR — innenfor SWING-vinduet på 6).
+    """
     return [
-        _lvl(100.0, LevelType.SWING_LOW, strength=0.8),  # entry-støtte
-        _lvl(106.0, LevelType.SWING_HIGH, strength=0.7),  # SCALP-TP
-        _lvl(108.0, LevelType.PRIOR_HIGH, strength=0.8),  # SWING-TP (2. i retningen)
+        _lvl(101.0, LevelType.SWING_LOW, strength=0.8),  # entry-støtte
+        _lvl(103.2, LevelType.SWING_HIGH, strength=0.7),  # SCALP-TP
+        _lvl(107.0, LevelType.PRIOR_HIGH, strength=0.8),  # SWING-TP
     ]
 
 
@@ -178,16 +227,17 @@ def test_build_setup_buy_scalp_succeeds() -> None:
         levels=_buy_scenario(),
     )
     assert setup is not None
-    assert setup.entry == 100.0
-    # SL = entry - 0.3 * atr = 100 - 0.3 = 99.7
-    assert setup.sl == pytest.approx(99.7)
-    assert setup.tp == 106.0
-    # R:R = (106-100) / (100-99.7) = 6 / 0.3 = 20
-    assert setup.rr == pytest.approx(20.0)
+    assert setup.entry == 101.0
+    # SL = entry - 0.3 * atr = 101 - 0.3 = 100.7
+    assert setup.sl == pytest.approx(100.7)
+    assert setup.tp == 103.2
+    # R:R = (103.2-101) / (101-100.7) = 2.2 / 0.3 ≈ 7.33
+    assert setup.rr == pytest.approx(2.2 / 0.3)
 
 
-def test_build_setup_buy_swing_uses_second_level() -> None:
-    """SWING skal hoppe over 1. nivå (SCALP-target) til 2."""
+def test_build_setup_buy_swing_skips_cluster_failing_rr_floor() -> None:
+    """SWING hopper over nær klynge som ikke gir R:R ≥ 2.5, til neste
+    innenfor SWING-vinduet (6 ATR)."""
     setup = build_setup(
         instrument="Gold",
         direction=Direction.BUY,
@@ -197,7 +247,8 @@ def test_build_setup_buy_swing_uses_second_level() -> None:
         levels=_buy_scenario(),
     )
     assert setup is not None
-    assert setup.tp == 108.0
+    # 103.2 gir R:R 2.2 (< 2.5) → neste klynge 107 (R:R 6.0)
+    assert setup.tp == 107.0
 
 
 def test_build_setup_buy_makro_has_no_tp() -> None:
@@ -221,7 +272,7 @@ def test_build_setup_entry_cluster_types_reported() -> None:
     levels = [
         _lvl(100.0, LevelType.SWING_LOW, strength=0.6),
         _lvl(100.1, LevelType.ROUND_NUMBER, strength=0.9),  # konfluens
-        _lvl(106.0, LevelType.SWING_HIGH, strength=0.7),
+        _lvl(103.5, LevelType.SWING_HIGH, strength=0.7),
     ]
     setup = build_setup(
         instrument="Gold",
@@ -241,11 +292,15 @@ def test_build_setup_entry_cluster_types_reported() -> None:
 
 
 def _sell_scenario() -> list[Level]:
-    """Nåpris ~98; motstand på 100, support på 94+92."""
+    """Nåpris ~98, atr=1.0; motstand på 99 (entry), support 96.8 + 93.5.
+
+    Speiler `_buy_scenario`: 96.8 er SCALP-TP (1.2 ATR), men gir SWING-
+    R:R 2.2 (< 2.5) → SWING går videre til 93.5 (4.5 ATR ≤ 6).
+    """
     return [
-        _lvl(100.0, LevelType.SWING_HIGH, strength=0.8),  # entry-motstand
-        _lvl(94.0, LevelType.SWING_LOW, strength=0.7),  # SCALP-TP
-        _lvl(92.0, LevelType.PRIOR_LOW, strength=0.8),  # SWING-TP
+        _lvl(99.0, LevelType.SWING_HIGH, strength=0.8),  # entry-motstand
+        _lvl(96.8, LevelType.SWING_LOW, strength=0.7),  # SCALP-TP
+        _lvl(93.5, LevelType.PRIOR_LOW, strength=0.8),  # SWING-TP
     ]
 
 
@@ -259,9 +314,9 @@ def test_build_setup_sell_scalp() -> None:
         levels=_sell_scenario(),
     )
     assert setup is not None
-    assert setup.entry == 100.0
-    assert setup.sl == pytest.approx(100.3)  # 100 + 0.3*1.0
-    assert setup.tp == 94.0
+    assert setup.entry == 99.0
+    assert setup.sl == pytest.approx(99.3)  # 99 + 0.3*1.0
+    assert setup.tp == 96.8
 
 
 def test_build_setup_sell_swing() -> None:
@@ -274,7 +329,7 @@ def test_build_setup_sell_swing() -> None:
         levels=_sell_scenario(),
     )
     assert setup is not None
-    assert setup.tp == 92.0
+    assert setup.tp == 93.5
 
 
 # ---------------------------------------------------------------------------
@@ -351,24 +406,21 @@ def test_build_setup_scalp_rejects_when_rr_below_min() -> None:
     assert setup is None
 
 
-def test_build_setup_swing_rejects_when_intended_cluster_below_min_rr() -> None:
-    """SWING bruker KUN tilsiktet klynge (idx 1). Ingen fallback til 3. nivå.
+def test_build_setup_swing_rejects_when_no_cluster_in_window_meets_rr() -> None:
+    """Horisont-vinduet er hardt: hvis ingen klynge innenfor SWING-vinduet
+    (6 ATR fra nåpris) gir R:R ≥ 2.5, droppes setup-et — TP glir IKKE ut
+    i MAKRO-distanse.
 
-    Asymmetri-prinsipp: horisont-kontrakten skal være hard. Hvis 2. klynge
-    i retning ikke gir nok R:R, drop heller setup enn å gli ut til 3.
-    klynge — det ville flyttet TP-distansen ut av SWING-vinduet og inn i
-    MAKRO-territorium.
-
-    Setup: entry=100, sl_atr=1.0 → sl=99, risk=1.0. Ahead-liste sortert
-    ASC: [101 (idx 0 skippes), 102 (idx 1 target), 103 (idx 2 ignored)].
-    Idx 1 (102): R:R=2.0 < 2.5 → drop.
+    Setup: entry=100, sl_atr=1.0 → sl=99, risk=1.0. Klynger over nåpris:
+    101 (R:R=1.0), 102 (R:R=2.0) — begge under floor. 109 ville gitt
+    R:R=9, men ligger 8.5 ATR fra nåpris (> 6) → drop.
     """
     cfg = SetupConfig(sl_atr_multiplier=1.0)
     levels = [
         _lvl(100.0, LevelType.SWING_LOW, strength=0.8),
-        _lvl(101.0, LevelType.ROUND_NUMBER, strength=0.7),  # idx 0 (skippes av SWING)
-        _lvl(102.0, LevelType.SWING_HIGH, strength=0.7),  # idx 1 — under floor
-        _lvl(103.0, LevelType.PRIOR_HIGH, strength=0.8),  # idx 2 — IKKE fallback lenger
+        _lvl(101.0, LevelType.ROUND_NUMBER, strength=0.7),  # R:R 1.0 — under floor
+        _lvl(102.0, LevelType.SWING_HIGH, strength=0.7),  # R:R 2.0 — under floor
+        _lvl(109.0, LevelType.PRIOR_HIGH, strength=0.8),  # utenfor 6-ATR-vinduet
     ]
     setup = build_setup(
         instrument="Gold",
@@ -382,18 +434,16 @@ def test_build_setup_swing_rejects_when_intended_cluster_below_min_rr() -> None:
     assert setup is None
 
 
-def test_build_setup_swing_uses_intended_cluster_when_rr_meets_floor() -> None:
-    """SWING velger idx 1 når R:R ≥ floor — selv om idx 2 ville gi høyere R:R.
-
-    Bekrefter at vi ikke "shopper" etter høyest mulig R:R: tilsiktet klynge
-    vinner så lenge floor er innfridd. Det bevarer horisont-kontrakten.
-    """
+def test_build_setup_swing_takes_nearest_cluster_meeting_rr_floor() -> None:
+    """SWING velger NÆRMESTE klynge med R:R ≥ floor — ingen shopping
+    etter høyere R:R lenger ute. Nærmeste reelle nivå som gjør traden
+    verdt å ta vinner; det holder TP innenfor horisont-vinduet."""
     cfg = SetupConfig(sl_atr_multiplier=1.0)
     levels = [
         _lvl(100.0, LevelType.SWING_LOW, strength=0.8),
-        _lvl(101.0, LevelType.ROUND_NUMBER, strength=0.7),  # idx 0
-        _lvl(103.5, LevelType.SWING_HIGH, strength=0.7),  # idx 1 — R:R=3.5
-        _lvl(106.0, LevelType.PRIOR_HIGH, strength=0.8),  # idx 2 — IKKE valgt
+        _lvl(101.0, LevelType.ROUND_NUMBER, strength=0.7),  # R:R 1.0 — hoppes over
+        _lvl(103.5, LevelType.SWING_HIGH, strength=0.7),  # R:R 3.5 — valgt
+        _lvl(106.0, LevelType.PRIOR_HIGH, strength=0.8),  # høyere R:R — IKKE valgt
     ]
     setup = build_setup(
         instrument="Gold",
@@ -407,6 +457,25 @@ def test_build_setup_swing_uses_intended_cluster_when_rr_meets_floor() -> None:
     assert setup is not None
     assert setup.tp == 103.5
     assert setup.rr == pytest.approx(3.5)
+
+
+def test_build_setup_entry_outside_max_distance_rejected() -> None:
+    """Entry-klynge lenger unna enn max_entry_distance_atr → None.
+    Limit-ordre langt bak pris fylles aldri, eller fylles etter at
+    score-tesen er død."""
+    levels = [
+        _lvl(97.0, LevelType.SWING_LOW, strength=0.9),  # 5 ATR under nåpris
+        _lvl(103.0, LevelType.SWING_HIGH, strength=0.8),
+    ]
+    setup = build_setup(
+        instrument="Gold",
+        direction=Direction.BUY,
+        horizon=Horizon.SCALP,
+        current_price=102.0,
+        atr=1.0,
+        levels=levels,
+    )
+    assert setup is None
 
 
 def test_build_setup_empty_levels() -> None:
@@ -510,8 +579,8 @@ def test_build_setup_swing_uses_horizon_scaled_sl() -> None:
     )
     assert setup is not None
     assert setup.sl == pytest.approx(99.0)  # 100 - 1.0×ATR
-    # R:R mot 2. klynge (108): reward=8, risk=1 → 8.0 ≥ 2.5
-    assert setup.rr == pytest.approx(8.0)
+    # Nærmeste klynge som møter floor: 104 → reward=4, risk=1 → 4.0 ≥ 2.5
+    assert setup.rr == pytest.approx(4.0)
 
 
 def test_build_setup_makro_uses_wider_sl_buffer() -> None:
@@ -572,7 +641,7 @@ def test_integration_detect_levels_then_build_setup() -> None:
     lows = [103.0] * 9 + [100.0] + [103.0] * 10  # swing low ved idx 9
     ohlc = pd.DataFrame({"open": highs, "high": highs, "low": lows, "close": highs}, index=ts)
     swing_levels = detect_swing_levels(ohlc, window=3)
-    round_levels = detect_round_numbers(current_price=104.0, step=2.0, count_above=3, count_below=3)
+    round_levels = detect_round_numbers(current_price=101.5, step=2.0, count_above=3, count_below=3)
 
     levels = swing_levels + round_levels
 
@@ -580,10 +649,11 @@ def test_integration_detect_levels_then_build_setup() -> None:
         instrument="Gold",
         direction=Direction.BUY,
         horizon=Horizon.SCALP,
-        current_price=104.0,
+        current_price=101.5,
         atr=1.0,
         levels=levels,
     )
     assert setup is not None
-    # Entry bør være på støtte-siden (< 104)
-    assert setup.entry < 104.0
+    # Entry bør være på støtte-siden (< 101.5) og innenfor 2×ATR-båndet
+    assert setup.entry < 101.5
+    assert 101.5 - setup.entry <= 2.0

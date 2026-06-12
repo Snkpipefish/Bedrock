@@ -10,6 +10,7 @@ import pytest
 from bedrock.setups.levels import (
     Level,
     LevelType,
+    apply_age_decay,
     detect_prior_period_levels,
     detect_round_numbers,
     detect_swing_levels,
@@ -322,6 +323,68 @@ def test_rank_levels_does_not_deduplicate() -> None:
     ]
     ranked = rank_levels(levels)
     assert len(ranked) == 2
+
+
+# ---------------------------------------------------------------------------
+# apply_age_decay
+# ---------------------------------------------------------------------------
+
+
+def test_age_decay_fresh_level_unchanged() -> None:
+    ref = datetime(2026, 6, 12)
+    levels = [Level(price=100.0, type=LevelType.PRIOR_HIGH, strength=0.8, ts=ref)]
+    out = apply_age_decay(levels, ref_ts=ref)
+    assert out[0].strength == pytest.approx(0.8)
+
+
+def test_age_decay_half_life_midpoint() -> None:
+    """age = half_life → faktor = min + (1-min)×0.5 = 0.8 med defaults."""
+    ref = datetime(2026, 6, 12)
+    old = datetime(2026, 3, 14)  # 90 dager før
+    levels = [Level(price=100.0, type=LevelType.PRIOR_HIGH, strength=0.8, ts=old)]
+    out = apply_age_decay(levels, ref_ts=ref, half_life_days=90.0, min_factor=0.6)
+    assert out[0].strength == pytest.approx(0.8 * 0.8)
+
+
+def test_age_decay_ancient_level_floors_at_min_factor() -> None:
+    ref = datetime(2026, 6, 12)
+    ancient = datetime(2020, 1, 1)
+    levels = [Level(price=100.0, type=LevelType.PRIOR_HIGH, strength=0.8, ts=ancient)]
+    out = apply_age_decay(levels, ref_ts=ref, half_life_days=90.0, min_factor=0.6)
+    assert out[0].strength == pytest.approx(0.8 * 0.6, abs=1e-6)
+
+
+def test_age_decay_skips_levels_without_ts() -> None:
+    """Round numbers (ts=None) er tidløse."""
+    ref = datetime(2026, 6, 12)
+    levels = [Level(price=2000.0, type=LevelType.ROUND_NUMBER, strength=0.9, ts=None)]
+    out = apply_age_decay(levels, ref_ts=ref)
+    assert out[0].strength == pytest.approx(0.9)
+
+
+def test_age_decay_does_not_mutate_input() -> None:
+    ref = datetime(2026, 6, 12)
+    old = datetime(2025, 6, 12)
+    levels = [Level(price=100.0, type=LevelType.PRIOR_HIGH, strength=0.8, ts=old)]
+    apply_age_decay(levels, ref_ts=ref)
+    assert levels[0].strength == pytest.approx(0.8)
+
+
+def test_age_decay_invalid_params_raise() -> None:
+    ref = datetime(2026, 6, 12)
+    with pytest.raises(ValueError):
+        apply_age_decay([], ref_ts=ref, half_life_days=0)
+    with pytest.raises(ValueError):
+        apply_age_decay([], ref_ts=ref, min_factor=1.5)
+
+
+def test_prior_period_strength_parameter() -> None:
+    """Caller kan differensiere tyngde per periode (W=0.8, M=0.9)."""
+    highs = [100.0 + i for i in range(70)]
+    ohlc = _ohlc_from_highs_lows(highs)
+    monthly = detect_prior_period_levels(ohlc, period="M", strength=0.9)
+    assert monthly
+    assert all(lvl.strength == pytest.approx(0.9) for lvl in monthly)
 
 
 # ---------------------------------------------------------------------------

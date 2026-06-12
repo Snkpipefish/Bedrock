@@ -156,21 +156,26 @@ def detect_swing_levels(ohlc: pd.DataFrame, window: int = 5) -> list[Level]:
 def detect_prior_period_levels(
     ohlc: pd.DataFrame,
     period: Literal["W", "D", "M"],
+    strength: float = 0.8,
 ) -> list[Level]:
     """Høy/lav-nivåer for hver komplette periode i historikken.
 
     Resampler OHLC på gitt periode ("W"=ukentlig, "D"=daglig, "M"=månedlig)
     og returnerer en `Level` for hver periodes max-high og min-low.
 
-    **Strength-heuristikk (konstant):**
-
-        strength = 0.8
+    **Strength (parameter, default 0.8):**
 
     Disse nivåene har inherent institusjonell vekt — prior-week-high er
     universelt observert uavhengig av hvor mange ganger prisen har
     testet det. PLAN § 5.1 klassifiserer dem som "Kjent institusjonelt
-    nivå". Aldersdegradering kan raffinere senere, men for MVP er 0.8
-    konstant.
+    nivå". Caller kan differensiere tyngde per periode (f.eks. 0.9 for
+    månedlige, 0.8 for ukentlige). Aldersdegradering gjøres separat via
+    `apply_age_decay`.
+
+    **NB (session 2026-06-12):** `period="D"` på D1-input gjør hver
+    eneste dags H/L til nivå — det flommer nivålisten og gjør strength-
+    gaten meningsløs (empirisk: 242 av 263 nivåer for Gold). Bruk "W"/"M"
+    når input er daglige barer.
 
     Siste (potensielt inkomplette) periode inkluderes ikke automatisk —
     pandas-resample inkluderer den, men vi dropper siste rad for å unngå
@@ -211,7 +216,7 @@ def detect_prior_period_levels(
             Level(
                 price=float(row["high"]),
                 type=LevelType.PRIOR_HIGH,
-                strength=0.8,
+                strength=strength,
                 ts=_to_datetime(ts),
             )
         )
@@ -219,12 +224,60 @@ def detect_prior_period_levels(
             Level(
                 price=float(row["low"]),
                 type=LevelType.PRIOR_LOW,
-                strength=0.8,
+                strength=strength,
                 ts=_to_datetime(ts),
             )
         )
 
     return levels
+
+
+# ---------------------------------------------------------------------------
+# Alders-decay
+# ---------------------------------------------------------------------------
+
+
+def apply_age_decay(
+    levels: list[Level],
+    ref_ts: datetime,
+    half_life_days: float = 90.0,
+    min_factor: float = 0.6,
+) -> list[Level]:
+    """Demp strength på gamle nivåer — markedet glemmer.
+
+    Multipliserer hver levels strength med en decay-faktor i
+    `[min_factor, 1.0]`:
+
+        factor = min_factor + (1 - min_factor) × 0.5^(age_days / half_life_days)
+
+    - Ferskt nivå (age=0) → faktor 1.0 (uendret)
+    - age = half_life → faktor midtveis mot gulvet (default 0.8)
+    - Eldgammelt nivå → faktor → `min_factor` (default 0.6)
+
+    Med defaults faller et prior-W-nivå (0.8) under entry-gaten på 0.6
+    etter ~5-6 måneder — gamle nivåer kan fortsatt være TP-soner, men
+    kvalifiserer ikke lenger som entry-anker.
+
+    Nivåer uten `ts` (round numbers) er tidløse og returneres uendret.
+    `ref_ts` skal være siste bar-timestamp (deterministisk, backtest-
+    trygg) — IKKE wallclock.
+
+    Returnerer nye `Level`-objekter; input muteres ikke.
+    """
+    if half_life_days <= 0:
+        raise ValueError(f"apply_age_decay: half_life_days must be > 0, got {half_life_days}")
+    if not 0.0 <= min_factor <= 1.0:
+        raise ValueError(f"apply_age_decay: min_factor must be in [0, 1], got {min_factor}")
+
+    out: list[Level] = []
+    for lvl in levels:
+        if lvl.ts is None:
+            out.append(lvl)
+            continue
+        age_days = max(0.0, (ref_ts - lvl.ts).total_seconds() / 86400.0)
+        factor = min_factor + (1.0 - min_factor) * 0.5 ** (age_days / half_life_days)
+        out.append(lvl.model_copy(update={"strength": lvl.strength * factor}))
+    return out
 
 
 # ---------------------------------------------------------------------------
