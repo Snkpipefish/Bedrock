@@ -58,6 +58,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1130,6 +1131,16 @@ class ExitEngine:
                 # live-posisjoner som boten sluttet å manage (kun hard SL igjen).
                 pos_id = getattr(event, "positionId", 0) or 0
                 order_id = getattr(event, "orderId", 0) or 0
+                # Fallback (session 2026-06-12): cTrader-error-eventet har i
+                # praksis verken positionId eller orderId satt — ID-en står
+                # kun i beskrivelsesteksten ("Position not found with id
+                # 16742913"). Uten parse ble staten ALDRI matchet → trail-
+                # amend re-trigget POSITION_NOT_FOUND hvert kvarter i
+                # timevis (observert 2026-06-11: samme posId 13+ ganger).
+                if not pos_id:
+                    m = re.search(r"position not found with id\s+(\d+)", str(desc), re.IGNORECASE)
+                    if m:
+                        pos_id = int(m.group(1))
                 target: TradeState | None = None
                 if pos_id:
                     target = next(
