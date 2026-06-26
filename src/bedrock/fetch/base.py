@@ -49,6 +49,8 @@ def http_get_with_retry(
     attempts: int = 3,
     headers: dict[str, str] | None = None,
     retry_on_5xx: bool = True,
+    wait_min: float = 1.0,
+    wait_max: float = 10.0,
 ) -> requests.Response:
     """GET med retries + eksponentiell backoff.
 
@@ -67,6 +69,10 @@ def http_get_with_retry(
             som krever custom headers (f.eks. metalcharts X-MC-Token).
         retry_on_5xx: True (default) retries HTTP 5xx; sett False hvis
             caller vil håndtere 5xx selv (f.eks. for fail-fast).
+        wait_min: nedre grense for eksponentiell backoff (sekunder).
+        wait_max: øvre grense for eksponentiell backoff (sekunder). Hev
+            denne (+ `attempts`) for kilder der en kort DNS/nettverks-blipp
+            ikke skal felle hele fetch-runet (f.eks. lav-kadens-fetchers).
     """
     if retry_on_5xx:
         retry_predicate = retry_any(
@@ -90,7 +96,7 @@ def http_get_with_retry(
 
     retrying = Retrying(
         stop=stop_after_attempt(attempts),
-        wait=wait_exponential(multiplier=1, min=1, max=10),
+        wait=wait_exponential(multiplier=1, min=wait_min, max=wait_max),
         retry=retry_predicate,
         reraise=True,
     )

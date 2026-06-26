@@ -66,7 +66,11 @@ def fetch_calendar_events(
     fetched_at = datetime.now(timezone.utc)
 
     if raw_response is None:
-        response = http_get_with_retry(CALENDAR_URL, timeout=timeout)
+        # Lav kadens (2×/dag) → vi har råd til å være tålmodige. Et kort
+        # DNS-/nettverks-blipp skal ikke felle fetch-runet og trigge en
+        # falsk RØD pipeline-helse. 5 forsøk med backoff opp til 30 s gir
+        # ~30 s samlet tålmodighet — nok til å ri av forbigående blip.
+        response = http_get_with_retry(CALENDAR_URL, timeout=timeout, attempts=5, wait_max=30.0)
         if response.status_code != 200:
             raise ValueError(f"calendar_ff: HTTP {response.status_code} from {CALENDAR_URL}")
         try:

@@ -78,3 +78,18 @@ def test_request_exception_retries() -> None:
         with pytest.raises(requests.ConnectionError):
             http_get_with_retry("https://example.com", attempts=3)
     assert mock_get.call_count == 3
+
+
+def test_dns_blip_recovery_med_flere_forsok() -> None:
+    """DNS-blipp på de første forsøkene rides av når attempts er høyt nok.
+
+    Speiler calendar_ff-kallet: 4 DNS-feil etterfulgt av suksess skal gi
+    en 200, ikke en hard fetch-failure (falsk RØD pipeline-helse).
+    """
+    side_effects = [requests.ConnectionError("dns")] * 4 + [_resp(200, "ok")]
+    mock_get = Mock(side_effect=side_effects)
+    with patch("bedrock.fetch.base.requests.get", mock_get):
+        # wait_max=0 holder testen rask uten å vente på backoff.
+        r = http_get_with_retry("https://example.com", attempts=5, wait_min=0, wait_max=0)
+        assert r.status_code == 200
+    assert mock_get.call_count == 5
