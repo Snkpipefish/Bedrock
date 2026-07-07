@@ -23,7 +23,9 @@ fetchers:
 
   cot_disaggregated:
     module: bedrock.fetch.cot_cftc
-    cron: "0 22 * * 5"         # fredag 22:00 UTC (etter CFTC-publisering)
+    # Fredag 22:00 (etter CFTC-publisering) + tirsdag som fanger rapporter
+    # utsatt av amerikanske helligdager (f.eks. 4. juli → publisert mandag).
+    cron: "0 22 * * 2,5"
     stale_hours: 264           # ukentlig + 4d buffer (sub-fase 12.8 § 20.4)
     on_failure: log_and_skip
     table: cot_disaggregated
@@ -116,10 +118,11 @@ fetchers:
   # Sub-fase 12.11+ analytiker D.2: ANP Brasil etanol pumpe-pris.
   # Eksport-impact-vektet daglig snitt for Centro-Sul-states.
   # Erstatter crude-oil-proxy med direkte etanol-paritet-måling.
-  # Månedlig publisering ~5. i mnd; vi henter 7. for buffer.
+  # Månedlig publisering, men ofte senere enn den 7. (2026-07-07: juni
+  # manglet fortsatt den 7.) — ekstra kjøring den 21. fanger etternølerne.
   anp_ethanol:
     module: bedrock.fetch.anp_ethanol
-    cron: "0 5 7 * *"            # 7. i mnd 05:00 Oslo
+    cron: "0 5 7,21 * *"         # 7. og 21. i mnd 05:00 Oslo
     stale_hours: 720              # månedlig
     on_failure: log_and_skip
     table: fundamentals
