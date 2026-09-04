@@ -145,6 +145,7 @@ _SYMBOL_SILENCE_AGRI_THRESHOLD_SEC = 7200  # 2 t — agri har naturlig off-hours
 
 # Heartbeat og watchdog-intervall (cTrader API-krav, ikke konfigurerbart)
 _HEARTBEAT_INTERVAL_SEC = 25
+_RECONCILE_INTERVAL_SEC = 900  # 15 min — fanger fantom-states mellom reconnects
 _WATCHDOG_INTERVAL_SEC = 30
 
 
@@ -317,6 +318,7 @@ class CtraderClient:
         self._last_spot_per_sid: dict[int, float] = {}
         self._symbol_silent_logged: set[int] = set()
         self._heartbeat_loop: task.LoopingCall | None = None
+        self._reconcile_loop: task.LoopingCall | None = None
         self._watchdog_loop: task.LoopingCall | None = None
 
         # Pending requests (clientMsgId → type) — for debug
@@ -802,8 +804,12 @@ class CtraderClient:
         for j, (_price_key, sid) in enumerate(feed_sids):
             reactor.callLater(feed_start + j * STEP, _sub_feed, sid)  # type: ignore[attr-defined]
 
-        # Reconcile — etter symbol-detaljer
+        # Reconcile — etter symbol-detaljer, deretter periodisk slik at
+        # ExitEngine kan prune fantom-states også uten reconnect.
         reactor.callLater(detail_delay + 0.5, self.send_reconcile)  # type: ignore[attr-defined]
+        if self._reconcile_loop is None or not self._reconcile_loop.running:
+            self._reconcile_loop = task.LoopingCall(self.send_reconcile)
+            self._reconcile_loop.start(_RECONCILE_INTERVAL_SEC, now=False)
 
         log.info(
             "[KLAR] Transport initialisert — %d trading-symboler, %d feed-symboler",

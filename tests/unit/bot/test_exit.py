@@ -2726,3 +2726,333 @@ def test_p3_5_swing_still_trails_post_t1(
 
     assert state.trail_level is not None
     assert client.amend_sl_tp.called
+
+
+# ─────────────────────────────────────────────────────────────
+# Server-side lukking (DEAL-CLOSE) → logg + fjern state
+# (fix 2026-09-04: «SL-BREACH» var feilmerket server-SL)
+# ─────────────────────────────────────────────────────────────
+
+
+def _make_close_event(
+    *,
+    position_id: int,
+    label: str,
+    gross_cents: int,
+    exec_price: float,
+    closed_volume: int,
+    position_status: int = 2,  # POSITION_STATUS_CLOSED
+    with_position: bool = True,
+) -> MagicMock:
+    """Execution-event med deal.closePositionDetail slik cTrader sender
+    ved SL/TP/trail/manuell lukking (positionStatus=2 = CLOSED)."""
+    event = MagicMock()
+    event.executionType = 3  # ORDER_FILLED
+    fields = {"deal", "position"} if with_position else {"deal"}
+    event.HasField = lambda fld: fld in fields
+
+    event.deal = MagicMock()
+    event.deal.HasField = lambda fld: fld == "closePositionDetail"
+    event.deal.dealId = 555
+    event.deal.positionId = position_id
+    event.deal.dealStatus = 2
+    event.deal.moneyDigits = 2
+    event.deal.commission = 0
+    event.deal.executionPrice = exec_price
+    event.deal.closePositionDetail.grossProfit = gross_cents
+    event.deal.closePositionDetail.swap = 0
+    event.deal.closePositionDetail.commission = 0
+    event.deal.closePositionDetail.closedVolume = closed_volume
+
+    event.position = MagicMock()
+    event.position.positionId = position_id
+    event.position.positionStatus = position_status
+    event.position.HasField = lambda fld: fld == "tradeData"
+    event.position.tradeData.label = label
+    return event
+
+
+def _write_open_log(path: Path, *entries: dict) -> None:
+    path.write_text(json.dumps({"entries": list(entries)}))
+
+
+def _open_entry(signal_id: str, position_id: int, **sig: object) -> dict:
+    return {
+        "timestamp": "2026-09-01 10:00 timezone.utc",
+        "closed_at": None,
+        "result": None,
+        "exit_reason": None,
+        "signal": {
+            "id": signal_id,
+            "instrument": "EURUSD",
+            "direction": "BUY",
+            "entry": 1.08,
+            "stop": 1.078,
+            "t1": 1.085,
+            "position_id": position_id,
+            **sig,
+        },
+    }
+
+
+def test_on_execution_server_sl_close_logs_real_pnl_and_removes_state(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    client = _make_client_stub(symbol_map={"EURUSD": 1}, symbol_price_digits={1: 5})
+    _, ex = _make_engines(
+        client=client, safety=safety, config=config, active_states=active_states, tmp_path=tmp_path
+    )
+    state = _in_trade_state(position_id=42)
+    active_states.append(state)
+    _write_open_log(tmp_path / "signal_log.json", _open_entry(state.signal_id, 42))
+
+    ex.on_execution(
+        _make_close_event(
+            position_id=42,
+            label=f"SE-{state.signal_id}",
+            gross_cents=-420,
+            exec_price=1.07795,
+            closed_volume=2000,
+        )
+    )
+
+    assert state not in active_states
+    client.close_position.assert_not_called()  # ingen død close → ingen POSITION_NOT_FOUND
+    e = json.loads((tmp_path / "signal_log.json").read_text())["entries"][0]
+    assert e["result"] == "loss"
+    assert e["exit_reason"] == "SL"
+    assert e["pnl"]["pnl_real"] is True
+    assert e["pnl"]["pnl_usd"] == -4.2
+    assert e["pnl"]["close_price"] == 1.07795
+    assert safety.daily_loss == pytest.approx(4.2)
+
+
+def test_on_execution_server_close_classifies_tp_and_trail(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    client = _make_client_stub(symbol_map={"EURUSD": 1}, symbol_price_digits={1: 5})
+    _, ex = _make_engines(
+        client=client, safety=safety, config=config, active_states=active_states, tmp_path=tmp_path
+    )
+    tp_state = _in_trade_state(position_id=42)
+    trail_state = _in_trade_state(position_id=43, stop_price=1.0820)  # SL flyttet i pluss
+    trail_state.signal_id = "eur-trail"
+    active_states.extend([tp_state, trail_state])
+    _write_open_log(
+        tmp_path / "signal_log.json",
+        _open_entry(tp_state.signal_id, 42),
+        _open_entry(trail_state.signal_id, 43),
+    )
+
+    ex.on_execution(
+        _make_close_event(
+            position_id=42, label="SE-x", gross_cents=1000, exec_price=1.0851, closed_volume=2000
+        )
+    )
+    ex.on_execution(
+        _make_close_event(
+            position_id=43, label="SE-y", gross_cents=400, exec_price=1.0819, closed_volume=2000
+        )
+    )
+
+    assert active_states == []
+    entries = {
+        e["signal"]["position_id"]: e
+        for e in json.loads((tmp_path / "signal_log.json").read_text())["entries"]
+    }
+    assert entries[42]["exit_reason"] == "TP"
+    assert entries[42]["result"] == "win"
+    assert entries[43]["exit_reason"] == "TRAIL"
+    assert entries[43]["result"] == "win"
+
+
+def test_on_execution_partial_close_status_open_smaller_volume_keeps_state(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    client = _make_client_stub(symbol_map={"EURUSD": 1}, symbol_price_digits={1: 5})
+    _, ex = _make_engines(
+        client=client, safety=safety, config=config, active_states=active_states, tmp_path=tmp_path
+    )
+    state = _in_trade_state(position_id=42, full_volume=4000)
+    # P3 oppdaterer remaining FØR dealen kommer → closedVolume == remaining.
+    # positionStatus=OPEN skal likevel vinne (ikke full lukking).
+    state.remaining_volume = 2000
+    active_states.append(state)
+    _write_open_log(tmp_path / "signal_log.json", _open_entry(state.signal_id, 42))
+
+    ex.on_execution(
+        _make_close_event(
+            position_id=42,
+            label=f"SE-{state.signal_id}",
+            gross_cents=500,
+            exec_price=1.085,
+            closed_volume=2000,
+            position_status=1,  # OPEN
+        )
+    )
+    assert state in active_states
+    assert state._real_pnl == pytest.approx(5.0)  # type: ignore[attr-defined]
+    e = json.loads((tmp_path / "signal_log.json").read_text())["entries"][0]
+    assert e["result"] is None
+
+
+def test_on_execution_deal_close_after_bot_close_patches_real_pnl(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Bot lukket (state fjernet, entry logget [est]) → deal kommer
+    etterpå → entry patches med ekte PnL + fill-pris."""
+    client = _make_client_stub(symbol_map={"EURUSD": 1}, symbol_price_digits={1: 5})
+    _, ex = _make_engines(
+        client=client, safety=safety, config=config, active_states=active_states, tmp_path=tmp_path
+    )
+    closed = _open_entry("eur-bot", 42)
+    closed.update(
+        result="loss",
+        exit_reason="SL-BREACH",
+        closed_at="2026-09-01 12:00 timezone.utc",
+        pnl={"close_price": 1.0770, "pips": -30.0, "pnl_usd": -6.0},
+    )
+    _write_open_log(tmp_path / "signal_log.json", closed)
+
+    ex.on_execution(
+        _make_close_event(
+            position_id=42,
+            label="SE-eur-bot",
+            gross_cents=-350,
+            exec_price=1.07801,
+            closed_volume=2000,
+        )
+    )
+    e = json.loads((tmp_path / "signal_log.json").read_text())["entries"][0]
+    assert e["pnl"]["pnl_usd"] == -3.5
+    assert e["pnl"]["pnl_real"] is True
+    assert e["pnl"]["close_price"] == 1.07801
+    assert e["exit_reason"] == "SL-BREACH"  # årsak beholdes, tall korrigeres
+
+    # Idempotent: ny deal på samme pos endrer ikke
+    ex.on_execution(
+        _make_close_event(
+            position_id=42, label="SE-eur-bot", gross_cents=-999, exec_price=1.0, closed_volume=2000
+        )
+    )
+    e = json.loads((tmp_path / "signal_log.json").read_text())["entries"][0]
+    assert e["pnl"]["pnl_usd"] == -3.5
+
+
+def test_log_trade_closed_prefers_position_id_over_signal_id(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """To åpne entries med samme signal-id (zombie + re-entry): lukkingen
+    skal treffe entry med matchende position_id, ikke eldste."""
+    client = _make_client_stub(
+        symbol_map={"EURUSD": 1}, last_bid={1: 1.07}, symbol_price_digits={1: 5}
+    )
+    _, ex = _make_engines(
+        client=client, safety=safety, config=config, active_states=active_states, tmp_path=tmp_path
+    )
+    _write_open_log(
+        tmp_path / "signal_log.json",
+        _open_entry("eur-1", 41),  # eldst, zombie
+        _open_entry("eur-1", 42),
+    )
+    state = _in_trade_state(position_id=42)
+    state.signal_id = "eur-1"
+    ex._log_trade_closed(state, "SL", 1.078)
+    entries = json.loads((tmp_path / "signal_log.json").read_text())["entries"]
+    assert entries[0]["result"] is None  # zombie urørt
+    assert entries[1]["result"] == "loss"
+    assert entries[1]["signal"]["position_id"] == 42
+
+
+def test_log_trade_closed_partial_real_plus_estimate_for_remainder(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Post-T1 bot-lukking: real fra T1-partial + estimat for resten,
+    merket pnl_real_partial (patches når siste deal kommer)."""
+    client = _make_client_stub(symbol_map={"EURUSD": 1}, symbol_price_digits={1: 5})
+    _, ex = _make_engines(
+        client=client, safety=safety, config=config, active_states=active_states, tmp_path=tmp_path
+    )
+    _write_open_log(tmp_path / "signal_log.json", _open_entry("eur-1", 42))
+    state = _in_trade_state(position_id=42, full_volume=200_000)
+    state.signal_id = "eur-1"
+    state.remaining_volume = 100_000
+    state._real_pnl = 5.0  # type: ignore[attr-defined]
+    ex._log_trade_closed(state, "TRAIL", 1.0820)
+    e = json.loads((tmp_path / "signal_log.json").read_text())["entries"][0]
+    assert e["pnl"]["pnl_real_partial"] == 5.0
+    assert "pnl_real" not in e["pnl"]
+    # est for rest: (1.0820-1.08) × 1000 lots-enheter = +2.0 → total 7.0
+    assert e["pnl"]["pnl_usd"] == pytest.approx(7.0)
+
+
+def test_on_reconcile_prunes_state_missing_at_broker(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """State med position_id som ikke finnes i reconcile-svaret er en
+    fantom → logges lost-close og fjernes; reelle posisjoner beholdes."""
+    client = _make_client_stub(
+        symbol_map={"EURUSD": 1},
+        last_bid={1: 1.0790},
+        symbol_price_digits={1: 5},
+        symbol_info={1: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}},
+    )
+    _, ex = _make_engines(
+        client=client, safety=safety, config=config, active_states=active_states, tmp_path=tmp_path
+    )
+    phantom = _in_trade_state(position_id=42)
+    phantom.signal_id = "eur-phantom"
+    real = _in_trade_state(position_id=43)
+    real.signal_id = "eur-real"
+    active_states.extend([phantom, real])
+    _write_open_log(
+        tmp_path / "signal_log.json",
+        _open_entry("eur-phantom", 42),
+        _open_entry("eur-real", 43),
+    )
+    res = MagicMock()
+    res.position = [
+        _make_reconcile_pos(
+            position_id=43,
+            label="SE-eur-real",
+            symbol_id=1,
+            side=1,
+            volume=2000,
+            stop_loss=1.078,
+            take_profit=1.085,
+            price=1.08,
+        )
+    ]
+    ex.on_reconcile(res)
+
+    assert phantom not in active_states
+    assert real in active_states
+    assert len(active_states) == 1
+    entries = {
+        e["signal"]["position_id"]: e
+        for e in json.loads((tmp_path / "signal_log.json").read_text())["entries"]
+    }
+    assert entries[42]["exit_reason"] == "lost-close"
+    assert entries[42]["result"] is not None
+    assert entries[43]["result"] is None

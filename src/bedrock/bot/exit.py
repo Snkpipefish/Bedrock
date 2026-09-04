@@ -89,6 +89,28 @@ _USD_BASE: frozenset[str] = frozenset({"USDJPY", "USDCHF", "USDCAD", "USDNOK"})
 _PIP_MAP: dict[int, float] = {5: 0.0001, 3: 0.01, 2: 0.01, 1: 0.1, 0: 1}
 
 
+_POSITION_STATUS_CLOSED = 2  # ProtoOAPositionStatus.POSITION_STATUS_CLOSED
+
+
+def _as_int(value: Any) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def _as_float(value: Any) -> float:
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0.0
+
+
+def _position_closed(event: Any) -> bool | None:
+    """True/False fra position.positionStatus; None hvis eventet mangler
+    position-felt (da må kaller falle tilbake på volum-sjekk)."""
+    if not event.HasField("position"):
+        return None
+    status = getattr(event.position, "positionStatus", None)
+    if not isinstance(status, int) or isinstance(status, bool):
+        return None
+    return status == _POSITION_STATUS_CLOSED
+
+
 class ExitEngine:
     """Posisjons-styring + cTrader-event-handlere.
 
@@ -672,12 +694,25 @@ class ExitEngine:
     # Trade-close-logging + reconcile-logging
     # ─────────────────────────────────────────────────────────
 
-    def _log_trade_closed(self, state: TradeState, reason: str, close_price: float = 0.0) -> None:
-        """Oppdater siste åpne entry for signal-id med close-data + PnL.
+    def _log_trade_closed(
+        self,
+        state: TradeState,
+        reason: str,
+        close_price: float = 0.0,
+        *,
+        real_complete: bool = False,
+    ) -> None:
+        """Oppdater åpen entry for posisjonen med close-data + PnL.
 
         Portert fra `trading_bot.py:_log_trade_closed` (1961-2008), men
         UTEN `_git_push_log`-kall. Akkumulerer daily_loss via
         `SafetyMonitor.add_loss` ved negativ PnL.
+
+        Entry matches på position_id først (signal-id kan ha flere åpne
+        entries etter re-entry/zombie — signal-id-match alene tilordnet
+        lukkingen til eldste entry). `real_complete=True` betyr at
+        `state._real_pnl` dekker hele posisjonen (server-lukking);
+        ellers er evt. real-del kun T1-partial og resten estimeres.
         """
         try:
             if not self._trade_log_path.exists():
@@ -687,8 +722,12 @@ class ExitEngine:
             pnl = self._calc_pnl(state, close_price)
             real = getattr(state, "_real_pnl", None)
             if real is not None and pnl:
-                pnl["pnl_usd"] = real
-                pnl["pnl_real"] = True
+                if real_complete or state.remaining_volume <= 0:
+                    pnl["pnl_usd"] = real
+                    pnl["pnl_real"] = True
+                else:
+                    pnl["pnl_real_partial"] = real
+                    pnl["pnl_usd"] = round(real + pnl.get("pnl_usd", 0.0), 2)
             pnl_val = pnl.get("pnl_usd", 0) if pnl else 0
             if reason in ("GEO-SPIKE", "KILL", "SL"):
                 result = "loss"
@@ -698,14 +737,13 @@ class ExitEngine:
                 result = "loss"
             else:
                 result = "managed"
-            for e in data.get("entries", []):
-                if e.get("signal", {}).get("id") == state.signal_id and e.get("result") is None:
-                    e["closed_at"] = now
-                    e["result"] = result
-                    e["exit_reason"] = reason
-                    if pnl:
-                        e["pnl"] = pnl
-                    break
+            target = self._find_open_log_entry(data, state)
+            if target is not None:
+                target["closed_at"] = now
+                target["result"] = result
+                target["exit_reason"] = reason
+                if pnl:
+                    target["pnl"] = pnl
             data["last_updated"] = now
             self._atomic_write_json(data)
             # Loss-cooldown: registrer signal_id slik at EntryEngine
@@ -732,6 +770,92 @@ class ExitEngine:
                 )
         except Exception as exc:
             log.warning("[TRADE-LOG] Lukking feilet: %s", exc)
+
+    @staticmethod
+    def _find_open_log_entry(data: dict[str, Any], state: TradeState) -> dict[str, Any] | None:
+        """Åpen entry (result=None) for staten: position_id først, så signal-id."""
+        entries = [e for e in data.get("entries", []) if isinstance(e, dict)]
+        if state.position_id is not None:
+            for e in entries:
+                sig = e.get("signal", {})
+                if sig.get("position_id") == state.position_id and e.get("result") is None:
+                    return e
+        for e in entries:
+            if e.get("signal", {}).get("id") == state.signal_id and e.get("result") is None:
+                return e
+        return None
+
+    def _classify_server_close(self, state: TradeState, exec_price: float) -> str:
+        """Årsak for server-side lukking ut fra fill-pris vs SL/T1."""
+        if not exec_price or not state.entry_price:
+            return "SL"
+        dir_mult = 1 if state.direction == "buy" else -1
+        profit = (exec_price - state.entry_price) * dir_mult
+        if state.t1_price and state.t1_price > 0 and state.stop_price:
+            if abs(exec_price - state.t1_price) < abs(exec_price - state.stop_price):
+                return "TP"
+        if profit > 0:
+            return "TRAIL"  # SL flyttet i pluss (BE / server-trail)
+        return "SL"
+
+    def _on_server_close(self, state: TradeState, exec_price: float) -> None:
+        """cTrader lukket hele posisjonen (SL/TP/trail/manuelt).
+
+        `state._real_pnl` er allerede akkumulert med denne dealen. Logg
+        med ekte fill-pris + PnL og fjern staten slik at den ikke blokkerer
+        nye entries (KONFLIKT/KORRELASJON) eller re-lukkes som SL-BREACH.
+        """
+        reason = self._classify_server_close(state, exec_price)
+        log.info(
+            "[STENGT SERVER] %s — %s @ %.5f (pos #%s). Fjerner state.",
+            state.signal_id,
+            reason,
+            exec_price,
+            state.position_id,
+        )
+        self._log_trade_closed(state, reason, exec_price, real_complete=True)
+        with self._lock:
+            if state in self._active_states:
+                self._active_states.remove(state)
+
+    def _patch_log_real_close(self, position_id: int, net_real: float, exec_price: float) -> None:
+        """Bot-initiert lukking er logget med estimat før dealen kom —
+        overskriv med ekte PnL/fill. Idempotent: hopper over entries som
+        allerede har `pnl_real`."""
+        try:
+            if not self._trade_log_path.exists():
+                return
+            data = json.loads(self._trade_log_path.read_text(encoding="utf-8"))
+            for e in data.get("entries", []):
+                if not isinstance(e, dict):
+                    continue
+                sig = e.get("signal", {})
+                if sig.get("position_id") != position_id or e.get("result") is None:
+                    continue
+                pnl = dict(e.get("pnl") or {})
+                if pnl.get("pnl_real"):
+                    return
+                partial = pnl.pop("pnl_real_partial", 0.0) or 0.0
+                total = round(partial + net_real, 2)
+                pnl["pnl_usd"] = total
+                pnl["pnl_real"] = True
+                if exec_price:
+                    pnl["close_price"] = exec_price
+                e["pnl"] = pnl
+                if e.get("exit_reason") not in ("GEO-SPIKE", "KILL"):
+                    e["result"] = "win" if total > 0 else ("loss" if total < 0 else "managed")
+                now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M timezone.utc")
+                data["last_updated"] = now
+                self._atomic_write_json(data)
+                log.info(
+                    "[TRADE-LOG] %s pos #%s — PnL patchet med ekte deal: %+.2f USD",
+                    sig.get("id"),
+                    position_id,
+                    total,
+                )
+                return
+        except Exception as exc:
+            log.warning("[TRADE-LOG] PnL-patch feilet for pos #%s: %s", position_id, exc)
 
     def _lookup_signal_log_entry(
         self, *, signal_id: str, position_id: int | None
@@ -1034,6 +1158,8 @@ class ExitEngine:
                     comm_real2 = round(comm_cpd / (10**money_digits), 4) if comm_cpd else 0
                     net_real = round(pnl_real + swap_real + comm_real2, 2)
                     pos_id = getattr(deal, "positionId", None)
+                    exec_price = _as_float(getattr(deal, "executionPrice", 0))
+                    closed_vol = _as_int(getattr(cpd, "closedVolume", 0))
                     if pos_id:
                         matched = next(
                             (s for s in self._active_states if s.position_id == pos_id),
@@ -1052,6 +1178,29 @@ class ExitEngine:
                                 net_real,
                                 pos_id,
                             )
+                            # Server-side full lukking (SL/TP/trail/manuelt):
+                            # posisjonen er borte hos cTrader — logg som
+                            # lukket NÅ med ekte fill, og fjern staten.
+                            # Uten dette ble staten stående IN_TRADE til
+                            # neste candle merket den «SL-BREACH» (est-PnL),
+                            # og close_position ga POSITION_NOT_FOUND
+                            # (observert 2026-08/09: 27/43 «SL-BREACH» hadde
+                            # DEAL-CLOSE FØR varselet, 0 lukket av bot).
+                            # positionStatus er autoritativ (T1-partial har
+                            # closedVolume == remaining etter bot-side
+                            # oppdatering, men status OPEN). Volum-fallback
+                            # kun når eventet mangler position-felt.
+                            closed_fully = _position_closed(event)
+                            if closed_fully is None:
+                                closed_fully = 0 < matched.remaining_volume <= closed_vol
+                            if closed_fully and matched.phase == TradePhase.IN_TRADE:
+                                self._on_server_close(matched, exec_price)
+                                return
+                        else:
+                            # Bot-initiert lukking: staten er allerede fjernet
+                            # og entry logget med estimert PnL — patch inn
+                            # ekte deal-tall og faktisk fill-pris.
+                            self._patch_log_real_close(pos_id, net_real, exec_price)
 
         if not event.HasField("position"):
             return
@@ -1204,10 +1353,46 @@ class ExitEngine:
                 if s in self._active_states:
                     self._active_states.remove(s)
 
+    def _prune_states_missing_at_broker(self, res: Any) -> None:
+        """Fjern IN_TRADE-states hvis posisjon ikke finnes i reconcile-svaret.
+
+        Reconcile-svaret er autoritativt for åpne posisjoner. En state
+        uten broker-posisjon er en fantom (close-event tapt under
+        frakobling/nedetid) som ellers blokkerer nye entries via
+        KONFLIKT/KORRELASJON og sender døde amends (POSITION_NOT_FOUND).
+        Logges som `lost-close` med estimert PnL — `scripts/
+        backfill_lost_close_pnl.py` henter ekte deal-tall etterpå.
+        """
+        broker_ids = {p.positionId for p in res.position}
+        with self._lock:
+            phantoms = [
+                s
+                for s in self._active_states
+                if s.phase == TradePhase.IN_TRADE
+                and s.position_id is not None
+                and s.position_id not in broker_ids
+            ]
+        for state in phantoms:
+            last = self._client.last_bid.get(state.symbol_id, 0) or self._client.last_ask.get(
+                state.symbol_id, 0
+            )
+            log.warning(
+                "[RECONCILE-PRUNE] %s — pos #%s finnes ikke hos broker. "
+                "Logger som lost-close (est @ %.5f) og fjerner state.",
+                state.signal_id,
+                state.position_id,
+                last or 0.0,
+            )
+            self._log_trade_closed(state, "lost-close", last or 0.0)
+            with self._lock:
+                if state in self._active_states:
+                    self._active_states.remove(state)
+
     def on_reconcile(self, res: Any) -> None:
         """Ta over åpne SE-posisjoner ved oppstart.
         Portert fra `trading_bot.py:_on_reconcile` (2235-2298)."""
         log.info("[RECONCILE] %d åpne posisjoner funnet.", len(res.position))
+        self._prune_states_missing_at_broker(res)
         for pos in res.position:
             label = pos.tradeData.label if pos.HasField("tradeData") else ""
             log.info("  → #%s %s", pos.positionId, label)
