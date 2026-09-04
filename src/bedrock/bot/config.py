@@ -87,6 +87,24 @@ class RiskPctConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class SizingConfig(BaseModel):
+    """Risikobasert sizing (reloadable). Se `sizing.compute_risk_lots`.
+
+    - account_currency: kontovaluta hos broker (PnL-tall fra cTrader
+      er i denne). Quote→konto-kurs hentes fra pris-feed (USD<acct>).
+    - min_lot_max_overshoot: aksepter min-lot hvis dens SL-risiko er
+      ≤ N × planlagt risk; ellers blokkeres traden.
+    - agri_risk_factor: skalering av risk_amount for agri (erstatter
+      gammel lot-halvering).
+    """
+
+    account_currency: str = "NOK"
+    min_lot_max_overshoot: float = 1.5
+    agri_risk_factor: float = 0.5
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class DailyLossConfig(BaseModel):
     """Daily-loss-gate (reloadable). `max(pct_of_balance, minimum_nok)`."""
 
@@ -300,6 +318,7 @@ class ReloadableConfig(BaseModel):
 
     confirmation: ConfirmationConfig = Field(default_factory=ConfirmationConfig)
     risk_pct: RiskPctConfig = Field(default_factory=RiskPctConfig)
+    sizing: SizingConfig = Field(default_factory=SizingConfig)
     daily_loss: DailyLossConfig = Field(default_factory=DailyLossConfig)
     spread: SpreadConfig = Field(default_factory=SpreadConfig)
     horizon_ttl: HorizonTTLConfig = Field(default_factory=HorizonTTLConfig)

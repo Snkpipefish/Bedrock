@@ -15,7 +15,6 @@ from __future__ import annotations
 from typing import Any
 
 from bedrock.bot.config import RiskPctConfig
-from bedrock.bot.instruments import AGRI_INSTRUMENTS
 
 
 def get_risk_pct(
@@ -61,39 +60,66 @@ def get_risk_pct(
 # ─────────────────────────────────────────────────────────────
 
 
-def compute_desired_lots(sig: dict[str, Any], risk_pct: float) -> float:
-    """Beregn ønsket lot-størrelse før stepVolume-avrunding.
+def compute_risk_lots(
+    *,
+    risk_amount: float,
+    sl_distance: float,
+    symbol_info: dict[str, Any] | None,
+    quote_to_account: float,
+    min_lot_max_overshoot: float = 1.5,
+) -> tuple[int, float, str | None]:
+    """Risikobasert volum: tap ved SL ≈ `risk_amount` (kontovaluta).
 
-    Portert fra `_execute_trade` (trading_bot.py:1551-1569). Bruker
-    `horizon_config.sizing_base_risk_usd` for base-tier, så VIX/geo-
-    nedskalering via `risk_pct`, så agri-halvering. Minimum 0.01 lot.
+    Erstatter faste lot-tiers (0.01/0.02/0.03 per horisont, session
+    2026-09-04). Live-data viste at faste lots ga 3–550 NOK per R
+    avhengig av instrument (NATGAS min-lot = 1.0 lot dominerte all
+    PnL), og at «Risk=… (x%)» i loggen var kosmetisk.
 
-    Reglene:
-    - base_risk ≥ 60 → 0.03 (MAKRO)
-    - base_risk ≥ 40 → 0.02 (SWING)
-    - ellers        → 0.01 (SCALP)
-    - risk_pct < 0.5 → ×0.5 (gulv 0.01)
-    - risk_pct < 1.0 → ×0.75 (gulv 0.01)
-    - agri-instrument → ×0.5 (gulv 0.01)
+        lots = risk_amount / (sl_distance × enheter_per_lot × quote→konto)
+
+    cTrader-volum er i 1/100 enheter: `lot_size` er cents-enheter per
+    lot, så enheter_per_lot = lot_size / 100. PnL per lot per 1.0
+    prisbevegelse i quote-valuta = enheter_per_lot; `quote_to_account`
+    konverterer til kontovaluta (USD→NOK ≈ 8-10, JPY→NOK via USDJPY).
+
+    Returnerer (volume_units, lots, blokk-årsak). Volum rundes NED til
+    `step_volume`. Under `min_volume`: aksepteres hvis min-lot-risiko
+    ≤ `min_lot_max_overshoot` × risk_amount, ellers blokkeres traden
+    (bedre å hoppe over enn å risikere flere ganger planlagt).
     """
-    hcfg = sig.get("horizon_config") or {}
-    base_risk = hcfg.get("sizing_base_risk_usd", 20)
-    if base_risk >= 60:
-        lots = 0.03
-    elif base_risk >= 40:
-        lots = 0.02
-    else:
-        lots = 0.01
-
-    if risk_pct < 0.5:
-        lots = max(lots * 0.5, 0.01)
-    elif risk_pct < 1.0:
-        lots = max(lots * 0.75, 0.01)
-
-    if sig.get("instrument", "") in AGRI_INSTRUMENTS:
-        lots = max(lots * 0.5, 0.01)
-
-    return lots
+    if not symbol_info or not symbol_info.get("lot_size"):
+        return 0, 0.0, "symbol_info/lot_size mangler"
+    lot_size = int(symbol_info["lot_size"])
+    step = int(symbol_info.get("step_volume") or 0) or lot_size
+    min_vol = int(symbol_info.get("min_volume") or 0) or step
+    max_vol = int(symbol_info.get("max_volume") or 0)
+    if risk_amount <= 0 or sl_distance <= 0 or quote_to_account <= 0:
+        return (
+            0,
+            0.0,
+            (
+                f"ugyldig input (risk={risk_amount:.2f} sl={sl_distance:.5f} kurs={quote_to_account:.4f})"
+            ),
+        )
+    units_per_lot = lot_size / 100.0
+    risk_per_lot = sl_distance * units_per_lot * quote_to_account
+    raw_volume = (risk_amount / risk_per_lot) * lot_size
+    volume = int(raw_volume // step) * step
+    if volume < min_vol:
+        min_risk = (min_vol / 100.0) * sl_distance * quote_to_account
+        if min_risk > risk_amount * min_lot_max_overshoot:
+            return (
+                0,
+                0.0,
+                (
+                    f"min-lot risikerer {min_risk:.0f} > {min_lot_max_overshoot:.1f}× "
+                    f"planlagt {risk_amount:.0f}"
+                ),
+            )
+        volume = min_vol
+    if max_vol and volume > max_vol:
+        volume = int(max_vol // step) * step
+    return volume, round(volume / lot_size, 4), None
 
 
 def lots_to_volume_units(desired_lots: float, symbol_info: dict[str, Any] | None) -> int:

@@ -50,6 +50,15 @@ reloadable:
     half: 0.5
     quarter: 0.25
 
+  # Risikobasert sizing (2026-09-04, erstatter faste lot-tiers):
+  #   lots = balanse × risk_pct / (SL-avstand × enheter/lot × quote→konto-kurs)
+  # Kontoen er i NOK — ekte PnL fra cTrader er NOK (empirisk verifisert:
+  # real/est-ratio ≈ USDNOK på tvers av 12 instrumenter).
+  sizing:
+    account_currency: NOK
+    min_lot_max_overshoot: 1.5   # min-lot OK hvis SL-risiko ≤ 1.5× planlagt
+    agri_risk_factor: 0.5        # agri: halv risk (som før via lot-halvering)
+
   # Daily-loss-gate. Bot låser entries når daily_loss ≥ limit.
   # limit = max(pct_of_balance × balance, minimum_nok) — minimum
   # gjelder for små kontoer.

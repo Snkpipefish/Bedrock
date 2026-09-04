@@ -66,7 +66,11 @@ def safety(tmp_path: Path) -> SafetyMonitor:
 
 @pytest.fixture
 def config() -> ReloadableConfig:
-    return BotConfig().reloadable
+    cfg = BotConfig().reloadable
+    # Tester er broker-agnostiske: USD-konto → quote→konto-kurs = 1.0
+    # uten USDNOK-feed i stubben.
+    cfg.sizing.account_currency = "USD"
+    return cfg
 
 
 @pytest.fixture
@@ -1168,7 +1172,9 @@ def test_execute_trade_sends_market_order(
     kwargs = client.send_new_order.call_args.kwargs
     assert kwargs["symbol_id"] == 1
     assert kwargs["trade_side"] == "BUY"
-    assert kwargs["volume"] == 2000  # 0.02 lot (SWING) × 100000 = 2000
+    # Risikobasert: 1% × 100k = 1000 USD / (SL 0.0021 × 1000 enh/lot) =
+    # 476.19 lot × lotSize 100000 = 47_619_000 (step 1000, rundet ned)
+    assert kwargs["volume"] == 47_619_000
     assert kwargs["order_type"] == "MARKET"
     # SL/TP festes atomisk på MARKET-ordren via relative offset (cTrader
     # avviser absolutt SL/TP på MARKET). Posisjonen er beskyttet fra
@@ -1184,9 +1190,9 @@ def test_execute_trade_sends_market_order(
     # i ExitEngine etter T1).
     assert "trailing_stop_loss" not in kwargs
     # State oppdatert
-    assert state.full_volume == 2000
+    assert state.full_volume == 47_619_000
     assert state.entry_price == 1.0801  # ask for buy
-    assert state.lots_used == 0.02
+    assert state.lots_used == 476.19
     assert state.risk_pct_used == 1.0
     assert state.horizon == "SWING"
 
@@ -1847,8 +1853,9 @@ def test_execute_trade_agri_in_session_sends_order(
     engine._execute_trade_impl(sig, state, candle)
     client.send_new_order.assert_called_once()
     kwargs = client.send_new_order.call_args.kwargs
-    # Corn = agri, SWING: 0.02 × 0.5 = 0.01 lot × 5000 = 50, min_vol=100 → 100
-    assert kwargs["volume"] == 100
+    # Corn = agri: risk 1% × 100k × agri_risk_factor 0.5 = 500 USD /
+    # (SL 4.52-4.40=0.12 × 50 enh/lot) = 83.33 lot × 5000 = 416_666 → step 100
+    assert kwargs["volume"] == 416_600
 
 
 # ─────────────────────────────────────────────────────────────

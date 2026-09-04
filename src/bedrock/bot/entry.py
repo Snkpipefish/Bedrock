@@ -60,14 +60,21 @@ from bedrock.bot.instruments import (
 )
 from bedrock.bot.safety import SafetyMonitor
 from bedrock.bot.sizing import (
-    compute_desired_lots,
+    compute_risk_lots,
     get_risk_pct,
-    lots_to_volume_units,
     volume_to_lots,
 )
 from bedrock.bot.state import Candle, CandleBuffer, TradePhase, TradeState
 
 CET = ZoneInfo("Europe/Oslo")
+
+# Quote-valuta per instrument for sizing. Alt annet er USD-quoted.
+_QUOTE_CURRENCY: dict[str, str] = {
+    "USDJPY": "JPY",
+    "USDCHF": "CHF",
+    "USDCAD": "CAD",
+    "USDNOK": "NOK",
+}
 
 log = logging.getLogger("bedrock.bot.entry")
 
@@ -1155,6 +1162,44 @@ class EntryEngine:
             self._lost_signal_ids[signal_id] = datetime.now(timezone.utc)
             self._cooldown_logged.discard(signal_id)
 
+    # ─────────────────────────────────────────────────────────
+    # Sizing-helpers: quote-valuta → kontovaluta
+    # ─────────────────────────────────────────────────────────
+
+    def _last_price_by_name(self, symbol_name: str) -> float:
+        """Siste bid/ask for et handels- eller feed-symbol (0 hvis ukjent)."""
+        sid = self._client.symbol_map.get(symbol_name) or self._client.price_feed_sids.get(
+            symbol_name
+        )
+        if not sid:
+            return 0.0
+        return float(self._client.last_bid.get(sid, 0) or self._client.last_ask.get(sid, 0) or 0)
+
+    def _quote_to_account_rate(self, instr_name: str) -> float | None:
+        """Kurs for å konvertere 1 enhet quote-valuta til kontovaluta.
+
+        Quote-valuta er USD for alle instrumenter unntatt USD-base-FX
+        (USDJPY→JPY osv, se `_QUOTE_CURRENCY`). Konvertering går via
+        USD: quote→USD (1/USDxxx) og USD→konto (USD<acct> fra pris-
+        feed, f.eks. USDNOK). None hvis nødvendig kurs ikke er mottatt.
+        """
+        account = (self._config.sizing.account_currency or "USD").upper()
+        quote = _QUOTE_CURRENCY.get(instr_name, "USD")
+        if quote == account:
+            return 1.0
+        quote_to_usd = 1.0
+        if quote != "USD":
+            px = self._last_price_by_name(f"USD{quote}")
+            if px <= 0:
+                return None
+            quote_to_usd = 1.0 / px
+        if account == "USD":
+            return quote_to_usd
+        px = self._last_price_by_name(f"USD{account}")
+        if px <= 0:
+            return None
+        return quote_to_usd * px
+
     def _horizon_ttl_seconds(self, horizon: str) -> int:
         ttl_cfg = self._config.horizon_ttl
         return {
@@ -1364,23 +1409,63 @@ class EntryEngine:
             self._remove_state(state)
             return
 
-        # ── Sizing ───────────────────────────────────────────
+        # ── Sizing (risikobasert) ─────────────────────────────
+        # lots = risk_amount / (SL-avstand × enheter/lot × quote→konto).
+        # Tap ved SL ≈ risk_amount uansett instrument → R-normalisert
+        # eksponering. Blokkerer heller enn å gjette hvis balanse, kurs
+        # eller symbol-info mangler.
         risk_pct = get_risk_pct(sig, gs, rules, self._config.risk_pct)
-        risk_amount = balance * (risk_pct / 100.0)
-        desired_lots = compute_desired_lots(sig, risk_pct)
-        symbol_info = self._client.symbol_info.get(state.symbol_id)
-        if symbol_info is None:
+        if balance <= 0:
             log.warning(
-                "[VOLUM] Symbol info mangler for %s — bruker 1000",
-                state.symbol_id,
+                "[SIZING] %s — kontobalanse ukjent (%.2f); kan ikke risikodimensjonere. Blokkerer.",
+                sig["id"],
+                balance,
             )
-        volume_units = lots_to_volume_units(desired_lots, symbol_info)
-        lot_size_str = str(symbol_info["lot_size"]) if symbol_info else "?"
+            self._remove_state(state)
+            return
+        risk_amount = balance * (risk_pct / 100.0)
+        if instr_name in AGRI_INSTRUMENTS:
+            risk_amount *= self._config.sizing.agri_risk_factor
+        quote_rate = self._quote_to_account_rate(instr_name)
+        if quote_rate is None:
+            log.warning(
+                "[SIZING] %s — mangler valutakurs quote→%s for %s. Blokkerer.",
+                sig["id"],
+                self._config.sizing.account_currency,
+                instr_name,
+            )
+            self._remove_state(state)
+            return
+        symbol_info = self._client.symbol_info.get(state.symbol_id)
+        sl_distance = abs(entry_price - float(sig["stop"]))
+        volume_units, desired_lots, size_block = compute_risk_lots(
+            risk_amount=risk_amount,
+            sl_distance=sl_distance,
+            symbol_info=symbol_info,
+            quote_to_account=quote_rate,
+            min_lot_max_overshoot=self._config.sizing.min_lot_max_overshoot,
+        )
+        if size_block or volume_units <= 0:
+            log.warning(
+                "[SIZING] %s [%s] blokkert — %s (risk %.0f %s, SL-avstand %.5f).",
+                sig["id"],
+                instr_name,
+                size_block or "volum=0",
+                risk_amount,
+                self._config.sizing.account_currency,
+                sl_distance,
+            )
+            self._remove_state(state)
+            return
         log.info(
-            "[VOLUM] %s: %s lot × lotSize=%s = %s enheter",
+            "[VOLUM] %s: risk %.0f %s / (SL %.5f × %s enh/lot × kurs %.4f) = %s lot → %d enheter",
             instr_name,
+            risk_amount,
+            self._config.sizing.account_currency,
+            sl_distance,
+            (symbol_info or {}).get("lot_size", 0) / 100.0,
+            quote_rate,
             desired_lots,
-            lot_size_str,
             volume_units,
         )
 

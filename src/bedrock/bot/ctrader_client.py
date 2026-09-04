@@ -831,6 +831,7 @@ class CtraderClient:
                 "lot_size": sym.lotSize,
                 "min_volume": sym.minVolume,
                 "step_volume": sym.stepVolume,
+                "max_volume": getattr(sym, "maxVolume", 0) or 0,
             }
             self.symbol_price_digits[sid] = sym.digits
             name = next((k for k, v in self.symbol_map.items() if v == sid), str(sid))

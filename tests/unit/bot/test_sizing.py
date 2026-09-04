@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
+
 from bedrock.bot.config import RiskPctConfig
 from bedrock.bot.sizing import (
-    compute_desired_lots,
+    compute_risk_lots,
     get_risk_pct,
     lots_to_volume_units,
     volume_to_lots,
@@ -88,69 +90,77 @@ def test_cfg_defaults_respected_without_rules() -> None:
 
 
 # ─────────────────────────────────────────────────────────────
-# compute_desired_lots — lot-tier + VIX/agri-nedskalering
+# compute_risk_lots — risikobasert volum (tap ved SL ≈ risk_amount)
 # ─────────────────────────────────────────────────────────────
 
-
-def test_desired_lots_scalp_tier() -> None:
-    sig = {"horizon_config": {"sizing_base_risk_usd": 20}, "instrument": "EURUSD"}
-    assert compute_desired_lots(sig, risk_pct=1.0) == 0.01
-
-
-def test_desired_lots_swing_tier() -> None:
-    sig = {"horizon_config": {"sizing_base_risk_usd": 40}, "instrument": "EURUSD"}
-    assert compute_desired_lots(sig, risk_pct=1.0) == 0.02
+_EURUSD = {"lot_size": 10_000_000, "min_volume": 100_000, "step_volume": 100_000}
+_NATGAS = {"lot_size": 100_000, "min_volume": 100_000, "step_volume": 100_000}
+_GOLD = {"lot_size": 1000, "min_volume": 10, "step_volume": 10}
 
 
-def test_desired_lots_makro_tier() -> None:
-    sig = {"horizon_config": {"sizing_base_risk_usd": 60}, "instrument": "EURUSD"}
-    assert compute_desired_lots(sig, risk_pct=1.0) == 0.03
+def test_risk_lots_eurusd_nok_account() -> None:
+    """risk 2444 NOK, SL 0.0055, 100k enh/lot, USDNOK 8.5 → 0.52 lot,
+    rundet ned til step (0.01 lot = 100_000 cents-enheter)."""
+    vol, lots, block = compute_risk_lots(
+        risk_amount=2444, sl_distance=0.0055, symbol_info=_EURUSD, quote_to_account=8.5
+    )
+    assert block is None
+    assert lots == 0.52
+    assert vol == 5_200_000
+    # Faktisk risiko ved SL ≈ planlagt (avrunding ned → litt under)
+    assert (vol / 100) * 0.0055 * 8.5 == pytest.approx(2431, abs=1)
 
 
-def test_desired_lots_default_base_risk_is_scalp() -> None:
-    """Tom horizon_config → base_risk=20 (SCALP-tier)."""
-    sig = {"instrument": "EURUSD"}
-    assert compute_desired_lots(sig, risk_pct=1.0) == 0.01
+def test_risk_lots_rounds_down_to_step() -> None:
+    vol, lots, _ = compute_risk_lots(
+        risk_amount=100, sl_distance=40.0, symbol_info=_GOLD, quote_to_account=1.0
+    )
+    # 100 / (40 × 10) = 0.25 lot = 250 enheter → step 10 → 250
+    assert vol == 250
+    assert lots == 0.25
 
 
-def test_desired_lots_vix_quarter_downsize() -> None:
-    """risk_pct < 0.5 → ×0.5, men ikke under 0.01."""
-    sig = {"horizon_config": {"sizing_base_risk_usd": 60}, "instrument": "EURUSD"}
-    # MAKRO 0.03 × 0.5 = 0.015
-    assert compute_desired_lots(sig, risk_pct=0.25) == 0.015
+def test_risk_lots_min_lot_accepted_within_overshoot() -> None:
+    """NATGAS min-lot (1000 enh) risikerer 0.09×1000×8.5 = 765 < 1.5×600."""
+    vol, lots, block = compute_risk_lots(
+        risk_amount=600, sl_distance=0.09, symbol_info=_NATGAS, quote_to_account=8.5
+    )
+    assert block is None
+    assert vol == 100_000
+    assert lots == 1.0
 
 
-def test_desired_lots_vix_half_downsize() -> None:
-    """risk_pct < 1.0 → ×0.75, men ikke under 0.01."""
-    sig = {"horizon_config": {"sizing_base_risk_usd": 60}, "instrument": "EURUSD"}
-    # MAKRO 0.03 × 0.75 = 0.0225
-    assert compute_desired_lots(sig, risk_pct=0.5) == 0.0225
+def test_risk_lots_min_lot_blocked_when_overshoot_too_big() -> None:
+    """Min-lot risikerer 765 > 1.5 × 300 → blokker (NATGAS-tapene 2026-08)."""
+    vol, lots, block = compute_risk_lots(
+        risk_amount=300, sl_distance=0.09, symbol_info=_NATGAS, quote_to_account=8.5
+    )
+    assert vol == 0 and lots == 0.0
+    assert block is not None and "min-lot" in block
 
 
-def test_desired_lots_floor_at_min_lot() -> None:
-    """Selv aggressiv nedskalering holder gulv på 0.01."""
-    sig = {"horizon_config": {"sizing_base_risk_usd": 20}, "instrument": "EURUSD"}
-    # SCALP 0.01 × 0.5 = 0.005 → floor 0.01
-    assert compute_desired_lots(sig, risk_pct=0.25) == 0.01
+def test_risk_lots_caps_at_max_volume() -> None:
+    info = {**_GOLD, "max_volume": 1000}
+    vol, _, block = compute_risk_lots(
+        risk_amount=100_000, sl_distance=1.0, symbol_info=info, quote_to_account=1.0
+    )
+    assert block is None
+    assert vol == 1000
 
 
-def test_desired_lots_agri_halvert() -> None:
-    """Agri-instrument → ekstra ×0.5 på slutten, gulv 0.01."""
-    sig = {"horizon_config": {"sizing_base_risk_usd": 40}, "instrument": "Corn"}
-    # SWING 0.02 × 0.5 (agri) = 0.01
-    assert compute_desired_lots(sig, risk_pct=1.0) == 0.01
-
-
-def test_desired_lots_agri_makro() -> None:
-    sig = {"horizon_config": {"sizing_base_risk_usd": 60}, "instrument": "Soybean"}
-    # MAKRO 0.03 × 0.5 (agri) = 0.015
-    assert compute_desired_lots(sig, risk_pct=1.0) == 0.015
-
-
-def test_desired_lots_agri_combined_with_vix() -> None:
-    sig = {"horizon_config": {"sizing_base_risk_usd": 60}, "instrument": "Wheat"}
-    # MAKRO 0.03 × 0.5 (VIX extreme via risk_pct<0.5) × 0.5 (agri) = 0.0075 → 0.01 floor
-    assert compute_desired_lots(sig, risk_pct=0.25) == 0.01
+def test_risk_lots_blocks_on_missing_symbol_info_or_bad_input() -> None:
+    assert compute_risk_lots(
+        risk_amount=100, sl_distance=1.0, symbol_info=None, quote_to_account=1.0
+    )[2]
+    assert compute_risk_lots(
+        risk_amount=0, sl_distance=1.0, symbol_info=_GOLD, quote_to_account=1.0
+    )[2]
+    assert compute_risk_lots(
+        risk_amount=100, sl_distance=0.0, symbol_info=_GOLD, quote_to_account=1.0
+    )[2]
+    assert compute_risk_lots(
+        risk_amount=100, sl_distance=1.0, symbol_info=_GOLD, quote_to_account=0.0
+    )[2]
 
 
 # ─────────────────────────────────────────────────────────────
