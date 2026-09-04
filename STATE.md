@@ -2,6 +2,66 @@
 
 ## Session log (most recent first)
 
+### 2026-09-04 — bot-review: exit-regnskap, zombie-backfill, risikobasert sizing, permanent loss-cooldown
+
+**Hva:** Operatør ba om review av bot + performance, så «kjør alle i din
+rekkefølge». Fem punkter levert (commits f30d20b, 1822402, c3fe6e5).
+
+**Review-funn (journal 20. aug → 4. sep + logg 13. juni → 3. sep):**
+
+1. **Server-SL-lukking ble aldri logget som lukking (P0).** Deal-close-
+   eventet satte kun `_real_pnl`; state ble stående IN_TRADE til neste
+   candle merket den «SL-BREACH» (est-PnL) og close_position ga
+   POSITION_NOT_FOUND. 27/43 SL-BREACH hadde DEAL-CLOSE FØR varselet,
+   0 ble lukket av bot, 126 POSITION_NOT_FOUND. Exit-reason SL/TP = 0.
+   → SL-BREACH-rotårsaken fra juni er dermed avklart: server-SL virket,
+   regnskapet gjorde ikke.
+2. **Fantom-states blokkerte entries.** Reconcile pruner aldri; SILVER
+   MAKRO d2b98ab97a91 (#17002440, lukket 28. aug) blokkerte SILVER-buy
+   via KONFLIKT til 4. sep. Loggen hadde 49 åpne mot 5 hos broker.
+3. **Bot nede 4. juli → 11. aug** (5 uker); 12 juli-posisjoner lukket av
+   broker uten logg.
+4. **Sizing var faste lots** (0.01/0.02/0.03 per horisont); «Risk=… (x%)»
+   i loggen var kosmetisk. NOK per R: 3 (AUDUSD) → 550 (NATGAS, min-lot
+   1.0). NATGAS sto for -6518 av -6471 totalt post-fix.
+5. **Kontoen er i NOK.** Ekte-PnL / lotSize-modell ≈ 8.3–9.2 på tvers av
+   12 instrumenter = USDNOK. `pnl_usd` i loggen er NOK.
+6. **Re-entry-churn:** 113 av 173 lukkede post-fix var re-entries på
+   samme id; etter tap -0.56R snitt uansett gap (>168t: -0.64R).
+
+**Endringer:**
+
+- **exit.py:** closePositionDetail + positionStatus=CLOSED → `_on_server_
+  close` (logg med ekte fill/PnL, reason SL/TP/TRAIL, fjern state).
+  Bot-initiert lukking patches med ekte deal etterpå. `_log_trade_closed`
+  matcher position_id før signal-id; post-T1 = real(partial)+est(rest).
+  `on_reconcile` pruner states uten broker-posisjon (lost-close).
+- **ctrader_client:** periodisk reconcile hvert 15. min; `max_volume`
+  i symbol_info.
+- **sizing.py:** `compute_risk_lots` (risk_amount / (SL-avstand ×
+  enh/lot × quote→konto)); `SizingConfig` (account_currency NOK,
+  min_lot_max_overshoot 1.5, agri_risk_factor 0.5). entry.py henter
+  quote→NOK via USDNOK-feed, blokkerer ved manglende balanse/kurs/info.
+- **cooldown:** `permanent_after_loss: true` — tap på id blokkerer
+  re-entry uten TTL (simulert: n 173→79, sumR -72.9→-25.2).
+- **Backfill:** 44 zombie-entries lukket med ekte deals
+  (`backfill_lost_close_pnl.py --position-ids`, backup
+  `signal_log.json.bak-20260904T074807`). Logg: 430 entries, 5 åpne =
+  broker-state. Bot restartet 09:48 og 10:01, verifisert.
+
+**Ren R-analyse post-fix (169 trades):** win 31 %, sum -67R, avg -0.40R.
+BUY -0.75R (n=87) vs SELL -0.03R (n=82). MAKRO -0.52, SWING -0.37,
+SCALP -0.32. GOLD 18 % win, USDJPY 12 %. Kun WTI/AUDUSD/SILVER positive.
+
+**Verifisert:** 2961 unit-tester grønne (full suite); bot-suiten 347.
+Oppstart etter restart: 77 tap-id-er lastet permanent, USDNOK-feed,
+reconcile 7 posisjoner (2 nye SILVER som fantomet hadde blokkert).
+
+**Neste:** følg første trades med ny sizing (VOLUM-linjer i journal,
+forventet ~1.2–4.9k NOK risk); re-kjør `analyze_r_multiples.py --since
+2026-09-04` etter 3-4 uker; BUY-skjevhet og samme-entry multi-horisont
+(SILVER SWING+MAKRO 10:01 i dag) er neste analysespor.
+
 ### 2026-06-12 (b) — setup-generator-overhaling: nivå-fundament + geometri + exits
 
 **Hva:** Operatør ba om analyse av setup-genererende trading-logikk +
@@ -412,6 +472,11 @@ Verifikasjon: pyright 0/0, ruff clean, **pytest 2929/2929 grønt** (5 min).
 
 ## Current state
 
+- **Bot (2026-09-04):** kjører demo (NOK-konto ~489k) med server-close-
+  regnskap, reconcile-pruning, risikobasert sizing (0.25–1 % av balanse
+  per trade) og permanent loss-cooldown per signal-id. Logg = broker-
+  state (5 åpne + 2 nye). Post-fix-edge er negativ (-0.40R/trade);
+  grade/gates urørt i påvente av rene data.
 - **Phase:** 12 **ÅPEN 2026-04-25** — parallell-drift (PLAN § 12). Observasjonsvinduet (sub-session 68) er **PAUSET** per bruker-beslutning 2026-04-25: gjelden fra tidligere faser (placeholder-drivere, kun 2 instrumenter, pyright-feil) gjorde at compare-script viste 0 felles signals — observasjon var meningsløs. Sub-fase 12.5 (debt-rydding) startet i stedet, drivere før instrumenter.
   - **66:** infrastruktur for parallell-drift (compare-script + monitor-script + systemd-runbook). **LUKKET 2026-04-25**
   - **67:** aktivert parallell-drift — alle 6 bedrock fetch-timere `enabled --now`. **LUKKET 2026-04-25**
@@ -933,10 +998,8 @@ ferdig og 12.6-rebalansering er gjort.
 
 ### Session 2026-06-12 (b) — setup-generator-overhaling
 
-- **SL-BREACH-rotårsak:** 18 av 80 juni-trades (22%) exitet via
-  software-SL-breach-vakten med avg -1.46R — dvs. server-side SL
-  manglet eller amend ble avvist (TRADING_BAD_STOPS?) og lukking
-  skjedde FORBI planlagt SL. Trenger dypdykk i bot-ordreflyt/logger.
+- ~~**SL-BREACH-rotårsak**~~ **LUKKET 2026-09-04:** server-SL virket;
+  boten behandlet ikke deal-close som lukking (fix f30d20b).
 - **Samme-retning multi-horisont-eksponering:** alle horisonter deler
   samme entry-cluster → bot kan åpne 2-3 posisjoner på identisk
   entry (observert: Cocoa SWING+MAKRO, SPX500 SCALP+MAKRO 4. mai —
@@ -949,10 +1012,15 @@ ferdig og 12.6-rebalansering er gjort.
   brukes ikke — horisont kommer fra YAML-iterasjon. Beholdt som
   dokumentert fremtidig kobling siden PLAN refererer § 5.5 (PLAN-
   endring krever samtale). Enten wire ved fase 13, eller stryk fra PLAN.
-- **Grade-rekalibrering venter på data:** gates/terskler bevisst urørt;
-  re-analyser med `scripts/analyze_r_multiples.py --since 2026-06-12`
-  når 4-6 uker post-SL-fix-data foreligger. Score logges nå per trade
-  (max_score + publish_floor i signal_log) så analysen kan normalisere.
+- **Grade-rekalibrering venter på data:** re-analysert 2026-09-04 på
+  ren logg (169 trades): A -0.33R, B -0.42R, A+ -1.27R (n=5) — ingen
+  grade positiv. Fortsatt urørt; BUY-skjevhet (-0.75R vs SELL -0.03R)
+  er større signal enn grade. Re-analyser `--since 2026-09-04` når
+  3-4 uker med ny sizing + cooldown foreligger.
+- **Sizing-nivå (2026-09-04):** risk per trade er nå 0.25–1 % av
+  balanse (demo: 1.2–4.9k NOK) mot ~30 NOK før. Daily-loss-gate (2 %)
+  vil dermed reelt låse etter 2 fulle tap. Bekreft at dette er ønsket
+  nivå før live; justér `risk_pct` i bot.yaml ellers.
 
 ### Session 2026-06-12 — datakilde-ferskhet
 
