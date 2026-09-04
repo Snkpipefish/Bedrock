@@ -2162,6 +2162,7 @@ def test_loss_cooldown_drops_entries_older_than_ttl(
     `loss_ttl_hours` skal IKKE lastes inn ved oppstart, ellers
     blacklister vi setups evig når orchestrator gjenfinner samme nivå.
     """
+    config.cooldown.permanent_after_loss = False  # test TTL-modus eksplisitt
     log_path = tmp_path / "signal_log.json"
     now = datetime.now(timezone.utc)
     fresh = now.strftime("%Y-%m-%d %H:%M timezone.utc")
@@ -2200,6 +2201,7 @@ def test_loss_cooldown_expires_after_ttl_without_restart(
     """TTL-utløp må gjelde også for in-memory entries (ikke bare ved
     load). Etter at TTL har passert, skal cooldown slippe taket og
     samme signal_id kunne åpne trade igjen — uten bot-restart."""
+    config.cooldown.permanent_after_loss = False  # test TTL-modus eksplisitt
     log_path = tmp_path / "signal_log.json"
     client = _make_client_stub(
         symbol_map={"EURUSD": 1},
@@ -2588,3 +2590,45 @@ def test_log_trade_closed_records_loss_signal_id_to_entry_engine(
     )
     ex._log_trade_closed(state, "SL-BREACH", close_price=1.07)
     assert "lost-now" in entry._lost_signal_ids
+
+
+def test_loss_cooldown_permanent_after_loss_ignores_ttl(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """permanent_after_loss=True (default): tap eldre enn TTL lastes
+    likevel ved oppstart, og cooldown utløper aldri for den id-en."""
+    assert config.cooldown.permanent_after_loss is True
+    log_path = tmp_path / "signal_log.json"
+    old = (
+        datetime.now(timezone.utc) - timedelta(hours=config.cooldown.loss_ttl_hours * 10)
+    ).strftime("%Y-%m-%d %H:%M timezone.utc")
+    log_path.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {
+                        "timestamp": old,
+                        "closed_at": old,
+                        "result": "loss",
+                        "exit_reason": "SL",
+                        "signal": {"id": "old-loser", "instrument": "EURUSD"},
+                    }
+                ]
+            }
+        )
+    )
+    client = _make_client_stub(symbol_map={"EURUSD": 1})
+    engine = EntryEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        stats_path=tmp_path / "s.json",
+        trade_log_path=log_path,
+    )
+    assert "old-loser" in engine._lost_signal_ids
+    assert engine._is_in_loss_cooldown("old-loser") is True
+    assert "old-loser" in engine._lost_signal_ids

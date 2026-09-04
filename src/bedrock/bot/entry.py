@@ -727,11 +727,13 @@ class EntryEngine:
                         ttl_h = self._config.cooldown.loss_ttl_hours
                         lost_at = self._lost_signal_ids[sig_id]
                         log.info(
-                            "[COOLDOWN] %s [%s] — tap %s; blokkerer re-entry i %dt (TTL).",
+                            "[COOLDOWN] %s [%s] — tap %s; blokkerer re-entry %s.",
                             sig_id,
                             horizon,
                             lost_at.strftime("%Y-%m-%d %H:%M UTC"),
-                            ttl_h,
+                            "permanent for denne id-en"
+                            if self._config.cooldown.permanent_after_loss
+                            else f"i {ttl_h}t (TTL)",
                         )
                         self._cooldown_logged.add(sig_id)
                     return
@@ -1087,6 +1089,8 @@ class EntryEngine:
         lost_at = self._lost_signal_ids.get(signal_id)
         if lost_at is None:
             return False
+        if self._config.cooldown.permanent_after_loss:
+            return True
         ttl_h = self._config.cooldown.loss_ttl_hours
         age_h = (datetime.now(timezone.utc) - lost_at).total_seconds() / 3600.0
         if age_h < ttl_h:
@@ -1135,7 +1139,7 @@ class EntryEngine:
                 skipped_unparsed += 1
                 continue
             age_h = (now - closed_at).total_seconds() / 3600.0
-            if age_h >= ttl_h:
+            if age_h >= ttl_h and not self._config.cooldown.permanent_after_loss:
                 skipped_old += 1
                 continue
             # Behold yngste tap-tid per signal_id (i tilfelle flere closes).

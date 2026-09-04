@@ -79,6 +79,13 @@ reloadable:
     sl_min_spread_mult_swing: 2.0
     sl_min_spread_mult_makro: 2.0
 
+  # Loss-cooldown per signal_id. permanent_after_loss (2026-09-04): re-entry
+  # etter tap på samme id var -0.56R snitt uansett gap (n=75, -42R av -73R);
+  # nivået må re-genereres som ny setup før det handles igjen.
+  cooldown:
+    loss_ttl_hours: 72
+    permanent_after_loss: true
+
   # Per-horisont TTL i sekunder. Signaler eldre enn dette ignoreres.
   horizon_ttl:
     scalp:  900       # 15 min

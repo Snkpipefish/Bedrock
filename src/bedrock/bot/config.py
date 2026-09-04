@@ -162,6 +162,11 @@ class CooldownConfig(BaseModel):
     """
 
     loss_ttl_hours: int = 72
+    # 2026-09-04: re-entry etter tap på samme signal_id var -0.56R snitt
+    # uansett gap (72-168t: -0.48R, >168t: -0.64R; n=75, sum -42R av
+    # -73R totalt). Permanent blokk per id: nivået må re-genereres som
+    # ny setup (ny id) før det handles igjen. TTL brukes kun hvis False.
+    permanent_after_loss: bool = True
 
     model_config = ConfigDict(extra="forbid")
 
