@@ -165,3 +165,20 @@ def test_unknown_endpoint_returns_404() -> None:
     with app.test_client() as client:
         response = client.get("/this-does-not-exist")
     assert response.status_code == 404
+
+
+def test_load_from_env_event_blackout_windows() -> None:
+    from bedrock.signal_server.config import load_from_env
+
+    cfg = load_from_env(
+        {
+            "BEDROCK_EVENT_BLACKOUT_BEFORE_MIN": "90",
+            "BEDROCK_EVENT_BLACKOUT_AFTER_MIN": "30",
+            "BEDROCK_USDA_BLACKOUT_HOURS_BEFORE": "4.5",
+            "BEDROCK_USDA_BLACKOUT_HOURS_AFTER": "2",
+        }
+    )
+    assert cfg.event_blackout_before_min == 90
+    assert cfg.event_blackout_after_min == 30
+    assert cfg.usda_blackout_hours_before == 4.5
+    assert cfg.usda_blackout_hours_after == 2.0

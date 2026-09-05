@@ -22,6 +22,21 @@ payload = adapt_to_bot_format(bedrock_signals)
 Bot-output er ``schema_version="2.1"`` slik at bedrock-bot's
 ``SUPPORTED_SCHEMA_VERSIONS = {"1.0", "2.0", "2.1"}`` aksepterer det
 uten warning.
+
+Batch-ferskhet / TTL (session 2026-09-05): boten skal bruke top-level
+``signals_generated_at`` (tidspunktet ``signals-all`` sist kjørte, lest
+fra sidecar ``signals_bot.json.last_run.json``) som grunnlag for TTL —
+altså *batch*-staleness, ikke per-signal ``created_at``. ``created_at``
+speiler ``setup.first_seen`` som nullstilles ved hver fil-skriving, og
+ga tidligere at stabile SWING-setups utløp etter 4t selv om batchen var
+fersk. ``generated_at`` er fortsatt HTTP-responstidspunktet og sier
+ingenting om datagrunnlaget.
+
+Ordre-type og TP: alle horisonter sendes som MARKET-ordre, og ordren
+bærer full TP (``t1``) server-side. cTrader lukker dermed 100 % av
+posisjonen ved T1 uten at boten trenger å være online; botens
+partial-close-sti (delvis lukking ved T1 + trailing på resten) er kun
+fallback hvis server-TP ikke ble satt.
 """
 
 from __future__ import annotations
@@ -35,8 +50,11 @@ log = logging.getLogger(__name__)
 SCHEMA_VERSION = "2.1"
 
 # Per-horisont default-konfig portert fra scalp_edge signal_server-præsedens.
-# expiry_candles bruker M5-candles per scalp_edge-konvensjon: SCALP=24
-# (2t), SWING=96 (8t), MAKRO=336 (28t = ~6 trading days).
+# expiry_candles telles av boten i *lukkede M15-candles* (exit.py P5a-
+# timeout, entry.py:_on_candle_closed) — ikke M5 slik scalp_edge gjorde:
+# SCALP=24 (6t; hard close ved 48 = 12t), SWING=96 (24t), MAKRO=336 (84t
+# = 3.5 dager). Kun SCALP har tids-exit; SWING/MAKRO holdes til trail/
+# SL/T1 og bruker expiry kun som watchlist-utløp.
 #
 # `sizing_base_risk_usd` styrer base-lot per horisont via
 # `bedrock.bot.sizing.compute_desired_lots`:
@@ -185,6 +203,12 @@ ASSET_CLASS_TO_GROUP: dict[str, str] = {
     "softs": "softs",
 }
 
+# Entry-zone-bredde: halv-bredde = ZONE_ATR_FRACTION × ATR, men aldri mer
+# enn ZONE_SL_FRACTION × |entry − SL|. Se `_entry_zone_from_setup`.
+ZONE_ATR_FRACTION = 0.25
+ZONE_SL_FRACTION = 0.4
+ZONE_FALLBACK_BPS = 5.0  # halv-bredde i bps av entry når ATR mangler/<=0
+
 
 def _normalize_horizon(horizon: str) -> str:
     """Bedrock bruker `makro`/`swing`/`scalp` (lowercase) i signals_bot.json;
@@ -192,17 +216,41 @@ def _normalize_horizon(horizon: str) -> str:
     return horizon.strip().upper()
 
 
+def _positive_float(value: Any) -> float | None:
+    """Tolk `value` som positivt tall; None hvis mangler/ugyldig/<=0."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return None
+    return num if num > 0 else None
+
+
 def _entry_zone_from_setup(setup: dict[str, Any]) -> list[float]:
-    """Bot venter `entry_zone: [low, high]` for limit-zone. Bedrocks
-    setup har ett `entry`-tall + `atr`. Lager zone som ±0.25*atr rundt
-    entry (smal cluster — bot's confirm-logic tar over derfra).
+    """Bot venter `entry_zone: [low, high]` rundt entry. Bedrocks setup
+    har ett `entry`-tall + `atr` + `sl`.
+
+    Halv-bredde = ZONE_ATR_FRACTION × ATR (fallback ZONE_FALLBACK_BPS av
+    entry når ATR mangler), men aldri mer enn ZONE_SL_FRACTION × |entry −
+    SL| når SL er et positivt tall. Uten SL-cappen kunne SCALP-setups med
+    SL 0.01–0.15 ATR unna få en zone bredere enn hele SL-avstanden, slik
+    at en fill i zone-kanten lå praktisk talt på (eller forbi) stoppen.
+    Med cappen på 0.4 etterlater verste fill i zone-kanten 60 % av den
+    planlagte SL-avstanden; boten håndhever i tillegg en fill-time-guard
+    mot SL-avstand ved faktisk ordreinnlegging.
     """
     inner = setup.get("setup", setup)
     entry = float(inner.get("entry") or 0.0)
     atr = float(inner.get("atr") or 0.0)
     if entry <= 0:
         return [0.0, 0.0]
-    half = atr * 0.25 if atr > 0 else entry * 0.0005  # fallback: 5 bps
+    half = atr * ZONE_ATR_FRACTION if atr > 0 else entry * ZONE_FALLBACK_BPS / 10_000
+    sl = _positive_float(inner.get("sl"))
+    if sl is not None:
+        # sl == entry er degenerert (risiko 0) — sonen kollapser til
+        # punktet; `_adapt_one` dropper slike entries uansett.
+        half = min(half, ZONE_SL_FRACTION * abs(entry - sl))
     return [entry - half, entry + half]
 
 
@@ -256,6 +304,17 @@ def _adapt_one(
         )
         return None
 
+    # Stop på entry = risiko 0: kan ikke sizes eller handles.
+    if abs(float(inner.get("entry") or 0.0) - float(stop)) <= 0.0:
+        log.warning(
+            "[ADAPTER] %s %s %s — stop == entry (%r); entry droppet (risiko 0).",
+            instrument,
+            horizon,
+            direction,
+            stop,
+        )
+        return None
+
     correlation_group = ASSET_CLASS_TO_GROUP.get(asset_class, "fx")
 
     return {
@@ -287,6 +346,34 @@ def _adapt_one(
     }
 
 
+def default_global_state() -> dict[str, Any]:
+    """Fail-open `global_state`: ingen geo-risiko, normal VIX, standard
+    korrelasjonsgrenser og ingen blackouts.
+
+    Brukes både som adapter-default og som fallback når
+    `bedrock.signal_server.global_state.build_global_state` ikke kan
+    kjøre (DB mangler o.l.). Returnerer alltid en fersk dict.
+    """
+    return {
+        "geo_risk_active": False,
+        # Boten leser `geo_active` (entry.py/sizing.py); `geo_risk_active`
+        # beholdes for scalp_edge-kompatibilitet. Samme verdi i begge.
+        "geo_active": False,
+        "vix_regime": "normal",
+        "correlation_config": {
+            "max_per_group": 2,
+            # Bot leser nøkkelen `max_total` (entry.py:1182). Tidligere
+            # `max_total_open` traff ikke — bot brukte default 6. I
+            # test-fasen ønsker vi mer breddet (3 horisonter × 22
+            # instrumenter = stort signal-univers); 20 lar ~7 instr
+            # være aktive samtidig på tvers av horisonter.
+            "max_total": 20,
+        },
+        "event_blackout": {},
+        "usda_blackout": {},
+    }
+
+
 def adapt_to_bot_format(
     bedrock_signals: list[dict[str, Any]],
     *,
@@ -295,6 +382,7 @@ def adapt_to_bot_format(
     global_state: dict[str, Any] | None = None,
     rules: dict[str, Any] | None = None,
     include_unpublished: bool = False,
+    source_generated_at: str | None = None,
 ) -> dict[str, Any]:
     """Transformer bedrocks signals_bot.json (flat list) til bot-payload.
 
@@ -304,14 +392,18 @@ def adapt_to_bot_format(
         valid_until_minutes: hvor lenge signal-batch-en er gyldig.
             Bot polling-intervall er typisk 60s; default 60min holder
             flere refresh-intervaller.
-        global_state: optional dict med geo_risk_active / vix_regime / etc.
-            Default: konservativ no-risk, normal-vix.
+        global_state: optional dict med geo_risk_active / vix_regime /
+            event_blackout etc. Default: `default_global_state()`.
         rules: optional dict med stop_multiplier / etc. Default: bot's
             interne defaults brukes hvis ikke satt.
         include_unpublished: hvis True, inkluder også entries med
             published=False i bot-batchen. Brukes på demo-konto for å
             la boten teste hele setup-utvalget. Default False (kun
             publishable entries går til bot på live-konto).
+        source_generated_at: ISO-8601-UTC-tidspunkt for når signal-
+            batchen (signals_bot.json) sist ble generert. Legges i
+            payload som `signals_generated_at` (null hvis ukjent) og er
+            botens TTL-grunnlag — se modul-docstring.
 
     Returns:
         Wrapped payload som bedrock-bot's comms.py forventer.
@@ -339,19 +431,7 @@ def adapt_to_bot_format(
     valid_until = (now + timedelta(minutes=valid_until_minutes)).isoformat()
 
     if global_state is None:
-        global_state = {
-            "geo_risk_active": False,
-            "vix_regime": "normal",
-            "correlation_config": {
-                "max_per_group": 2,
-                # Bot leser nøkkelen `max_total` (entry.py:1182). Tidligere
-                # `max_total_open` traff ikke — bot brukte default 6. I
-                # test-fasen ønsker vi mer breddet (3 horisonter × 22
-                # instrumenter = stort signal-univers); 20 lar ~7 instr
-                # være aktive samtidig på tvers av horisonter.
-                "max_total": 20,
-            },
-        }
+        global_state = default_global_state()
     if rules is None:
         rules = {
             "stop_multiplier": 3.0,
@@ -365,5 +445,8 @@ def adapt_to_bot_format(
         "rules": rules,
         "n_total": len(bedrock_signals),
         "n_published": len(adapted),
+        # HTTP-responstidspunkt. Sier ingenting om datagrunnlagets alder.
         "generated_at": now.isoformat(),
+        # Batch-ferskhet: når signals-all sist kjørte. Botens TTL-grunnlag.
+        "signals_generated_at": source_generated_at,
     }

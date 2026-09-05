@@ -8,10 +8,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from bedrock.signal_server.bot_adapter import (
     HORIZON_DEFAULTS,
     SCHEMA_VERSION,
+    ZONE_SL_FRACTION,
     adapt_to_bot_format,
+    default_global_state,
 )
 
 
@@ -140,6 +144,47 @@ def test_entry_zone_fallback_when_no_atr():
     assert high == 100.05
 
 
+def test_entry_zone_capped_by_sl_distance():
+    """SCALP-tilfelle: SL 0.5 unna, ATR 4.0. Uten cap ville zone vært ±1.0
+    (bredere enn hele SL-avstanden). Med ZONE_SL_FRACTION=0.4 blir halv-
+    bredde 0.2 → verste fill i zone-kanten etterlater 60 % av SL-avstand."""
+    payload = adapt_to_bot_format([_make_entry(entry=100.0, atr=4.0, sl=99.5)])
+    low, high = payload["signals"][0]["entry_zone"]
+    assert low == pytest.approx(99.8)
+    assert high == pytest.approx(100.2)
+    remaining = low - 99.5  # kant nærmest SL
+    assert remaining == pytest.approx(0.3)
+    assert remaining / 0.5 == pytest.approx(1 - ZONE_SL_FRACTION)
+
+
+def test_entry_zone_sl_cap_for_sell_setup():
+    """Sell: SL over entry. Cap symmetrisk — samme halv-bredde."""
+    payload = adapt_to_bot_format([_make_entry(direction="sell", entry=100.0, atr=4.0, sl=100.25)])
+    low, high = payload["signals"][0]["entry_zone"]
+    assert high - 100.0 == pytest.approx(0.1)
+    assert 100.0 - low == pytest.approx(0.1)
+
+
+def test_entry_zone_atr_band_kept_when_sl_far():
+    """SL langt unna (2 ATR) → ATR-båndet binder, ikke SL-cappen."""
+    payload = adapt_to_bot_format([_make_entry(entry=100.0, atr=4.0, sl=92.0)])
+    low, high = payload["signals"][0]["entry_zone"]
+    assert low == 99.0
+    assert high == 101.0
+
+
+def test_entry_zone_sl_cap_also_applies_to_bps_fallback():
+    """ATR mangler → 5 bps-fallback, men fortsatt cappet av SL-avstand."""
+    payload = adapt_to_bot_format([_make_entry(entry=100.0, atr=0.0, sl=99.98)])
+    low, high = payload["signals"][0]["entry_zone"]
+    assert high - 100.0 == pytest.approx(0.4 * 0.02)
+    assert 100.0 - low == pytest.approx(0.4 * 0.02)
+
+
+def test_zone_sl_fraction_constant():
+    assert ZONE_SL_FRACTION == 0.4
+
+
 def test_makro_horizon_has_no_tp():
     payload = adapt_to_bot_format([_make_entry(horizon="makro", tp=None)])
     sig = payload["signals"][0]
@@ -254,7 +299,7 @@ def test_missing_setup_inner_skips_entry():
 
 
 def test_non_dict_entries_skipped():
-    payload = adapt_to_bot_format([None, "string", 42, _make_entry()])
+    payload = adapt_to_bot_format([None, "string", 42, _make_entry()])  # pyright: ignore[reportArgumentType]
     assert payload["n_published"] == 1
 
 
@@ -330,3 +375,60 @@ def test_negative_entry_yields_zero_zone():
     """Defensive: negativ/null entry → tom zone, ikke crash."""
     payload = adapt_to_bot_format([_make_entry(entry=0.0)])
     assert payload["signals"][0]["entry_zone"] == [0.0, 0.0]
+
+
+# ---------------------------------------------------------------------------
+# signals_generated_at + global_state-defaults (session 2026-09-05)
+# ---------------------------------------------------------------------------
+
+
+def test_signals_generated_at_defaults_to_none():
+    payload = adapt_to_bot_format([])
+    assert "signals_generated_at" in payload
+    assert payload["signals_generated_at"] is None
+
+
+def test_signals_generated_at_passed_through_unchanged():
+    payload = adapt_to_bot_format([], source_generated_at="2026-09-05T06:06:00+00:00")
+    assert payload["signals_generated_at"] == "2026-09-05T06:06:00+00:00"
+
+
+def test_generated_at_is_http_time_not_batch_time():
+    fixed = datetime(2026, 9, 5, 12, 0, 0, tzinfo=timezone.utc)
+    payload = adapt_to_bot_format([], now=fixed, source_generated_at="2026-09-05T06:06:00+00:00")
+    assert payload["generated_at"].startswith("2026-09-05T12:00:00")
+    assert payload["signals_generated_at"] == "2026-09-05T06:06:00+00:00"
+
+
+def test_default_global_state_has_bot_keys():
+    gs = default_global_state()
+    assert gs["geo_active"] is False
+    assert gs["geo_risk_active"] is False
+    assert gs["event_blackout"] == {}
+    assert gs["usda_blackout"] == {}
+    assert gs["correlation_config"] == {"max_per_group": 2, "max_total": 20}
+    # Fersk dict hver gang — ingen delt mutabel state
+    assert default_global_state() is not gs
+
+
+def test_expiry_candles_are_m15_units():
+    """Boten teller lukkede M15-candles: SCALP 24 = 6t, SWING 96 = 24t,
+    MAKRO 336 = 84t."""
+    assert HORIZON_DEFAULTS["SCALP"]["expiry_candles"] * 15 == 6 * 60
+    assert HORIZON_DEFAULTS["SWING"]["expiry_candles"] * 15 == 24 * 60
+    assert HORIZON_DEFAULTS["MAKRO"]["expiry_candles"] * 15 == 84 * 60
+
+
+def test_stop_equal_to_entry_is_dropped():
+    """Stop på entry = risiko 0 → kan ikke sizes; entry droppes (review 2026-09-05)."""
+    payload = adapt_to_bot_format([_make_entry(entry=100.0, atr=4.0, sl=100.0)])
+    assert payload["signals"] == []
+
+
+def test_entry_zone_collapses_when_sl_equals_entry():
+    from bedrock.signal_server.bot_adapter import _entry_zone_from_setup
+
+    assert _entry_zone_from_setup({"setup": {"entry": 100.0, "atr": 4.0, "sl": 100.0}}) == [
+        100.0,
+        100.0,
+    ]

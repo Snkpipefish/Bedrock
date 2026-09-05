@@ -154,7 +154,7 @@ annet format. Adapter må bygges.
 | `direction` | `direction` | direkte |
 | `horizon` | `horizon` | UPPER (`makro`→`MAKRO`) |
 | `status` | (ny) | "watchlist" alltid (eller "active" om bot fortolkning) |
-| `entry_zone` | `setup.setup.entry` | `[entry - atr*0.5, entry + atr*0.5]` (cluster) |
+| `entry_zone` | `setup.setup.entry` + `atr` + `sl` | `[entry - half, entry + half]`, `half = min(0.25·ATR, 0.4·|entry − SL|)` (fallback 5 bps uten ATR). SL-cap (2026-09-05) gjør at verste fill i zone-kanten etterlater 60 % av planlagt SL-avstand; boten har i tillegg fill-time-guard |
 | `stop` | `setup.setup.sl` | direkte |
 | `t1` | `setup.setup.tp` | direkte (eller null for MAKRO trailing-only) |
 | `expiry_candles` | (ny) | per-horisont default (SCALP=24, SWING=96, MAKRO=336) |
@@ -163,8 +163,10 @@ annet format. Adapter må bygges.
 | `correlation_group` | (ny via mapping) | per asset_class (`fx`, `metals`, `agri`, `indices`, `energy`, `crypto`) |
 | `created_at` | `setup.first_seen` | direkte |
 | `valid_until` (top) | (ny) | now + min(expiry_candles) |
-| `global_state` (top) | (ny) | `{geo_risk_active: false, vix_regime: "normal"}` (eller hentet fra bedrock fundamentals) |
+| `global_state` (top) | `bedrock.signal_server.global_state.build_global_state` | `{geo_risk_active, geo_active, vix_regime, correlation_config, event_blackout, usda_blackout}`. `event_blackout[bot_instrument] = {event, country, impact, minutes_away}` fra econ_events (High-impact, −15 min … +60 min, USD for alt + ikke-USD-siden for FX-par); `usda_blackout[Corn/Wheat/Soybean] = {report, hours_away}` fra `config/calendars/usda.yaml` (−1t … +3t). Fail-open: feil → tomme dicts + `event_blackout_error` |
 | `rules` (top) | (ny) | hard-kodet for bot-default |
+| `generated_at` (top) | (ny) | HTTP-responstidspunkt — sier ingenting om datagrunnlaget |
+| `signals_generated_at` (top) | `<signals_bot.json>.last_run.json` → `run_ts` | Når `signals-all` sist kjørte (skrives også når output var uendret). Fallback: mtime på signals_bot.json; `null` hvis filen mangler. **Botens TTL-grunnlag** — ikke per-signal `created_at` (= `first_seen`, som nullstilles ved hver fil-skriving) |
 
 **Filter:** kun `published: true` entries inkluderes i adapter-output.
 

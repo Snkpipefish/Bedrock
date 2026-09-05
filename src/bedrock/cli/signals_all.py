@@ -22,6 +22,7 @@ Eksempel:
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -89,6 +90,55 @@ def _write_if_changed(path: Path, entries: list[dict]) -> bool:
             pass
     path.write_text(new_payload)
     return True
+
+
+# Sidecar-fil ved siden av hver output: `<output>.last_run.json`. Skrives
+# ved HVER kjøring — også når `_write_if_changed` hopper over selve
+# output-filen fordi innholdet var uendret. Signal-serveren
+# (`signal_server/endpoints/bot.py`) leser `run_ts` herfra som
+# `signals_generated_at` = botens TTL-grunnlag. Uten sidecar måtte boten
+# bruke per-signal `first_seen`, som nullstilles ved hver fil-skriving og
+# fikk stabile SWING-setups til å utløpe etter 4t. Suffikset er duplisert
+# i endpoints/bot.py (`LAST_RUN_SIDECAR_SUFFIX`) — test låser likhet.
+LAST_RUN_SIDECAR_SUFFIX = ".last_run.json"
+
+
+def _last_run_sidecar_path(output_path: Path) -> Path:
+    """`data/signals_bot.json` → `data/signals_bot.json.last_run.json`."""
+    return Path(str(output_path) + LAST_RUN_SIDECAR_SUFFIX)
+
+
+def _write_last_run_sidecar(
+    output_path: Path,
+    *,
+    run_ts: datetime,
+    written: bool,
+    n_entries: int,
+    n_instruments_ok: int,
+    n_instruments_failed: int,
+) -> Path:
+    """Skriv kjøre-metadata atomisk (tmp + os.replace) ved siden av
+    `output_path`. Returnerer sidecar-stien.
+
+    `run_ts` normaliseres til UTC og skrives som ISO 8601 med `+00:00`
+    (parsebart av `datetime.fromisoformat` på alle støttede Python-
+    versjoner). Naiv datetime tolkes som UTC.
+    """
+    if run_ts.tzinfo is None:
+        run_ts = run_ts.replace(tzinfo=timezone.utc)
+    payload = {
+        "run_ts": run_ts.astimezone(timezone.utc).isoformat(timespec="seconds"),
+        "written": bool(written),
+        "n_entries": int(n_entries),
+        "n_instruments_ok": int(n_instruments_ok),
+        "n_instruments_failed": int(n_instruments_failed),
+    }
+    sidecar = _last_run_sidecar_path(output_path)
+    sidecar.parent.mkdir(parents=True, exist_ok=True)
+    tmp = sidecar.with_name(sidecar.name + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    os.replace(tmp, sidecar)
+    return sidecar
 
 
 def _read_asset_class(yaml_path: Path) -> str | None:
@@ -450,6 +500,8 @@ def signals_all_cmd(
     # Splitt financial/agri hvis split_assets er på OG vi ikke er i bot-only.
     # Bot-only writes always to a single output file (signals_bot.json) since
     # bot ikke skiller mellom financial og agri.
+    n_ok = len(instruments) - len(failures)
+    n_failed = len(failures)
     if split_assets and not bot_only:
         agri_entries = [e for e in all_entries if e.get("asset_class") in _AGRI_ASSET_CLASSES]
         financial_entries = [
@@ -458,6 +510,24 @@ def signals_all_cmd(
         fin_written = _write_if_changed(output_path, financial_entries)
         agri_output_path.parent.mkdir(parents=True, exist_ok=True)
         agri_written = _write_if_changed(agri_output_path, agri_entries)
+        # Sidecar per output — også ved skip, slik at lesere ser at
+        # batchen er verifisert fersk selv om innholdet var uendret.
+        _write_last_run_sidecar(
+            output_path,
+            run_ts=now,
+            written=fin_written,
+            n_entries=len(financial_entries),
+            n_instruments_ok=n_ok,
+            n_instruments_failed=n_failed,
+        )
+        _write_last_run_sidecar(
+            agri_output_path,
+            run_ts=now,
+            written=agri_written,
+            n_entries=len(agri_entries),
+            n_instruments_ok=n_ok,
+            n_instruments_failed=n_failed,
+        )
         click.echo("")
         fin_tag = "Wrote" if fin_written else "Unchanged (skipped)"
         agri_tag = "Wrote" if agri_written else "Unchanged (skipped)"
@@ -465,11 +535,18 @@ def signals_all_cmd(
         click.echo(f"{agri_tag} {len(agri_entries)} agri entries to {agri_output_path}")
     else:
         written = _write_if_changed(output_path, all_entries)
+        _write_last_run_sidecar(
+            output_path,
+            run_ts=now,
+            written=written,
+            n_entries=len(all_entries),
+            n_instruments_ok=n_ok,
+            n_instruments_failed=n_failed,
+        )
         click.echo("")
         tag = "Wrote" if written else "Unchanged (skipped)"
         click.echo(
-            f"{tag} {len(all_entries)} entries from "
-            f"{len(instruments) - len(failures)}/{len(instruments)} instruments "
+            f"{tag} {len(all_entries)} entries from {n_ok}/{len(instruments)} instruments "
             f"to {output_path}"
         )
     if failures:

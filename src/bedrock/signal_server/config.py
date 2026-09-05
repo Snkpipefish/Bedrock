@@ -87,6 +87,27 @@ class ServerConfig(BaseModel):
     # slik at kun setups som passerer publish-floor handles.
     bot_include_unpublished: bool = False
 
+    # Event-blackout i `global_state` for /bot/signals (session 2026-09-05).
+    # Boten nekter nye entries for instrumenter som står i
+    # `global_state.event_blackout` / `global_state.usda_blackout`.
+    # Vinduet er asymmetrisk: `before_min` før publisering (markedet
+    # posisjonerer seg) og `after_min` etter (initial spike + reprising).
+    # `impact_levels` matcher `impact`-kolonnen i econ_events ("High",
+    # "Medium"). Ved `event_blackout_enabled=False` sendes tomme dicts og
+    # DB røres ikke. Se `bedrock.signal_server.global_state`.
+    event_blackout_enabled: bool = True
+    event_blackout_before_min: int = Field(default=60, ge=0)
+    event_blackout_after_min: int = Field(default=15, ge=0)
+    event_blackout_impact_levels: tuple[str, ...] = ("High",)
+    # USDA-rapporter (Corn/Wheat/Soybean): timer før/etter publisering.
+    usda_blackout_hours_before: float = Field(default=3.0, ge=0.0)
+    usda_blackout_hours_after: float = Field(default=1.0, ge=0.0)
+    # Bot-whitelist (bedrock-id → bot-navn) brukes for å dekke alle
+    # whitelistede instrumenter i event_blackout; USDA-kalender leses av
+    # `bedrock.fetch.usda_calendar.load_usda_calendar`.
+    bot_whitelist_path: Path = Field(default=Path("config/bot_whitelist.yaml"))
+    usda_calendar_path: Path = Field(default=Path("config/calendars/usda.yaml"))
+
     # Feature-flagge (sanity-check for at vi er i bedrock-versjonen,
     # ikke i gammel scalp_edge)
     server_name: str = "bedrock-signal-server"
@@ -119,6 +140,17 @@ def load_from_env(env: dict[str, str] | None = None) -> ServerConfig:
     if "BEDROCK_BOT_INCLUDE_UNPUBLISHED" in source:
         val = source["BEDROCK_BOT_INCLUDE_UNPUBLISHED"].strip().lower()
         payload["bot_include_unpublished"] = val in ("1", "true", "yes", "on")
+    if "BEDROCK_EVENT_BLACKOUT_ENABLED" in source:
+        val = source["BEDROCK_EVENT_BLACKOUT_ENABLED"].strip().lower()
+        payload["event_blackout_enabled"] = val in ("1", "true", "yes", "on")
+    if "BEDROCK_EVENT_BLACKOUT_BEFORE_MIN" in source:
+        payload["event_blackout_before_min"] = int(source["BEDROCK_EVENT_BLACKOUT_BEFORE_MIN"])
+    if "BEDROCK_EVENT_BLACKOUT_AFTER_MIN" in source:
+        payload["event_blackout_after_min"] = int(source["BEDROCK_EVENT_BLACKOUT_AFTER_MIN"])
+    if "BEDROCK_USDA_BLACKOUT_HOURS_BEFORE" in source:
+        payload["usda_blackout_hours_before"] = float(source["BEDROCK_USDA_BLACKOUT_HOURS_BEFORE"])
+    if "BEDROCK_USDA_BLACKOUT_HOURS_AFTER" in source:
+        payload["usda_blackout_hours_after"] = float(source["BEDROCK_USDA_BLACKOUT_HOURS_AFTER"])
 
     # `payload` er typet som `dict[str, object]` for å samle blandede typer
     # (str, int, Path) før konstruksjon. Pyright klarer ikke å smal-type

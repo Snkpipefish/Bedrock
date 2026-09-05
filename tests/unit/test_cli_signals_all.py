@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from click.testing import CliRunner
+from click.testing import CliRunner, Result
 
 from bedrock.cli.signals_all import _discover_instrument_ids, signals_all_cmd
 
@@ -258,3 +258,157 @@ def test_signals_all_fails_on_empty_instruments_dir(tmp_path: Path) -> None:
     )
     assert result.exit_code != 0
     assert "Ingen instrumenter funnet" in result.output
+
+
+# ---------------------------------------------------------------------------
+# last_run-sidecar (batch-ferskhet, session 2026-09-05)
+# ---------------------------------------------------------------------------
+
+
+def test_write_last_run_sidecar_writes_expected_payload(tmp_path: Path) -> None:
+    from datetime import datetime, timezone
+
+    from bedrock.cli.signals_all import _write_last_run_sidecar
+
+    out = tmp_path / "signals_bot.json"
+    run_ts = datetime(2026, 9, 5, 6, 6, 0, tzinfo=timezone.utc)
+    sidecar = _write_last_run_sidecar(
+        out,
+        run_ts=run_ts,
+        written=False,
+        n_entries=42,
+        n_instruments_ok=19,
+        n_instruments_failed=1,
+    )
+    assert sidecar == tmp_path / "signals_bot.json.last_run.json"
+    data = json.loads(sidecar.read_text())
+    assert data == {
+        "run_ts": "2026-09-05T06:06:00+00:00",
+        "written": False,
+        "n_entries": 42,
+        "n_instruments_ok": 19,
+        "n_instruments_failed": 1,
+    }
+    # Ingen tmp-rester etter atomisk replace
+    assert not (tmp_path / "signals_bot.json.last_run.json.tmp").exists()
+
+
+def test_write_last_run_sidecar_normalizes_to_utc(tmp_path: Path) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    from bedrock.cli.signals_all import _write_last_run_sidecar
+
+    out = tmp_path / "s.json"
+    oslo = timezone(timedelta(hours=2))
+    _write_last_run_sidecar(
+        out,
+        run_ts=datetime(2026, 9, 5, 8, 0, 0, tzinfo=oslo),
+        written=True,
+        n_entries=0,
+        n_instruments_ok=0,
+        n_instruments_failed=0,
+    )
+    data = json.loads((tmp_path / "s.json.last_run.json").read_text())
+    assert data["run_ts"] == "2026-09-05T06:00:00+00:00"
+    # Naiv datetime tolkes som UTC
+    _write_last_run_sidecar(
+        out,
+        run_ts=datetime(2026, 9, 5, 8, 0, 0),
+        written=True,
+        n_entries=0,
+        n_instruments_ok=0,
+        n_instruments_failed=0,
+    )
+    data = json.loads((tmp_path / "s.json.last_run.json").read_text())
+    assert data["run_ts"] == "2026-09-05T08:00:00+00:00"
+
+
+def test_write_last_run_sidecar_overwrites_previous(tmp_path: Path) -> None:
+    from datetime import datetime, timezone
+
+    from bedrock.cli.signals_all import _write_last_run_sidecar
+
+    out = tmp_path / "s.json"
+    for i in range(2):
+        _write_last_run_sidecar(
+            out,
+            run_ts=datetime(2026, 9, 5, i, 0, 0, tzinfo=timezone.utc),
+            written=bool(i),
+            n_entries=i,
+            n_instruments_ok=i,
+            n_instruments_failed=0,
+        )
+    data = json.loads((tmp_path / "s.json.last_run.json").read_text())
+    assert data["run_ts"] == "2026-09-05T01:00:00+00:00"
+    assert data["written"] is True
+    assert data["n_entries"] == 1
+
+
+def _run_mocked(tmp_path: Path, monkeypatch, extra_args: list[str]) -> tuple[Path, Result]:
+    instruments_dir = tmp_path / "instruments"
+    instruments_dir.mkdir(exist_ok=True)
+    (instruments_dir / "gold.yaml").write_text("instrument: {id: Gold}")
+    fake_db = tmp_path / "fake.db"
+    fake_db.touch()
+
+    import bedrock.cli.signals_all as mod
+
+    monkeypatch.setattr(mod, "DataStore", lambda _path: object())
+    monkeypatch.setattr(
+        mod, "generate_signals", lambda inst, *a, **kw: _mocked_generate_result(inst)
+    )
+    monkeypatch.setattr(mod, "_read_asset_class", lambda _p: "metals")
+
+    output = tmp_path / "out" / "signals.json"
+    runner = CliRunner()
+    result = runner.invoke(
+        signals_all_cmd,
+        [
+            "--instruments-dir",
+            str(instruments_dir),
+            "--db",
+            str(fake_db),
+            "--output",
+            str(output),
+            *extra_args,
+        ],
+    )
+    return output, result
+
+
+def test_signals_all_writes_sidecar_on_write_and_on_skip(tmp_path: Path, monkeypatch) -> None:
+    """Sidecar skrives ved første kjøring (written=True) OG ved andre
+    kjøring der output er uendret (written=False) — run_ts bumpes."""
+    output, result = _run_mocked(tmp_path, monkeypatch, ["--no-split"])
+    assert result.exit_code == 0, result.output
+    sidecar = Path(str(output) + ".last_run.json")
+    assert sidecar.exists()
+    first = json.loads(sidecar.read_text())
+    assert first["written"] is True
+    assert first["n_entries"] == 6
+    assert first["n_instruments_ok"] == 1
+    assert first["n_instruments_failed"] == 0
+    assert first["run_ts"].endswith("+00:00")
+
+    output_mtime = output.stat().st_mtime
+    output2, result2 = _run_mocked(tmp_path, monkeypatch, ["--no-split"])
+    assert result2.exit_code == 0, result2.output
+    assert "Unchanged (skipped)" in result2.output
+    assert output2.stat().st_mtime == output_mtime  # output ikke rørt
+    second = json.loads(sidecar.read_text())
+    assert second["written"] is False
+    assert second["n_entries"] == 6
+    assert second["run_ts"] >= first["run_ts"]
+
+
+def test_signals_all_split_writes_sidecar_per_output(tmp_path: Path, monkeypatch) -> None:
+    agri_output = tmp_path / "out" / "agri_signals.json"
+    output, result = _run_mocked(tmp_path, monkeypatch, ["--agri-output", str(agri_output)])
+    assert result.exit_code == 0, result.output
+    fin_sidecar = json.loads(Path(str(output) + ".last_run.json").read_text())
+    agri_sidecar = json.loads(Path(str(agri_output) + ".last_run.json").read_text())
+    # Gold er metals → alle 6 i financial, 0 i agri; begge sidecars finnes
+    assert fin_sidecar["n_entries"] == 6
+    assert agri_sidecar["n_entries"] == 0
+    assert fin_sidecar["run_ts"] == agri_sidecar["run_ts"]
+    assert fin_sidecar["n_instruments_ok"] == agri_sidecar["n_instruments_ok"] == 1

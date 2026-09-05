@@ -114,3 +114,9 @@ data/_meta/backfill_*.log
 
 # Lokale backfill-PDFer (lastet ned via Wayback, ikke distribusjonsklare)
 data/manual/unica_archive/
+
+# signals-all sidecar (kjøre-metadata per output, skrives hver kjøring)
+data/*.last_run.json
+# SQLite WAL/shm (opprettes når server/tester åpner DB i WAL-modus)
+data/bedrock.db-shm
+data/bedrock.db-wal
