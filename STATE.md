@@ -2,6 +2,78 @@
 
 ## Session log (most recent first)
 
+### 2026-09-05 — kjede-review setup→signal→bot: nivå-cooldown, batch-TTL, fill-vakt, blackout, geometri
+
+**Hva:** Operatør ba om grundig gjennomgang av setup-generering, bot-
+entry/exit og koden, med forbedringer og bug-jakt — deretter «fiks alle
+i din rekkefølge». Review mot kode + journal (11. aug→4. sep) +
+signal_log; 10 funn, alle fikset (commits 48b78b3, 849790e, 79dbc95).
+Generator- og server-delen ble implementert av to parallelle agenter
+(disjunkte filsett) med adversarial review; bot-delen inline.
+
+**Funn (bekreftet mot data):**
+
+1. **Permanent cooldown låste slotter, ikke nivåer (P0).** `signal_id`
+   = sha1(instrument:retning:horisont) endres aldri når nivået flytter
+   seg. 45 av 57 slotter blokkert, 9 av 24 publiserte handlebare —
+   inkl. tap fra mai/juni-bugregimer.
+2. **TTL drepte SWING kl. 10 hver dag (P1).** `created_at` = `first_seen`;
+   hysterese er AV i prod (`snapshot_path=None`), så alle first_seen
+   nullstilles ved hver filskriving. 32 SWING-TTL-skip siden 11. aug.
+3. **SCALP-geometri kollapset ved fill (P1).** Sone ±0.25 ATR vs SL 0.3
+   ATR; R:R målt mot alert_level. Post-13. jun: SCALP SL-avstand ved
+   fill median 0.43 ATR, p10 0.15, 6 trades <0.15 (alle tap); SWING
+   R:R ved fill ned i 0.9.
+4. AWAITING-states uten ordre lekket til restart (KONFLIKT-blokk).
+5. Daglig tap blandet USD-estimat og NOK-real (bot-tap telte ~1/9).
+6. Weekend-stramming 1.5×ATR(1H) ≈ 0.3×D1 på SWING hver fredag.
+7. Server-TP lukker 100 % ved T1 → P3-partial er død kode (10 «hele»
+   mot 2 «50 %»). Beholdt som fallback; dokumentert.
+8. SILVER SWING+MAKRO 10:00 NFP-dag, begge stoppet 14:30:01 — ingen
+   event-gate; USDA-blackout ble aldri populert av server.
+9. Mindre: `geo_active`-nøkkel mismatch, `is_limit` alltid sann for
+   MARKET (99 «LIMIT FILL», 0 «AMEND»), MAKRO passerte R:R-filter via
+   t1=0, group_params manglet natgas/copper/platinum/crypto.
+10. Generator: SetupConfig hardkodet (ingen YAML-vei), TP-vindu målt fra
+    nåpris (gratis TP-rom for dype entries), hysterese kunne beholde
+    entry/TP på feil side av pris.
+
+**Endringer:**
+
+- **bot:** cooldown nøklet på (id, tapt entry) — blokk kun innenfor
+  `cooldown.level_atr_mult`×ATR(D1), `loss_level_max_age_days` 90;
+  TTL mot `signals_generated_at` (SCALP 75 min); `entry_guard`
+  (SL-avstand 0.6–1.5× planlagt, R:R ved fill, `max_same_direction_
+  per_instrument` 1); sveip av AWAITING uten ordre; event-/USDA-
+  blackout-filter; est-PnL i NOK + `adjust_loss` ved ekte deal; weekend
+  med `state.atr_d1` (logges, gjenopprettes ved reconcile); server-SL
+  autoritativ ved fill (amend kun hvis mangler, trailing for MAKRO);
+  `order_sent`-flagg; group_params for 4 grupper.
+- **server/cli:** sidecar `<output>.last_run.json` hver kjøring →
+  `signals_generated_at`; `signal_server/global_state.py` (event_
+  blackout High −15…+60 min, globale 'ALL'-events, USDA for grains,
+  fail-open); entry-sone halv-bredde min(0.25×ATR, 0.4×|entry−SL|).
+- **generator:** `setup:`-blokk i YAML → SetupConfig; SCALP entry-tak
+  0.75 ATR; TP-vindu fra entry; `stabilize_setup(current_price, min_rr)`
+  geometri-vakt + R:R-gulv.
+
+**Verifisert:** full suite 3129 passed, ruff/pyright rene. Server
+(system-unit, sudo) og bot (user-unit) restartet 10:12: bot lastet 60
+id-er/148 nivåer (156 eldre droppet), balanse 488k, KLAR. /bot/signals
+har `signals_generated_at`, `geo_active`, tomme blackouts (lørdag).
+Simulert på signals_bot.json: 17 av 24 publiserte handlebare (var 9).
+NB: serveren sender alle 57 setups (BEDROCK_BOT_INCLUDE_UNPUBLISHED,
+demo). Forventet: sparsommere SCALP-feed (alle 11 dagens SCALP-setups
+lå 0.77–1.97 ATR bak pris → forkastes til pris kommer nærmere).
+
+**Neste:** følg første uke: [FILL-GUARD]/[COOLDOWN]/[TTL]/[SAMME-
+RETNING]/event-blackout-linjer i journal; sjekk at sidecar skrives av
+ExecStartPost-regen (mandag); `config/calendars/usda.yaml` mangler
+WASDE-datoer (usda_blackout tom til de legges inn); re-kjør
+`analyze_r_multiples.py --since 2026-09-05` etter 3–4 uker.
+`tests/snapshot/expected/score_baseline.json` er 100 rader stale
+(data-drift siden mai) — bevisst ikke regenerert.
+
 ### 2026-09-04 — bot-review: exit-regnskap, zombie-backfill, risikobasert sizing, permanent loss-cooldown
 
 **Hva:** Operatør ba om review av bot + performance, så «kjør alle i din
@@ -472,11 +544,16 @@ Verifikasjon: pyright 0/0, ruff clean, **pytest 2929/2929 grønt** (5 min).
 
 ## Current state
 
-- **Bot (2026-09-04):** kjører demo (NOK-konto ~489k) med server-close-
+- **Bot (2026-09-05):** kjører demo (NOK-konto ~488k) med server-close-
   regnskap, reconcile-pruning, risikobasert sizing (0.25–1 % av balanse
-  per trade) og permanent loss-cooldown per signal-id. Logg = broker-
-  state (5 åpne + 2 nye). Post-fix-edge er negativ (-0.40R/trade);
-  grade/gates urørt i påvente av rene data.
+  per trade), nivå-basert loss-cooldown (1×ATR, 90 d), batch-TTL,
+  fill-vakt (SL-avstand + R:R ved fill), ett-posisjon-per-retning-tak,
+  event-/USDA-blackout fra server, NOK-konsistent daglig tap. Server
+  leverer `signals_generated_at` + `global_state.event_blackout`.
+  Generator: SCALP-entry ≤ 0.75 ATR, TP-vindu fra entry, `setup:` i
+  YAML. Post-fix-edge (før 5. sep) var -0.40R/trade; grade/gates urørt
+  i påvente av rene data. Serveren sender alle setups (demo, include-
+  unpublished).
 - **Phase:** 12 **ÅPEN 2026-04-25** — parallell-drift (PLAN § 12). Observasjonsvinduet (sub-session 68) er **PAUSET** per bruker-beslutning 2026-04-25: gjelden fra tidligere faser (placeholder-drivere, kun 2 instrumenter, pyright-feil) gjorde at compare-script viste 0 felles signals — observasjon var meningsløs. Sub-fase 12.5 (debt-rydding) startet i stedet, drivere før instrumenter.
   - **66:** infrastruktur for parallell-drift (compare-script + monitor-script + systemd-runbook). **LUKKET 2026-04-25**
   - **67:** aktivert parallell-drift — alle 6 bedrock fetch-timere `enabled --now`. **LUKKET 2026-04-25**
@@ -996,17 +1073,29 @@ ferdig og 12.6-rebalansering er gjort.
 
 ## Open questions to user
 
+### Session 2026-09-05 — kjede-review
+
+- **SCALP-feed blir tynn:** entry-tak 0.75 ATR forkaster alle dagens
+  11 SCALP-setups. Er det ønsket at SCALP kun handles når pris er nær
+  nivået, eller skal taket justeres (per instrument via `setup:`)?
+- **Demo sender unpublished:** /bot/signals inkluderer 33 upubliserte
+  setups (BEDROCK_BOT_INCLUDE_UNPUBLISHED). Fortsatt ønsket i demo-
+  fasen, eller skal boten kun se publiserte nå som gates er strammet?
+- **USDA-kalender:** `config/calendars/usda.yaml` har kun prospective_
+  plantings t.o.m. mars 2026 — WASDE-datoer må inn for at usda_blackout
+  skal virke.
+- **Server-TP vs partial-close:** valgt full TP server-side (robust ved
+  bot-nedetid); «runner»-idéen fra scalp_edge er dermed lagt bort.
+- **Cooldown-nivåtoleranse 1×ATR / 90 d** og fill-vakt 0.6–1.5× er satt
+  datadrevet, ikke backtestet — juster i bot.yaml ved behov.
+
 ### Session 2026-06-12 (b) — setup-generator-overhaling
 
 - ~~**SL-BREACH-rotårsak**~~ **LUKKET 2026-09-04:** server-SL virket;
   boten behandlet ikke deal-close som lukking (fix f30d20b).
-- **Samme-retning multi-horisont-eksponering:** alle horisonter deler
-  samme entry-cluster → bot kan åpne 2-3 posisjoner på identisk
-  entry (observert: Cocoa SWING+MAKRO, SPX500 SCALP+MAKRO 4. mai —
-  duplikerte tap, men Brent-vinneren 5. mai var også trippel).
-  Effektivt en sizing-beslutning; ikke endret nå. Alternativer:
-  dedupe i orchestrator, per-instrument eksponeringstak i bot, eller
-  horisont-differensierte entries (dypere pullback for lengre horisont).
+- ~~**Samme-retning multi-horisont-eksponering**~~ **LUKKET 2026-09-05:**
+  `entry_guard.max_same_direction_per_instrument` (default 1) i bot.
+  Horisont-differensierte entries i generator er fortsatt ikke gjort.
 - **horizon.py er fortsatt ukoblet:** classify_horizon /
   estimate_expected_hold_days / apply_horizon_hysteresis (PLAN § 5.5)
   brukes ikke — horisont kommer fra YAML-iterasjon. Beholdt som
