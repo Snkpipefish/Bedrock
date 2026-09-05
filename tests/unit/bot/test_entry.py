@@ -26,7 +26,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from bedrock.bot.config import BotConfig, ReloadableConfig
-from bedrock.bot.entry import DEFAULT_CONFIRMATION_STATS_PATH, EntryEngine
+from bedrock.bot.entry import DEFAULT_CONFIRMATION_STATS_PATH, EntryEngine, LostLevel
 from bedrock.bot.safety import SafetyMonitor
 from bedrock.bot.state import Candle, CandleBuffer, TradePhase, TradeState
 
@@ -320,7 +320,9 @@ def test_daily_loss_gate_blocks_new_entry(
 def test_ttl_blocks_stale_scalp(
     safety: SafetyMonitor, config: ReloadableConfig, active_states: list, tmp_path: Path
 ) -> None:
-    # SCALP TTL = 15 min. Signal med created_at 30 min tilbake skal dropes
+    # SCALP TTL = 75 min. Batch generert 2 t tilbake skal droppes — uansett
+    # hva per-signal created_at sier (den er first_seen og nullstilles ved
+    # hver filskriving; ignoreres nå).
     symbol_map = {"EURUSD": 1}
     client = _make_client_stub(
         symbol_map=symbol_map,
@@ -330,7 +332,8 @@ def test_ttl_blocks_stale_scalp(
     )
     engine = _make_engine(client, safety, config, active_states, stats_path=tmp_path / "s.json")
     engine.on_symbols_ready(client)
-    old_ts = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
+    old_batch = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    fresh_created = datetime.now(timezone.utc).isoformat()
     signal = {
         "id": "stale-scalp",
         "instrument": "EURUSD",
@@ -341,9 +344,14 @@ def test_ttl_blocks_stale_scalp(
         "t1": 1.0900,
         "entry_zone": [1.08, 1.081],
         "horizon": "SCALP",
-        "created_at": old_ts,
+        "created_at": fresh_created,  # ferskt — skal IKKE redde signalet
     }
-    engine.signal_data = {"signals": [signal], "global_state": {}, "rules": {}}
+    engine.signal_data = {
+        "signals": [signal],
+        "global_state": {},
+        "rules": {},
+        "signals_generated_at": old_batch,
+    }
     engine._on_candle_closed(
         1,
         Candle(
@@ -361,7 +369,8 @@ def test_ttl_blocks_stale_scalp(
 def test_ttl_allows_fresh_swing(
     safety: SafetyMonitor, config: ReloadableConfig, active_states: list, tmp_path: Path
 ) -> None:
-    # SWING TTL = 4t. Signal 30 min gammelt er OK
+    # SWING TTL = 4t. Batch 30 min gammel er OK — selv om per-signal
+    # created_at er 3 dager gammel (stabilt setup skal fortsatt handles).
     symbol_map = {"EURUSD": 1}
     client = _make_client_stub(
         symbol_map=symbol_map,
@@ -371,7 +380,8 @@ def test_ttl_allows_fresh_swing(
     )
     engine = _make_engine(client, safety, config, active_states, stats_path=tmp_path / "s.json")
     engine.on_symbols_ready(client)
-    ts = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
+    batch_ts = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
+    old_created = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
     signal = {
         "id": "fresh-swing",
         "instrument": "EURUSD",
@@ -382,9 +392,14 @@ def test_ttl_allows_fresh_swing(
         "t1": 1.0900,
         "entry_zone": [1.08, 1.081],
         "horizon": "SWING",
-        "created_at": ts,
+        "created_at": old_created,
     }
-    engine.signal_data = {"signals": [signal], "global_state": {}, "rules": {}}
+    engine.signal_data = {
+        "signals": [signal],
+        "global_state": {},
+        "rules": {},
+        "signals_generated_at": batch_ts,
+    }
     engine._on_candle_closed(
         1,
         Candle(
@@ -563,14 +578,23 @@ def test_sweep_handles_cancel_order_exception(
     assert state not in active_states  # fjernet selv om cancel feilet
 
 
-def test_different_horizon_same_instrument_direction_allowed(
-    safety: SafetyMonitor, config: ReloadableConfig, active_states: list, tmp_path: Path
+@pytest.mark.parametrize("max_same, expected_states", [(1, 1), (2, 2)])
+def test_different_horizon_same_instrument_direction_gated_by_config(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list,
+    tmp_path: Path,
+    max_same: int,
+    expected_states: int,
 ) -> None:
-    """Åpen SCALP-buy skal IKKE blokkere ny SWING-buy på samme instrument.
+    """Åpen SCALP-buy + ny SWING-buy på samme instrument styres av
+    `entry_guard.max_same_direction_per_instrument`.
 
-    SCALP/SWING/MAKRO er uavhengige slots — egne tese-tidsskalaer og
-    egne stops/TP'er. Operatør vil ha mange scalps uavhengig av makro/swing.
+    Default 1: samme retning på annen horisont er samme tese med dobbel
+    risiko (SILVER SWING+MAKRO 2026-09-04, begge stoppet 14:30:01).
+    Med 2 ko-eksisterer de som før (uavhengige slots).
     """
+    config.entry_guard.max_same_direction_per_instrument = max_same
     active_states.append(
         TradeState(
             signal_id="existing-scalp",
@@ -612,10 +636,9 @@ def test_different_horizon_same_instrument_direction_allowed(
             timestamp=datetime.now(timezone.utc),
         ),
     )
-    # Begge skal ko-eksistere — scalp og swing er uavhengige slots
-    assert len(active_states) == 2
+    assert len(active_states) == expected_states
     horizons_active = {s.horizon for s in active_states}
-    assert horizons_active == {"SCALP", "SWING"}
+    assert horizons_active == ({"SCALP", "SWING"} if expected_states == 2 else {"SCALP"})
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1102,7 +1125,9 @@ def _make_signal(
     direction: str = "buy",
     alert: float = 1.0800,
     stop: float = 1.0780,
-    t1: float = 1.0850,
+    # 1.0860 (ikke 1.0850): fill-vakten krever R:R ≥ 2.5 målt fra fill
+    # (ask 1.0801) — 1.0850 ga 2.33 og ble korrekt avvist.
+    t1: float = 1.0860,
     horizon: str = "SWING",
     base_risk: int = 40,
     grade: str = "A",
@@ -1180,9 +1205,9 @@ def test_execute_trade_sends_market_order(
     # avviser absolutt SL/TP på MARKET). Posisjonen er beskyttet fra
     # fill-tidspunkt selv om boten kobles fra umiddelbart etter.
     # entry=1.0801 (ask), SL=1.0780 → diff=0.0021 / pip_size 1e-5 = 210
-    # entry=1.0801, T1=1.0850 → diff=0.0049 / 1e-5 = 490
+    # entry=1.0801, T1=1.0860 → diff=0.0059 / 1e-5 = 590
     assert kwargs["relative_stop_loss"] == 210
-    assert kwargs["relative_take_profit"] == 490
+    assert kwargs["relative_take_profit"] == 590
     assert "stop_loss" not in kwargs
     assert "take_profit" not in kwargs
     # SWING-horisont har trail-active fra T1-hit, ikke fra entry →
@@ -1258,8 +1283,10 @@ def test_execute_trade_market_relative_sl_uses_fixed_100k_scale(
     client.symbol_info = {7: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}}
     client.symbol_price_digits = {7: 3}
     engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
+    # t1=160.0 (ikke 159.5): fill-vakten krever R:R ≥ 2.5 fra fill (ask
+    # 157.854) — 159.5 ga 1.95 og ble korrekt avvist.
     state = _make_state(
-        signal_id="usdjpy-1", symbol_id=7, instrument="USDJPY", stop=157.008, t1=159.500
+        signal_id="usdjpy-1", symbol_id=7, instrument="USDJPY", stop=157.008, t1=160.000
     )
     active_states.append(state)
     sig = _make_signal(
@@ -1267,7 +1294,7 @@ def test_execute_trade_market_relative_sl_uses_fixed_100k_scale(
         instrument="USDJPY",
         alert=157.85,
         stop=157.008,
-        t1=159.500,
+        t1=160.000,
         base_risk=40,
     )
     candle = Candle(
@@ -1284,8 +1311,8 @@ def test_execute_trade_market_relative_sl_uses_fixed_100k_scale(
     assert kwargs["order_type"] == "MARKET"
     # entry=157.854 (ask), SL=157.008 → diff=0.846 × 100_000 = 84_600
     assert kwargs["relative_stop_loss"] == 84_600
-    # entry=157.854, T1=159.500 → diff=1.646 × 100_000 = 164_600
-    assert kwargs["relative_take_profit"] == 164_600
+    # entry=157.854, T1=160.000 → diff=2.146 × 100_000 = 214_600
+    assert kwargs["relative_take_profit"] == 214_600
 
 
 def test_execute_trade_market_rounds_sl_to_tick_before_relative(
@@ -1410,10 +1437,13 @@ def test_execute_trade_uses_horizon_config_use_limit_orders_over_rules(
     client.symbol_info = {2: {"lot_size": 100, "min_volume": 1, "step_volume": 1}}
     client.symbol_price_digits = {2: 2}
     engine = _exec_engine(safety, config, active_states, tmp_path=tmp_path, client=client)
-    state = _make_state(signal_id="gold-1", symbol_id=2, instrument="GOLD", stop=2040.0, t1=2070.0)
+    # t1=2080 (ikke 2070): MARKET-fill på ask 2050.5 må gi R:R ≥ 2.5 for
+    # å passere fill-vakten (2070 ga 1.86). LIMIT-testen over beholder 2070
+    # fordi LIMIT fylles på alert_level og hopper over vakten.
+    state = _make_state(signal_id="gold-1", symbol_id=2, instrument="GOLD", stop=2040.0, t1=2080.0)
     active_states.append(state)
     sig = _make_signal(
-        sig_id="gold-1", instrument="GOLD", alert=2050.25, stop=2040.0, t1=2070.0, base_risk=40
+        sig_id="gold-1", instrument="GOLD", alert=2050.25, stop=2040.0, t1=2080.0, base_risk=40
     )
     # hcfg sier MARKET (False), rules sier LIMIT (True) — hcfg vinner
     sig["horizon_config"]["use_limit_orders"] = False
@@ -2221,9 +2251,12 @@ def test_loss_cooldown_expires_after_ttl_without_restart(
     # Plant et "tap" eldre enn TTL direkte i dict (simulerer at
     # `record_lost_signal` ble kalt for lenge siden).
     ttl_h = config.cooldown.loss_ttl_hours
-    engine._lost_signal_ids["eurusd-buy-1"] = datetime.now(timezone.utc) - timedelta(
-        hours=ttl_h + 1
-    )
+    engine._lost_signal_ids["eurusd-buy-1"] = [
+        LostLevel(
+            lost_at=datetime.now(timezone.utc) - timedelta(hours=ttl_h + 1),
+            entry_price=1.0801,
+        )
+    ]
     signal = {
         "id": "eurusd-buy-1",
         "instrument": "EURUSD",
@@ -2385,8 +2418,11 @@ def test_conflict_gate_allows_same_direction_different_horizon(
     active_states: list,
     tmp_path: Path,
 ) -> None:
-    """SCALP og SWING er uavhengige slots. BUY på SCALP skal IKKE
-    blokkere BUY på SWING samme instrument."""
+    """KONFLIKT-gaten (motsatt retning) skal ikke slå inn på samme
+    retning. Samme-retning-taket settes til 2 her så bare KONFLIKT-
+    logikken testes; default-taket (1) dekkes av
+    test_different_horizon_same_instrument_direction_gated_by_config."""
+    config.entry_guard.max_same_direction_per_instrument = 2
     log_path = tmp_path / "signal_log.json"
     client = _make_client_stub(
         symbol_map={"EURUSD": 1},
@@ -2598,13 +2634,15 @@ def test_loss_cooldown_permanent_after_loss_ignores_ttl(
     active_states: list[TradeState],
     tmp_path: Path,
 ) -> None:
-    """permanent_after_loss=True (default): tap eldre enn TTL lastes
-    likevel ved oppstart, og cooldown utløper aldri for den id-en."""
+    """permanent_after_loss=True (default): tap eldre enn TTL (men yngre
+    enn loss_level_max_age_days) lastes ved oppstart, og cooldown
+    utløper ikke med TTL for den id-en."""
     assert config.cooldown.permanent_after_loss is True
     log_path = tmp_path / "signal_log.json"
     old = (
         datetime.now(timezone.utc) - timedelta(hours=config.cooldown.loss_ttl_hours * 10)
     ).strftime("%Y-%m-%d %H:%M timezone.utc")
+    assert config.cooldown.loss_ttl_hours * 10 < config.cooldown.loss_level_max_age_days * 24
     log_path.write_text(
         json.dumps(
             {
@@ -2630,5 +2668,5 @@ def test_loss_cooldown_permanent_after_loss_ignores_ttl(
         trade_log_path=log_path,
     )
     assert "old-loser" in engine._lost_signal_ids
-    assert engine._is_in_loss_cooldown("old-loser") is True
+    assert engine._is_in_loss_cooldown("old-loser") is not None
     assert "old-loser" in engine._lost_signal_ids

@@ -42,6 +42,7 @@ import os
 import tempfile
 from collections import deque
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
@@ -106,6 +107,18 @@ _PERMANENTLY_DISABLED_BOT_INSTRUMENTS: frozenset[str] = frozenset(
 
 def _noop(*_args: Any, **_kwargs: Any) -> None:  # pragma: no cover
     pass
+
+
+@dataclass
+class LostLevel:
+    """Ett registrert tap på en signal_id: når, og på hvilket entry-nivå.
+
+    `entry_price=None` = ukjent nivå (eldre logg-entries) → blokkerer
+    uansett hvor signalets entry ligger nå (konservativt).
+    """
+
+    lost_at: datetime
+    entry_price: float | None = None
 
 
 def _initial_confirmation_stats() -> dict[str, Any]:
@@ -176,23 +189,24 @@ class EntryEngine:
         # Spam-vern-set (nullstilles ved restart — bevisst)
         self._usd_dir_missing_logged: set[str] = set()
         self._spread_cold_logged: set[int] = set()
-        self._ttl_logged: set[str] = set()
         self._last_expiry_log: datetime | None = None
         self._daily_loss_logged: bool = False
         self._permanently_disabled_logged: set[str] = set()
 
-        # Loss-cooldown: signal_id → tap-tidspunkt (UTC). Blokkerer
-        # re-entry på samme signal_id fra orchestrator inntil
-        # `config.cooldown.loss_ttl_hours` har passert. Setup-id
-        # persisteres på tvers av dager via hysterese — uten cooldown
-        # ender vi i loss → re-entry → loss-loop i sideways-marked.
-        # Uten TTL ender vi derimot i evig blacklist når orchestrator
-        # gjenfinner samme nivå (regresjons-bug commit 6acb609, 2026-05-05;
-        # låste FX/indices i 16 dager før detection 2026-05-26).
-        # Lastes fra signal_log ved oppstart, oppdateres av ExitEngine
-        # via `record_lost_signal()` ved hver loss-close.
-        self._lost_signal_ids: dict[str, datetime] = {}
+        # Loss-cooldown: signal_id → liste av tap (tidspunkt + entry-nivå).
+        # signal_id er slot-hash (instrument, retning, horisont) og endres
+        # aldri når nivået flytter seg — derfor nøkles blokken på NIVÅ:
+        # re-entry blokkeres bare når signalets nåværende entry ligger
+        # innenfor `cooldown.level_atr_mult × ATR(D1)` av et tapt entry.
+        # (2026-09-05: id-basert permanent blokk hadde låst 45 av 57
+        # slotter.) Lastes fra signal_log ved oppstart, oppdateres av
+        # ExitEngine via `record_lost_signal()` ved hver loss-close.
+        self._lost_signal_ids: dict[str, list[LostLevel]] = {}
         self._cooldown_logged: set[str] = set()
+        self._ttl_batch_logged: set[tuple[str, str]] = set()
+        self._ttl_fallback_warned: bool = False
+        self._event_blackout_logged: set[tuple[str, str]] = set()
+        self._same_dir_logged: set[str] = set()
         self._load_lost_signal_ids_from_log()
 
         self._lock = Lock()
@@ -216,10 +230,10 @@ class EntryEngine:
     def on_signals(self, data: dict[str, Any]) -> None:
         """Kalles av SignalComms når /signals har gitt fersk respons."""
         self.signal_data = data
-        # Cancel + rydd LIMIT-states som ikke lenger finnes i ferske
-        # signaler. Forhindrer at gårsdagens MAKRO/SWING-LIMIT-er blir
-        # liggende på cTrader-server etter at underliggende setup er
-        # forsvunnet eller flyttet til nytt setup_id.
+        # Rydd AWAITING-states hvis signal er borte fra fersk batch:
+        # LIMIT-ordrer kanselleres på server; states uten ordre (MARKET-
+        # flyt før bekreftelse) fjernes så de ikke blokkerer motsatt
+        # retning via KONFLIKT til neste restart.
         self._sweep_stale_limit_orders(data.get("signals", []))
         # Reset daily-loss-log-flag når ny dag begynner (via safety-hook,
         # men også her som belte-og-seler)
@@ -236,11 +250,15 @@ class EntryEngine:
         i `_process_watchlist_signal` ville hindre nytt signal på samme
         (instrument, direction, horizon) fra å opprette ny state.
 
-        Krever at state.order_id > 0 (= LIMIT akseptert av server, real
-        orderId mottatt via ORDER_ACCEPTED-event). Placeholder -1
-        ignoreres — det er en LIMIT som er sendt men ikke akseptert
-        ennå; den vil enten fås real orderId eller en
-        ORDER_REJECTED-event som rydder staten.
+        To tilfeller per AWAITING-state med signal_id utenfor batchen:
+
+        - Ingen ordre sendt (`order_sent=False`): staten er bare et
+          bekreftelsesvindu. Fjernes stille — uten dette lå den til
+          restart og blokkerte motsatt retning via KONFLIKT (2026-09-05).
+        - LIMIT med real orderId (`order_id > 0`): kanselleres på server
+          og fjernes. Placeholder -1 (sendt, ikke akseptert ennå) og
+          MARKET-in-flight (`order_sent=True`, order_id None) røres ikke
+          — de får fill/reject-event som rydder.
         """
         if not fresh_signals:
             return
@@ -249,9 +267,19 @@ class EntryEngine:
             for state in list(self._active_states):
                 if state.phase != TradePhase.AWAITING_CONFIRMATION:
                     continue
-                if state.order_id is None or state.order_id <= 0:
-                    continue
                 if state.signal_id in fresh_ids:
+                    continue
+                if not state.order_sent and state.order_id is None:
+                    log.info(
+                        "[CLEANUP] %s — signal forsvunnet fra fresh batch før "
+                        "bekreftelse; fjerner ventende state (%s %s).",
+                        state.signal_id,
+                        state.direction.upper(),
+                        state.horizon,
+                    )
+                    self._active_states.remove(state)
+                    continue
+                if state.order_id is None or state.order_id <= 0:
                     continue
                 # Signal forsvunnet — cancel LIMIT og fjern state
                 log.info(
@@ -674,28 +702,12 @@ class EntryEngine:
                 self._daily_loss_logged = True
             return
 
-        # Per-signal TTL
-        created_at = sig.get("created_at")
+        # Per-horisont TTL mot batch-ferskhet (ikke per-signal created_at —
+        # se HorizonTTLConfig). Stale batch = pipelinen har ikke regnet
+        # setupet på nytt på TTL sekunder.
         horizon = sig.get("horizon", "SWING")
-        if created_at:
-            try:
-                ca = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-                age = (datetime.now(timezone.utc) - ca).total_seconds()
-                ttl = self._horizon_ttl_seconds(horizon)
-                if age > ttl:
-                    sig_id = sig.get("id", "?")
-                    if sig_id not in self._ttl_logged:
-                        log.info(
-                            "[TTL] Signal %s skippet — alder %.0fs > %ds for %s",
-                            sig_id,
-                            age,
-                            ttl,
-                            horizon,
-                        )
-                        self._ttl_logged.add(sig_id)
-                    return
-            except (ValueError, TypeError) as e:
-                log.warning("[TTL] Kunne ikke parse created_at=%r: %s", created_at, e)
+        if self._batch_is_stale(horizon):
+            return
 
         with self._lock:
             state = next(
@@ -722,16 +734,30 @@ class EntryEngine:
                 # fri etter `config.cooldown.loss_ttl_hours` slik at
                 # cooldown ikke blir evig blacklist når orchestrator
                 # gjenfinner samme nivå over uker.
-                if sig_id and self._is_in_loss_cooldown(sig_id):
+                alert_level = float(sig.get("alert_level") or 0.0)
+                sig_atr = float(sig.get("atr") or 0.0)
+                blocking_loss = (
+                    self._is_in_loss_cooldown(sig_id, alert_level, sig_atr) if sig_id else None
+                )
+                if blocking_loss is not None:
                     if sig_id not in self._cooldown_logged:
                         ttl_h = self._config.cooldown.loss_ttl_hours
-                        lost_at = self._lost_signal_ids[sig_id]
+                        lvl = (
+                            f"@ {blocking_loss.entry_price:.5f}"
+                            if blocking_loss.entry_price
+                            else "@ ukjent nivå"
+                        )
                         log.info(
-                            "[COOLDOWN] %s [%s] — tap %s; blokkerer re-entry %s.",
+                            "[COOLDOWN] %s [%s] — tap %s %s (entry nå %.5f, toleranse "
+                            "%.2f×ATR=%.5f); blokkerer re-entry %s.",
                             sig_id,
                             horizon,
-                            lost_at.strftime("%Y-%m-%d %H:%M UTC"),
-                            "permanent for denne id-en"
+                            blocking_loss.lost_at.strftime("%Y-%m-%d %H:%M UTC"),
+                            lvl,
+                            alert_level,
+                            self._config.cooldown.level_atr_mult,
+                            self._config.cooldown.level_atr_mult * sig_atr,
+                            "til nivået flytter seg"
                             if self._config.cooldown.permanent_after_loss
                             else f"i {ttl_h}t (TTL)",
                         )
@@ -781,6 +807,34 @@ class EntryEngine:
                 )
                 if already:
                     return
+                # Samme retning på annen horisont = samme tese med dobbel
+                # risiko (SILVER SWING+MAKRO 2026-09-04, begge stoppet
+                # 14:30:01). Teller IN_TRADE + ordre-in-flight.
+                max_same = self._config.entry_guard.max_same_direction_per_instrument
+                same_dir_open = [
+                    s
+                    for s in self._active_states
+                    if getattr(s, "instrument", "") == instrument
+                    and s.direction == dirn
+                    and (s.phase == TradePhase.IN_TRADE or s.order_sent)
+                ]
+                if max_same > 0 and len(same_dir_open) >= max_same:
+                    if sig_id not in self._same_dir_logged:
+                        log.info(
+                            "[SAMME-RETNING] %s [%s] %s blokkert — %d/%d %s-posisjon(er) "
+                            "allerede åpen på %s (%s).",
+                            sig_id,
+                            horizon,
+                            dirn,
+                            len(same_dir_open),
+                            max_same,
+                            dirn,
+                            instrument,
+                            ", ".join(f"{s.signal_id}/{s.horizon}" for s in same_dir_open),
+                        )
+                        self._same_dir_logged.add(sig_id)
+                    return
+                self._same_dir_logged.discard(sig_id)
 
                 hcfg_init = sig.get("horizon_config", {})
                 if "exit_timeout_partial_candles" in hcfg_init:
@@ -815,6 +869,7 @@ class EntryEngine:
                     horizon_config=hcfg_init,
                     correlation_group=sig.get("correlation_group"),
                     trail_active=is_makro,
+                    atr_d1=sig_atr,
                 )
                 self._active_states.append(state)
 
@@ -874,6 +929,25 @@ class EntryEngine:
                 )
                 return False
 
+        # Event-blackout (server bygger fra calendar_ff: high-impact-events
+        # for instrumentets valutaer innenfor [−after, +before]). SILVER
+        # SWING+MAKRO 2026-09-04 ble åpnet 10:00 på NFP-dag og stoppet med
+        # slippage 14:30:01 — nøyaktig ved publisering.
+        event_bo = gs.get("event_blackout") or {}
+        instr_bo = event_bo.get(sig.get("instrument", "")) if isinstance(event_bo, dict) else None
+        if isinstance(instr_bo, dict):
+            key = (str(sig.get("id")), str(instr_bo.get("event")))
+            if key not in self._event_blackout_logged:
+                log.info(
+                    "[FILTER] %s — event-blackout: %s (%s) om %s min",
+                    sig.get("id"),
+                    instr_bo.get("event"),
+                    instr_bo.get("country"),
+                    instr_bo.get("minutes_away"),
+                )
+                self._event_blackout_logged.add(key)
+            return False
+
         # Spread cold-start-vern
         spread_samples = len(self._client.spread_history.get(symbol_id, ()))
         min_samples = self._config.spread.min_samples
@@ -913,14 +987,19 @@ class EntryEngine:
             )
             return False
 
-        # R:R — horizon-differensiert
+        # R:R — horizon-differensiert. Trailing-only (t1 <= 0, MAKRO) har
+        # ingen R:R å måle; tidligere ga t1=0 et absurd høyt tall som
+        # «passerte» ved et uhell.
         geo = gs.get("geo_active", False)
         horizon = sig.get("horizon", "SWING")
+        t1 = float(sig.get("t1") or 0.0)
+        if t1 <= 0:
+            return True
         min_rr = self._horizon_min_rr(horizon)
         if geo:
             min_rr = max(min_rr, rules.get("min_rr_geo", 2.0))
         risk = abs(sig.get("alert_level", 0) - sig.get("stop", 0))
-        reward = abs(sig.get("alert_level", 0) - sig.get("t1", 0))
+        reward = abs(sig.get("alert_level", 0) - t1)
         rr = reward / risk if risk > 0 else 0
         if rr < min_rr:
             log.info(
@@ -1078,27 +1157,89 @@ class EntryEngine:
         except ValueError:
             return None
 
-    def _is_in_loss_cooldown(self, signal_id: str) -> bool:
-        """True hvis signal_id har et tap registrert innenfor TTL-vinduet.
+    def _batch_is_stale(self, horizon: str) -> bool:
+        """True hvis signal-batchen er eldre enn horisontens TTL.
 
-        Sjekkes ved hver entry-evaluering så cooldown utløper også uten
-        bot-restart. Side-effekt: utløpte entries fjernes fra både
-        `_lost_signal_ids` og `_cooldown_logged` slik at en ny info-log
-        kan trigges hvis samme id taper igjen senere.
+        Alder måles fra `signals_generated_at` (siste vellykkede
+        signals-all-kjøring, skrevet av server fra sidecar-fila). Mangler
+        feltet (eldre server) brukes `generated_at` (HTTP-tid) med én
+        advarsel — det gir i praksis ingen TTL, som er fail-open.
         """
-        lost_at = self._lost_signal_ids.get(signal_id)
-        if lost_at is None:
+        data = self.signal_data or {}
+        raw = data.get("signals_generated_at")
+        if not raw:
+            raw = data.get("generated_at")
+            if raw and not self._ttl_fallback_warned:
+                log.warning(
+                    "[TTL] signals_generated_at mangler i payload — bruker generated_at "
+                    "(HTTP-tid). Oppgrader signal-server for reell batch-TTL."
+                )
+                self._ttl_fallback_warned = True
+        if not raw:
             return False
-        if self._config.cooldown.permanent_after_loss:
-            return True
-        ttl_h = self._config.cooldown.loss_ttl_hours
-        age_h = (datetime.now(timezone.utc) - lost_at).total_seconds() / 3600.0
-        if age_h < ttl_h:
-            return True
-        # Utløpt: rydd opp så neste tap får frisk log + ny TTL-klokke.
-        self._lost_signal_ids.pop(signal_id, None)
-        self._cooldown_logged.discard(signal_id)
-        return False
+        try:
+            gen_ts = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            if gen_ts.tzinfo is None:
+                gen_ts = gen_ts.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError) as e:
+            log.warning("[TTL] Kunne ikke parse signals_generated_at=%r: %s", raw, e)
+            return False
+        age = (datetime.now(timezone.utc) - gen_ts).total_seconds()
+        ttl = self._horizon_ttl_seconds(horizon)
+        if age <= ttl:
+            return False
+        key = (str(horizon), str(raw))
+        if key not in self._ttl_batch_logged:
+            log.info(
+                "[TTL] %s-signaler skippet — batch generert %s er %.0fs gammel > %ds",
+                horizon,
+                raw,
+                age,
+                ttl,
+            )
+            self._ttl_batch_logged.add(key)
+        return True
+
+    def _is_in_loss_cooldown(
+        self, signal_id: str, alert_level: float = 0.0, atr: float = 0.0
+    ) -> LostLevel | None:
+        """Returner det tapet som blokkerer re-entry, eller None.
+
+        Et tap blokkerer hvis (a) det ikke er utløpt (TTL når
+        `permanent_after_loss=False`) OG (b) signalets nåværende
+        `alert_level` ligger innenfor `level_atr_mult × atr` av tapets
+        entry-pris. Tap uten kjent entry, eller kall uten alert/atr,
+        blokkerer uansett nivå (konservativt). Utløpte tap ryddes som
+        side-effekt så samme id kan logges på nytt ved nytt tap.
+        """
+        losses = self._lost_signal_ids.get(signal_id)
+        if not losses:
+            return None
+        cfg = self._config.cooldown
+        now = datetime.now(timezone.utc)
+        kept: list[LostLevel] = []
+        blocking: LostLevel | None = None
+        for loss in losses:
+            if not cfg.permanent_after_loss:
+                age_h = (now - loss.lost_at).total_seconds() / 3600.0
+                if age_h >= cfg.loss_ttl_hours:
+                    continue  # utløpt
+            kept.append(loss)
+            if blocking is not None:
+                continue
+            if loss.entry_price is None or alert_level <= 0 or atr <= 0:
+                blocking = loss
+                continue
+            if abs(alert_level - loss.entry_price) <= cfg.level_atr_mult * atr:
+                blocking = loss
+        if kept:
+            self._lost_signal_ids[signal_id] = kept
+        else:
+            self._lost_signal_ids.pop(signal_id, None)
+        if blocking is None:
+            # Nivået har flyttet seg (eller TTL utløpt): ny info-log ved neste tap
+            self._cooldown_logged.discard(signal_id)
+        return blocking
 
     def _load_lost_signal_ids_from_log(self) -> None:
         """Last signal_ids med result='loss' fra signal_log.json ved oppstart.
@@ -1117,7 +1258,13 @@ class EntryEngine:
             log.warning("[COOLDOWN] kunne ikke lese %s: %s", path, exc)
             return
         entries = data.get("entries", []) if isinstance(data, dict) else []
-        ttl_h = self._config.cooldown.loss_ttl_hours
+        cfg = self._config.cooldown
+        ttl_h = cfg.loss_ttl_hours
+        max_age_h = (
+            cfg.loss_level_max_age_days * 24.0
+            if cfg.permanent_after_loss and cfg.loss_level_max_age_days > 0
+            else (float("inf") if cfg.permanent_after_loss else float(ttl_h))
+        )
         now = datetime.now(timezone.utc)
         loaded = 0
         skipped_old = 0
@@ -1127,7 +1274,8 @@ class EntryEngine:
                 continue
             if entry.get("result") != "loss":
                 continue
-            sig_id = (entry.get("signal") or {}).get("id")
+            sig = entry.get("signal") or {}
+            sig_id = sig.get("id")
             if not isinstance(sig_id, str) or not sig_id:
                 continue
             closed_at = self._parse_log_timestamp(entry.get("closed_at") or "")
@@ -1139,32 +1287,47 @@ class EntryEngine:
                 skipped_unparsed += 1
                 continue
             age_h = (now - closed_at).total_seconds() / 3600.0
-            if age_h >= ttl_h and not self._config.cooldown.permanent_after_loss:
+            if age_h >= max_age_h:
                 skipped_old += 1
                 continue
-            # Behold yngste tap-tid per signal_id (i tilfelle flere closes).
-            prev = self._lost_signal_ids.get(sig_id)
-            if prev is None or closed_at > prev:
-                self._lost_signal_ids[sig_id] = closed_at
-                if prev is None:
-                    loaded += 1
+            entry_price: float | None
+            raw_entry = sig.get("entry")
+            try:
+                entry_price = float(raw_entry) if raw_entry else None
+            except (TypeError, ValueError):
+                entry_price = None
+            if entry_price is not None and entry_price <= 0:
+                entry_price = None
+            bucket = self._lost_signal_ids.setdefault(sig_id, [])
+            if not bucket:
+                loaded += 1
+            bucket.append(LostLevel(lost_at=closed_at, entry_price=entry_price))
         if loaded or skipped_old or skipped_unparsed:
             log.info(
-                "[COOLDOWN] Lastet %d aktive tap-signal_ids (TTL=%dt); "
+                "[COOLDOWN] Lastet %d signal_ids med tap (%d nivåer, %s); "
                 "droppet %d eldre, %d uten parsbar dato.",
                 loaded,
-                ttl_h,
+                sum(len(v) for v in self._lost_signal_ids.values()),
+                (
+                    f"permanent, maks {cfg.loss_level_max_age_days}d"
+                    if cfg.permanent_after_loss
+                    else f"TTL={ttl_h}t"
+                ),
                 skipped_old,
                 skipped_unparsed,
             )
 
-    def record_lost_signal(self, signal_id: str) -> None:
-        """Registrer at et signal stengte i tap. ExitEngine kaller denne
-        fra `_log_trade_closed` slik at re-entry blokkeres umiddelbart
-        — uten å vente på neste log-reload. TTL-klokken starter nå."""
-        if signal_id:
-            self._lost_signal_ids[signal_id] = datetime.now(timezone.utc)
-            self._cooldown_logged.discard(signal_id)
+    def record_lost_signal(self, signal_id: str, entry_price: float | None = None) -> None:
+        """Registrer at et signal stengte i tap på `entry_price`. ExitEngine
+        kaller denne fra `_log_trade_closed` slik at re-entry på samme
+        nivå blokkeres umiddelbart — uten å vente på neste log-reload."""
+        if not signal_id:
+            return
+        price = float(entry_price) if entry_price and entry_price > 0 else None
+        self._lost_signal_ids.setdefault(signal_id, []).append(
+            LostLevel(lost_at=datetime.now(timezone.utc), entry_price=price)
+        )
+        self._cooldown_logged.discard(signal_id)
 
     # ─────────────────────────────────────────────────────────
     # Sizing-helpers: quote-valuta → kontovaluta
@@ -1178,6 +1341,19 @@ class EntryEngine:
         if not sid:
             return 0.0
         return float(self._client.last_bid.get(sid, 0) or self._client.last_ask.get(sid, 0) or 0)
+
+    def usd_to_account_rate(self) -> float | None:
+        """USD → kontovaluta (USD<acct> fra pris-feed, f.eks. USDNOK).
+
+        1.0 for USD-konto. None hvis kursen ikke er mottatt ennå. Brukes
+        av ExitEngine for å føre estimert USD-PnL i kontovaluta (daglig
+        tap og logg) så bot- og server-lukkinger regnes i samme enhet.
+        """
+        account = (self._config.sizing.account_currency or "USD").upper()
+        if account == "USD":
+            return 1.0
+        px = self._last_price_by_name(f"USD{account}")
+        return px if px > 0 else None
 
     def _quote_to_account_rate(self, instr_name: str) -> float | None:
         """Kurs for å konvertere 1 enhet quote-valuta til kontovaluta.
@@ -1197,12 +1373,10 @@ class EntryEngine:
             if px <= 0:
                 return None
             quote_to_usd = 1.0 / px
-        if account == "USD":
-            return quote_to_usd
-        px = self._last_price_by_name(f"USD{account}")
-        if px <= 0:
+        usd_rate = self.usd_to_account_rate()
+        if usd_rate is None:
             return None
-        return quote_to_usd * px
+        return quote_to_usd * usd_rate
 
     def _horizon_ttl_seconds(self, horizon: str) -> int:
         ttl_cfg = self._config.horizon_ttl
@@ -1291,11 +1465,13 @@ class EntryEngine:
           UTEN git-push (gammel bot pushet logg til cot-explorer; Bedrock
           skal ikke gjøre git i hot-path)
         """
-        # Idempotency: hvis state allerede har en aktiv LIMIT på server
-        # (order_id > 0) eller en in-flight send (order_id == -1), ikke
-        # send en ny ordre. Forhindrer at re-publiserte signaler eller
-        # gjentatte confirmation-events lager duplikat-LIMITs på cTrader.
-        if state.order_id is not None and state.order_id != 0:
+        # Idempotency: hvis state allerede har en ordre in-flight eller
+        # akseptert (order_sent / order_id), ikke send en ny. Forhindrer
+        # at re-publiserte signaler eller gjentatte confirmation-events
+        # lager duplikat-ordrer på cTrader. `order_sent` brukes (ikke
+        # order_id=-1 for alle) slik at MARKET-states beholder
+        # order_id=None og fill-håndteringen kan skille LIMIT fra MARKET.
+        if state.order_sent or (state.order_id is not None and state.order_id != 0):
             log.debug(
                 "[DUP-GUARD] %s — ordre allerede sendt (order_id=%s, phase=%s); "
                 "hopper over ny send.",
@@ -1313,9 +1489,9 @@ class EntryEngine:
             )
             return
         # Reservér slot tidlig så samtidige confirmation-events ikke
-        # begge kan komme forbi guarden over. Erstattes med ekte orderId
-        # i on_execution når server svarer ORDER_ACCEPTED.
-        state.order_id = -1
+        # begge kan komme forbi guarden over. Nullstilles av
+        # `_remove_state` hvis en gate under avviser traden.
+        state.order_sent = True
 
         gs = (self.signal_data or {}).get("global_state", {})
         rules = (self.signal_data or {}).get("rules", {})
@@ -1340,6 +1516,20 @@ class EntryEngine:
         risk_per_unit = abs(entry_price - sig["stop"])
         if risk_per_unit <= 0:
             log.error("[FEIL] %s — risk_per_unit=0. Avbryter.", sig["id"])
+            self._remove_state(state)
+            return
+
+        # Per-horisont LIMIT-flagg overstyrer global rules (brukes både av
+        # fill-vakten under og ordre-byggingen lenger ned).
+        hcfg = sig.get("horizon_config", {})
+        use_limit = hcfg.get("use_limit_orders", rules.get("use_limit_orders", False))
+
+        # ── Fill-tids-vakt: geometri på faktisk pris ─────────────
+        # Generator-SL/TP er relative til alert_level; MARKET-fill skjer
+        # i sonen ± confirmation-drift. LIMIT fylles på alert_level og
+        # beholder planlagt geometri — vakten hoppes over. Se
+        # EntryGuardConfig.
+        if not use_limit and not self._passes_fill_guard(sig, entry_price, risk_per_unit):
             self._remove_state(state)
             return
 
@@ -1620,11 +1810,8 @@ class EntryEngine:
 
         # ── Ordre-sending ─────────────────────────────────────
         trade_side = "SELL" if sig["direction"] == "sell" else "BUY"
-        hcfg = sig.get("horizon_config", {})
-        # Per-horisont LIMIT-flagg overstyrer global rules. SCALP→MARKET
-        # (fart > entry-kvalitet), SWING/MAKRO→LIMIT (entry-kvalitet > fart;
-        # SL festes synkront på serveren — ingen unprotected window).
-        use_limit = hcfg.get("use_limit_orders", rules.get("use_limit_orders", False))
+        # `use_limit`/`hcfg` er bestemt over (før fill-vakten). SCALP→MARKET
+        # (fart > entry-kvalitet); LIMIT fester SL synkront på serveren.
         price_digits = self._client.symbol_price_digits.get(state.symbol_id, 5)
 
         order_kwargs: dict[str, Any] = {
@@ -1694,6 +1881,11 @@ class EntryEngine:
                 order_kwargs["trailing_stop_loss"] = True
 
         state.entry_price = entry_price
+        # Ferske nivåer fra signalet (staten tok dem ved ALERT; uten
+        # hysterese kan generator ha flyttet dem siden).
+        state.stop_price = float(sig["stop"])
+        state.t1_price = float(sig.get("t1") or 0.0)
+        state.atr_d1 = float(sig.get("atr") or state.atr_d1 or 0.0)
         state.full_volume = volume_units
         state.instrument = instr_name or sig.get("id", "")
         state.lots_used = desired_lots
@@ -1733,10 +1925,76 @@ class EntryEngine:
 
     def _remove_state(self, state: TradeState) -> None:
         """Fjern state fra active_states hvis den finnes. Trygt å kalle flere ganger."""
+        state.order_sent = False
         try:
             self._active_states.remove(state)
         except ValueError:
             pass
+
+    def _passes_fill_guard(
+        self, sig: dict[str, Any], entry_price: float, risk_per_unit: float
+    ) -> bool:
+        """Geometri-vakt på faktisk fill-pris (se EntryGuardConfig).
+
+        - SL-avstand innenfor [min_frac, max_frac] × planlagt avstand
+          (|alert_level − stop|).
+        - R:R fra fill ≥ horisontens gulv når t1 > 0.
+        Returnerer False (og logger) hvis traden skal avvises.
+        """
+        cfg = self._config.entry_guard
+        horizon = (sig.get("horizon") or "SWING").upper()
+        alert = float(sig.get("alert_level") or 0.0)
+        stop = float(sig.get("stop") or 0.0)
+        planned = abs(alert - stop) if alert > 0 and stop > 0 else 0.0
+        if planned > 0:
+            frac = risk_per_unit / planned
+            if frac < cfg.min_sl_distance_frac:
+                log.warning(
+                    "[FILL-GUARD] %s [%s] blokkert — SL-avstand %.5f er %.0f%% av planlagt "
+                    "%.5f (< %.0f%%). Fill %.5f for nær SL %.5f.",
+                    sig.get("id"),
+                    horizon,
+                    risk_per_unit,
+                    frac * 100,
+                    planned,
+                    cfg.min_sl_distance_frac * 100,
+                    entry_price,
+                    stop,
+                )
+                return False
+            if frac > cfg.max_sl_distance_frac:
+                log.warning(
+                    "[FILL-GUARD] %s [%s] blokkert — SL-avstand %.5f er %.0f%% av planlagt "
+                    "%.5f (> %.0f%%). Pris %.5f har løpt fra nivået %.5f.",
+                    sig.get("id"),
+                    horizon,
+                    risk_per_unit,
+                    frac * 100,
+                    planned,
+                    cfg.max_sl_distance_frac * 100,
+                    entry_price,
+                    alert,
+                )
+                return False
+        t1 = float(sig.get("t1") or 0.0)
+        if cfg.check_rr_at_fill and t1 > 0:
+            reward = abs(t1 - entry_price)
+            rr_fill = reward / risk_per_unit if risk_per_unit > 0 else 0.0
+            min_rr = self._horizon_min_rr(horizon)
+            if rr_fill < min_rr:
+                log.warning(
+                    "[FILL-GUARD] %s [%s] blokkert — R:R ved fill %.2f < %.2f "
+                    "(fill %.5f, SL %.5f, T1 %.5f).",
+                    sig.get("id"),
+                    horizon,
+                    rr_fill,
+                    min_rr,
+                    entry_price,
+                    stop,
+                    t1,
+                )
+                return False
+        return True
 
     def _log_trade_opened(self, state: TradeState) -> None:
         """Skriv en åpnet trade til `~/bedrock/data/bot/signal_log.json`.
@@ -1776,6 +2034,8 @@ class EntryEngine:
                     "grade": getattr(state, "grade", None),
                     "score": getattr(state, "score", None),
                     "max_score": getattr(state, "max_score", None),
+                    # ATR(D1) fra setup — trengs ved reconcile (weekend-SL)
+                    "atr": round(state.atr_d1, 6) if state.atr_d1 else None,
                 },
             }
             data["entries"] = [entry, *data.get("entries", [])]

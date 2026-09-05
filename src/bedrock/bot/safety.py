@@ -146,6 +146,18 @@ class SafetyMonitor:
         self._state.daily_loss += amount
         self._save_state()
 
+    def adjust_loss(self, delta: float) -> None:
+        """Korriger dagens tap med `delta` (kan være negativ).
+
+        Brukes når et estimert tap (bot-initiert lukking, logget før
+        cTrader-dealen kom) erstattes av ekte deal-PnL: delta = ekte −
+        estimert. Klampes til ≥ 0. Persisteres umiddelbart.
+        """
+        if delta == 0:
+            return
+        self._state.daily_loss = max(0.0, self._state.daily_loss + delta)
+        self._save_state()
+
     def reset_daily_loss_if_new_day(self) -> bool:
         """Sjekk om dagens dato er forskjellig fra state-dato; resett hvis så.
 

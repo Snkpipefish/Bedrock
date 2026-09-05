@@ -38,7 +38,10 @@ Exit-prioritet (P1 → P5):
   P2.5 Weekend: fredag ≥20 CET → SCALP-lukk + SWING SL-stram
        (MAKRO unntatt — skal tåle helge-volatilitet)
   P3  T1 nådd → partial-close (t1_close_pct) + break-even + trail-aktiv
-       (kun SCALP/SWING — MAKRO har ingen fast T1)
+       (kun SCALP/SWING — MAKRO har ingen fast T1). NB: MARKET-ordren
+       bærer full TP=t1 server-side (entry.py relative_take_profit), så
+       cTrader lukker normalt 100 % ved T1 før denne grenen ser candle-
+       close ≥ T1. P3 er fallback (TP avvist/fjernet, reconcile uten TP).
   P3.5 Trailing-stop → close brøt trail_level → STENG
        (post-T1, kun SCALP/SWING — MAKRO trailes server-side av cTrader
         på original SL-distanse, satt ved entry; 1H-ATR-trail er for
@@ -247,19 +250,25 @@ class ExitEngine:
                 continue
             # MAKRO ekskludert: skal tåle volatilitet over flere helger;
             # geo-spike-gaten håndterer ekte krise-gap mandag morgen.
-            if weekend["tighten_sl"] and horizon == "SWING" and atr is not None:
-                tighter_sl = self._compute_weekend_sl(state, close, atr)
+            # SWING-SL er 1×ATR(D1) fra generator; weekend-stramming må
+            # måles i samme enhet. 1.5×ATR(1H) ≈ 0.3×ATR(D1) ga scalp-stops
+            # på SWING hver fredag kveld (2026-09-04: EURUSD strammet 6×
+            # på én time). Uten kjent D1-ATR (eldre reconcile) hoppes over.
+            weekend_atr = state.atr_d1 if state.atr_d1 > 0 else None
+            if weekend["tighten_sl"] and horizon == "SWING" and weekend_atr is not None:
+                tighter_sl = self._compute_weekend_sl(state, close, weekend_atr)
                 if tighter_sl is not None:
                     old_sl = state.stop_price
                     tighter_sl = self._round_price(state.symbol_id, tighter_sl)
                     state.stop_price = tighter_sl
                     self._client.amend_sl_tp(position_id=state.position_id, stop_loss=tighter_sl)
                     log.info(
-                        "[WEEKEND] %s SL strammet: %.5f → %.5f (%.1f×ATR)",
+                        "[WEEKEND] %s SL strammet: %.5f → %.5f (%.1f×ATR(D1)=%.5f)",
                         state.signal_id,
                         old_sl,
                         tighter_sl,
                         self._config.weekend.sl_atr_mult,
+                        weekend_atr,
                     )
 
             gp = self._config.group_params.get(get_group_name(state.instrument or ""))
@@ -451,8 +460,9 @@ class ExitEngine:
 
     def _compute_weekend_sl(self, state: TradeState, close: float, atr: float) -> float | None:
         """Returnerer strammere weekend-SL (mult×ATR fra nåpris), eller None
-        hvis ny SL ikke er strammere enn nåværende. Portert fra
-        `trading_bot.py:_compute_weekend_sl` (1762-1773)."""
+        hvis ny SL ikke er strammere enn nåværende. `atr` skal være i
+        samme enhet som posisjonens SL-geometri (ATR(D1) for SWING).
+        Portert fra `trading_bot.py:_compute_weekend_sl` (1762-1773)."""
         if not atr:
             return None
         mult = self._config.weekend.sl_atr_mult
@@ -721,7 +731,27 @@ class ExitEngine:
             now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M timezone.utc")
             pnl = self._calc_pnl(state, close_price)
             real = getattr(state, "_real_pnl", None)
+            account_ccy = (self._config.sizing.account_currency or "USD").upper()
+            if pnl:
+                # Estimatet fra _calc_pnl er i USD; ekte deal-tall fra
+                # cTrader er i kontovaluta. Før estimatet i kontovaluta
+                # så daglig tap og logg har én enhet (2026-09-05: bot-
+                # initierte tap telte ~1/9 av server-tap i NOK-grensen).
+                est_usd = pnl.get("pnl_usd", 0.0)
+                rate = self._entry.usd_to_account_rate()
+                if rate is None:
+                    log.warning(
+                        "[TRADE-LOG] %s — mangler USD→%s-kurs; estimert PnL føres i USD.",
+                        state.signal_id,
+                        account_ccy,
+                    )
+                    pnl["pnl_ccy"] = "USD"
+                else:
+                    pnl["pnl_est_usd"] = est_usd
+                    pnl["pnl_usd"] = round(est_usd * rate, 2)
+                    pnl["pnl_ccy"] = account_ccy
             if real is not None and pnl:
+                pnl["pnl_ccy"] = account_ccy
                 if real_complete or state.remaining_volume <= 0:
                     pnl["pnl_usd"] = real
                     pnl["pnl_real"] = True
@@ -737,6 +767,10 @@ class ExitEngine:
                 result = "loss"
             else:
                 result = "managed"
+            # Daglig tap: det som legges til nå — patches mot ekte deal senere
+            loss_added = abs(pnl["pnl_usd"]) if pnl and pnl.get("pnl_usd", 0) < 0 else 0.0
+            if pnl:
+                pnl["daily_loss_added"] = loss_added
             target = self._find_open_log_entry(data, state)
             if target is not None:
                 target["closed_at"] = now
@@ -746,14 +780,17 @@ class ExitEngine:
                     target["pnl"] = pnl
             data["last_updated"] = now
             self._atomic_write_json(data)
-            # Loss-cooldown: registrer signal_id slik at EntryEngine
-            # blokkerer re-entry på samme orchestrator-setup. Verner mot
+            # Loss-cooldown: registrer signal_id + entry-nivå slik at
+            # EntryEngine blokkerer re-entry på samme nivå. Verner mot
             # loss → re-entry → loss-loop i sideways-marked.
             if result == "loss" and state.signal_id:
-                self._entry.record_lost_signal(state.signal_id)
+                self._entry.record_lost_signal(state.signal_id, state.entry_price)
             real_tag = " [cTrader]" if pnl.get("pnl_real") else " [est]"
             pnl_str = (
-                f"  {pnl['pnl_usd']:+.2f} USD ({pnl['pips']:+.1f} pips){real_tag}" if pnl else ""
+                f"  {pnl['pnl_usd']:+.2f} {pnl.get('pnl_ccy', 'USD')} "
+                f"({pnl['pips']:+.1f} pips){real_tag}"
+                if pnl
+                else ""
             )
             log.info(
                 "[TRADE-LOG] %s stengt: %s (%s)%s",
@@ -762,11 +799,12 @@ class ExitEngine:
                 reason,
                 pnl_str,
             )
-            if pnl and pnl.get("pnl_usd", 0) < 0:
-                self._safety.add_loss(abs(pnl["pnl_usd"]))
+            if loss_added > 0:
+                self._safety.add_loss(loss_added)
                 log.info(
-                    "[DAGLIG TAP] Akkumulert: %.0f",
+                    "[DAGLIG TAP] Akkumulert: %.0f %s",
                     self._safety.daily_loss,
+                    account_ccy,
                 )
         except Exception as exc:
             log.warning("[TRADE-LOG] Lukking feilet: %s", exc)
@@ -839,8 +877,21 @@ class ExitEngine:
                 total = round(partial + net_real, 2)
                 pnl["pnl_usd"] = total
                 pnl["pnl_real"] = True
+                pnl["pnl_ccy"] = (self._config.sizing.account_currency or "USD").upper()
                 if exec_price:
                     pnl["close_price"] = exec_price
+                # Daglig tap ble akkumulert med estimatet ved lukking —
+                # korriger til ekte tall (samme enhet, kontovaluta).
+                prev_added = float(pnl.get("daily_loss_added") or 0.0)
+                new_loss = abs(total) if total < 0 else 0.0
+                if abs(new_loss - prev_added) > 0.005:
+                    self._safety.adjust_loss(new_loss - prev_added)
+                    log.info(
+                        "[DAGLIG TAP] Korrigert med ekte deal: %+.2f → akkumulert %.0f",
+                        new_loss - prev_added,
+                        self._safety.daily_loss,
+                    )
+                pnl["daily_loss_added"] = new_loss
                 e["pnl"] = pnl
                 if e.get("exit_reason") not in ("GEO-SPIKE", "KILL"):
                     e["result"] = "win" if total > 0 else ("loss" if total < 0 else "managed")
@@ -1082,7 +1133,10 @@ class ExitEngine:
                 sig_id = label[3:]
                 with self._lock:
                     state = next((s for s in self._active_states if s.signal_id == sig_id), None)
-                    if state is not None and state.order_id is not None:
+                    # Kun placeholder -1 erstattes: senere ACCEPTED-events
+                    # (SL/TP-ordre på samme label) skal ikke overskrive
+                    # LIMIT-ens ekte orderId.
+                    if state is not None and state.order_id == -1:
                         state.order_id = order.orderId
                         log.info(
                             "[ORDRE AKSEPTERT] %s — orderId=%d (LIMIT venter på fyll)",
@@ -1251,16 +1305,41 @@ class ExitEngine:
             getattr(state, "_entry_spread", 0),
         )
 
-        # LIMIT har SL/TP allerede på ordren; MARKET må ammendes
-        is_limit = state.order_id is not None and state.order_id != 0
-        if not is_limit:
-            pd = self._client.symbol_price_digits.get(state.symbol_id, 5)
+        # Server-SL er autoritativ: både LIMIT (absolutt SL på ordren) og
+        # MARKET (relativ SL fra fill) har SL festet av cTrader ved fill.
+        # Synk state.stop_price til den (P0-breach og logg bruker samme
+        # nivå som serveren). Amend kun hvis serveren IKKE har SL —
+        # og da med trailing for MAKRO, ellers ville en amend uten
+        # trailingStopLoss slå av server-trailingen som ordren aktiverte.
+        server_sl = _as_float(getattr(pos, "stopLoss", 0))
+        server_tp = _as_float(getattr(pos, "takeProfit", 0))
+        pd = self._client.symbol_price_digits.get(state.symbol_id, 5)
+        if server_sl > 0:
+            state.stop_price = server_sl
+            if server_tp > 0:
+                state.t1_price = server_tp
+            log.info(
+                "[FILL] SL=%.5f TP=%s festet av server (%s)",
+                server_sl,
+                f"{server_tp:.5f}" if server_tp > 0 else "ingen",
+                "LIMIT" if state.order_id else "MARKET",
+            )
+        else:
             sl = round(state.stop_price, pd)
             tp = round(state.t1_price, pd) if state.t1_price > 0 else None
-            self._client.amend_sl_tp(position_id=pos.positionId, stop_loss=sl, take_profit=tp)
-            log.info("[AMEND] SL=%s TP=%s (digits=%d)", sl, tp if tp else 0, pd)
-        else:
-            log.info("[LIMIT FILL] SL/TP allerede satt på limit order")
+            is_makro = (state.horizon or "").upper() == "MAKRO"
+            self._client.amend_sl_tp(
+                position_id=pos.positionId,
+                stop_loss=sl,
+                take_profit=tp,
+                trailing_stop_loss=True if is_makro else None,
+            )
+            log.warning(
+                "[AMEND] Server rapporterte ingen SL ved fill — sender SL=%s TP=%s (digits=%d)",
+                sl,
+                tp if tp else 0,
+                pd,
+            )
 
         # Trade-log-åpning eies av EntryEngine (hot-path)
         self._entry._log_trade_opened(state)
@@ -1422,11 +1501,16 @@ class ExitEngine:
             log_horizon = (sig_log.get("horizon") if sig_log else None) or "SWING"
             log_horizon = str(log_horizon).upper()
             log_t1 = 0.0
+            log_atr = 0.0
             if sig_log is not None:
                 try:
                     log_t1 = float(sig_log.get("t1") or 0.0)
                 except (TypeError, ValueError):
                     log_t1 = 0.0
+                try:
+                    log_atr = float(sig_log.get("atr") or 0.0)
+                except (TypeError, ValueError):
+                    log_atr = 0.0
             is_makro = log_horizon == "MAKRO"
             is_long_horizon = log_horizon in ("SWING", "MAKRO")
 
@@ -1455,6 +1539,7 @@ class ExitEngine:
                 t1_hit=not has_tp,
                 t1_price_reached=not has_tp,
                 trail_active=is_makro,
+                atr_d1=log_atr,
             )
             instr_name = next(
                 (k for k, v in self._client.symbol_map.items() if v == sym_id),

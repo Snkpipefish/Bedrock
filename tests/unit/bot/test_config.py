@@ -46,7 +46,7 @@ def test_bot_config_default_construction() -> None:
     assert cfg.startup_only.signal_api_key_env is None
     assert cfg.startup_only.reconnect.window_sec == 600
     assert cfg.reloadable.risk_pct.full == 1.0
-    assert cfg.reloadable.horizon_ttl.scalp == 900
+    assert cfg.reloadable.horizon_ttl.scalp == 4500
     assert "fx" in cfg.reloadable.group_params
     assert cfg.reloadable.group_params["fx"].trail_atr == 2.5
 

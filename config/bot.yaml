@@ -82,15 +82,39 @@ reloadable:
   # Loss-cooldown per signal_id. permanent_after_loss (2026-09-04): re-entry
   # etter tap på samme id var -0.56R snitt uansett gap (n=75, -42R av -73R);
   # nivået må re-genereres som ny setup før det handles igjen.
+  # 2026-09-05: signal_id er slot-hash (instrument, retning, horisont) og
+  # endres aldri når nivået flytter seg — id-basert permanent blokk låste
+  # 45 av 57 slotter. Blokken er nå nøklet på NIVÅ: re-entry blokkeres
+  # bare når signalets entry ligger innenfor level_atr_mult × ATR(D1) av
+  # entry-prisen der tapet skjedde. Tap eldre enn loss_level_max_age_days
+  # lastes ikke ved oppstart (0 = ingen grense).
   cooldown:
     loss_ttl_hours: 72
     permanent_after_loss: true
+    level_atr_mult: 1.0
+    loss_level_max_age_days: 90
 
-  # Per-horisont TTL i sekunder. Signaler eldre enn dette ignoreres.
+  # Per-horisont TTL i sekunder — måles mot batchens signals_generated_at
+  # (siste vellykkede signals-all-kjøring), IKKE per-signal created_at.
+  # Regen er event-drevet etter hver fetch (prices hver time), så SCALP-
+  # TTL må dekke én pris-syklus + margin.
   horizon_ttl:
-    scalp:  900       # 15 min
+    scalp:  4500      # 75 min
     swing:  14400     # 4 t
     makro:  86400     # 24 t
+
+  # Fill-tids-vakter (2026-09-05). Generator-geometri er relativ til
+  # alert_level; fill skjer i sonen ± confirmation-drift. SCALP ble fylt
+  # 0.01–0.15 ATR fra SL (6 trades, alle tap), SWING med R:R 0.9 ved fill.
+  #   min/max_sl_distance_frac: faktisk SL-avstand vs planlagt |alert−stop|
+  #   check_rr_at_fill:         R:R fra fill-pris må nå horizon_min_rr
+  #   max_same_direction_per_instrument: åpne posisjoner samme retning,
+  #     alle horisonter (SILVER SWING+MAKRO 4. sep = dobbel risiko, samme tese)
+  entry_guard:
+    min_sl_distance_frac: 0.6
+    max_sl_distance_frac: 1.5
+    check_rr_at_fill: true
+    max_same_direction_per_instrument: 1
 
   # Per-horisont minimum R:R-gate. Synkronisert med generator-floors
   # (SetupConfig.min_rr_scalp=1.5, min_rr_swing=2.5) så bot ikke slipper
@@ -185,6 +209,35 @@ reloadable:
       be_atr: 0.15
       expiry: 40
       ema9_exit: true
+    # 2026-09-05: manglet — arvet fx-verdier via fallback i exit.py
+    natgas:
+      trail_atr: 3.5
+      gb_peak: 0.90
+      gb_exit: 0.45
+      be_atr: 0.25
+      expiry: 48
+      ema9_exit: false
+    copper:
+      trail_atr: 3.0
+      gb_peak: 0.88
+      gb_exit: 0.42
+      be_atr: 0.25
+      expiry: 48
+      ema9_exit: false
+    platinum:
+      trail_atr: 3.0
+      gb_peak: 0.88
+      gb_exit: 0.42
+      be_atr: 0.25
+      expiry: 48
+      ema9_exit: false
+    crypto:
+      trail_atr: 3.5
+      gb_peak: 0.90
+      gb_exit: 0.45
+      be_atr: 0.25
+      expiry: 48
+      ema9_exit: false
     corn:
       trail_atr: 2.0
       gb_peak: 0.85

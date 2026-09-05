@@ -141,9 +141,19 @@ class SpreadConfig(BaseModel):
 
 
 class HorizonTTLConfig(BaseModel):
-    """Per-horisont TTL i sekunder (reloadable)."""
+    """Per-horisont TTL i sekunder (reloadable).
 
-    scalp: int = 15 * 60
+    Måles mot batchens `signals_generated_at` (siste vellykkede
+    signals-all-kjøring, uavhengig av om fila ble skrevet) — IKKE mot
+    per-signal `created_at`. `created_at` er `first_seen` som nullstilles
+    ved hver filskriving (hysterese er av i prod), så SWING-setups «døde»
+    4 t etter forrige innholdsendring (32 SWING-TTL-skip 11. aug–4. sep).
+    Semantikken er nå: «pipelinen har ikke regnet setupet på nytt på N
+    sekunder» = data kan være stale. Regen er event-drevet etter hver
+    fetch; prices hentes hver time, så SCALP-TTL må dekke én pris-syklus.
+    """
+
+    scalp: int = 75 * 60
     swing: int = 4 * 60 * 60
     makro: int = 24 * 60 * 60
 
@@ -151,22 +161,63 @@ class HorizonTTLConfig(BaseModel):
 
 
 class CooldownConfig(BaseModel):
-    """Loss-cooldown TTL (reloadable).
+    """Loss-cooldown per (signal_id, tapt entry-nivå) (reloadable).
 
-    Etter et tap blokkeres re-entry på samme signal_id i `loss_ttl_hours`
-    timer. Verner mot loss → re-entry → loss-loop i sideways-marked
-    (orchestrator persisterer setup_id via hysterese), men slipper fri
-    etter at markedet sannsynligvis har beveget seg utenfor det
-    opprinnelige nivået. Settes for høyt → setups dør permanent (bug
-    før denne config-en eksisterte); for lavt → loss-loop.
+    `signal_id` er en hash av (instrument, retning, horisont) — den
+    endres ALDRI når nivået flytter seg (hysteresis.compute_setup_id).
+    Cooldown nøklet kun på id låste derfor hele slotten for alltid
+    (2026-09-05: 45 av 57 slotter blokkert, 9 av 24 publiserte setups
+    handlebare). Nå blokkeres re-entry bare når signalets nåværende
+    entry ligger innenfor `level_atr_mult × ATR(D1)` av entry-prisen
+    der tapet skjedde — det er «samme nivå» som 2026-09-04-analysen
+    viste var -0.56R i snitt. Flytter nivået seg, er slotten fri igjen.
+
+    - `permanent_after_loss=True`: nivå-blokken utløper ikke med TTL
+      (men eldes ut etter `loss_level_max_age_days`).
+    - `permanent_after_loss=False`: `loss_ttl_hours` gjelder per tap.
+    - Tap uten kjent entry-pris (eldre logg) blokkerer uansett nivå.
     """
 
     loss_ttl_hours: int = 72
     # 2026-09-04: re-entry etter tap på samme signal_id var -0.56R snitt
     # uansett gap (72-168t: -0.48R, >168t: -0.64R; n=75, sum -42R av
-    # -73R totalt). Permanent blokk per id: nivået må re-genereres som
-    # ny setup (ny id) før det handles igjen. TTL brukes kun hvis False.
+    # -73R totalt). TTL brukes kun hvis False.
     permanent_after_loss: bool = True
+    # Nivå-toleranse: ny entry innenfor N × ATR(D1) av tapt entry = samme nivå.
+    level_atr_mult: float = 1.0
+    # Tap eldre enn dette lastes ikke ved oppstart selv om permanent —
+    # et nivå som tapte for 3+ måneder siden er en annen markedskontekst.
+    # 0 = ingen aldersgrense.
+    loss_level_max_age_days: int = 90
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class EntryGuardConfig(BaseModel):
+    """Fill-tids-vakter i `_execute_trade_impl` (reloadable).
+
+    Generatorens SL/TP er geometri rundt `alert_level`, men boten fyller
+    til marked etter bekreftelse — et sted i entry-sonen, opptil N
+    candles senere. Uten vakt kunne SCALP fylles 0.01-0.15 ATR fra SL
+    (6 slike 13. jun–4. sep, alle tap) og SWING med R:R 0.9 mot gulv
+    2.5. Vaktene måler geometrien på faktisk fill-pris.
+
+    - min_sl_distance_frac: faktisk SL-avstand må være ≥ N × planlagt
+      (|alert_level − stop|).
+    - max_sl_distance_frac: faktisk SL-avstand må være ≤ N × planlagt
+      (pris har løpt fra nivået; gjelder også MAKRO uten TP).
+    - check_rr_at_fill: R:R regnet fra fill-pris må nå horisontens
+      `horizon_min_rr` (kun når t1 > 0).
+    - max_same_direction_per_instrument: antall åpne posisjoner (alle
+      horisonter) i samme retning på samme instrument. SILVER SWING+
+      MAKRO 2026-09-04 åpnet 10:00:00 og ble stoppet 14:30:01 (NFP)
+      begge — samme tese, dobbel risiko.
+    """
+
+    min_sl_distance_frac: float = 0.6
+    max_sl_distance_frac: float = 1.5
+    check_rr_at_fill: bool = True
+    max_same_direction_per_instrument: int = 1
 
     model_config = ConfigDict(extra="forbid")
 
@@ -174,10 +225,13 @@ class CooldownConfig(BaseModel):
 class HorizonMinRRConfig(BaseModel):
     """Per-horisont minimum R:R-gate (reloadable).
 
-    Synkronisert med generator (SetupConfig.min_rr_scalp/swing) så bot
-    ikke slipper gjennom setups med svakere R:R enn generator allerede
-    filtrerte på. MAKRO 2.0 brukes kun hvis tp er satt eksplisitt;
-    trailing-makro har rr=None og hopper R:R-sjekken.
+    Globalt GULV på bot-siden — matcher generator-defaults
+    (SetupConfig.min_rr_scalp/swing). Instrument-YAML kan overstyre
+    generatorens floor via `setup:`-blokken; senkes den under dette
+    gulvet vil boten avvise setupene (ved fill, `entry_guard.
+    check_rr_at_fill`) — hev heller gulvet her enn å senke det i YAML.
+    MAKRO 2.0 brukes kun hvis tp er satt eksplisitt; trailing-makro
+    (t1=0) hopper R:R-sjekken.
     """
 
     scalp: float = 1.5
@@ -294,6 +348,20 @@ def _default_group_params() -> dict[str, GroupParams]:
         "indices": GroupParams(
             trail_atr=2.8, gb_peak=0.85, gb_exit=0.35, be_atr=0.15, expiry=40, ema9_exit=True
         ),
+        # 2026-09-05: manglet — NATGAS/COPPER/PLATINUM/crypto arvet fx-
+        # verdier (be_atr 0.10, ema9_exit True) via fallback i exit.py.
+        "natgas": GroupParams(
+            trail_atr=3.5, gb_peak=0.90, gb_exit=0.45, be_atr=0.25, expiry=48, ema9_exit=False
+        ),
+        "copper": GroupParams(
+            trail_atr=3.0, gb_peak=0.88, gb_exit=0.42, be_atr=0.25, expiry=48, ema9_exit=False
+        ),
+        "platinum": GroupParams(
+            trail_atr=3.0, gb_peak=0.88, gb_exit=0.42, be_atr=0.25, expiry=48, ema9_exit=False
+        ),
+        "crypto": GroupParams(
+            trail_atr=3.5, gb_peak=0.90, gb_exit=0.45, be_atr=0.25, expiry=48, ema9_exit=False
+        ),
         "corn": GroupParams(
             trail_atr=2.0, gb_peak=0.85, gb_exit=0.35, be_atr=0.20, expiry=48, ema9_exit=True
         ),
@@ -333,6 +401,7 @@ class ReloadableConfig(BaseModel):
     weekend: WeekendConfig = Field(default_factory=WeekendConfig)
     monday_gap: MondayGapConfig = Field(default_factory=MondayGapConfig)
     trail: TrailConfig = Field(default_factory=TrailConfig)
+    entry_guard: EntryGuardConfig = Field(default_factory=EntryGuardConfig)
     agri: AgriConfig = Field(default_factory=AgriConfig)
     oil: OilConfig = Field(default_factory=OilConfig)
     group_params: dict[str, GroupParams] = Field(default_factory=_default_group_params)

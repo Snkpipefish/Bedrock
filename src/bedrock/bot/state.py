@@ -71,7 +71,16 @@ class TradeState:
     max_score: float | None = None
     horizon_config: dict = field(default_factory=dict)
     correlation_group: str | None = None
-    order_id: int | None = None  # for limit orders
+    # ATR(D1) fra setup-generatoren (sig["atr"]). Brukes av weekend-
+    # stramming (P2.5) slik at SWING-SL måles i samme enhet som
+    # generator-SL, ikke i 1H-ATR (≈ 0.2× D1).
+    atr_d1: float = 0.0
+    # Reservert når en ordre (MARKET eller LIMIT) er sendt men ikke
+    # bekreftet — dup-guard i `_execute_trade_impl`. Skilles fra
+    # `order_id` slik at MARKET-states beholder order_id=None og
+    # fill-håndteringen kan skille LIMIT (SL/TP på ordren) fra MARKET.
+    order_sent: bool = False
+    order_id: int | None = None  # for limit orders (-1 = sendt, venter orderId)
     lots_used: float | None = None  # ønsket lot-størrelse ved entry (før stepVolume)
     risk_pct_used: float | None = None  # risk-% tier brukt (0.25/0.5/1.0)
     # ── Exit-tracking (P3.5 / P3.6) ───────────────────────────────
