@@ -20,7 +20,7 @@ import bedrock.engine.drivers  # noqa: F401
 from bedrock.data.store import DataStore
 from bedrock.orchestrator import generate_signals
 from bedrock.orchestrator.score import OrchestratorError
-from bedrock.setups.generator import Direction, Horizon
+from bedrock.setups.generator import Direction, Horizon, SetupConfig
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -401,6 +401,198 @@ def test_generate_signals_unknown_horizon_errors(
             instruments_dir=instruments_dir,
             defaults_dir=minimal_defaults,
         )
+
+
+# ---------------------------------------------------------------------------
+# `setup:`-blokk i instrument-YAML → SetupConfig (session 2026-09-05)
+# ---------------------------------------------------------------------------
+
+
+def _write_gold_with_setup_block(dir_: Path, block: str) -> None:
+    (dir_ / "gold.yaml").write_text(
+        dedent(
+            f"""\
+            inherits: family_financial
+            instrument:
+              id: Gold
+              asset_class: metals
+              ticker: XAUUSD
+            setup:
+              {block}
+            """
+        )
+    )
+
+
+def _swing_buy(result_entries: list) -> object:
+    return next(
+        e for e in result_entries if e.direction == Direction.BUY and e.horizon == Horizon.SWING
+    )
+
+
+def test_generate_signals_setup_block_overrides_generator_defaults(
+    store_with_wavy_prices: DataStore,
+    minimal_defaults: Path,
+    instruments_dir: Path,
+) -> None:
+    """`setup: {min_rr_swing: 9.0}` i YAML → intet SWING-setup der
+    defaults gir ett. Med default SWING-SL 1×ATR og TP-vindu 6×ATR er
+    maks oppnåelig SWING-R:R 6.0, så et gulv på 9.0 kan aldri nås —
+    testen er deterministisk uavhengig av nøyaktig nivå-geometri."""
+    now = datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+    # Baseline: defaults gir SWING BUY-setup med R:R < 9
+    _write_gold(instruments_dir)
+    baseline = generate_signals(
+        "Gold",
+        store_with_wavy_prices,
+        now=now,
+        instruments_dir=instruments_dir,
+        defaults_dir=minimal_defaults,
+    )
+    base_entry = _swing_buy(baseline.entries)
+    assert base_entry.setup is not None
+    assert base_entry.setup.setup.rr is not None
+    assert base_entry.setup.setup.rr < 9.0
+
+    # Overstyring via YAML: samme data, gulv 9.0 → ingen setup
+    _write_gold_with_setup_block(instruments_dir, "min_rr_swing: 9.0")
+    overridden = generate_signals(
+        "Gold",
+        store_with_wavy_prices,
+        now=now,
+        instruments_dir=instruments_dir,
+        defaults_dir=minimal_defaults,
+    )
+    over_entry = _swing_buy(overridden.entries)
+    assert over_entry.setup is None
+    assert over_entry.skip_reason is not None
+    assert over_entry.published is False
+    # Score er upåvirket — setup-blokken rører ikke Engine
+    assert over_entry.score == base_entry.score
+
+
+def test_generate_signals_explicit_setup_config_wins_over_yaml_block(
+    store_with_wavy_prices: DataStore,
+    minimal_defaults: Path,
+    instruments_dir: Path,
+) -> None:
+    """Prioritet: eksplisitt `setup_config`-param > YAML `setup:` > defaults.
+    YAML sier 9.0 (umulig), caller sender defaults → setup finnes."""
+    now = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    _write_gold_with_setup_block(instruments_dir, "min_rr_swing: 9.0")
+
+    result = generate_signals(
+        "Gold",
+        store_with_wavy_prices,
+        now=now,
+        instruments_dir=instruments_dir,
+        defaults_dir=minimal_defaults,
+        setup_config=SetupConfig(),
+    )
+    assert _swing_buy(result.entries).setup is not None
+
+
+def test_generate_signals_setup_block_inherited_from_family_default(
+    store_with_wavy_prices: DataStore,
+    minimal_defaults: Path,
+    instruments_dir: Path,
+) -> None:
+    """`setup:` i family_financial.yaml arves av instrumentet (shallow
+    top-level merge) og påvirker generatoren."""
+    now = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    family = minimal_defaults / "family_financial.yaml"
+    family.write_text(family.read_text() + "setup:\n  min_rr_swing: 9.0\n")
+    _write_gold(instruments_dir)
+
+    result = generate_signals(
+        "Gold",
+        store_with_wavy_prices,
+        now=now,
+        instruments_dir=instruments_dir,
+        defaults_dir=minimal_defaults,
+    )
+    assert _swing_buy(result.entries).setup is None
+
+
+def test_generate_signals_hysteresis_reverts_stale_entry_on_price_move(
+    store_with_wavy_prices: DataStore,
+    minimal_defaults: Path,
+    instruments_dir: Path,
+    tmp_path: Path,
+) -> None:
+    """E2E geometri-vakt: et snapshot med entry/SL/TP på FEIL side av
+    nåpris (som om prisen har løpt gjennom nivåene siden forrige
+    kjøring) må ikke overleve hysteresen. Hysterese-bufferne settes
+    enormt store slik at forrige verdi alltid ville blitt beholdt uten
+    vakten — testen feiler dermed hvis `current_price`/`min_rr` ikke
+    sendes inn til `stabilize_setup`."""
+    from bedrock.setups.hysteresis import HysteresisConfig, SetupSnapshot
+    from bedrock.setups.snapshot import load_snapshot, save_snapshot
+
+    _write_gold(instruments_dir)
+    snapshot = tmp_path / "last_run.json"
+    close = float(store_with_wavy_prices.get_prices_ohlc("Gold", "D1", 1)["close"].iloc[-1])
+    keep_everything = HysteresisConfig(
+        entry_atr_multiplier=50.0, sl_atr_multiplier=50.0, tp_atr_multiplier=50.0
+    )
+
+    first = generate_signals(
+        "Gold",
+        store_with_wavy_prices,
+        now=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        snapshot_path=snapshot,
+        instruments_dir=instruments_dir,
+        defaults_dir=minimal_defaults,
+        hysteresis_config=keep_everything,
+    )
+    assert any(e.setup is not None for e in first.entries)
+
+    # Plant stale snapshot: alle nivåer på feil side av nåpris
+    prev = load_snapshot(snapshot)
+    assert prev is not None
+    stale_setups = []
+    for st in prev.setups:
+        s = st.setup
+        if s.direction == Direction.BUY:
+            upd = {"entry": close + 1.0, "sl": close + 0.5}
+            if s.tp is not None:
+                upd["tp"] = close - 1.0
+        else:
+            upd = {"entry": close - 1.0, "sl": close - 0.5}
+            if s.tp is not None:
+                upd["tp"] = close + 1.0
+        stale_setups.append(st.model_copy(update={"setup": s.model_copy(update=upd)}))
+    save_snapshot(SetupSnapshot(run_ts=prev.run_ts, setups=stale_setups), snapshot)
+
+    second = generate_signals(
+        "Gold",
+        store_with_wavy_prices,
+        now=datetime(2024, 1, 2, tzinfo=timezone.utc),
+        snapshot_path=snapshot,
+        instruments_dir=instruments_dir,
+        defaults_dir=minimal_defaults,
+        hysteresis_config=keep_everything,
+    )
+    checked = 0
+    for e in second.entries:
+        if e.setup is None:
+            continue
+        s = e.setup.setup
+        checked += 1
+        # Hysteresen fant slotten (first_seen bevart fra kjøring 1)
+        assert e.setup.first_seen == datetime(2024, 1, 1, tzinfo=timezone.utc)
+        if e.direction == Direction.BUY:
+            assert s.entry < close
+            assert s.sl < s.entry
+            assert s.tp is None or s.tp > close
+        else:
+            assert s.entry > close
+            assert s.sl > s.entry
+            assert s.tp is None or s.tp < close
+        if s.rr is not None:
+            assert s.rr >= SetupConfig().min_rr_for(e.horizon)  # type: ignore[operator]
+    assert checked > 0
 
 
 # ---------------------------------------------------------------------------

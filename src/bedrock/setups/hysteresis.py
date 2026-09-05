@@ -11,6 +11,9 @@ verdier hver 4. time.
    - Ny SL innenfor `k × ATR` av forrige SL → behold forrige
    - Ny TP innenfor `k × ATR` av forrige TP → behold forrige
    - R:R beregnes på nytt med de stabiliserte verdiene
+   - Geometri-vakt + R:R-gulv (session 2026-09-05): beholdte verdier
+     som nåpris har passert, eller som presser R:R under horisontens
+     floor, reverteres til nytt setup — se `stabilize_setup`
 
 2. **Hysterese på horisont-tildeling** (utsatt til session 19 siden
    horisont-klassifisering mangler fortsatt)
@@ -137,6 +140,9 @@ def stabilize_setup(
     previous: StableSetup | None,
     now: datetime,
     config: HysteresisConfig | None = None,
+    *,
+    current_price: float | None = None,
+    min_rr: float | None = None,
 ) -> StableSetup:
     """Bruk hysterese på `new_setup` mot `previous`.
 
@@ -156,6 +162,29 @@ def stabilize_setup(
     - `first_seen` bevares fra `previous` når slot matcher; `last_updated`
       settes til `now`.
 
+    **Geometri-vakt** (session 2026-09-05, kun når `current_price` er
+    gitt): hysterese kan beholde en forrige verdi som nåpris i mellom-
+    tiden har passert — BUY-entry over nåpris (traden ville fylles
+    øyeblikkelig, ikke på pullback), BUY-TP under nåpris (target allerede
+    truffet). En beholdt verdi som bryter geometrien reverteres til
+    `new_setup` sin verdi. Regler: BUY krever `entry < current_price`,
+    `sl < entry`, `tp > current_price`; SELL speilet. Entry og SL er et
+    par — reverteres entry, reverteres SL også.
+
+    **R:R-gulv** (kun når `min_rr` er gitt og TP finnes): hvis R:R etter
+    substitusjon er `None` eller under gulvet, reverteres TP til
+    `new_setup.tp`. Hvis R:R fortsatt er under gulvet (beholdt entry/SL-
+    par gir for stor risiko mot ny TP), forkastes all hysterese og
+    `new_setup` sine verdier brukes i sin helhet — generatoren har
+    allerede garantert at de oppfyller gulvet.
+
+    Vakten sjekker SIDE av nåpris/entry, ikke avstand: en beholdt verdi
+    kan ligge inntil `entry_atr_multiplier` (0.3×ATR) utenfor
+    generatorens entry-tak og `tp_atr_multiplier` (0.5×ATR) utenfor TP-
+    vinduet. Det er bevisst — hysteresens formål er å tåle små drift,
+    og overskuddet er begrenset av buffer-størrelsen.
+
+    Uten `current_price`/`min_rr` er atferden som før (ingen vakt).
     `config.enabled=False` slår av alle filtre og returnerer `new_setup`
     uendret (nyttig for debugging).
     """
@@ -176,6 +205,8 @@ def stabilize_setup(
             f"stabilize_setup: previous.setup_id ({previous.setup_id}) does not "
             f"match new setup's slot ({setup_id}). Did you pass the wrong previous?"
         )
+
+    direction = new_setup.direction
 
     stable_entry = _stabilize_value(
         new_value=new_setup.entry,
@@ -203,13 +234,46 @@ def stabilize_setup(
             buffer=cfg.tp_atr_multiplier * new_setup.atr,
         )
 
-    # Bygg stabilisert Setup. Bruker model_copy for å bevare traceability-felter.
+    # Geometri-vakt: beholdte verdier på feil side av nåpris/entry
+    # reverteres. `new_setup` oppfyller geometrien per konstruksjon
+    # (build_setup velger entry bak og TP foran nåpris), så revertering
+    # til ny verdi er alltid trygg.
+    if current_price is not None:
+        if not _entry_side_ok(stable_entry, current_price, direction):
+            stable_entry = new_setup.entry
+            stable_sl = new_setup.sl  # par med entry
+            entry_kept = False
+        if not _sl_side_ok(stable_entry, stable_sl, direction):
+            stable_sl = new_setup.sl
+        if stable_tp is not None and not _tp_side_ok(stable_tp, current_price, direction):
+            stable_tp = new_setup.tp
+
     rr_recomputed = _recompute_rr(
         entry=stable_entry,
         sl=stable_sl,
         tp=stable_tp,
-        direction=new_setup.direction,
+        direction=direction,
     )
+
+    # R:R-gulv: substitusjon kan ha presset R:R under horisontens floor
+    # (beholdt TP nærmere, eller beholdt entry/SL-par med bredere risiko).
+    if min_rr is not None and stable_tp is not None and _below_floor(rr_recomputed, min_rr):
+        stable_tp = new_setup.tp
+        rr_recomputed = _recompute_rr(
+            entry=stable_entry, sl=stable_sl, tp=stable_tp, direction=direction
+        )
+        if _below_floor(rr_recomputed, min_rr):
+            # Ny TP hjalp ikke — det beholdte entry/SL-paret er problemet.
+            # Forkast all hysterese; generatoren garanterer at nytt setup
+            # oppfyller gulvet.
+            stable_entry = new_setup.entry
+            stable_sl = new_setup.sl
+            entry_kept = False
+            rr_recomputed = _recompute_rr(
+                entry=stable_entry, sl=stable_sl, tp=stable_tp, direction=direction
+            )
+
+    # Bygg stabilisert Setup. Bruker model_copy for å bevare traceability-felter.
     updates: dict[str, object] = {
         "entry": stable_entry,
         "sl": stable_sl,
@@ -234,12 +298,19 @@ def apply_hysteresis_batch(
     previous_snapshot: SetupSnapshot | None,
     now: datetime,
     config: HysteresisConfig | None = None,
+    *,
+    current_prices: dict[str, float] | None = None,
+    min_rr_by_horizon: dict[Horizon, float | None] | None = None,
 ) -> list[StableSetup]:
     """Kjør `stabilize_setup` for en hel batch mot forrige snapshot.
 
     Oppslag skjer per-slot (instrument, direction, horizon) via
     `SetupSnapshot.find`. Setups som ikke fantes forrige gang får
     `previous=None` og behandles som nye.
+
+    `current_prices` (instrument → nåpris) og `min_rr_by_horizon`
+    aktiverer geometri-vakt + R:R-gulv per setup (se `stabilize_setup`).
+    Utelatt = uvaktet stabilisering (legacy).
     """
     stabilized: list[StableSetup] = []
     for new_setup in new_setups:
@@ -248,7 +319,11 @@ def apply_hysteresis_batch(
             previous = previous_snapshot.find(
                 new_setup.instrument, new_setup.direction, new_setup.horizon
             )
-        stabilized.append(stabilize_setup(new_setup, previous, now, config))
+        price = (current_prices or {}).get(new_setup.instrument)
+        min_rr = (min_rr_by_horizon or {}).get(new_setup.horizon)
+        stabilized.append(
+            stabilize_setup(new_setup, previous, now, config, current_price=price, min_rr=min_rr)
+        )
     return stabilized
 
 
@@ -264,6 +339,33 @@ def _stabilize_value(new_value: float, previous_value: float, buffer: float) -> 
     if abs(new_value - previous_value) <= buffer:
         return previous_value
     return new_value
+
+
+def _entry_side_ok(entry: float, current_price: float, direction: Direction) -> bool:
+    """Entry må ligge bak nåpris: BUY under, SELL over (pullback-fylling)."""
+    if direction == Direction.BUY:
+        return entry < current_price
+    return entry > current_price
+
+
+def _sl_side_ok(entry: float, sl: float, direction: Direction) -> bool:
+    """SL må ligge forbi entry i retning motsatt trade (risiko > 0)."""
+    if direction == Direction.BUY:
+        return sl < entry
+    return sl > entry
+
+
+def _tp_side_ok(tp: float, current_price: float, direction: Direction) -> bool:
+    """TP må ligge foran nåpris — et target pris allerede har passert er
+    ikke et target."""
+    if direction == Direction.BUY:
+        return tp > current_price
+    return tp < current_price
+
+
+def _below_floor(rr: float | None, min_rr: float) -> bool:
+    """R:R er ugyldig (None) eller under gulvet."""
+    return rr is None or rr < min_rr
 
 
 def _recompute_rr(

@@ -98,7 +98,9 @@ class Setup(BaseModel):
 
 
 class SetupConfig(BaseModel):
-    """Bygger-parametre. Overstyres per instrument i senere fase via YAML.
+    """Bygger-parametre. Overstyres per instrument via `setup:`-blokken i
+    instrument-YAML (`InstrumentConfig.setup`); alle felter er valgfrie
+    og ukjente nøkler er hard fail (`extra="forbid"`).
 
     Defaults matcher PLAN § 5.2-5.3 (k per horisont — ATR er D1 i
     produksjon, så buffer må skalere med forventet holdetid):
@@ -118,14 +120,21 @@ class SetupConfig(BaseModel):
     - `min_entry_strength=0.6`: entry-klyngen må minst ha denne strength
     - `min_rr_scalp=1.5`, `min_rr_swing=2.5`: asymmetri-floor per horisont
     - `min_entry_distance_atr=0.0` / `max_entry_distance_atr=2.0`:
-       avstandsbånd for entry-klyngen (×ATR bak nåpris). Uten max kunne
-       entry ligge vilkårlig langt unna — limit-ordre som aldri fylles,
-       eller fylles etter at tesen er død. Min er 0.0 (av) — pris som
-       står PÅ et sterkt nivå er et gyldig entry-punkt
+       avstandsbånd for entry-klyngen (×ATR bak nåpris) for SWING/MAKRO.
+       Uten max kunne entry ligge vilkårlig langt unna — limit-ordre som
+       aldri fylles, eller fylles etter at tesen er død. Min er 0.0 (av)
+       — pris som står PÅ et sterkt nivå er et gyldig entry-punkt
+    - `max_entry_distance_atr_scalp=0.75`: eget entry-tak for SCALP.
+       Boten går inn til marked innenfor en sone rundt entry, så
+       entry-avstanden er forventet reise FØR traden starter. En scalp
+       med entry 2 ATR bak pris er en flerdagers pullback, ikke en
+       scalp — 0.75×dATR er øvre grense for intradag-reise til nivået
     - `tp_max_distance_atr_scalp=2.0` / `tp_max_distance_atr_swing=6.0`:
-       horisont-vindu for TP-avstand (×ATR fra nåpris). Tommelfinger
-       ~1 ATR/dag: SCALP ≤ 2 dager, SWING ≤ ~6 dager reise til target.
-       Hindrer at TP glir ut i MAKRO-territorium
+       horisont-vindu for TP-avstand (×ATR fra ENTRY, ikke nåpris —
+       reisen som må tilbakelegges er entry→TP; målt fra nåpris ville
+       vinduet krympe/vokse med hvor langt bak pris entry ligger).
+       Tommelfinger ~1 ATR/dag: SCALP ≤ 2 dager, SWING ≤ ~6 dager reise
+       til target. Hindrer at TP glir ut i MAKRO-territorium
     """
 
     cluster_atr_multiplier: float = Field(default=0.3, gt=0.0)
@@ -138,18 +147,32 @@ class SetupConfig(BaseModel):
     min_rr_swing: float = Field(default=2.5, gt=0.0)
     min_entry_distance_atr: float = Field(default=0.0, ge=0.0)
     max_entry_distance_atr: float = Field(default=2.0, gt=0.0)
+    max_entry_distance_atr_scalp: float = Field(default=0.75, gt=0.0)
     tp_max_distance_atr_scalp: float = Field(default=2.0, gt=0.0)
     tp_max_distance_atr_swing: float = Field(default=6.0, gt=0.0)
 
     model_config = ConfigDict(extra="forbid")
 
     def tp_max_distance_atr_for(self, horizon: Horizon) -> float | None:
-        """TP-vindu per horisont. MAKRO har ingen TP → None."""
+        """TP-vindu per horisont (×ATR fra entry). MAKRO har ingen TP → None."""
         if horizon == Horizon.SCALP:
             return self.tp_max_distance_atr_scalp
         if horizon == Horizon.SWING:
             return self.tp_max_distance_atr_swing
         return None  # MAKRO
+
+    def max_entry_distance_atr_for(self, horizon: Horizon) -> float:
+        """Entry-tak per horisont (×ATR bak nåpris).
+
+        SCALP får et strammere tak (`max_entry_distance_atr_scalp`) enn
+        SWING/MAKRO (`max_entry_distance_atr`): boten går inn til marked
+        innenfor en sone rundt entry, så avstanden nåpris→entry er
+        forventet reise før traden i det hele tatt starter. En scalp som
+        skal vente på 2 ATR pullback er ikke lenger en scalp.
+        """
+        if horizon == Horizon.SCALP:
+            return self.max_entry_distance_atr_scalp
+        return self.max_entry_distance_atr
 
     def sl_atr_multiplier_for(self, horizon: Horizon) -> float:
         """SL-buffer skalerer med horisont — lengre hold = bredere buffer."""
@@ -335,15 +358,16 @@ def build_setup(
        og span-tak `config.cluster_max_span_atr × atr`
     2. Finn **entry-klynge**: nærmeste klynge *bak* nåpris som oppfyller
        `strength ≥ min_entry_strength` OG ligger innenfor avstandsbåndet
-       `[min_entry_distance_atr, max_entry_distance_atr] × atr`. BUY =
-       støtte under, SELL = motstand over. Ingen funnet → `None`
+       `[min_entry_distance_atr, max_entry_distance_atr_for(horizon)] ×
+       atr` (SCALP har strammere tak enn SWING/MAKRO). BUY = støtte
+       under, SELL = motstand over. Ingen funnet → `None`
     3. **SL** = entry ± `config.sl_atr_multiplier × atr` (forbi entry-
        nivået i retning motsatt trade)
     4. **TP** per horisont (session 2026-06-12: indeks-regel erstattet
        av horisont-vindu — se `_find_tp_cluster`):
        - **SCALP/SWING**: nærmeste klynge i retningen som gir R:R ≥
          horisontens floor og ligger innenfor horisontens TP-vindu
-         (`tp_max_distance_atr_*`)
+         (`tp_max_distance_atr_*`, målt fra entry)
        - **MAKRO**: ingen TP, returner `Setup` med `tp=None, rr=None`
     5. **Asymmetri-gate**: R:R må være ≥ `config.min_rr_for(horizon)`.
        Hvis ingen TP-kandidat tilfredsstiller → `None`
@@ -365,7 +389,7 @@ def build_setup(
         direction,
         cfg.min_entry_strength,
         min_distance=cfg.min_entry_distance_atr * atr,
-        max_distance=cfg.max_entry_distance_atr * atr,
+        max_distance=cfg.max_entry_distance_atr_for(horizon) * atr,
     )
     if entry_cluster is None:
         return None
@@ -502,10 +526,17 @@ def _find_tp_cluster(
 
     Ny regel: gå gjennom klyngene i retningen, nærmest først, og velg
     den FØRSTE som både gir `rr ≥ min_rr` og ligger innenfor
-    `max_distance` fra nåpris. Nærmest-først bevarer prinsippet om at
+    `max_distance` fra ENTRY. Nærmest-først bevarer prinsippet om at
     vi ikke shopper etter høyest mulig R:R — vi tar det nærmeste reelle
     nivået som gjør traden verdt å ta. Vinduet hindrer at TP glir ut av
     horisonten (SWING-TP i MAKRO-distanse).
+
+    Vinduet måles fra entry, ikke fra nåpris: horisont-vinduet er
+    forventet reise for traden, og traden starter på entry. Målt fra
+    nåpris ville et setup med entry 1.5 ATR bak pris få 1.5 ATR ekstra
+    TP-rom "gratis" — SCALP-TP kunne da ligge 3.5 ATR fra der traden
+    faktisk fylles. Kandidat-filteret (klynger *foran* nåpris) beholdes:
+    et TP som pris allerede har passert er ikke et target.
 
     `min_rr=None` skal ikke kalles her (MAKRO er håndtert før).
     """
@@ -524,8 +555,13 @@ def _find_tp_cluster(
         )
 
     for candidate in ahead:
-        if abs(candidate.price - current_price) > max_distance:
-            break  # sortert på avstand — alle videre er enda lenger unna
+        # `ahead` er sortert på avstand fra nåpris. Entry ligger bak
+        # nåpris (BUY: entry < nåpris < kandidat; SELL speilet), så
+        # avstand fra entry = avstand fra nåpris + konstant (nåpris−entry)
+        # — samme rekkefølge. Break er derfor fortsatt gyldig: alle
+        # videre kandidater er enda lenger fra entry.
+        if abs(candidate.price - entry) > max_distance:
+            break
         rr = _compute_rr(entry, sl, candidate.price, direction)
         if rr is not None and rr >= min_rr:
             return (candidate, rr)

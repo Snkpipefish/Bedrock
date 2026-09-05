@@ -11,12 +11,14 @@ from pathlib import Path
 from textwrap import dedent
 
 import pytest
+from pydantic import ValidationError
 
 from bedrock.config.instruments import (
     InstrumentConfigError,
     load_instrument_config,
 )
 from bedrock.engine.engine import AgriRules, FinancialRules
+from bedrock.setups.generator import SetupConfig
 
 # ---------------------------------------------------------------------------
 # Hjelpere
@@ -300,6 +302,96 @@ def test_non_string_inherits_errors(tmp_path: Path) -> None:
     inst.write_text("inherits: [a, b]\ninstrument: {id: X, asset_class: fx, ticker: X}\n")
     with pytest.raises(InstrumentConfigError, match="inherits.*must be a string"):
         load_instrument_config(inst, defaults_dir=defaults)
+
+
+# ---------------------------------------------------------------------------
+# `setup:`-blokk → InstrumentConfig.setup (session 2026-09-05)
+# ---------------------------------------------------------------------------
+
+
+def _write_gold_child(tmp_path: Path, extra: str = "") -> Path:
+    inst = tmp_path / "gold.yaml"
+    inst.write_text(
+        dedent(
+            """\
+            inherits: family_financial
+            instrument:
+              id: Gold
+              asset_class: metals
+              ticker: XAUUSD
+            """
+        )
+        + extra
+    )
+    return inst
+
+
+def test_setup_block_absent_yields_none(tmp_path: Path) -> None:
+    """Ingen `setup:` noe sted i kjeden → `cfg.setup is None` (orchestrator
+    faller tilbake til `SetupConfig()`)."""
+    defaults = _write_defaults_dir(tmp_path)
+    cfg = load_instrument_config(_write_gold_child(tmp_path), defaults_dir=defaults)
+    assert cfg.setup is None
+
+
+def test_setup_block_on_child_parsed_into_setup_config(tmp_path: Path) -> None:
+    defaults = _write_defaults_dir(tmp_path)
+    inst = _write_gold_child(tmp_path, "setup:\n  min_rr_swing: 9.0\n")
+    cfg = load_instrument_config(inst, defaults_dir=defaults)
+    assert isinstance(cfg.setup, SetupConfig)
+    assert cfg.setup.min_rr_swing == pytest.approx(9.0)
+    # Øvrige felter = defaults
+    assert cfg.setup.min_rr_scalp == SetupConfig().min_rr_scalp
+
+
+def test_setup_block_inherited_from_family_default(tmp_path: Path) -> None:
+    """`setup:` i family_financial.yaml bæres gjennom til barnet."""
+    defaults = _write_defaults_dir(tmp_path)
+    family = defaults / "family_financial.yaml"
+    family.write_text(family.read_text() + "setup:\n  sl_atr_multiplier_swing: 1.2\n")
+
+    cfg = load_instrument_config(_write_gold_child(tmp_path), defaults_dir=defaults)
+    assert cfg.setup is not None
+    assert cfg.setup.sl_atr_multiplier_swing == pytest.approx(1.2)
+
+
+def test_child_setup_block_replaces_parent_setup_block(tmp_path: Path) -> None:
+    """Shallow top-level merge: barnets `setup:` erstatter HELE blokken
+    (barnet vinner) — parent-felt bæres ikke med under blokk-nivå,
+    konsistent med `families`/`horizons`."""
+    defaults = _write_defaults_dir(tmp_path)
+    family = defaults / "family_financial.yaml"
+    family.write_text(family.read_text() + "setup:\n  sl_atr_multiplier_swing: 1.2\n")
+    inst = _write_gold_child(tmp_path, "setup:\n  min_rr_swing: 9.0\n")
+
+    cfg = load_instrument_config(inst, defaults_dir=defaults)
+    assert cfg.setup is not None
+    assert cfg.setup.min_rr_swing == pytest.approx(9.0)
+    assert cfg.setup.sl_atr_multiplier_swing == SetupConfig().sl_atr_multiplier_swing
+
+
+def test_setup_block_unknown_key_is_hard_fail(tmp_path: Path) -> None:
+    """`extra="forbid"` på SetupConfig — skrivefeil skal ikke passere stille."""
+    defaults = _write_defaults_dir(tmp_path)
+    inst = _write_gold_child(tmp_path, "setup:\n  min_rr_swng: 9.0\n")
+    with pytest.raises(ValidationError, match="min_rr_swng"):
+        load_instrument_config(inst, defaults_dir=defaults)
+
+
+def test_setup_block_non_mapping_errors(tmp_path: Path) -> None:
+    defaults = _write_defaults_dir(tmp_path)
+    inst = _write_gold_child(tmp_path, "setup: [1, 2]\n")
+    with pytest.raises(InstrumentConfigError, match="must be a mapping"):
+        load_instrument_config(inst, defaults_dir=defaults)
+
+
+def test_setup_block_does_not_leak_into_rules(tmp_path: Path) -> None:
+    """`setup:` er ikke en rules-nøkkel — Engine skal ikke se den."""
+    defaults = _write_defaults_dir(tmp_path)
+    inst = _write_gold_child(tmp_path, "setup:\n  min_rr_swing: 9.0\n")
+    cfg = load_instrument_config(inst, defaults_dir=defaults)
+    assert isinstance(cfg.rules, FinancialRules)
+    assert not hasattr(cfg.rules, "setup")
 
 
 # ---------------------------------------------------------------------------

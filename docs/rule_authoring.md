@@ -34,6 +34,23 @@ grade_thresholds:
   B: {...}
 ```
 
+## Setup-generator (`setup:`)
+
+Valgfri top-level-blokk som overstyrer setup-generatorens parametre for ett
+instrument. Nøklene mapper 1:1 til `SetupConfig` i `bedrock.setups.generator`
+(alle valgfrie, ukjente nøkler er hard fail):
+
+```yaml
+setup:
+  min_rr_swing: 3.0                  # asymmetri-floor SWING (default 2.5)
+  max_entry_distance_atr_scalp: 0.5  # entry-tak SCALP, ×ATR bak nåpris (default 0.75)
+  tp_max_distance_atr_swing: 5.0     # TP-vindu SWING, ×ATR fra entry (default 6.0)
+```
+
+Utelatt blokk = `SetupConfig()`-defaults. Blokken arves som alle andre
+top-level keys (hele blokken erstattes hvis barnet definerer sin egen).
+Ingen av de checked-in YAML-ene bruker den ennå — legg til med dry-run først.
+
 ## Arv
 
 Defaults-filer i `config/defaults/` gir felles verdier. Instrument-fil overstyrer

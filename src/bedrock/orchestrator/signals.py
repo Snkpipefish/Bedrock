@@ -223,6 +223,9 @@ def generate_signals(
       determinisme i tester.
     - `round_number_step`: hvis satt, legges round-number-nivåer til
       level-listen. Default None (ikke inkluder).
+    - `setup_config`: eksplisitt caller-param vinner; ellers `setup:`-
+      blokken fra instrument-YAML (`cfg.setup`); ellers `SetupConfig()`-
+      defaults.
 
     Returnerer `OrchestratorResult` med én `SignalEntry` per (direction,
     horizon)-kombinasjon, uavhengig av om setup faktisk ble bygget.
@@ -239,6 +242,7 @@ def generate_signals(
     run_ts = now or datetime.now(timezone.utc)
     directions_list = directions if directions is not None else [Direction.BUY, Direction.SELL]
     horizons_list = _resolve_horizons(cfg, horizons)
+    effective_setup_config = _resolve_setup_config(cfg, setup_config)
 
     # Market-data én gang
     ohlc = store.get_prices_ohlc(cfg.instrument.id, price_tf, price_lookback)
@@ -289,7 +293,7 @@ def generate_signals(
                 levels=levels,
                 previous_snapshot=previous_snapshot,
                 run_ts=run_ts,
-                setup_config=setup_config,
+                setup_config=effective_setup_config,
                 hysteresis_config=hysteresis_config,
                 analog_trace=analog_trace,
             )
@@ -366,6 +370,15 @@ def _resolve_direction_conflicts(entries: list[SignalEntry]) -> list[SignalEntry
                 }
             )
     return out
+
+
+def _resolve_setup_config(cfg: InstrumentConfig, explicit: SetupConfig | None) -> SetupConfig:
+    """Prioritet: eksplisitt caller-param > instrument-YAML `setup:` > defaults."""
+    if explicit is not None:
+        return explicit
+    if cfg.setup is not None:
+        return cfg.setup
+    return SetupConfig()
 
 
 def _resolve_horizons(cfg: InstrumentConfig, requested: list[str] | None) -> list[Horizon]:
@@ -625,11 +638,15 @@ def _build_entry(
     levels: list[Level],
     previous_snapshot: SetupSnapshot | None,
     run_ts: datetime,
-    setup_config: SetupConfig | None,
+    setup_config: SetupConfig,
     hysteresis_config: HysteresisConfig | None,
     analog_trace: AnalogTrace | None = None,
 ) -> SignalEntry:
     """Bygg én SignalEntry — score + (kanskje) stabilisert setup.
+
+    `setup_config` er allerede resolved av caller (`_resolve_setup_config`)
+    — samme objekt brukes til `build_setup` og til R:R-gulvet som
+    hysteresen sjekker mot, så de kan ikke drifte fra hverandre.
 
     `analog_trace` beregnes av caller (én gang per instrument — K-NN-
     resultatet er identisk for alle horisont/retning-kombinasjoner) og
@@ -673,11 +690,16 @@ def _build_entry(
     if previous_snapshot is not None:
         previous = previous_snapshot.find(cfg.instrument.id, direction, horizon)
 
+    # current_price + min_rr aktiverer geometri-vakt og R:R-gulv i
+    # hysteresen: en beholdt entry/TP som nåpris har passert, eller som
+    # presser R:R under horisontens floor, reverteres til nytt setup.
     stable = stabilize_setup(
         new_setup=raw_setup,
         previous=previous,
         now=run_ts,
         config=hysteresis_config,
+        current_price=current_price,
+        min_rr=setup_config.min_rr_for(horizon),
     )
 
     return SignalEntry(

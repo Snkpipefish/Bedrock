@@ -219,6 +219,185 @@ def test_stabilize_entry_kept_recomputes_rr_from_stable_values() -> None:
 
 
 # ---------------------------------------------------------------------------
+# stabilize_setup — geometri-vakt mot nåpris (session 2026-09-05)
+# ---------------------------------------------------------------------------
+
+
+def test_stabilize_guard_reverts_kept_entry_above_current_price_buy() -> None:
+    """(a) Forrige entry 100.0 ville blitt beholdt (ny 99.8 innenfor 0.3-
+    buffer), men nåpris har falt til 99.9 — en BUY-entry OVER nåpris
+    fylles øyeblikkelig, ikke på pullback. Revert entry OG SL (par) til
+    nytt setup."""
+    prev_setup = _basic_buy_setup()  # entry=100.0, sl=99.7
+    prev = _prev_with(prev_setup)
+
+    new = prev_setup.model_copy(update={"entry": 99.8, "sl": 99.5, "entry_cluster_price": 99.8})
+    stable = stabilize_setup(new, previous=prev, now=LATER, current_price=99.9)
+    assert stable.setup.entry == 99.8
+    assert stable.setup.sl == 99.5
+    # Traceability følger revertert entry (ikke forrige klynge)
+    assert stable.setup.entry_cluster_price == 99.8
+    # R:R fra reverterte verdier: (106-99.8)/(99.8-99.5)
+    assert stable.setup.rr == pytest.approx(6.2 / 0.3)
+
+
+def test_stabilize_guard_reverts_kept_tp_below_current_price_buy() -> None:
+    """(b) Forrige TP 106.0 ville blitt beholdt (ny 106.3 innenfor 0.5-
+    buffer), men nåpris står på 106.1 — target er allerede truffet.
+    Revert TP til nytt setup."""
+    prev_setup = _basic_buy_setup()  # tp=106.0
+    prev = _prev_with(prev_setup)
+
+    new = prev_setup.model_copy(update={"tp": 106.3})
+    stable = stabilize_setup(new, previous=prev, now=LATER, current_price=106.1)
+    assert stable.setup.tp == 106.3
+    # Entry 100 < 106.1 er fortsatt gyldig — beholdt
+    assert stable.setup.entry == 100.0
+
+
+def test_stabilize_guard_keeps_previous_when_geometry_valid() -> None:
+    """Vakten er passiv når beholdte verdier fortsatt er på riktig side."""
+    prev_setup = _basic_buy_setup()
+    prev = _prev_with(prev_setup)
+
+    new = prev_setup.model_copy(update={"entry": 100.2, "sl": 99.9, "tp": 106.3})
+    stable = stabilize_setup(new, previous=prev, now=LATER, current_price=102.0)
+    assert stable.setup.entry == 100.0
+    assert stable.setup.sl == 99.7
+    assert stable.setup.tp == 106.0
+
+
+def test_stabilize_guard_reverts_kept_sl_on_wrong_side_of_entry() -> None:
+    """Entry ny (utenfor entry-buffer), men SL beholdt fra forrige via
+    løsere SL-buffer — og den beholdte SL-en ligger OVER ny entry.
+    Risiko ≤ 0 er ugyldig → revert SL til nytt setup."""
+    prev_setup = _basic_buy_setup().model_copy(update={"sl": 99.9})  # entry=100, sl=99.9
+    prev = _prev_with(prev_setup)
+
+    # Entry flytter 0.5 (> 0.3 → ny); ny SL 99.2 er innenfor 1.0-buffer
+    # av forrige 99.9 → ville blitt beholdt, men 99.9 > 99.5 (ny entry)
+    new = prev_setup.model_copy(update={"entry": 99.5, "sl": 99.2, "entry_cluster_price": 99.5})
+    cfg = HysteresisConfig(sl_atr_multiplier=1.0)
+    stable = stabilize_setup(new, previous=prev, now=LATER, config=cfg, current_price=99.8)
+    assert stable.setup.entry == 99.5
+    assert stable.setup.sl == 99.2
+
+
+def test_stabilize_guard_sell_mirrored() -> None:
+    """SELL: beholdt entry må ligge OVER nåpris, beholdt TP UNDER.
+    Nåpris 100.1 har passert forrige entry 100.0 → revert entry+SL;
+    forrige TP 94.0 er fortsatt under nåpris → beholdes."""
+    prev_setup = Setup(
+        instrument="Gold",
+        direction=Direction.SELL,
+        horizon=Horizon.SCALP,
+        entry=100.0,
+        sl=100.3,
+        tp=94.0,
+        rr=20.0,
+        atr=1.0,
+        entry_cluster_price=100.0,
+        entry_cluster_types=[LevelType.SWING_HIGH],
+        tp_cluster_price=94.0,
+        tp_cluster_types=[LevelType.SWING_LOW],
+    )
+    prev = _prev_with(prev_setup)
+
+    new = prev_setup.model_copy(
+        update={"entry": 100.2, "sl": 100.5, "tp": 94.3, "entry_cluster_price": 100.2}
+    )
+    stable = stabilize_setup(new, previous=prev, now=LATER, current_price=100.1)
+    assert stable.setup.entry == 100.2
+    assert stable.setup.sl == 100.5
+    assert stable.setup.tp == 94.0  # innenfor buffer OG gyldig side
+
+
+def test_stabilize_without_current_price_keeps_old_behaviour() -> None:
+    """(d) Uten `current_price` er det ingen vakt: forrige entry 100.0
+    beholdes selv om den (hypotetisk) ligger over nåpris — samme atferd
+    som før session 2026-09-05."""
+    prev_setup = _basic_buy_setup()
+    prev = _prev_with(prev_setup)
+
+    new = prev_setup.model_copy(update={"entry": 99.8, "sl": 99.5, "tp": 106.3})
+    stable = stabilize_setup(new, previous=prev, now=LATER)
+    assert stable.setup.entry == 100.0
+    assert stable.setup.sl == 99.7
+    assert stable.setup.tp == 106.0
+
+
+# ---------------------------------------------------------------------------
+# stabilize_setup — R:R-gulv etter substitusjon (session 2026-09-05)
+# ---------------------------------------------------------------------------
+
+
+def test_stabilize_rr_floor_reverts_kept_tp() -> None:
+    """(c) Forrige TP 100.9 (R:R 3.0 mot entry 100/SL 99.7) beholdes
+    fordi ny TP 101.3 er innenfor 0.5-buffer — men gulvet er 3.5.
+    Revert TP til 101.3 → R:R 4.33 ≥ 3.5."""
+    prev_setup = _basic_buy_setup().model_copy(update={"tp": 100.9, "rr": 3.0})
+    prev = _prev_with(prev_setup)
+
+    new = prev_setup.model_copy(update={"tp": 101.3, "rr": 1.3 / 0.3})
+    stable = stabilize_setup(new, previous=prev, now=LATER, min_rr=3.5)
+    assert stable.setup.tp == 101.3
+    assert stable.setup.rr == pytest.approx(1.3 / 0.3)
+
+
+def test_stabilize_rr_floor_not_triggered_when_kept_tp_meets_floor() -> None:
+    """Beholdt TP som fortsatt oppfyller gulvet beholdes."""
+    prev_setup = _basic_buy_setup().model_copy(update={"tp": 100.9, "rr": 3.0})
+    prev = _prev_with(prev_setup)
+
+    new = prev_setup.model_copy(update={"tp": 101.3, "rr": 1.3 / 0.3})
+    stable = stabilize_setup(new, previous=prev, now=LATER, min_rr=2.5)
+    assert stable.setup.tp == 100.9
+    assert stable.setup.rr == pytest.approx(3.0)
+
+
+def test_stabilize_rr_floor_falls_back_to_new_setup_entirely() -> None:
+    """Beholdt entry/SL-par (risiko 1.0) gjør at selv ny TP ikke når
+    gulvet: forrige entry 100.0/SL 99.0, ny entry 100.2/SL 99.9/TP 101.2
+    (R:R 3.33 i nytt setup). Entry innenfor buffer → par beholdt →
+    R:R mot TP 101.2 = 1.2 < 2.5, mot beholdt TP 101.0 = 1.0. Revert TP
+    hjelper ikke → hele nye setup-et brukes."""
+    prev_setup = _basic_buy_setup().model_copy(update={"sl": 99.0, "tp": 101.0, "rr": 1.0})
+    prev = _prev_with(prev_setup)
+
+    new = prev_setup.model_copy(
+        update={
+            "entry": 100.2,
+            "sl": 99.9,
+            "tp": 101.2,
+            "rr": 1.0 / 0.3,
+            "entry_cluster_price": 100.2,
+        }
+    )
+    stable = stabilize_setup(new, previous=prev, now=LATER, min_rr=2.5)
+    assert stable.setup.entry == 100.2
+    assert stable.setup.sl == 99.9
+    assert stable.setup.tp == 101.2
+    assert stable.setup.rr == pytest.approx(1.0 / 0.3)
+    assert stable.setup.entry_cluster_price == 100.2
+    # first_seen bevares fortsatt — slot-kontinuitet er uavhengig av
+    # om verdiene ble stabilisert
+    assert stable.first_seen == NOW
+
+
+def test_stabilize_rr_floor_ignored_for_makro_tp_none() -> None:
+    """MAKRO (tp=None): gulvet er irrelevant, ingen crash."""
+    prev_setup = _basic_buy_setup().model_copy(
+        update={"tp": None, "rr": None, "horizon": Horizon.MAKRO}
+    )
+    prev = _prev_with(prev_setup)
+    new = prev_setup.model_copy(update={"entry": 100.2, "sl": 99.9})
+    stable = stabilize_setup(new, previous=prev, now=LATER, current_price=102.0, min_rr=2.5)
+    assert stable.setup.tp is None
+    assert stable.setup.rr is None
+    assert stable.setup.entry == 100.0  # beholdt, gyldig side
+
+
+# ---------------------------------------------------------------------------
 # stabilize_setup — MAKRO + edge cases
 # ---------------------------------------------------------------------------
 

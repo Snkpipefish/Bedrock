@@ -204,16 +204,22 @@ def test_cluster_types_stable_order() -> None:
 
 
 def _buy_scenario() -> list[Level]:
-    """Scenario: nåpris ~102, atr=1.0; støtte på 101 (entry).
+    """Scenario: nåpris 101.5, atr=1.0; støtte på 101 (entry, 0.5 ATR bak
+    — innenfor SCALP-taket på 0.75).
 
-    Motstand 103.2 (1.2 ATR over nåpris): innenfor SCALP-vinduet (2 ATR)
-    og gir SCALP-R:R 7.3 — men SWING-R:R bare 2.2 (< 2.5), så SWING
-    hopper videre til 107 (5 ATR — innenfor SWING-vinduet på 6).
+    Motstand 102.8 (1.8 ATR fra entry): innenfor SCALP-vinduet (2 ATR
+    fra entry) og gir SCALP-R:R 6.0 — men SWING-R:R bare 1.8 (< 2.5,
+    SWING-SL er 1×ATR), så SWING hopper videre til 105 (4 ATR fra entry
+    — innenfor SWING-vinduet på 6).
+
+    Session 2026-09-05: nåpris flyttet fra 102 → 101.5 og TP-nivåene
+    inn, etter at SCALP fikk eget entry-tak (0.75×ATR) og TP-vinduet
+    måles fra entry i stedet for nåpris.
     """
     return [
         _lvl(101.0, LevelType.SWING_LOW, strength=0.8),  # entry-støtte
-        _lvl(103.2, LevelType.SWING_HIGH, strength=0.7),  # SCALP-TP
-        _lvl(107.0, LevelType.PRIOR_HIGH, strength=0.8),  # SWING-TP
+        _lvl(102.8, LevelType.SWING_HIGH, strength=0.7),  # SCALP-TP
+        _lvl(105.0, LevelType.PRIOR_HIGH, strength=0.8),  # SWING-TP
     ]
 
 
@@ -222,7 +228,7 @@ def test_build_setup_buy_scalp_succeeds() -> None:
         instrument="Gold",
         direction=Direction.BUY,
         horizon=Horizon.SCALP,
-        current_price=102.0,
+        current_price=101.5,
         atr=1.0,
         levels=_buy_scenario(),
     )
@@ -230,25 +236,26 @@ def test_build_setup_buy_scalp_succeeds() -> None:
     assert setup.entry == 101.0
     # SL = entry - 0.3 * atr = 101 - 0.3 = 100.7
     assert setup.sl == pytest.approx(100.7)
-    assert setup.tp == 103.2
-    # R:R = (103.2-101) / (101-100.7) = 2.2 / 0.3 ≈ 7.33
-    assert setup.rr == pytest.approx(2.2 / 0.3)
+    assert setup.tp == 102.8
+    # R:R = (102.8-101) / (101-100.7) = 1.8 / 0.3 = 6.0
+    assert setup.rr == pytest.approx(1.8 / 0.3)
 
 
 def test_build_setup_buy_swing_skips_cluster_failing_rr_floor() -> None:
     """SWING hopper over nær klynge som ikke gir R:R ≥ 2.5, til neste
-    innenfor SWING-vinduet (6 ATR)."""
+    innenfor SWING-vinduet (6 ATR fra entry)."""
     setup = build_setup(
         instrument="Gold",
         direction=Direction.BUY,
         horizon=Horizon.SWING,
-        current_price=102.0,
+        current_price=101.5,
         atr=1.0,
         levels=_buy_scenario(),
     )
     assert setup is not None
-    # 103.2 gir R:R 2.2 (< 2.5) → neste klynge 107 (R:R 6.0)
-    assert setup.tp == 107.0
+    # 102.8 gir R:R 1.8 (< 2.5) → neste klynge 105 (R:R 4.0)
+    assert setup.tp == 105.0
+    assert setup.rr == pytest.approx(4.0)
 
 
 def test_build_setup_buy_makro_has_no_tp() -> None:
@@ -256,7 +263,7 @@ def test_build_setup_buy_makro_has_no_tp() -> None:
         instrument="Gold",
         direction=Direction.BUY,
         horizon=Horizon.MAKRO,
-        current_price=102.0,
+        current_price=101.5,
         atr=1.0,
         levels=_buy_scenario(),
     )
@@ -272,13 +279,13 @@ def test_build_setup_entry_cluster_types_reported() -> None:
     levels = [
         _lvl(100.0, LevelType.SWING_LOW, strength=0.6),
         _lvl(100.1, LevelType.ROUND_NUMBER, strength=0.9),  # konfluens
-        _lvl(103.5, LevelType.SWING_HIGH, strength=0.7),
+        _lvl(101.5, LevelType.SWING_HIGH, strength=0.7),  # 1.44 ATR fra entry
     ]
     setup = build_setup(
         instrument="Gold",
         direction=Direction.BUY,
         horizon=Horizon.SCALP,
-        current_price=102.0,
+        current_price=100.5,  # entry-klynge ~100.06 = 0.44 ATR bak
         atr=1.0,
         levels=levels,
     )
@@ -292,15 +299,16 @@ def test_build_setup_entry_cluster_types_reported() -> None:
 
 
 def _sell_scenario() -> list[Level]:
-    """Nåpris ~98, atr=1.0; motstand på 99 (entry), support 96.8 + 93.5.
+    """Nåpris 98.5, atr=1.0; motstand på 99 (entry, 0.5 ATR bak), support
+    97.2 + 95.0.
 
-    Speiler `_buy_scenario`: 96.8 er SCALP-TP (1.2 ATR), men gir SWING-
-    R:R 2.2 (< 2.5) → SWING går videre til 93.5 (4.5 ATR ≤ 6).
+    Speiler `_buy_scenario`: 97.2 er SCALP-TP (1.8 ATR fra entry), men
+    gir SWING-R:R 1.8 (< 2.5) → SWING går videre til 95.0 (4 ATR ≤ 6).
     """
     return [
         _lvl(99.0, LevelType.SWING_HIGH, strength=0.8),  # entry-motstand
-        _lvl(96.8, LevelType.SWING_LOW, strength=0.7),  # SCALP-TP
-        _lvl(93.5, LevelType.PRIOR_LOW, strength=0.8),  # SWING-TP
+        _lvl(97.2, LevelType.SWING_LOW, strength=0.7),  # SCALP-TP
+        _lvl(95.0, LevelType.PRIOR_LOW, strength=0.8),  # SWING-TP
     ]
 
 
@@ -309,14 +317,15 @@ def test_build_setup_sell_scalp() -> None:
         instrument="Gold",
         direction=Direction.SELL,
         horizon=Horizon.SCALP,
-        current_price=98.0,
+        current_price=98.5,
         atr=1.0,
         levels=_sell_scenario(),
     )
     assert setup is not None
     assert setup.entry == 99.0
     assert setup.sl == pytest.approx(99.3)  # 99 + 0.3*1.0
-    assert setup.tp == 96.8
+    assert setup.tp == 97.2
+    assert setup.rr == pytest.approx(1.8 / 0.3)
 
 
 def test_build_setup_sell_swing() -> None:
@@ -324,12 +333,13 @@ def test_build_setup_sell_swing() -> None:
         instrument="Gold",
         direction=Direction.SELL,
         horizon=Horizon.SWING,
-        current_price=98.0,
+        current_price=98.5,
         atr=1.0,
         levels=_sell_scenario(),
     )
     assert setup is not None
-    assert setup.tp == 93.5
+    assert setup.tp == 95.0
+    assert setup.rr == pytest.approx(4.0)
 
 
 # ---------------------------------------------------------------------------
@@ -408,12 +418,12 @@ def test_build_setup_scalp_rejects_when_rr_below_min() -> None:
 
 def test_build_setup_swing_rejects_when_no_cluster_in_window_meets_rr() -> None:
     """Horisont-vinduet er hardt: hvis ingen klynge innenfor SWING-vinduet
-    (6 ATR fra nåpris) gir R:R ≥ 2.5, droppes setup-et — TP glir IKKE ut
+    (6 ATR fra entry) gir R:R ≥ 2.5, droppes setup-et — TP glir IKKE ut
     i MAKRO-distanse.
 
     Setup: entry=100, sl_atr=1.0 → sl=99, risk=1.0. Klynger over nåpris:
     101 (R:R=1.0), 102 (R:R=2.0) — begge under floor. 109 ville gitt
-    R:R=9, men ligger 8.5 ATR fra nåpris (> 6) → drop.
+    R:R=9, men ligger 9 ATR fra entry (> 6) → drop.
     """
     cfg = SetupConfig(sl_atr_multiplier=1.0)
     levels = [
@@ -462,10 +472,73 @@ def test_build_setup_swing_takes_nearest_cluster_meeting_rr_floor() -> None:
 def test_build_setup_entry_outside_max_distance_rejected() -> None:
     """Entry-klynge lenger unna enn max_entry_distance_atr → None.
     Limit-ordre langt bak pris fylles aldri, eller fylles etter at
-    score-tesen er død."""
+    score-tesen er død. Gjelder alle horisonter (5 ATR > 2.0 SWING-tak)."""
     levels = [
         _lvl(97.0, LevelType.SWING_LOW, strength=0.9),  # 5 ATR under nåpris
         _lvl(103.0, LevelType.SWING_HIGH, strength=0.8),
+    ]
+    for horizon in (Horizon.SCALP, Horizon.SWING, Horizon.MAKRO):
+        setup = build_setup(
+            instrument="Gold",
+            direction=Direction.BUY,
+            horizon=horizon,
+            current_price=102.0,
+            atr=1.0,
+            levels=levels,
+        )
+        assert setup is None, horizon
+
+
+# ---------------------------------------------------------------------------
+# build_setup — per-horisont entry-tak (session 2026-09-05)
+# ---------------------------------------------------------------------------
+
+
+def test_setup_config_max_entry_distance_atr_for_scales_with_horizon() -> None:
+    """SCALP har eget, strammere entry-tak (0.75) enn SWING/MAKRO (2.0)."""
+    cfg = SetupConfig()
+    assert cfg.max_entry_distance_atr_for(Horizon.SCALP) == 0.75
+    assert cfg.max_entry_distance_atr_for(Horizon.SWING) == 2.0
+    assert cfg.max_entry_distance_atr_for(Horizon.MAKRO) == 2.0
+
+
+def test_build_setup_scalp_rejects_entry_beyond_scalp_cap_but_swing_accepts() -> None:
+    """Entry 1.0 ATR bak nåpris: for langt for SCALP (tak 0.75 — en scalp
+    som venter på 1 ATR pullback er en flerdagers trade), men fint for
+    SWING (tak 2.0). Samme nivåliste, ulikt utfall per horisont."""
+    levels = [
+        _lvl(101.0, LevelType.SWING_LOW, strength=0.8),  # 1.0 ATR bak 102
+        _lvl(102.8, LevelType.SWING_HIGH, strength=0.7),
+        _lvl(105.0, LevelType.PRIOR_HIGH, strength=0.8),
+    ]
+    scalp = build_setup(
+        instrument="Gold",
+        direction=Direction.BUY,
+        horizon=Horizon.SCALP,
+        current_price=102.0,
+        atr=1.0,
+        levels=levels,
+    )
+    assert scalp is None
+
+    swing = build_setup(
+        instrument="Gold",
+        direction=Direction.BUY,
+        horizon=Horizon.SWING,
+        current_price=102.0,
+        atr=1.0,
+        levels=levels,
+    )
+    assert swing is not None
+    assert swing.entry == 101.0
+
+
+def test_build_setup_scalp_entry_cap_overridable_via_config() -> None:
+    """`max_entry_distance_atr_scalp` kan løsnes per instrument."""
+    cfg = SetupConfig(max_entry_distance_atr_scalp=1.5)
+    levels = [
+        _lvl(101.0, LevelType.SWING_LOW, strength=0.8),  # 1.0 ATR bak
+        _lvl(102.8, LevelType.SWING_HIGH, strength=0.7),
     ]
     setup = build_setup(
         instrument="Gold",
@@ -474,8 +547,111 @@ def test_build_setup_entry_outside_max_distance_rejected() -> None:
         current_price=102.0,
         atr=1.0,
         levels=levels,
+        config=cfg,
+    )
+    assert setup is not None
+    assert setup.entry == 101.0
+
+
+def test_build_setup_scalp_sell_entry_cap_mirrored() -> None:
+    """SELL: motstand 1.0 ATR over nåpris avvises for SCALP."""
+    levels = [
+        _lvl(99.0, LevelType.SWING_HIGH, strength=0.8),  # 1.0 ATR over 98
+        _lvl(97.2, LevelType.SWING_LOW, strength=0.7),
+    ]
+    setup = build_setup(
+        instrument="Gold",
+        direction=Direction.SELL,
+        horizon=Horizon.SCALP,
+        current_price=98.0,
+        atr=1.0,
+        levels=levels,
     )
     assert setup is None
+
+
+# ---------------------------------------------------------------------------
+# build_setup — TP-vindu måles fra entry, ikke nåpris (session 2026-09-05)
+# ---------------------------------------------------------------------------
+
+
+def test_build_setup_tp_window_measured_from_entry_not_current_price() -> None:
+    """SCALP-vindu 2 ATR. TP 102.3 ligger 1.8 ATR fra nåpris 100.5 (ville
+    passert målt fra nåpris) men 2.3 ATR fra entry 100.0 → utenfor.
+    Reisen som må tilbakelegges er entry→TP, ikke nåpris→TP."""
+    levels = [
+        _lvl(100.0, LevelType.SWING_LOW, strength=0.8),  # entry, 0.5 ATR bak
+        _lvl(102.3, LevelType.SWING_HIGH, strength=0.7),  # 2.3 ATR fra entry
+    ]
+    setup = build_setup(
+        instrument="Gold",
+        direction=Direction.BUY,
+        horizon=Horizon.SCALP,
+        current_price=100.5,
+        atr=1.0,
+        levels=levels,
+    )
+    assert setup is None
+
+    # Kontroll: TP 1.9 ATR fra entry (1.4 fra nåpris) → innenfor vinduet
+    levels_ok = [
+        _lvl(100.0, LevelType.SWING_LOW, strength=0.8),
+        _lvl(101.9, LevelType.SWING_HIGH, strength=0.7),
+    ]
+    setup_ok = build_setup(
+        instrument="Gold",
+        direction=Direction.BUY,
+        horizon=Horizon.SCALP,
+        current_price=100.5,
+        atr=1.0,
+        levels=levels_ok,
+    )
+    assert setup_ok is not None
+    assert setup_ok.tp == 101.9
+
+
+def test_build_setup_tp_window_from_entry_sell_mirrored() -> None:
+    """SELL: entry 100.0 (0.5 ATR over nåpris 99.5); TP 97.7 er 1.8 ATR
+    fra nåpris men 2.3 ATR fra entry → utenfor SCALP-vinduet."""
+    levels = [
+        _lvl(100.0, LevelType.SWING_HIGH, strength=0.8),
+        _lvl(97.7, LevelType.SWING_LOW, strength=0.7),
+    ]
+    setup = build_setup(
+        instrument="Gold",
+        direction=Direction.SELL,
+        horizon=Horizon.SCALP,
+        current_price=99.5,
+        atr=1.0,
+        levels=levels,
+    )
+    assert setup is None
+
+
+def test_build_setup_tp_candidates_still_filtered_ahead_of_current_price() -> None:
+    """Kandidat-filteret (klynger FORAN nåpris) beholdes selv om vinduet
+    måles fra entry: et nivå mellom entry og nåpris er allerede passert
+    og er ikke et target. BUY: entry 100.0, nåpris 100.5, nivå 100.3
+    hoppes over; 101.9 velges."""
+    levels = [
+        _lvl(100.0, LevelType.SWING_LOW, strength=0.8),
+        _lvl(100.3, LevelType.ROUND_NUMBER, strength=0.5),  # bak nåpris
+        _lvl(101.9, LevelType.SWING_HIGH, strength=0.7),
+    ]
+    # Hindre at 100.3 clustrer med entry: buffer 0.3×ATR=0.3, avstand
+    # 0.3 ≤ 0.3 → ville merget. Bruk strammere cluster-buffer.
+    cfg = SetupConfig(cluster_atr_multiplier=0.1)
+    setup = build_setup(
+        instrument="Gold",
+        direction=Direction.BUY,
+        horizon=Horizon.SCALP,
+        current_price=100.5,
+        atr=1.0,
+        levels=levels,
+        config=cfg,
+    )
+    assert setup is not None
+    assert setup.tp == 101.9
 
 
 def test_build_setup_empty_levels() -> None:
@@ -504,7 +680,7 @@ def test_build_setup_is_deterministic() -> None:
             instrument="Gold",
             direction=Direction.BUY,
             horizon=Horizon.SCALP,
-            current_price=102.0,
+            current_price=101.5,
             atr=1.0,
             levels=levels,
         )
@@ -641,19 +817,23 @@ def test_integration_detect_levels_then_build_setup() -> None:
     lows = [103.0] * 9 + [100.0] + [103.0] * 10  # swing low ved idx 9
     ohlc = pd.DataFrame({"open": highs, "high": highs, "low": lows, "close": highs}, index=ts)
     swing_levels = detect_swing_levels(ohlc, window=3)
-    round_levels = detect_round_numbers(current_price=101.5, step=2.0, count_above=3, count_below=3)
+    round_levels = detect_round_numbers(current_price=100.5, step=2.0, count_above=3, count_below=3)
 
     levels = swing_levels + round_levels
 
+    # Nåpris 100.5: swing low + round 100 clustrer til entry 0.5 ATR bak
+    # (innenfor SCALP-taket 0.75); round 102 er TP 2.0 ATR fra entry.
     setup = build_setup(
         instrument="Gold",
         direction=Direction.BUY,
         horizon=Horizon.SCALP,
-        current_price=101.5,
+        current_price=100.5,
         atr=1.0,
         levels=levels,
     )
     assert setup is not None
-    # Entry bør være på støtte-siden (< 101.5) og innenfor 2×ATR-båndet
-    assert setup.entry < 101.5
-    assert 101.5 - setup.entry <= 2.0
+    # Entry bør være på støtte-siden (< 100.5) og innenfor SCALP-båndet
+    assert setup.entry < 100.5
+    assert 100.5 - setup.entry <= 0.75
+    assert setup.tp is not None
+    assert setup.tp - setup.entry <= 2.0

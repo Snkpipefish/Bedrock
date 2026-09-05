@@ -25,12 +25,24 @@ aggregation: weighted_horizon
 horizons: { ... }
 families: { ... }
 grade_thresholds: { ... }
+
+# ---- setup-generator (valgfri, går til SetupConfig) ----
+setup:
+  min_rr_swing: 3.0
+  max_entry_distance_atr_scalp: 0.5
 ```
 
 `inherits: family_financial` (PLAN § 4.2) resolves rekursivt fra
 `config/defaults/` (session 23). Shallow merge på top-level keys —
 barnets felter vinner. `gates` og `usda_blackout` er fortsatt stille-
 skippet til egne sessions implementerer scoring/kalender-støtte.
+
+`setup:` (session 2026-09-05) mapper 1:1 til `SetupConfig` i
+`bedrock.setups.generator` — alle felter valgfrie, ukjente nøkler er
+hard fail. Utelatt blokk = `InstrumentConfig.setup is None`, og
+orchestrator faller tilbake til `SetupConfig()`-defaults. Som alle
+top-level keys erstattes hele blokken ved arv (ingen merging under
+`setup:`-nivå).
 """
 
 from __future__ import annotations
@@ -42,6 +54,10 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from bedrock.engine.engine import AgriRules, FinancialRules
+
+# Ingen sirkulær import: generator importerer kun `bedrock.setups.levels`
+# (og engine.engine importerer allerede generator for `Direction`).
+from bedrock.setups.generator import SetupConfig
 
 DEFAULT_DEFAULTS_DIR = Path("config/defaults")
 
@@ -82,10 +98,15 @@ class InstrumentConfig(BaseModel):
 
     `rules` er enten `FinancialRules` eller `AgriRules` — diskriminert
     via `aggregation`-feltet. Engine tar `rules` direkte.
+
+    `setup` er instrumentets overstyring av setup-generatorens
+    parametre (`setup:`-blokken i YAML). `None` = ingen overstyring;
+    orchestrator bruker da `SetupConfig()`-defaults.
     """
 
     instrument: InstrumentMetadata
     rules: FinancialRules | AgriRules
+    setup: SetupConfig | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -298,6 +319,10 @@ _AGRI_RULES_KEYS: frozenset[str] = frozenset(
     }
 )
 
+# Top-level YAML-nøkkel for setup-generatorens parametre. Mapper 1:1 til
+# `SetupConfig` (ikke en del av `rules` — Engine ser den ikke).
+_SETUP_KEY = "setup"
+
 # Nøkler som er bevisst utsatt til senere session — vi ignorerer dem nå
 # uten error slik at YAML-er skrevet for fremtiden ikke bryter i dag.
 # `inherits` fjernet session 23: resolves nå av `_resolve_inherits` og
@@ -321,7 +346,7 @@ def _parse_instrument_dict(data: dict[str, Any], source: str) -> InstrumentConfi
     rules_data: dict[str, Any] = {}
     unknown_keys: list[str] = []
     for key, value in data.items():
-        if key == "instrument":
+        if key in ("instrument", _SETUP_KEY):
             continue
         if key in _DEFERRED_KEYS:
             continue  # stille skip — kommer i senere session
@@ -333,9 +358,11 @@ def _parse_instrument_dict(data: dict[str, Any], source: str) -> InstrumentConfi
     if unknown_keys:
         raise InstrumentConfigError(
             f"{source}: unknown top-level keys: {sorted(unknown_keys)}. "
-            f"Known: instrument + {sorted(_RULES_KEYS)}. "
+            f"Known: instrument + {_SETUP_KEY} + {sorted(_RULES_KEYS)}. "
             f"Deferred (ignored silently): {sorted(_DEFERRED_KEYS)}"
         )
+
+    setup_config = _parse_setup_block(data.get(_SETUP_KEY), source=source)
 
     aggregation = rules_data.get("aggregation")
     if aggregation == "weighted_horizon":
@@ -350,7 +377,23 @@ def _parse_instrument_dict(data: dict[str, Any], source: str) -> InstrumentConfi
             f"Expected 'weighted_horizon' or 'additive_sum', got {aggregation!r}"
         )
 
-    return InstrumentConfig(instrument=metadata, rules=rules)
+    return InstrumentConfig(instrument=metadata, rules=rules, setup=setup_config)
+
+
+def _parse_setup_block(raw: Any, source: str) -> SetupConfig | None:
+    """`setup:`-blokk → `SetupConfig`. `None`/utelatt → `None`.
+
+    Må være en mapping; Pydantic-validering (ukjente felter, ugyldige
+    verdier) propageres som `ValidationError` slik caller ser hva som
+    er galt — samme kontrakt som `rules`-delen.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise InstrumentConfigError(
+            f"{source}: `{_SETUP_KEY}` must be a mapping, got {type(raw).__name__}"
+        )
+    return SetupConfig.model_validate(raw)
 
 
 __all__ = [
