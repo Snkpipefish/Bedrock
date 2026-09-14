@@ -2,6 +2,55 @@
 
 ## Session log (most recent first)
 
+### 2026-09-14 — UI-autostart feilet ved boot; boten hadde vært død i 9 dager
+
+**Hva:** Operatør meldte at UI-widget ikke kom opp ved PC-oppstart, og
+spurte om resten av kjeden (setups → trades) fungerte. Diagnose mot
+journal (boot 14:43) + `~/.cache/bedrock-widget.log` + bot-journal fra
+forrige boot.
+
+**Funn:**
+
+1. **Widget-autostart ga opp 1 s for tidlig.** `bedrock_widget_launch.sh`
+   ventet maks 120 s på port 5100; serveren har `After=bedrock-signals-
+   all` som tok 61 s pluss fetch-tid. Ga opp 14:46:13 — samme sekund
+   serveren kom opp. Tidligere boots: 40–51 s. Samme feil 30. juni.
+2. **Boten var død 5.–14. sep (P0).** 5. sep 11:27 falt cTrader-
+   forbindelsen, reconnect-budsjett (6/600 s) brukt opp → `_fatal_exit
+   (79)`. reactor.stop() fikk `main()` til å returnere 0 før `callLater
+   (2, sys.exit(79))` fyrte → journal «exit 0», systemd så ingen feil.
+   79 sto uansett i `RestartPreventExitStatus`. Ingen trades i 9 dager;
+   monitor sa ingenting (ingen prosess-sjekk).
+3. **Tre posisjoner lukket hos megler uten close-event i signal_log:**
+   US100 SELL (SL, 8. sep, −33 NOK), EURUSD SELL (SL, 7. sep, −51 NOK),
+   AUDUSD BUY (MANUAL_OR_TRAIL 14. sep 06:18 — før boten var oppe, altså
+   manuelt/megler-side, +18 NOK). Backfilt med
+   `backfill_lost_close_pnl.py --position-ids … --apply`.
+4. calendar_ff RØD i health-skript = HTTP 429 fra Forex Factory ved
+   boot (rate-limit, timer prøver igjen). Ikke kodefeil.
+
+**Endringer:**
+
+- `a03fa76` fix(ui): widget venter 600 s (var 120), logger ekte sekunder.
+- `5db8d28` fix(bot): `fatal_exit_code` på klienten, `main()` returnerer
+  den; unit: `RestartPreventExitStatus=78 80` (79 restartes nå — det er
+  nettverks-transient, auth-loop-vakten er 78). Test oppdatert.
+- `41d4ced` feat(monitor): `check_bot_process` (/proc-skann, fungerer
+  root→user-unit) inngår i `run_monitor` → monitor-alert varsler død bot.
+- Bot restartet 14:57 med ny kode; `daemon-reload --user` gjort.
+
+**Verifisert:** scoped 83 tester grønne (systemd_unit, ctrader_client,
+parallel_monitor, main); ruff/pyright rene. Bot: konto autentisert,
+balanse 488 358 NOK, 0 åpne posisjoner, `/bot/signals` 55 setups fersk.
+Monitor kjørt manuelt: Overall OK inkl. bot_process. signal_log: 0
+åpne entries.
+
+**Neste:** (a) sjekk `journalctl --user -u bedrock-bot` etter neste
+nettverksbrudd at restart faktisk skjer (exit 79 → 10 s → ny prosess).
+(b) Valgfritt: fjern `After=bedrock-signals-all` fra bedrock-server
+(sudo) så UI kommer opp 1–2 min tidligere ved boot. (c) Fortsatt:
+følg første uke med FILL-GUARD/COOLDOWN/TTL fra 5. sep-sessionen.
+
 ### 2026-09-05 — kjede-review setup→signal→bot: nivå-cooldown, batch-TTL, fill-vakt, blackout, geometri
 
 **Hva:** Operatør ba om grundig gjennomgang av setup-generering, bot-
@@ -544,6 +593,10 @@ Verifikasjon: pyright 0/0, ruff clean, **pytest 2929/2929 grønt** (5 min).
 
 ## Current state
 
+- **Drift (2026-09-14):** boten var død 5.–14. sep (FATAL exit 79
+  returnerte 0 + 79 i prevent-lista). Fikset: exit-kode propageres,
+  79 restartes, monitor har `bot_process`-sjekk. Widget-autostart
+  venter nå 600 s på serveren.
 - **Bot (2026-09-05):** kjører demo (NOK-konto ~488k) med server-close-
   regnskap, reconcile-pruning, risikobasert sizing (0.25–1 % av balanse
   per trade), nivå-basert loss-cooldown (1×ATR, 90 d), batch-TTL,
