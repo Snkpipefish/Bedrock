@@ -336,6 +336,17 @@ def test_on_error_res_fatal_code_triggers_exit(client: CtraderClient) -> None:
         fatal.assert_called_once_with(78)
 
 
+def test_fatal_exit_records_code_for_main(client: CtraderClient) -> None:
+    """2026-09-05: reactor.stop() fikk main() til å returnere 0 før
+    callLater(2, sys.exit) fyrte → systemd så exit 0. Koden må lagres på
+    klienten så __main__ kan returnere den."""
+    assert client.fatal_exit_code is None
+    with patch("bedrock.bot.ctrader_client.reactor") as reactor:
+        reactor.running = False
+        client._fatal_exit(79)
+    assert client.fatal_exit_code == 79
+
+
 def test_on_error_res_non_fatal_code_calls_callback(
     creds: CtraderCredentials, startup_cfg: StartupOnlyConfig
 ) -> None:

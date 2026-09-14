@@ -295,8 +295,11 @@ def main(argv: list[str] | None = None) -> int:
     # Blokkerende — kjører til reactor.stop() via SIGTERM/SIGINT/fatal
     client.start()
 
-    log.info("[SHUTDOWN] Reactor stoppet — exit 0")
-    return 0
+    # Propager FATAL-kode (78/79/80) fra klienten — ellers returnerer vi 0
+    # etter reactor.stop() og systemd tror avslutningen var vellykket.
+    code = client.fatal_exit_code or 0
+    log.info("[SHUTDOWN] Reactor stoppet — exit %d", code)
+    return code
 
 
 if __name__ == "__main__":

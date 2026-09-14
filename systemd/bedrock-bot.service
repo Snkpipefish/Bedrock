@@ -9,9 +9,14 @@
 # Restart-policy:
 #   on-failure med backoff, MEN aldri ved exit 78 (FATAL =
 #   token-refresh-flyten har gitt opp; operatør må generere ny
-#   refresh_token manuelt med scripts/get_token.py og restarte service).
-#   Exit 79 = reconnect-budsjett oppbrukt (fast auth/network-feil) —
-#   samme behandling: ikke restart automatisk.
+#   refresh_token manuelt med scripts/get_token.py og restarte service)
+#   eller exit 80 (>50 % av instrumentene mangler hos megler — konto/
+#   symbol-konfig må fikses av operatør).
+#   Exit 79 = reconnect-budsjett oppbrukt (6 forsøk på 600 s). Det er
+#   typisk et nettverks-glipp, ikke auth (auth er 78) — SKAL restartes.
+#   2026-09-05: 79 lå i prevent-lista, boten døde etter et 10-minutters
+#   nettverksbrudd og ble liggende død i 9 dager uten trades/logging.
+#   Auth-loop-risikoen fra scalp_edge dekkes av 78, ikke 79.
 #
 # Avhengighet:
 #   bedrock-server.service (system-unit) må være oppe slik at
@@ -32,7 +37,7 @@ EnvironmentFile=/home/pc/.bedrock/secrets.env
 ExecStart=/home/pc/bedrock/.venv/bin/python -m bedrock.bot --demo
 Restart=on-failure
 RestartSec=10s
-RestartPreventExitStatus=78 79
+RestartPreventExitStatus=78 80
 StandardOutput=journal
 StandardError=journal
 

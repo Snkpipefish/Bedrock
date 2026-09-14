@@ -61,15 +61,18 @@ def test_unit_exec_start_uses_demo_mode(unit_text: str) -> None:
 
 
 def test_unit_restart_policy_excludes_fatal_codes(unit_text: str) -> None:
-    """Exit 78 (FATAL — refresh-token-flyt ga opp) og 79 (reconnect-budsjett
-    oppbrukt) skal ikke trigge auto-restart. Operatør må intervenere."""
+    """Exit 78 (FATAL — refresh-token-flyt ga opp) og 80 (>50 % av
+    instrumentene mangler hos megler) krever operatør og skal ikke trigge
+    auto-restart. Exit 79 (reconnect-budsjett oppbrukt) er nettverks-
+    transient og SKAL restartes — 2026-09-05 lot 79 boten ligge død i 9 dager."""
     assert "Restart=on-failure" in unit_text
     line = next(
         line for line in unit_text.splitlines() if line.startswith("RestartPreventExitStatus=")
     )
     codes = line.split("=", 1)[1].split()
     assert "78" in codes
-    assert "79" in codes
+    assert "80" in codes
+    assert "79" not in codes
 
 
 def test_unit_logs_to_journal(unit_text: str) -> None:

@@ -329,6 +329,13 @@ class CtraderClient:
         # Hindrer evig retry hvis cTrader rejecter også den nye tokenen.
         self._refresh_attempted: bool = False
 
+        # Exit-kode fra `_fatal_exit` — leses av `bot/__main__.py` etter at
+        # reactor har stoppet, slik at prosessen faktisk avslutter med
+        # 78/79/80 og ikke 0. (Bug 2026-09-05: reactor.stop() fikk main()
+        # til å returnere 0 før callLater(2, sys.exit) rakk å fyre →
+        # systemd så "exit 0" og restartet aldri; bot nede i 9 dager.)
+        self.fatal_exit_code: int | None = None
+
     # ─────────────────────────────────────────────────────────
     #  Oppstart
     # ─────────────────────────────────────────────────────────
@@ -407,6 +414,7 @@ class CtraderClient:
         Signalerer til systemd / operatør at botrestart med nye credentials
         kreves. Ikke bruk for forbigående feil.
         """
+        self.fatal_exit_code = code
         try:
             if reactor.running:  # type: ignore[attr-defined]
                 reactor.callLater(0, reactor.stop)  # type: ignore[attr-defined]
