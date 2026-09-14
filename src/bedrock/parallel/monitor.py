@@ -21,6 +21,7 @@ automatisert — surfacert som dokumentert TODO i tekst-rapporten.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -205,6 +206,55 @@ def check_agri_tp_override(
     )
 
 
+def _bedrock_bot_proc_running() -> bool:
+    """Sann hvis en `bedrock.bot`-prosess finnes i /proc.
+
+    /proc/<pid>/cmdline er world-readable, så dette fungerer selv når
+    monitor kjører som root (system-unit) og boten som user-unit —
+    `systemctl --user` svarer ikke på tvers av den grensa. Tåler at
+    pid-er forsvinner mellom listing og lesing.
+    """
+    import os
+
+    try:
+        pids = [d for d in os.listdir("/proc") if d.isdigit()]
+    except OSError:
+        return False
+    for pid in pids:
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as fh:
+                cmd = fh.read().replace(b"\0", b" ")
+        except OSError:
+            continue
+        if b"bedrock.bot" in cmd and b"backfill" not in cmd:
+            return True
+    return False
+
+
+def check_bot_process(
+    *,
+    proc_running: Callable[[], bool] | None = None,
+) -> CheckResult:
+    """Boten skal kjøre — en død bot betyr null trades og null logging.
+
+    2026-09-05→14: bedrock-bot.service exit-et etter et nettverksbrudd og
+    ble liggende død i 9 dager uten at monitor flagget det, fordi ingen
+    sjekk så på selve prosessen. Tre posisjoner ble lukket hos megler
+    uten at signal_log fikk close-event.
+    """
+    alive = (proc_running or _bedrock_bot_proc_running)()
+    return CheckResult(
+        name="bot_process",
+        ok=alive,
+        detail=(
+            "bedrock.bot-prosess kjører"
+            if alive
+            else "ingen bedrock.bot-prosess funnet — sjekk `systemctl --user status bedrock-bot`"
+        ),
+        data={"running": alive},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Orkestrering + formatering
 # ---------------------------------------------------------------------------
@@ -217,12 +267,17 @@ def run_monitor(
     pipeline_log: Path = DEFAULT_PIPELINE_LOG,
     bot_log: Path = DEFAULT_BOT_LOG,
     now: datetime | None = None,
+    bot_proc_running: Callable[[], bool] | None = None,
 ) -> MonitorReport:
-    """Kjør alle delsjekker og bygg samlet MonitorReport."""
+    """Kjør alle delsjekker og bygg samlet MonitorReport.
+
+    `bot_proc_running` er injiserbar for tester; None → ekte /proc-skann.
+    """
     checks = [
         check_fetcher_freshness(fetch_yaml=fetch_yaml, db=db, now=now),
         check_pipeline_log_errors(log_path=pipeline_log),
         check_agri_tp_override(log_path=bot_log),
+        check_bot_process(proc_running=bot_proc_running),
     ]
     resolved_now = (now or datetime.now(timezone.utc)).isoformat()
     return MonitorReport(

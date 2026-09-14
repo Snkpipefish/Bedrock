@@ -12,6 +12,7 @@ from pathlib import Path
 from bedrock.parallel.monitor import (
     MonitorReport,
     check_agri_tp_override,
+    check_bot_process,
     check_pipeline_log_errors,
     format_monitor_json,
     format_monitor_text,
@@ -104,6 +105,7 @@ def test_run_monitor_with_clean_inputs_returns_ok(tmp_path: Path) -> None:
         db=tmp_path / "no-db",
         pipeline_log=pipeline_log,
         bot_log=bot_log,
+        bot_proc_running=lambda: True,
     )
 
     assert isinstance(report, MonitorReport)
@@ -118,7 +120,24 @@ def test_run_monitor_with_clean_inputs_returns_ok(tmp_path: Path) -> None:
     agri_check = next(c for c in report.checks if c.name == "agri_tp_override")
     assert agri_check.ok is True
 
+    bot_check = next(c for c in report.checks if c.name == "bot_process")
+    assert bot_check.ok is True
+
     assert report.overall_ok is False  # pga fetcher-check
+
+
+def test_bot_process_running_is_ok() -> None:
+    res = check_bot_process(proc_running=lambda: True)
+    assert res.ok is True
+    assert res.data == {"running": True}
+
+
+def test_bot_process_dead_fails_with_hint() -> None:
+    """2026-09-05→14: død bot i 9 dager uten varsel. Sjekken skal feile
+    og peke operatør til systemctl."""
+    res = check_bot_process(proc_running=lambda: False)
+    assert res.ok is False
+    assert "systemctl --user status bedrock-bot" in res.detail
 
 
 def test_format_monitor_text_includes_manual_step(tmp_path: Path) -> None:
@@ -127,6 +146,7 @@ def test_format_monitor_text_includes_manual_step(tmp_path: Path) -> None:
         db=tmp_path / "x.db",
         pipeline_log=tmp_path / "x.log",
         bot_log=tmp_path / "x.log",
+        bot_proc_running=lambda: True,
     )
     text = format_monitor_text(report)
     assert "Manuelt steg" in text
@@ -139,9 +159,10 @@ def test_format_monitor_json_is_valid_json(tmp_path: Path) -> None:
         db=tmp_path / "x.db",
         pipeline_log=tmp_path / "x.log",
         bot_log=tmp_path / "x.log",
+        bot_proc_running=lambda: True,
     )
     out = format_monitor_json(report)
     parsed = json.loads(out)
     assert "checks" in parsed
     assert isinstance(parsed["checks"], list)
-    assert len(parsed["checks"]) == 3
+    assert len(parsed["checks"]) == 4
