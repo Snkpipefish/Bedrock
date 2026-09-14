@@ -18,17 +18,19 @@ mkdir -p "$(dirname "$LOG_FILE")"
 {
   echo "[$(date -Iseconds)] bedrock-widget-launch start"
 
-  # Vent inntil signal-server svarer (boot tar 5-20s typisk).
-  for i in $(seq 1 60); do
+  # Vent inntil signal-server svarer. Serveren har After=bedrock-signals-all,
+  # som ved boot tar 60-120s (fetch + signals-all). 2026-09-14 ga 120s-grensen
+  # opp i samme sekund som serveren kom opp — derfor 10 min tak.
+  for i in $(seq 1 300); do
     if curl -sf "$WIDGET_URL" >/dev/null 2>&1; then
-      echo "[$(date -Iseconds)] signal-server oppe etter ${i}s"
+      echo "[$(date -Iseconds)] signal-server oppe etter $((i * 2))s"
       break
     fi
     sleep 2
   done
 
   if ! curl -sf "$WIDGET_URL" >/dev/null 2>&1; then
-    echo "[$(date -Iseconds)] signal-server ikke tilgjengelig etter 120s — avbryter"
+    echo "[$(date -Iseconds)] signal-server ikke tilgjengelig etter 600s — avbryter"
     exit 1
   fi
 
