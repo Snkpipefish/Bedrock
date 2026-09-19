@@ -34,7 +34,7 @@ Wire-up-rekkefølge:
   8. Instansier ExitEngine med entry-ref
   9. Wire: entry.set_manage_open_positions(exit.manage_open_positions)
  10. Wire client.callbacks (on_spot/on_historical_bars/on_symbols_ready
-     → entry; on_execution/on_order_error/on_reconcile → exit)
+     → entry; on_execution/on_trailing_sl_changed/on_order_error/on_reconcile → exit)
  11. Wire comms-callbacks: on_signals → entry.on_signals,
      on_kill_ids → helper som setter state.kill_switch
  12. Registrer signal-handlers (SIGHUP/SIGTERM/SIGINT)
@@ -158,6 +158,7 @@ def build_bot(
     callbacks.on_historical_bars = entry.on_historical_bars
     callbacks.on_symbols_ready = entry.on_symbols_ready
     callbacks.on_execution = exit_engine.on_execution
+    callbacks.on_trailing_sl_changed = exit_engine.on_trailing_sl_changed
     callbacks.on_order_error = exit_engine.on_order_error
     callbacks.on_reconcile = exit_engine.on_reconcile
 

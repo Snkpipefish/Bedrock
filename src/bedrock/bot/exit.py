@@ -1094,6 +1094,55 @@ class ExitEngine:
     # cTrader event-handlere (wires to CtraderCallbacks)
     # ─────────────────────────────────────────────────────────
 
+    def on_trailing_sl_changed(self, event: Any) -> None:
+        """ProtoOATrailingSLChangedEvent (2107): cTrader har flyttet
+        server-side trailing-SL på en posisjon (MAKRO trailes av serveren
+        på original SL-distanse, satt ved entry). Synk `state.stop_price`
+        slik at P0-breach, logg og R-beregning bruker samme nivå som
+        serveren. Før sep 2026 ble eventet ignorert («Uhåndtert type:
+        2107», ~850 stk/uke) og state hang igjen på entry-SL.
+
+        Kun stramming aksepteres: serveren trailer aldri løsere, og en
+        løsere SL fra et forsinket/omstokket event skal ikke overskrive
+        en BE- eller trail-stramming boten selv har gjort.
+        """
+        pos_id = _as_int(getattr(event, "positionId", 0))
+        new_sl = _as_float(getattr(event, "stopPrice", 0))
+        if pos_id <= 0 or new_sl <= 0:
+            return
+        with self._lock:
+            state = next(
+                (
+                    s
+                    for s in self._active_states
+                    if s.phase == TradePhase.IN_TRADE and s.position_id == pos_id
+                ),
+                None,
+            )
+        if state is None:
+            log.debug("[TRAIL-SERVER] pos #%d ukjent for bot — ignorerer SL=%.5f", pos_id, new_sl)
+            return
+        old_sl = state.stop_price or 0.0
+        is_sell = state.direction == "sell"
+        tighter = old_sl <= 0 or (new_sl < old_sl if is_sell else new_sl > old_sl)
+        if not tighter:
+            log.debug(
+                "[TRAIL-SERVER] %s — server-SL %.5f ikke strammere enn %.5f, beholder.",
+                state.signal_id,
+                new_sl,
+                old_sl,
+            )
+            return
+        state.stop_price = new_sl
+        log.info(
+            "[TRAIL-SERVER] %s — SL %.5f → %.5f (pos #%d, %s)",
+            state.signal_id,
+            old_sl,
+            new_sl,
+            pos_id,
+            state.horizon or "?",
+        )
+
     def on_execution(self, event: Any) -> None:
         """ORDER_FILLED / PARTIAL / deal-close. Portert fra
         `trading_bot.py:_on_execution` (2074-2180).

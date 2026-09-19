@@ -3056,3 +3056,83 @@ def test_on_reconcile_prunes_state_missing_at_broker(
     assert entries[42]["exit_reason"] == "lost-close"
     assert entries[42]["result"] is not None
     assert entries[43]["result"] is None
+
+
+# ─────────────────────────────────────────────────────────────
+# on_trailing_sl_changed (ProtoOATrailingSLChangedEvent, 2107)
+# ─────────────────────────────────────────────────────────────
+
+
+def _trail_event(position_id: int, stop_price: float) -> MagicMock:
+    return MagicMock(positionId=position_id, stopPrice=stop_price, orderId=1)
+
+
+def test_trailing_sl_event_tightens_buy_stop(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    client = _make_client_stub(symbol_map={"GOLD": 1})
+    _, ex = _make_engines(
+        client=client, safety=safety, config=config, active_states=active_states, tmp_path=tmp_path
+    )
+    st = _in_trade_state(
+        instrument="GOLD", direction="buy", entry_price=4390.0, stop_price=4314.0, horizon="MAKRO"
+    )
+    active_states.append(st)
+    ex.on_trailing_sl_changed(_trail_event(42, 4350.0))
+    assert st.stop_price == 4350.0
+
+
+def test_trailing_sl_event_tightens_sell_stop(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    client = _make_client_stub(symbol_map={"OIL WTI": 1})
+    _, ex = _make_engines(
+        client=client, safety=safety, config=config, active_states=active_states, tmp_path=tmp_path
+    )
+    st = _in_trade_state(
+        instrument="OIL WTI", direction="sell", entry_price=95.36, stop_price=98.14, horizon="MAKRO"
+    )
+    active_states.append(st)
+    ex.on_trailing_sl_changed(_trail_event(42, 96.50))
+    assert st.stop_price == 96.50
+
+
+def test_trailing_sl_event_never_loosens_stop(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Et forsinket event med løsere SL skal ikke overskrive BE/trail
+    boten selv har satt."""
+    client = _make_client_stub(symbol_map={"GOLD": 1})
+    _, ex = _make_engines(
+        client=client, safety=safety, config=config, active_states=active_states, tmp_path=tmp_path
+    )
+    st = _in_trade_state(direction="buy", entry_price=4390.0, stop_price=4380.0)
+    active_states.append(st)
+    ex.on_trailing_sl_changed(_trail_event(42, 4350.0))
+    assert st.stop_price == 4380.0
+
+
+def test_trailing_sl_event_unknown_position_or_zero_ignored(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    client = _make_client_stub(symbol_map={"GOLD": 1})
+    _, ex = _make_engines(
+        client=client, safety=safety, config=config, active_states=active_states, tmp_path=tmp_path
+    )
+    st = _in_trade_state(direction="buy", entry_price=4390.0, stop_price=4314.0)
+    active_states.append(st)
+    ex.on_trailing_sl_changed(_trail_event(999, 4350.0))  # ukjent posisjon
+    ex.on_trailing_sl_changed(_trail_event(42, 0.0))  # tom SL
+    assert st.stop_price == 4314.0
