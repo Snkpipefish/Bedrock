@@ -2,6 +2,52 @@
 
 ## Session log (most recent first)
 
+### 2026-09-19 — laptop-søvn forklarer feed-hull; trailing-SL-event, spot-klokke, agri-gate-rekkefølge
+
+**Hva:** Operatør spurte hvorfor posisjonsstørrelsene varierer, og
+deretter hva loggen viser positivt/negativt. Gjennomgang av bot-journal
+14.–19. sep + signal_log + systemjournal.
+
+**Funn:**
+
+1. **Sizing er korrekt.** Alle SL-treff siden 14. sep landet på planlagt
+   NOK-risiko (NATGAS 36 lot, Brent 0,24 lot, US100 0,79 lot ≈ 1 % / 0,5 %
+   av balanse). Lot-spriket er kontraktstørrelse × SL-avstand, by design.
+2. **pc-probook går i S3-suspend når lokket lukkes (P0 drift).** Hver
+   `[WATCHDOG] Ingen spot-data på N s` er et resume-tidspunkt, N =
+   søvnlengde (lørdag 08:43 = «Lid opened» på sekundet). Sov ~60 av 115 t
+   siden mandag, inkl. tir 09–18, ons 09–23, tor 10–18, fre 10–24. Alle
+   9 exits siden 14. sep er `lost-close` med stale estimat-pris; loggen
+   sa +20,8k på vinnerne, kontoen steg 15,7k. Daglig-tap-gate fyrte kl.
+   23 på tap bokført samlet ved oppvåkning. Ikke en bot-bug.
+3. **Dobbel reconnect etter resume** — spot-klokka ble ikke nullstilt.
+4. **848 × «Uhåndtert type: 2107»** = ProtoOATrailingSLChangedEvent.
+   MAKRO trailes server-side; boten fulgte ikke med, state hang på
+   entry-SL.
+5. **116 [VOLUM]-linjer → 17 ordrer** — Cotton ble sizet hvert kvarter om
+   natten før agri-session-gaten avviste den.
+
+**Endringer:**
+
+- `cc208a7` fix(bot): `_on_connected` setter `_last_spot_time = now`.
+- `2b426ab` feat(bot): `on_trailing_sl_changed` (callback + dispatch +
+  ExitEngine-handler, kun stramming) — logger `[TRAIL-SERVER]`.
+- `3a43ed1` refactor(bot): agri-gatene kjøres før sizing.
+- Bot restartet 09:56 med ny kode; reconcile tok over 6 posisjoner
+  (server-SL-ene var allerede trailet inn: GOLD 4321.72, Brent 97.23).
+- Minne: `project_laptop_suspend_kills_bot.md`.
+
+**Verifisert:** 397 bot-unit-tester grønne (7 nye), ruff/pyright rene.
+Balanse 484 479 NOK. Helse: GRØNN.
+
+**Neste:** (a) **Operatør må avgjøre søvn:** `HandleLidSwitch=ignore`
+i `/etc/systemd/logind.conf` (+ `HandleLidSwitchExternalPower`), eller
+flytte boten til en maskin som står på. Uten dette er all bot-statistikk
+fra uke 38 meningsløs. (b) Etter første handelsdag: bekreft
+`[TRAIL-SERVER]`-linjer i journalen og at `Uhåndtert type: 2107` er
+borte. (c) Vurder å registrere `lost-close`-tap i loss-cooldown
+(95a808934c9c Brent ble re-entret 0,8 ATR fra est. tap-nivå).
+
 ### 2026-09-14 — UI-autostart feilet ved boot; boten hadde vært død i 9 dager
 
 **Hva:** Operatør meldte at UI-widget ikke kom opp ved PC-oppstart, og
@@ -593,6 +639,11 @@ Verifikasjon: pyright 0/0, ruff clean, **pytest 2929/2929 grønt** (5 min).
 
 ## Current state
 
+- **Drift (2026-09-19):** **pc-probook sover ved lukket lokk** — boten
+  var uten feed ~60 av 115 t i uke 38. Krever logind-endring eller
+  annen maskin (operatør-beslutning, åpen). Boten kjører ny kode fra
+  09:56: spot-klokke nullstilles ved tilkobling, trailing-SL-event
+  (2107) synker `state.stop_price`, agri-gater før sizing.
 - **Drift (2026-09-14):** boten var død 5.–14. sep (FATAL exit 79
   returnerte 0 + 79 i prevent-lista). Fikset: exit-kode propageres,
   79 restartes, monitor har `bot_process`-sjekk. Widget-autostart
@@ -1125,6 +1176,19 @@ ferdig og 12.6-rebalansering er gjort.
   `git status` før retry; aldri `git add -u`.
 
 ## Open questions to user
+
+### Session 2026-09-19 — laptop-søvn
+
+- **Skal pc-probook slutte å sove?** Lukket lokk → S3-suspend; boten
+  mistet ~60 av 115 timer i uke 38, inkl. hele handelsdager. Valg:
+  `HandleLidSwitch=ignore` + `HandleLidSwitchExternalPower=ignore` i
+  `/etc/systemd/logind.conf` (sudo, `systemctl restart systemd-logind`),
+  eller flytte boten til en maskin som står på. Inntil avgjort er all
+  edge-statistikk fra uke 38 ugyldig (exits ble bokført ved oppvåkning
+  med stale pris).
+- **lost-close i cooldown?** Brent 95a808934c9c ble re-entret 0,8 ATR
+  fra estimert tap-nivå fordi `lost-close` ikke registreres i loss-
+  cooldown. Skal estimerte tap telle, eller kun bekreftede SL-treff?
 
 ### Session 2026-09-05 — kjede-review
 
