@@ -659,3 +659,56 @@ def test_cancel_order(client: CtraderClient) -> None:
         client.cancel_order(order_id=77)
     req = send.call_args.args[0]
     assert req.orderId == 77
+
+
+# ─────────────────────────────────────────────────────────────
+# Reconnect: spot-klokke nullstilles + trailing-SL-event dispatch
+# ─────────────────────────────────────────────────────────────
+
+
+def test_on_connected_resets_last_spot_time(client: CtraderClient) -> None:
+    """Etter laptop-resume så watchdogen fortsatt siste spot fra før
+    frakoblingen og fyrte en NY reconnect 30 s etter at vi var oppe
+    igjen. _on_connected skal sette spot-klokka til «nå»."""
+    import time
+
+    client._last_spot_time = time.time() - 50_000
+    client._reconnecting = True
+    with (
+        patch.object(client, "_authenticate_application"),
+        patch("bedrock.bot.ctrader_client.task.LoopingCall") as lc,
+    ):
+        lc.return_value.running = False
+        client._on_connected(MagicMock())
+    assert client._reconnecting is False
+    assert client._last_spot_time is not None
+    assert time.time() - client._last_spot_time < 5
+
+
+def test_handlers_map_routes_trailing_sl_changed(
+    creds: CtraderCredentials, startup_cfg: StartupOnlyConfig
+) -> None:
+    from ctrader_open_api.messages.OpenApiMessages_pb2 import (
+        ProtoOATrailingSLChangedEvent,
+    )
+
+    received: list[Any] = []
+    cb = CtraderCallbacks(on_trailing_sl_changed=received.append)
+    c = CtraderClient(credentials=creds, demo=True, startup_config=startup_cfg, callbacks=cb)
+    ptype = ProtoOATrailingSLChangedEvent().payloadType
+    assert ptype == 2107
+    handler = c._handlers()[ptype]
+    ev = MagicMock(positionId=17, stopPrice=1.2345)
+    handler(ev)
+    assert received == [ev]
+
+
+def test_trailing_sl_callback_exception_does_not_propagate(
+    creds: CtraderCredentials, startup_cfg: StartupOnlyConfig
+) -> None:
+    def _boom(_: Any) -> None:
+        raise RuntimeError("boom")
+
+    cb = CtraderCallbacks(on_trailing_sl_changed=_boom)
+    c = CtraderClient(credentials=creds, demo=True, startup_config=startup_cfg, callbacks=cb)
+    c._on_trailing_sl_changed(MagicMock())  # skal ikke kaste

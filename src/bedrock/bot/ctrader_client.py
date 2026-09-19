@@ -92,6 +92,7 @@ from ctrader_open_api.messages.OpenApiMessages_pb2 import (
     ProtoOASymbolsListRes,
     ProtoOATraderReq,
     ProtoOATraderRes,
+    ProtoOATrailingSLChangedEvent,
 )
 from ctrader_open_api.messages.OpenApiModelMessages_pb2 import (
     ProtoOAOrderType,
@@ -177,6 +178,9 @@ class CtraderCallbacks:
     # men FØR subscribe-spots begynner. Bot initialiserer candle-buffere her.
     on_symbols_ready: Callable[[CtraderClient], None] = _noop
     on_trader_info: Callable[[float], None] = _noop
+    # cTrader flytter server-side trailing-SL (MAKRO) og sender
+    # ProtoOATrailingSLChangedEvent (2107). Exit-laget synker state.stop_price.
+    on_trailing_sl_changed: Callable[[Any], None] = _noop
 
 
 # ─────────────────────────────────────────────────────────────
@@ -371,6 +375,12 @@ class CtraderClient:
     def _on_connected(self, client: Client) -> None:
         log.info("[TILKOBLET] Autentiserer applikasjon...")
         self._reconnecting = False
+        # Nullstill spot-klokka ved (re)tilkobling. Uten dette ser watchdogen
+        # fortsatt siste spot fra FØR frakoblingen og fyrer en ny reconnect
+        # 30 s etter at vi er oppe igjen (dobbel reconnect etter laptop-
+        # resume, sep 2026). time.time() — ikke None — slik at en tilkobling
+        # som aldri får spot fortsatt fanges etter _WATCHDOG_RECONNECT_SEC.
+        self._last_spot_time = time.time()
         if self._heartbeat_loop is not None and not self._heartbeat_loop.running:
             self._heartbeat_loop.start(_HEARTBEAT_INTERVAL_SEC)
         if self._watchdog_loop is None or not self._watchdog_loop.running:
@@ -454,6 +464,7 @@ class CtraderClient:
             ProtoOASpotEvent().payloadType: self._on_spot,
             ProtoOAGetTrendbarsRes().payloadType: self._on_historical_bars,
             ProtoOAExecutionEvent().payloadType: self._on_execution,
+            ProtoOATrailingSLChangedEvent().payloadType: self._on_trailing_sl_changed,
             ProtoOAOrderErrorEvent().payloadType: self._on_order_error,
             ProtoOAErrorRes().payloadType: self._on_error_res,
             ProtoOAReconcileRes().payloadType: self._on_reconcile,
@@ -927,6 +938,12 @@ class CtraderClient:
             self._callbacks.on_execution(event)
         except Exception:
             log.exception("[CALLBACK] on_execution feilet")
+
+    def _on_trailing_sl_changed(self, event: Any) -> None:
+        try:
+            self._callbacks.on_trailing_sl_changed(event)
+        except Exception:
+            log.exception("[CALLBACK] on_trailing_sl_changed feilet")
 
     def _on_order_error(self, event: Any) -> None:
         try:
