@@ -1603,67 +1603,11 @@ class EntryEngine:
             self._remove_state(state)
             return
 
-        # ── Sizing (risikobasert) ─────────────────────────────
-        # lots = risk_amount / (SL-avstand × enheter/lot × quote→konto).
-        # Tap ved SL ≈ risk_amount uansett instrument → R-normalisert
-        # eksponering. Blokkerer heller enn å gjette hvis balanse, kurs
-        # eller symbol-info mangler.
-        risk_pct = get_risk_pct(sig, gs, rules, self._config.risk_pct)
-        if balance <= 0:
-            log.warning(
-                "[SIZING] %s — kontobalanse ukjent (%.2f); kan ikke risikodimensjonere. Blokkerer.",
-                sig["id"],
-                balance,
-            )
-            self._remove_state(state)
-            return
-        risk_amount = balance * (risk_pct / 100.0)
-        if instr_name in AGRI_INSTRUMENTS:
-            risk_amount *= self._config.sizing.agri_risk_factor
-        quote_rate = self._quote_to_account_rate(instr_name)
-        if quote_rate is None:
-            log.warning(
-                "[SIZING] %s — mangler valutakurs quote→%s for %s. Blokkerer.",
-                sig["id"],
-                self._config.sizing.account_currency,
-                instr_name,
-            )
-            self._remove_state(state)
-            return
-        symbol_info = self._client.symbol_info.get(state.symbol_id)
-        sl_distance = abs(entry_price - float(sig["stop"]))
-        volume_units, desired_lots, size_block = compute_risk_lots(
-            risk_amount=risk_amount,
-            sl_distance=sl_distance,
-            symbol_info=symbol_info,
-            quote_to_account=quote_rate,
-            min_lot_max_overshoot=self._config.sizing.min_lot_max_overshoot,
-        )
-        if size_block or volume_units <= 0:
-            log.warning(
-                "[SIZING] %s [%s] blokkert — %s (risk %.0f %s, SL-avstand %.5f).",
-                sig["id"],
-                instr_name,
-                size_block or "volum=0",
-                risk_amount,
-                self._config.sizing.account_currency,
-                sl_distance,
-            )
-            self._remove_state(state)
-            return
-        log.info(
-            "[VOLUM] %s: risk %.0f %s / (SL %.5f × %s enh/lot × kurs %.4f) = %s lot → %d enheter",
-            instr_name,
-            risk_amount,
-            self._config.sizing.account_currency,
-            sl_distance,
-            (symbol_info or {}).get("lot_size", 0) / 100.0,
-            quote_rate,
-            desired_lots,
-            volume_units,
-        )
-
         # ── Agri-spesifikke sjekker ───────────────────────────
+        # Kjøres FØR sizing: session/spread/konkurranse-gatene er billige
+        # og avviser de fleste agri-kandidater (Cotton om natten ga én
+        # [VOLUM]-linje per kvarter før blokkering, 116 volum-linjer → 17
+        # ordrer i uke 38/2026).
         if instr_name in AGRI_INSTRUMENTS:
             agri_cfg = self._config.agri
             # 1) Maks samtidige agri-posisjoner
@@ -1731,6 +1675,66 @@ class EntryEngine:
                     )
                     self._remove_state(state)
                     return
+
+        # ── Sizing (risikobasert) ─────────────────────────────
+        # lots = risk_amount / (SL-avstand × enheter/lot × quote→konto).
+        # Tap ved SL ≈ risk_amount uansett instrument → R-normalisert
+        # eksponering. Blokkerer heller enn å gjette hvis balanse, kurs
+        # eller symbol-info mangler.
+        risk_pct = get_risk_pct(sig, gs, rules, self._config.risk_pct)
+        if balance <= 0:
+            log.warning(
+                "[SIZING] %s — kontobalanse ukjent (%.2f); kan ikke risikodimensjonere. Blokkerer.",
+                sig["id"],
+                balance,
+            )
+            self._remove_state(state)
+            return
+        risk_amount = balance * (risk_pct / 100.0)
+        if instr_name in AGRI_INSTRUMENTS:
+            risk_amount *= self._config.sizing.agri_risk_factor
+        quote_rate = self._quote_to_account_rate(instr_name)
+        if quote_rate is None:
+            log.warning(
+                "[SIZING] %s — mangler valutakurs quote→%s for %s. Blokkerer.",
+                sig["id"],
+                self._config.sizing.account_currency,
+                instr_name,
+            )
+            self._remove_state(state)
+            return
+        symbol_info = self._client.symbol_info.get(state.symbol_id)
+        sl_distance = abs(entry_price - float(sig["stop"]))
+        volume_units, desired_lots, size_block = compute_risk_lots(
+            risk_amount=risk_amount,
+            sl_distance=sl_distance,
+            symbol_info=symbol_info,
+            quote_to_account=quote_rate,
+            min_lot_max_overshoot=self._config.sizing.min_lot_max_overshoot,
+        )
+        if size_block or volume_units <= 0:
+            log.warning(
+                "[SIZING] %s [%s] blokkert — %s (risk %.0f %s, SL-avstand %.5f).",
+                sig["id"],
+                instr_name,
+                size_block or "volum=0",
+                risk_amount,
+                self._config.sizing.account_currency,
+                sl_distance,
+            )
+            self._remove_state(state)
+            return
+        log.info(
+            "[VOLUM] %s: risk %.0f %s / (SL %.5f × %s enh/lot × kurs %.4f) = %s lot → %d enheter",
+            instr_name,
+            risk_amount,
+            self._config.sizing.account_currency,
+            sl_distance,
+            (symbol_info or {}).get("lot_size", 0) / 100.0,
+            quote_rate,
+            desired_lots,
+            volume_units,
+        )
 
         # ── Korrelasjonsgating ────────────────────────────────
         # Makro/swing/scalp behandles uavhengig i samme instrument: kun

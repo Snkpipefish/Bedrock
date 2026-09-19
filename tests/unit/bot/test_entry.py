@@ -1812,8 +1812,12 @@ def test_execute_trade_agri_size_halved_and_corn_blocked_out_of_session(
     active_states: list[TradeState],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Corn utenfor session (f.eks. kl. 05:00 CET) → blokkert."""
+    """Corn utenfor session (f.eks. kl. 05:00 CET) → blokkert, og
+    blokkeringen skjer FØR sizing (ingen [VOLUM]-linje — uke 38/2026 ga
+    116 volum-linjer for 17 ordrer fordi Cotton ble sizet hvert kvarter
+    om natten før session-gaten avviste den)."""
     from bedrock.bot import entry as entry_mod
 
     class _FrozenDT(datetime):
@@ -1839,8 +1843,12 @@ def test_execute_trade_agri_size_halved_and_corn_blocked_out_of_session(
     candle = Candle(
         open=4.51, high=4.52, low=4.50, close=4.515, volume=1, timestamp=datetime.now(timezone.utc)
     )
-    engine._execute_trade_impl(sig, state, candle)
+    with caplog.at_level("INFO", logger="bedrock.bot.entry"):
+        engine._execute_trade_impl(sig, state, candle)
     client.send_new_order.assert_not_called()
+    msgs = [r.getMessage() for r in caplog.records]
+    assert any("utenfor session" in m for m in msgs)
+    assert not any("[VOLUM]" in m for m in msgs), "sizing skal ikke kjøre før agri-gatene"
 
 
 def test_execute_trade_agri_in_session_sends_order(
