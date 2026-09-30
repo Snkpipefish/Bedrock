@@ -2,6 +2,49 @@
 
 ## Session log (most recent first)
 
+### 2026-09-30 — monitor RØD: ANP-fetcher bommet på filnavn, anp_ethanol stale
+
+**Hva:** Operatør meldte «bedrock monitor pipeline-helse feilet».
+`bedrock-monitor.service` hadde exit 1 både 29. og 30. sep;
+`fetcher_freshness` FAIL med `1 stale: anp_ethanol` (+ 7 aging).
+
+**Funn:**
+
+1. **anp_ethanol stale = ekte datahull, ikke timer-feil.** Timeren
+   (7. og 21. kl. 05) kjørte som planlagt 21. sep. Men fetcheren
+   gjettet filnavn etter to maler × csv/xlsx, og ANP navngir
+   inkonsistent: `02-cados-abertos-preco-…` (skrivefeil), `04-…-etanol`
+   (uten filendelse), `06-dados-abertos-precos-2026-06-…`. Feb, apr, jun
+   og aug 2026 manglet i DB; nyeste rad var 2026-07-31 → passerte
+   2 × 720 h (60 d) den 29. sep. August lå dessuten på side 2 i ANPs
+   paginerte mappe-listing (20 elementer/side).
+2. **De 7 «aging» var støy fra laptop-søvn.** Lokket lukket 04:26–14:52
+   i dag; Persistent-timerne (agsi, alsi, calendar_ff, crypto_sentiment,
+   news_intel) fyrte 14:52:36 samtidig med monitoren, så data var ikke
+   inne ennå. Alle fullførte OK innen 14:53. comtrade/enso er aging by
+   design (månedlig cron, kortere stale_hours-vindu) — ikke FAIL.
+3. **pc-probook sover fortsatt ved lukket lokk** (journal viser
+   suspend hver dag 24.–30. sep, opptil 14 t). Operatør-beslutningen fra
+   19. sep er ikke tatt; `HandleLidSwitch` er urørt i logind.conf.
+
+**Endringer:**
+
+- `9839d5b` fix(fetch): `discover_month_urls` leser ANPs mappe-listing
+  (følger `?b_start:int=N`-paginering) og gir `fetch_month` kandidat-
+  URL-er; gamle maler beholdt som fallback. 8 nye tester.
+- `204a2a8` config(fetch): anp_ethanol `stale_hours` 720 → 1200 (ANP
+  publiserer 30–60 d etter månedsslutt; 720 ga RØD hver gang ANP var sen).
+- Backfill kjørt via servicen: 178 rader, ANP-serien komplett jan–aug
+  2026. Monitor kjørt på nytt (system-unit) → OK, failed-tilstand borte.
+
+**Verifisert:** 21 anp-tester + test_fetch_config grønne, ruff/pyright
+rene. Live: listing gir 12/12 mnd for 2025 og 8/8 publiserte for 2026.
+`session_health.sh` → GRØNN.
+
+**Neste:** (a) Lokk-søvn er fortsatt hovedproblemet for boten — samme
+åpne spørsmål som 19. sep. (b) Neste anp-timer 7. okt bør vise
+`anp.listing_ok year=2026 months=[1..9]` hvis september er publisert.
+
 ### 2026-09-19 — laptop-søvn forklarer feed-hull; trailing-SL-event, spot-klokke, agri-gate-rekkefølge
 
 **Hva:** Operatør spurte hvorfor posisjonsstørrelsene varierer, og
@@ -639,6 +682,10 @@ Verifikasjon: pyright 0/0, ruff clean, **pytest 2929/2929 grønt** (5 min).
 
 ## Current state
 
+- **Drift (2026-09-30):** monitor var RØD 29.–30. sep pga. anp_ethanol
+  stale (ANP-filnavn gjettet feil → feb/apr/jun/aug 2026 manglet).
+  Fikset med listing-basert fil-oppdagelse + stale_hours 1200; backfilt,
+  monitor OK. Laptop sover fortsatt daglig ved lukket lokk (ubesluttet).
 - **Drift (2026-09-19):** **pc-probook sover ved lukket lokk** — boten
   var uten feed ~60 av 115 t i uke 38. Krever logind-endring eller
   annen maskin (operatør-beslutning, åpen). Boten kjører ny kode fra
@@ -1178,6 +1225,10 @@ ferdig og 12.6-rebalansering er gjort.
 ## Open questions to user
 
 ### Session 2026-09-19 — laptop-søvn
+
+- **Fortsatt åpent 2026-09-30:** journal viser suspend hver dag 24.–30.
+  sep (i dag 04:26–14:52). Monitor og timere fyrer i klump ved
+  oppvåkning, som gir falske «aging»-varsler i tillegg til bot-hullene.
 
 - **Skal pc-probook slutte å sove?** Lukket lokk → S3-suspend; boten
   mistet ~60 av 115 timer i uke 38, inkl. hele handelsdager. Valg:
