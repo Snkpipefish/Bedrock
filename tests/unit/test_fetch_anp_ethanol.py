@@ -10,12 +10,16 @@ import pytest
 from bedrock.fetch.anp_ethanol import (
     SERIES_ID,
     STATE_WEIGHTS,
+    URL_TMPL_NEW,
     AnpFetchError,
     _br_to_float,
     _is_xlsx_bytes,
+    _month_from_filename,
     _parse_date_dd_mm_yyyy,
     aggregate_to_daily,
+    discover_month_urls,
     fetch_month,
+    parse_listing,
 )
 
 
@@ -194,3 +198,112 @@ def test_fetch_month_all_fail_raises() -> None:
     with patch("bedrock.fetch.anp_ethanol.http_get_with_retry", return_value=response):
         with pytest.raises(AnpFetchError, match="Failed to fetch"):
             fetch_month(2026, 1)
+
+
+# --- Fil-oppdagelse via mappe-listing (2026-09-30: ANP navngir inkonsistent) ---
+
+_BASE = "https://www.gov.br/anp/pt-br/centrais-de-conteudo/dados-abertos/arquivos/shpc/dsan"
+
+_LISTING_2026 = f"""
+<a href="{_BASE}/2026/">2026</a>
+<a href="{_BASE}/2026/01-dados-abertos-precos-diesel-gnv.csv/view">x</a>
+<a href="{_BASE}/2026/01-dados-abertos-precos-gasolina-etanol.csv/view">x</a>
+<a href="{_BASE}/2026/01-dados-abertos-precos-glp.csv/view">x</a>
+<a href="{_BASE}/2026/02-cados-abertos-preco-gasolina-etanol.csv/view">typo</a>
+<a href="{_BASE}/2026/04-dados-abertos-precos-gasolina-etanol/view">uten ext</a>
+<a href="{_BASE}/2026/06-dados-abertos-precos-2026-06-gasolina-etanol.csv/view">dato i navn</a>
+<a href="{_BASE}/2026/07-dados-abertos-precos-gasolina-etanol.csv/view">x</a>
+<a href="{_BASE}/2026/07-dados-abertos-precos-gasolina-etanol.csv/view">duplikat</a>
+<a href="{_BASE}/2025/precos-gasolina-etanol-12.csv/view">feil år</a>
+"""
+
+
+def test_month_from_filename_variants() -> None:
+    assert _month_from_filename("01-dados-abertos-precos-gasolina-etanol.csv") == 1
+    assert _month_from_filename("02-cados-abertos-preco-gasolina-etanol.csv") == 2
+    assert _month_from_filename("04-dados-abertos-precos-gasolina-etanol") == 4
+    assert _month_from_filename("06-dados-abertos-precos-2026-06-gasolina-etanol.csv") == 6
+    assert _month_from_filename("precos-gasolina-etanol-07.csv") == 7
+    assert _month_from_filename("precos-gasolina-etanol-11") == 11
+    assert _month_from_filename("precos-gasolina-etanol.csv") is None
+    assert _month_from_filename("13-dados-abertos-precos-gasolina-etanol.csv") is None
+
+
+def test_parse_listing_picks_ethanol_files_per_month() -> None:
+    found = parse_listing(_LISTING_2026, 2026)
+    assert sorted(found) == [1, 2, 4, 6, 7]
+    assert found[2] == [f"{_BASE}/2026/02-cados-abertos-preco-gasolina-etanol.csv"]
+    assert found[4] == [f"{_BASE}/2026/04-dados-abertos-precos-gasolina-etanol"]
+    assert found[6] == [f"{_BASE}/2026/06-dados-abertos-precos-2026-06-gasolina-etanol.csv"]
+    # «/view» strippet, duplikat kollapset
+    assert found[7] == [f"{_BASE}/2026/07-dados-abertos-precos-gasolina-etanol.csv"]
+
+
+def test_parse_listing_old_style_and_relative_href() -> None:
+    html = (
+        '<a href="/anp/pt-br/centrais-de-conteudo/dados-abertos/arquivos/shpc/dsan/2025/'
+        'precos-gasolina-etanol-03.csv/view">x</a>'
+    )
+    found = parse_listing(html, 2025)
+    assert found == {3: [f"{_BASE}/2025/precos-gasolina-etanol-03.csv"]}
+
+
+def test_parse_listing_empty_on_no_matches() -> None:
+    assert parse_listing("<html><body>ingenting</body></html>", 2026) == {}
+
+
+def test_fetch_month_tries_discovered_url_first() -> None:
+    csv_text = "Produto;Estado - Sigla;Data da Coleta;Valor de Venda\nETANOL;SP;03/02/2026;4,50\n"
+    response = Mock()
+    response.status_code = 200
+    response.content = csv_text.encode("utf-8")
+    discovered = f"{_BASE}/2026/02-cados-abertos-preco-gasolina-etanol.csv"
+
+    with patch("bedrock.fetch.anp_ethanol.http_get_with_retry", return_value=response) as get:
+        records = fetch_month(2026, 2, candidates=[discovered])
+    assert len(records) == 1
+    assert get.call_args_list[0].args[0] == discovered
+
+
+def test_fetch_month_falls_back_to_templates_after_candidates() -> None:
+    fail = Mock()
+    fail.status_code = 404
+    fail.content = b""
+    ok = Mock()
+    ok.status_code = 200
+    ok.content = (
+        b"Produto;Estado - Sigla;Data da Coleta;Valor de Venda\nETANOL;SP;03/02/2026;4,50\n"
+    )
+
+    with patch("bedrock.fetch.anp_ethanol.http_get_with_retry", side_effect=[fail, ok]) as get:
+        records = fetch_month(2026, 2, candidates=[f"{_BASE}/2026/dead-link"])
+    assert len(records) == 1
+    assert get.call_args_list[1].args[0] == URL_TMPL_NEW.format(year=2026, month=2, ext="csv")
+
+
+def test_discover_month_urls_returns_empty_on_http_error() -> None:
+    response = Mock()
+    response.status_code = 403
+    response.text = ""
+    with patch("bedrock.fetch.anp_ethanol.http_get_with_retry", return_value=response):
+        assert discover_month_urls(2026) == {}
+
+
+def test_discover_month_urls_follows_pagination() -> None:
+    page1 = Mock()
+    page1.status_code = 200
+    page1.text = (
+        f'<a href="{_BASE}/2025/precos-gasolina-etanol-01.csv/view">x</a>'
+        f'<a href="{_BASE}/2025?b_start:int=20">Próximo</a>'
+    )
+    page2 = Mock()
+    page2.status_code = 200
+    page2.text = (
+        f'<a href="{_BASE}/2025/precos-gasolina-etanol-08.csv/view">x</a>'
+        f'<a href="{_BASE}/2025?b_start:int=0">Anterior</a>'
+    )
+    with patch("bedrock.fetch.anp_ethanol.http_get_with_retry", side_effect=[page1, page2]) as get:
+        found = discover_month_urls(2025, pacing_sec=0)
+    assert sorted(found) == [1, 8]
+    assert get.call_count == 2
+    assert get.call_args_list[1].args[0].endswith("/2025?b_start:int=20")
