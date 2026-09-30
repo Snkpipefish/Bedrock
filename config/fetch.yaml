@@ -123,7 +123,11 @@ fetchers:
   anp_ethanol:
     module: bedrock.fetch.anp_ethanol
     cron: "0 5 7,21 * *"         # 7. og 21. i mnd 05:00 Oslo
-    stale_hours: 720              # månedlig
+    # Ferskhet måles på nyeste ANP-dato (siste dag i mnd). ANP publiserer
+    # mnd M 30–60 dager etter månedsslutt (juli 2026 kom ≤14. sep, aug
+    # ikke ute 30. sep). Med 720 gikk monitor RØD ved 60 dager hver gang
+    # ANP var sen. 1200 h = aging fra 50 d, stale fra 100 d (2026-09-30).
+    stale_hours: 1200
     on_failure: log_and_skip
     table: fundamentals
     ts_column: date
