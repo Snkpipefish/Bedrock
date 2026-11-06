@@ -20,6 +20,10 @@ Konvensjoner overtatt fra cot-explorer:
 - User-Agent "Mozilla/5.0" + Accept "application/json" — Yahoo
   returnerer 403 uten User-Agent.
 - 15 sekunders timeout.
+- Retry via `tenacity`: 3 forsøk med eksponentiell backoff ved
+  nettverksfeil/timeout og HTTP 5xx. 4xx er permanente og retries ikke.
+  Uten retry feller ett WiFi-blipp på millisekunder hele prices-runet
+  (2026-11-06: `[Errno 101] Network is unreachable` på 2 av 22 tickere).
 - Ingen parallell henting (per bruker-instruks): gratis APIer
   feiler med parallelle kall. Caller (CLI) må kjøre sekvensielt
   med 1-2 sek sleep mellom symboler.
@@ -42,6 +46,13 @@ from datetime import date, datetime, timezone
 from typing import Literal
 
 import pandas as pd
+from tenacity import (
+    RetryCallState,
+    Retrying,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -82,12 +93,25 @@ def build_yahoo_url(
     return f"{YAHOO_CHART_URL}/{encoded}?interval={interval}&period1={period1}&period2={period2}"
 
 
+def _is_transient(exc: BaseException) -> bool:
+    """tenacity-predikat: retry nettverksfeil/timeout og HTTP 5xx, ikke 4xx."""
+    if isinstance(exc, urllib.error.HTTPError):
+        return 500 <= exc.code < 600
+    return isinstance(exc, urllib.error.URLError | TimeoutError)
+
+
+def _log_retry(state: RetryCallState) -> None:
+    exc = state.outcome.exception() if state.outcome is not None else None
+    _log.warning("fetch_yahoo_retry attempt=%d error=%s", state.attempt_number, exc)
+
+
 def fetch_yahoo_prices(
     ticker: str,
     from_date: date,
     to_date: date,
     interval: YahooInterval = "1d",
     timeout_sec: float = 15.0,
+    attempts: int = 3,
 ) -> pd.DataFrame:
     """Hent OHLCV-bars fra Yahoo Finance.
 
@@ -98,6 +122,8 @@ def fetch_yahoo_prices(
     Rader hvor `close` er None (helger, holidays) ekskluderes — de gir
     ingen mening i en pris-tidserie og ville lekke som NaN i drivere.
 
+    Transiente feil (nettverk, timeout, HTTP 5xx) forsøkes `attempts`
+    ganger med eksponentiell backoff før `YahooFetchError` kastes.
     Kaster `YahooFetchError` ved nettverks-feil eller malformert JSON.
     """
     url = build_yahoo_url(ticker, from_date, to_date, interval)
@@ -110,9 +136,20 @@ def fetch_yahoo_prices(
     )
 
     req = urllib.request.Request(url, headers=_DEFAULT_HEADERS)
-    try:
+
+    def _do_request() -> bytes:
         with urllib.request.urlopen(req, timeout=timeout_sec) as r:
-            payload = r.read()
+            return r.read()
+
+    retrying = Retrying(
+        stop=stop_after_attempt(attempts),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception(_is_transient),
+        before_sleep=_log_retry,
+        reraise=True,
+    )
+    try:
+        payload = retrying(_do_request)
     except (urllib.error.URLError, TimeoutError) as exc:
         raise YahooFetchError(f"Network failure for {ticker}: {exc}") from exc
 

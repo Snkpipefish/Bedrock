@@ -195,9 +195,58 @@ def test_fetch_url_error_raises() -> None:
     def boom(*args: object, **kwargs: object) -> object:
         raise urllib.error.URLError("connection refused")
 
-    with patch("urllib.request.urlopen", side_effect=boom):
+    with patch("urllib.request.urlopen", side_effect=boom) as urlopen, patch("time.sleep"):
         with pytest.raises(YahooFetchError, match="Network failure"):
             fetch_yahoo_prices("GC=F", date(2010, 1, 1), date(2010, 1, 31))
+    assert urlopen.call_count == 3
+
+
+def test_fetch_transient_network_error_retries_then_succeeds() -> None:
+    """Ett nettverksblipp (Errno 101) skal ikke felle tickeren."""
+    import urllib.error
+
+    ts = [int(datetime(2010, 1, 4, tzinfo=timezone.utc).timestamp())]
+    payload = json.dumps(_yahoo_response(ts, closes=[1100.0])).encode()
+
+    class FakeResp:
+        def __enter__(self) -> FakeResp:
+            return self
+
+        def __exit__(self, *a: object) -> None:
+            pass
+
+        def read(self) -> bytes:
+            return payload
+
+    blip = urllib.error.URLError(OSError(101, "Network is unreachable"))
+    with (
+        patch("urllib.request.urlopen", side_effect=[blip, FakeResp()]) as urlopen,
+        patch("time.sleep"),
+    ):
+        df = fetch_yahoo_prices("KC=F", date(2010, 1, 1), date(2010, 1, 31))
+    assert urlopen.call_count == 2
+    assert len(df) == 1
+
+
+def test_fetch_http_5xx_retries() -> None:
+    import urllib.error
+
+    err = urllib.error.HTTPError("http://x", 503, "Service Unavailable", None, None)  # type: ignore[arg-type]
+    with patch("urllib.request.urlopen", side_effect=err) as urlopen, patch("time.sleep"):
+        with pytest.raises(YahooFetchError, match="Network failure"):
+            fetch_yahoo_prices("GC=F", date(2010, 1, 1), date(2010, 1, 31))
+    assert urlopen.call_count == 3
+
+
+def test_fetch_http_4xx_not_retried() -> None:
+    """4xx (ukjent ticker, blokkert UA) er permanent — ett forsøk."""
+    import urllib.error
+
+    err = urllib.error.HTTPError("http://x", 404, "Not Found", None, None)  # type: ignore[arg-type]
+    with patch("urllib.request.urlopen", side_effect=err) as urlopen, patch("time.sleep"):
+        with pytest.raises(YahooFetchError, match="Network failure"):
+            fetch_yahoo_prices("GC=F", date(2010, 1, 1), date(2010, 1, 31))
+    assert urlopen.call_count == 1
 
 
 def test_fetch_invalid_json_raises() -> None:
