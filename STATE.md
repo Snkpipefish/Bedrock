@@ -2,6 +2,34 @@
 
 ## Session log (most recent first)
 
+### 2026-11-06 — fetch-prices feilet på WiFi-blipp; Yahoo-fetcher fikk retry
+
+**Hva:** Operatør meldte «bedrock feilmelding på fetch prices».
+`session_health.sh` → RØD (`bedrock-fetch-prices.service` failed,
+monitor grønn).
+
+**Funn:** 20:40-kjøringen ga `Summary: 20/22 ok` — Coffee (KC=F) og
+CrudeOil (CL=F) feilet momentant med `[Errno 101] Network is
+unreachable`, mens tickerne ~100 ms før og etter gikk fint. NM logget
+connectivity-skifte 20:37 og ny DHCP-lease 20:42 → kort WiFi-blipp, ikke
+Yahoo og ikke laptop-søvn (maskinen var våken fra 08:42). Alle kjøringer
+siden 4. nov var 22/22. `fetch_yahoo_prices` hadde ingen retry, så ett
+blipp ga exit 1 + failed unit + varsel.
+
+**Endringer:**
+
+- `5972280` fix(fetch): `fetch_yahoo_prices` retries (tenacity, 3 forsøk,
+  backoff 1–10 s) ved URLError/timeout og HTTP 5xx; 4xx retries ikke.
+  Logger `fetch_yahoo_retry`. 3 nye tester + 1 oppdatert.
+
+**Verifisert:** test_fetch_yahoo + test_fetch_prices grønne (20), ruff/
+pyright rene. Servicen kjørt på nytt 20:45 → 22/22 ok, signals_bot regen
+fullført, `session_health.sh` → GRØNN.
+
+**Neste:** Ingen oppfølging nødvendig. Dukker `fetch_yahoo_retry` opp
+ofte i journalen, er det WiFi-en på pc-probook som er ustabil. Lokk-søvn
+(åpen siden 19. sep) er fortsatt ubesluttet.
+
 ### 2026-09-30 — monitor RØD: ANP-fetcher bommet på filnavn, anp_ethanol stale
 
 **Hva:** Operatør meldte «bedrock monitor pipeline-helse feilet».
@@ -682,6 +710,9 @@ Verifikasjon: pyright 0/0, ruff clean, **pytest 2929/2929 grønt** (5 min).
 
 ## Current state
 
+- **Drift (2026-11-06):** fetch-prices feilet én gang (20:40) på et
+  WiFi-blipp — 2/22 tickere `Network is unreachable`. Yahoo-fetcheren
+  har nå retry (3 forsøk). Kjørt på nytt 22/22, helse GRØNN.
 - **Drift (2026-09-30):** monitor var RØD 29.–30. sep pga. anp_ethanol
   stale (ANP-filnavn gjettet feil → feb/apr/jun/aug 2026 manglet).
   Fikset med listing-basert fil-oppdagelse + stale_hours 1200; backfilt,
