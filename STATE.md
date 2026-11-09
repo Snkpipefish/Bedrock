@@ -2,6 +2,73 @@
 
 ## Session log (most recent first)
 
+### 2026-11-09 — setup-gjennomgang: hva funker og ikke (demo 5. sep → 9. nov)
+
+**Hva:** Operatør ba om gjennomgangen som ble utsatt 30. sep («nr. 3»).
+Ren analyse — ingen kode eller config endret, boten ikke rørt.
+
+**Datagrunnlag og metode:**
+
+- Periode: 5. sep → 9. nov (risikobasert sizing fra 4. sep gjør R
+  sammenlignbar; før det er R-tall meningsløse). 114 lukkede trades.
+- 60 av 114 exits er `lost-close` med estimert pris. Journalen før
+  9. nov gikk tapt i disk-full-hendelsen, men `/var/log/syslog*` har
+  bot-loggen fra 11. okt. Ekte PnL for lost-close 12. okt → 9. nov er
+  rekonstruert fra `[KONTO] Balanse`-linjene (balanse-delta per
+  intervall minus cTrader-bekreftede exits). Stemmer mot kontoen på
+  krona. «Verifisert» under = cTrader-bekreftet + balanse-rekonstruert
+  (n=74). `backfill_lost_close_pnl.py` ble ikke kjørt (krever bot-stopp).
+- Konto: 488 358 (14. sep) → 397 694 NOK (9. nov) = −90,7k (−18,6 %).
+
+**Funn (verifisert, n=74: −18,3R, 28 % vinn, PF 0,59):**
+
+1. **Energi står for det meste av tapet.** Energi −12,9R (n=19, 16 %
+   vinn). NATGAS 0/6 (0/22 i hele demoen), WTI 1/8. Alle trades inkl.
+   estimater: energi −23,7R (n=36), resten +7,1R (n=78). Mønster:
+   trend-/posisjonerings-scoren ga BUY A/B mens olje gikk 100 → 88 →
+   107 → 93; 27 av 31 energi-trades siden 19. sep var BUY. NATGAS gapper
+   gjennom SL (tap opptil −3,4R).
+2. **Grade B taper, grade A tjener (utenom energi).** A: +6,5R (n=26,
+   42 % vinn, PF 1,58). B: −10,0R (n=25, 24 % vinn, PF 0,34). A+ n=4,
+   for få.
+3. **SCALP grade A er det som virker best:** +5,3R (n=13, 54 % vinn,
+   PF 2,0). MAKRO −2,8R (n=29), SWING −7,8R (n=13) utenom energi.
+4. **Re-entry innen 24 t i samme instrument+retning taper:** −8,6R
+   (n=18, 17 % vinn) mot −0,17R/trade ellers. Gjelder også etter vinn
+   (trail-exit → rett inn igjen). Nivå-cooldownen dekker ikke dette.
+5. **SELL +5,3R (n=39), BUY −10,7R (n=16) utenom energi.** Sannsynligvis
+   regime (SPX500 BUY 0/5), ikke grunnlag for regel.
+6. **Instrument:** AUDUSD +6,0R (6/8). SPX500 0/5, GBPUSD 2/9, US100 2/9.
+7. **`lost-close`-estimatene blåser opp statistikken.** 12. okt → 9. nov:
+   logget +44,6k, reelt +17,0k. Vinnerne logget +84,0k, reelt +52,0k
+   (estimatet bruker prisen ved oppvåkning, ikke trail-SL-en som faktisk
+   stengte). UI/trade-logg viser altså ~27k for mye på fire uker.
+8. **Laptopen sover fortsatt 70–90 t/uke** (uke 42–45). Botens egen
+   exit-styring (8-candle, give-back, T1) får knapt virke; 53 % av
+   exits er lost-close.
+9. Trakt 11. okt → 9. nov: 51 setups i sone → 44 bekreftet → 31 fikk
+   ordre. KONFLIKT (motsatt retning åpen) 1704 linjer/33 id-er — BUY og
+   SELL er publisert samtidig for de fleste instrumenter med liten
+   score-forskjell. Agri: 339 blokkeringer (softs-tak, spread, session),
+   1 trade.
+
+**Hva-hvis (verifisert, sumR):** baseline −18,3 (n=74) → uten energi
+−5,4 (n=55) → uten energi og B +4,7 (n=30) → + ingen re-entry <24 t
++8,7 (n=19, 53 % vinn). In-sample, små utvalg — retning, ikke fasit.
+
+**Anbefalt (ikke utført — venter på operatør):**
+
+- (a) Ta NATGAS ut av bot-whitelist; pause WTI/Brent for boten til
+  energi-scoren er sett på (setups genereres fortsatt for UI).
+- (b) `min_grade_by_horizon`: swing/makro B → A.
+- (c) 24 t re-entry-pause per instrument+retning etter enhver exit.
+- (d) Boten henter ekte deal ved RECONCILE-PRUNE i stedet for estimat.
+- (e) Lokk-søvn (åpen siden 19. sep).
+
+**Neste:** Operatør velger blant (a)–(e). Fortsatt åpent fra tidligere
+i dag: kill-switch-kontrakt, to foreldreløse entries (NATGAS 17268156,
+WTI 17260893).
+
 ### 2026-11-09 — full disk i natt: 9 bedrock-units feilet, én trade-lukking ikke loggført
 
 **Hva:** Operatør meldte sju feilede fetch-tjenester (agsi, alsi,
@@ -791,6 +858,12 @@ Verifikasjon: pyright 0/0, ruff clean, **pytest 2929/2929 grønt** (5 min).
 
 ## Current state
 
+- **Edge (2026-11-09, gjennomgang 5. sep → 9. nov):** verifisert
+  −18,3R på 74 trades; konto 397,7k (−18,6 % siden 14. sep). Energi
+  −12,9R (NATGAS 0/22 i demoen), grade B −10,0R vs A +6,5R utenom
+  energi, SCALP-A +5,3R, re-entry <24 t −8,6R. `lost-close`-estimater
+  overvurderer vinnere (~27k på fire uker). Anbefalinger (a)–(e) i
+  session-loggen er ikke utført — venter på operatør.
 - **Drift (2026-11-09):** `/` var full ca. 02:45–08:30 → 9 bedrock-units
   feilet med SQLite `disk I/O error`. Kjørt på nytt, helse GRØNN, DB ok.
   GBPUSD-lukking 07:15 (pos 17667688) ble ikke loggført pga. ENOSPC —
