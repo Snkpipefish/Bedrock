@@ -56,7 +56,7 @@ Ren analyse — ingen kode eller config endret, boten ikke rørt.
 −5,4 (n=55) → uten energi og B +4,7 (n=30) → + ingen re-entry <24 t
 +8,7 (n=19, 53 % vinn). In-sample, små utvalg — retning, ikke fasit.
 
-**Anbefalt (ikke utført — venter på operatør):**
+**Anbefalt etter analysen:**
 
 - (a) Ta NATGAS ut av bot-whitelist; pause WTI/Brent for boten til
   energi-scoren er sett på (setups genereres fortsatt for UI).
@@ -65,9 +65,39 @@ Ren analyse — ingen kode eller config endret, boten ikke rørt.
 - (d) Boten henter ekte deal ved RECONCILE-PRUNE i stedet for estimat.
 - (e) Lokk-søvn (åpen siden 19. sep).
 
-**Neste:** Operatør velger blant (a)–(e). Fortsatt åpent fra tidligere
-i dag: kill-switch-kontrakt, to foreldreløse entries (NATGAS 17268156,
-WTI 17260893).
+**Oppfølging samme dag (operatør: «gjør alle de foreslåtte endringene»):**
+
+- `532ce30` config(bot): (a) CrudeOil, Brent og NaturalGas kommentert ut
+  av `mapping:` i bot_whitelist.yaml. Setups genereres fortsatt for UI.
+- `fdb9c8b` config(bot): (b) `min_grade_by_horizon` swing/makro B → A.
+- `6853185` feat(bot): (c) `cooldown.reentry_pause_hours: 24` — pause per
+  (instrument, retning) etter enhver exit, alle horisonter. Lastes fra
+  signal_log ved oppstart, logger `[RE-ENTRY-PAUSE]`. 7 nye tester.
+- `671f6c7` fix(bot): (d) etter RECONCILE-PRUNE henter boten posisjonens
+  deals (`ProtoOADealListByPositionIdReq`, 6-dagers vinduer bakover til
+  åpning) og patcher lost-close-entryen med ekte PnL, fill, lukketid og
+  årsak. Estimatet bevares i `pnl.lost_close_est`. Feiler oppslaget,
+  står estimatet. 9 nye tester.
+- signals_bot.json regenerert: 63 → 16 entries (15 A, 1 A+; ingen
+  energi). Bot restartet 21:36:58 med ny kode: balanse 405 550 NOK,
+  8 posisjoner tatt over (inkl. to WTI SELL som styres videre av
+  exit-laget), 4 ferske exits lastet i re-entry-pausen (GBPUSD/GOLD/
+  OIL BRENT/SILVER sell).
+- (e) lokk-søvn er ikke rørt — systeminnstilling, operatør gjør den
+  selv (kommando gitt i chat).
+
+**Verifisert:** 428 tester grønne (tests/unit/bot + whitelist), ruff og
+pyright rene, `session_health.sh` GRØNN etter restart. (d) er ikke sett
+live ennå — første RECONCILE-PRUNE etter neste søvn skal gi en
+`[LOST-CLOSE] … ekte deal`-linje.
+
+**Neste:** (1) Etter neste lokk-søvn: bekreft `[LOST-CLOSE]`-linje og
+at entryen har `pnl_real`. (2) Ny gjennomgang når ~30 trades er lukket
+under de nye reglene (ventet lavere frekvens: 16 setups mot 63).
+(3) Energi-scoringen må sees på før energi tas inn igjen. (4) Åpent fra
+tidligere i dag: kill-switch-kontrakt, to foreldreløse entries (NATGAS
+17268156, WTI 17260893). (5) Kjent begrensning i (d): estimert tap som
+viser seg å være vinn blir stående i loss-cooldown.
 
 ### 2026-11-09 — full disk i natt: 9 bedrock-units feilet, én trade-lukking ikke loggført
 
@@ -862,8 +892,12 @@ Verifikasjon: pyright 0/0, ruff clean, **pytest 2929/2929 grønt** (5 min).
   −18,3R på 74 trades; konto 397,7k (−18,6 % siden 14. sep). Energi
   −12,9R (NATGAS 0/22 i demoen), grade B −10,0R vs A +6,5R utenom
   energi, SCALP-A +5,3R, re-entry <24 t −8,6R. `lost-close`-estimater
-  overvurderer vinnere (~27k på fire uker). Anbefalinger (a)–(e) i
-  session-loggen er ikke utført — venter på operatør.
+  overvurderer vinnere (~27k på fire uker).
+- **Bot-regler fra 2026-11-09 21:37:** energi (WTI, Brent, NATGAS)
+  pauset i bot-whitelisten; minste grade A på alle horisonter; 24 t
+  re-entry-pause per instrument+retning (`cooldown.reentry_pause_hours`);
+  lost-close patches med ekte cTrader-deal. Bot-feeden har 16 setups
+  (var 63). Lokk-søvn fortsatt ubesluttet.
 - **Drift (2026-11-09):** `/` var full ca. 02:45–08:30 → 9 bedrock-units
   feilet med SQLite `disk I/O error`. Kjørt på nytt, helse GRØNN, DB ok.
   GBPUSD-lukking 07:15 (pos 17667688) ble ikke loggført pga. ENOSPC —
