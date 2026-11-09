@@ -43,7 +43,7 @@ import tempfile
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -203,11 +203,18 @@ class EntryEngine:
         # ExitEngine via `record_lost_signal()` ved hver loss-close.
         self._lost_signal_ids: dict[str, list[LostLevel]] = {}
         self._cooldown_logged: set[str] = set()
+        # Re-entry-pause: (INSTRUMENT, retning) → tidspunkt for siste exit.
+        # Tidsbasert og uavhengig av resultat/horisont — se
+        # `CooldownConfig.reentry_pause_hours`. Lastes fra signal_log ved
+        # oppstart, oppdateres av ExitEngine via `record_exit()`.
+        self._last_exit_at: dict[tuple[str, str], datetime] = {}
+        self._reentry_pause_logged: set[str] = set()
         self._ttl_batch_logged: set[tuple[str, str]] = set()
         self._ttl_fallback_warned: bool = False
         self._event_blackout_logged: set[tuple[str, str]] = set()
         self._same_dir_logged: set[str] = set()
         self._load_lost_signal_ids_from_log()
+        self._load_recent_exits_from_log()
 
         self._lock = Lock()
 
@@ -763,6 +770,27 @@ class EntryEngine:
                         )
                         self._cooldown_logged.add(sig_id)
                     return
+                # Re-entry-pause: ingen ny entry i samme instrument+retning
+                # (alle horisonter) før `reentry_pause_hours` er gått siden
+                # forrige exit — også etter vinn (trail-exit → rett inn igjen).
+                last_exit = self._reentry_pause_blocking(instrument, dirn)
+                if last_exit is not None:
+                    if sig_id not in self._reentry_pause_logged:
+                        pause_h = self._config.cooldown.reentry_pause_hours
+                        log.info(
+                            "[RE-ENTRY-PAUSE] %s [%s] %s %s blokkert — forrige exit "
+                            "%s, pause %.0ft (til %s).",
+                            sig_id,
+                            horizon,
+                            instrument,
+                            dirn,
+                            last_exit.strftime("%Y-%m-%d %H:%M UTC"),
+                            pause_h,
+                            (last_exit + timedelta(hours=pause_h)).strftime("%Y-%m-%d %H:%M UTC"),
+                        )
+                        self._reentry_pause_logged.add(sig_id)
+                    return
+                self._reentry_pause_logged.discard(sig_id)
                 # Konflikt-blokk: blokker ny entry hvis det er en MOTSATT
                 # direction-state allerede aktiv for samme instrument — på
                 # tvers av alle horisonter. Orchestrator's
@@ -1328,6 +1356,82 @@ class EntryEngine:
             LostLevel(lost_at=datetime.now(timezone.utc), entry_price=price)
         )
         self._cooldown_logged.discard(signal_id)
+
+    # ─────────────────────────────────────────────────────────
+    # Re-entry-pause per (instrument, retning)
+    # ─────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _exit_key(instrument: str, direction: str) -> tuple[str, str]:
+        return (instrument.strip().upper(), direction.strip().lower())
+
+    def record_exit(
+        self, instrument: str, direction: str, closed_at: datetime | None = None
+    ) -> None:
+        """Registrer at en posisjon i (instrument, retning) er lukket.
+
+        ExitEngine kaller denne fra `_log_trade_closed` for enhver full
+        lukking. Nyeste tidspunkt vinner, så en etterpatch med eldre
+        ekte lukketid forkorter aldri en pause som allerede løper.
+        """
+        if not instrument or not direction:
+            return
+        when = closed_at or datetime.now(timezone.utc)
+        key = self._exit_key(instrument, direction)
+        prev = self._last_exit_at.get(key)
+        if prev is None or when > prev:
+            self._last_exit_at[key] = when
+
+    def _reentry_pause_blocking(self, instrument: str, direction: str) -> datetime | None:
+        """Tidspunktet for exit-en som fortsatt blokkerer, eller None."""
+        pause_h = self._config.cooldown.reentry_pause_hours
+        if pause_h <= 0:
+            return None
+        key = self._exit_key(instrument, direction)
+        last = self._last_exit_at.get(key)
+        if last is None:
+            return None
+        if datetime.now(timezone.utc) - last >= timedelta(hours=pause_h):
+            self._last_exit_at.pop(key, None)  # utløpt
+            return None
+        return last
+
+    def _load_recent_exits_from_log(self) -> None:
+        """Last siste exit per (instrument, retning) fra signal_log.json.
+
+        Sikrer at re-entry-pausen overlever bot-restart. Bare lukkinger
+        innenfor `reentry_pause_hours` lastes. No-op hvis pausen er av
+        eller loggen mangler/er korrupt.
+        """
+        pause_h = self._config.cooldown.reentry_pause_hours
+        path = self._trade_log_path
+        if pause_h <= 0 or not path.exists():
+            return
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            log.warning("[RE-ENTRY-PAUSE] kunne ikke lese %s: %s", path, exc)
+            return
+        entries = data.get("entries", []) if isinstance(data, dict) else []
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=pause_h)
+        for entry in entries:
+            if not isinstance(entry, dict) or entry.get("result") is None:
+                continue
+            closed_at = self._parse_log_timestamp(entry.get("closed_at") or "")
+            if closed_at is None or closed_at < cutoff:
+                continue
+            sig = entry.get("signal") or {}
+            instrument = sig.get("instrument")
+            direction = sig.get("direction")
+            if isinstance(instrument, str) and isinstance(direction, str):
+                self.record_exit(instrument, direction, closed_at)
+        if self._last_exit_at:
+            log.info(
+                "[RE-ENTRY-PAUSE] Lastet %d ferske exits (pause %.0ft): %s",
+                len(self._last_exit_at),
+                pause_h,
+                ", ".join(f"{i} {d}" for i, d in sorted(self._last_exit_at)),
+            )
 
     # ─────────────────────────────────────────────────────────
     # Sizing-helpers: quote-valuta → kontovaluta

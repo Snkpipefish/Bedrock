@@ -801,6 +801,9 @@ class ExitEngine:
             # loss → re-entry → loss-loop i sideways-marked.
             if result == "loss" and state.signal_id:
                 self._entry.record_lost_signal(state.signal_id, state.entry_price)
+            # Re-entry-pause: enhver full lukking (vinn eller tap) starter
+            # pausen for (instrument, retning) — se CooldownConfig.
+            self._entry.record_exit(state.instrument, state.direction)
             real_tag = " [cTrader]" if pnl.get("pnl_real") else " [est]"
             pnl_str = (
                 f"  {pnl['pnl_usd']:+.2f} {pnl.get('pnl_ccy', 'USD')} "

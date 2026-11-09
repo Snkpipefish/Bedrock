@@ -176,6 +176,11 @@ class CooldownConfig(BaseModel):
       (men eldes ut etter `loss_level_max_age_days`).
     - `permanent_after_loss=False`: `loss_ttl_hours` gjelder per tap.
     - Tap uten kjent entry-pris (eldre logg) blokkerer uansett nivå.
+
+    `reentry_pause_hours` er en egen, tidsbasert pause per
+    (instrument, retning) etter ENHVER exit — vinn eller tap, alle
+    horisonter. Nivå-blokken over fanger ikke re-entry rett etter en
+    trail-exit i pluss eller på et flyttet nivå. 0 = av.
     """
 
     loss_ttl_hours: int = 72
@@ -189,6 +194,11 @@ class CooldownConfig(BaseModel):
     # et nivå som tapte for 3+ måneder siden er en annen markedskontekst.
     # 0 = ingen aldersgrense.
     loss_level_max_age_days: int = 90
+    # 2026-11-09 (5. sep → 9. nov, verifiserte trades): ny entry i samme
+    # instrument+retning innen 24 t etter forrige exit ga -8,6R på 18
+    # trades (17 % vinn, PF 0,33) mot -0,17R/trade ellers — også etter
+    # vinn. 0 = ingen pause.
+    reentry_pause_hours: float = Field(default=24.0, ge=0.0)
 
     model_config = ConfigDict(extra="forbid")
 

@@ -2678,3 +2678,253 @@ def test_loss_cooldown_permanent_after_loss_ignores_ttl(
     assert "old-loser" in engine._lost_signal_ids
     assert engine._is_in_loss_cooldown("old-loser") is not None
     assert "old-loser" in engine._lost_signal_ids
+
+
+# ─────────────────────────────────────────────────────────────
+# Re-entry-pause — tidsbasert per (instrument, retning) etter enhver exit
+# ─────────────────────────────────────────────────────────────
+
+
+def _reentry_signal(sig_id: str = "eurusd-buy-swing", direction: str = "buy") -> dict:
+    return {
+        "id": sig_id,
+        "instrument": "EURUSD",
+        "direction": direction,
+        "status": "watchlist",
+        "alert_level": 1.0801,
+        "atr": 0.0080,
+        "stop": 1.0750,
+        "t1": 1.0900,
+        "entry_zone": [1.0800, 1.0803],
+        "horizon": "SWING",
+        "horizon_config": {},
+    }
+
+
+def _reentry_engine(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list,
+    tmp_path: Path,
+) -> EntryEngine:
+    client = _make_client_stub(
+        symbol_map={"EURUSD": 1},
+        last_bid={1: 1.0800},
+        last_ask={1: 1.0802},
+        spread_history={1: deque([0.00002] * 15, maxlen=20)},
+    )
+    engine = _make_engine(
+        client,
+        safety,
+        config,
+        active_states,
+        stats_path=tmp_path / "s.json",
+        trade_log_path=tmp_path / "signal_log.json",
+    )
+    engine.on_symbols_ready(client)
+    return engine
+
+
+def _reentry_candle() -> Candle:
+    return Candle(
+        open=1.0801,
+        high=1.0802,
+        low=1.0800,
+        close=1.0801,
+        volume=1,
+        timestamp=datetime.now(timezone.utc),
+    )
+
+
+def test_reentry_pause_blocks_same_instrument_direction_after_win(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list,
+    tmp_path: Path,
+) -> None:
+    """Gitt en exit (uansett resultat) i EURUSD buy for 2 t siden, skal et
+    nytt buy-signal i sonen IKKE åpne bekreftelsesvindu — også på en annen
+    signal_id/horisont enn den som ble lukket."""
+    assert config.cooldown.reentry_pause_hours == 24
+    engine = _reentry_engine(safety, config, active_states, tmp_path)
+    engine.record_exit("EURUSD", "buy", datetime.now(timezone.utc) - timedelta(hours=2))
+    engine.signal_data = {"signals": [_reentry_signal()], "global_state": {}, "rules": {}}
+    engine._on_candle_closed(1, _reentry_candle())
+    assert len(active_states) == 0
+
+
+def test_reentry_pause_expires_and_allows_entry(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list,
+    tmp_path: Path,
+) -> None:
+    """Etter at pausen er utløpt skal samme signal slippe gjennom."""
+    engine = _reentry_engine(safety, config, active_states, tmp_path)
+    engine.record_exit("EURUSD", "buy", datetime.now(timezone.utc) - timedelta(hours=25))
+    engine.signal_data = {"signals": [_reentry_signal()], "global_state": {}, "rules": {}}
+    engine._on_candle_closed(1, _reentry_candle())
+    assert len(active_states) == 1
+    assert ("EURUSD", "buy") not in engine._last_exit_at  # ryddet ved utløp
+
+
+def test_reentry_pause_does_not_block_opposite_direction(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list,
+    tmp_path: Path,
+) -> None:
+    """Pausen er per retning: exit i buy blokkerer ikke et sell-signal."""
+    engine = _reentry_engine(safety, config, active_states, tmp_path)
+    engine.record_exit("EURUSD", "buy")
+    sig = _reentry_signal("eurusd-sell-swing", "sell")
+    sig["stop"], sig["t1"] = 1.0850, 1.0700
+    engine.signal_data = {"signals": [sig], "global_state": {}, "rules": {}}
+    engine._on_candle_closed(1, _reentry_candle())
+    assert len(active_states) == 1
+
+
+def test_reentry_pause_disabled_with_zero_hours(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list,
+    tmp_path: Path,
+) -> None:
+    """reentry_pause_hours=0 slår pausen av."""
+    config.cooldown.reentry_pause_hours = 0
+    engine = _reentry_engine(safety, config, active_states, tmp_path)
+    engine.record_exit("EURUSD", "buy")
+    engine.signal_data = {"signals": [_reentry_signal()], "global_state": {}, "rules": {}}
+    engine._on_candle_closed(1, _reentry_candle())
+    assert len(active_states) == 1
+
+
+def test_reentry_pause_loaded_from_signal_log_at_startup(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list,
+    tmp_path: Path,
+) -> None:
+    """Pausen må overleve restart: ferske lukkinger (vinn og tap) lastes,
+    eldre enn pausen og åpne entries lastes ikke. Loggens BUY/SELL og
+    instrumentnavn normaliseres."""
+    now = datetime.now(timezone.utc)
+    fmt = "%Y-%m-%d %H:%M timezone.utc"
+    fresh = (now - timedelta(hours=3)).strftime(fmt)
+    old = (now - timedelta(hours=30)).strftime(fmt)
+    (tmp_path / "signal_log.json").write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {
+                        "result": "win",
+                        "closed_at": fresh,
+                        "signal": {"id": "a", "instrument": "EURUSD", "direction": "BUY"},
+                    },
+                    {
+                        "result": "loss",
+                        "closed_at": fresh,
+                        "signal": {"id": "b", "instrument": "Gold", "direction": "SELL"},
+                    },
+                    {
+                        "result": "loss",
+                        "closed_at": old,
+                        "signal": {"id": "c", "instrument": "SILVER", "direction": "SELL"},
+                    },
+                    {
+                        "result": None,
+                        "closed_at": None,
+                        "signal": {"id": "d", "instrument": "US100", "direction": "BUY"},
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    engine = _reentry_engine(safety, config, active_states, tmp_path)
+    assert set(engine._last_exit_at) == {("EURUSD", "buy"), ("GOLD", "sell")}
+    assert engine._reentry_pause_blocking("gold", "SELL") is not None
+
+
+def test_record_exit_keeps_latest_timestamp(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list,
+    tmp_path: Path,
+) -> None:
+    """En senere registrering med eldre tidspunkt (ekte lukketid patchet
+    inn etter lost-close) skal ikke forkorte en pause som løper."""
+    engine = _reentry_engine(safety, config, active_states, tmp_path)
+    newer = datetime.now(timezone.utc)
+    engine.record_exit("EURUSD", "buy", newer)
+    engine.record_exit("EURUSD", "buy", newer - timedelta(hours=10))
+    assert engine._last_exit_at[("EURUSD", "buy")] == newer
+
+
+def test_exit_engine_records_exit_for_reentry_pause_on_win(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list,
+    tmp_path: Path,
+) -> None:
+    """ExitEngine._log_trade_closed skal starte re-entry-pausen også når
+    traden lukkes i pluss (ingen loss-cooldown registreres da)."""
+    from bedrock.bot.exit import ExitEngine
+
+    log_path = tmp_path / "signal_log.json"
+    log_path.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {
+                        "result": None,
+                        "signal": {
+                            "id": "won-now",
+                            "instrument": "EURUSD",
+                            "direction": "BUY",
+                            "entry": 1.08,
+                            "stop": 1.075,
+                            "t1": None,
+                            "position_id": 77,
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    client = _make_client_stub(symbol_map={"EURUSD": 1}, last_bid={1: 1.09}, last_ask={1: 1.09})
+    client.symbol_info = {1: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}}
+    entry = _make_engine(
+        client,
+        safety,
+        config,
+        active_states,
+        stats_path=tmp_path / "s.json",
+        trade_log_path=log_path,
+    )
+    ex = ExitEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        entry=entry,
+        trade_log_path=log_path,
+    )
+    state = TradeState(
+        signal_id="won-now",
+        symbol_id=1,
+        instrument="EURUSD",
+        direction="buy",
+        entry_price=1.08,
+        stop_price=1.075,
+        t1_price=0.0,
+        full_volume=2000,
+        remaining_volume=2000,
+        position_id=77,
+        phase=TradePhase.IN_TRADE,
+        horizon="SWING",
+    )
+    ex._log_trade_closed(state, "TRAIL", close_price=1.09)
+    assert "won-now" not in entry._lost_signal_ids
+    assert entry._reentry_pause_blocking("EURUSD", "buy") is not None

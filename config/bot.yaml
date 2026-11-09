@@ -93,6 +93,11 @@ reloadable:
     permanent_after_loss: true
     level_atr_mult: 1.0
     loss_level_max_age_days: 90
+    # Tidsbasert re-entry-pause per (instrument, retning) etter enhver
+    # exit, uansett resultat og horisont (2026-11-09): entry innen 24 t
+    # etter forrige exit ga -8,6R på 18 verifiserte trades (17 % vinn)
+    # mot -0,17R/trade ellers. 0 = av.
+    reentry_pause_hours: 24
 
   # Per-horisont TTL i sekunder — måles mot batchens signals_generated_at
   # (siste vellykkede signals-all-kjøring), IKKE per-signal created_at.
