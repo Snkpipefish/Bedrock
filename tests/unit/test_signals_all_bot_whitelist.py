@@ -81,15 +81,17 @@ def test_repo_whitelist_yaml_is_valid() -> None:
     mapping = _load_bot_whitelist(repo_wl)
     # Sjekk noen kjente entries
     assert mapping.get("Gold") == "GOLD"
-    assert mapping.get("Brent") == "OIL BRENT"
-    assert mapping.get("CrudeOil") == "OIL WTI"
     assert mapping.get("SP500") == "SPX500"
     assert mapping.get("Nasdaq") == "US100"
     # Agri matcher seg selv
     assert mapping.get("Corn") == "Corn"
     # Fortsatt aktive fra observasjons-vinduet
     assert mapping.get("Copper") == "COPPER"
-    assert mapping.get("NaturalGas") == "NATGAS"
+    # Energi pauset for boten (session 2026-11-09): -12,9R på 19
+    # verifiserte trades. Kommentert ut i YAML, ikke permanent-guard.
+    assert mapping.get("CrudeOil") is None
+    assert mapping.get("Brent") is None
+    assert mapping.get("NaturalGas") is None
     # Permanent disabled (session 2026-05-26): skal IKKE være i mapping —
     # PERMANENTLY_DISABLED-guarden filtrerer dem selv om YAML skulle
     # inneholde dem.

@@ -34,10 +34,19 @@ mapping:
   # src/bedrock/bot/entry.py.
   # Platinum: PLATINUM
 
-  # Energy
-  CrudeOil: "OIL WTI"
-  Brent: "OIL BRENT"
-  NaturalGas: NATGAS
+  # Energy — PAUSET for boten (session 2026-11-09). Setups genereres
+  # fortsatt til signals.json/UI; kun bot-feeden er stengt.
+  # Begrunnelse (5. sep → 9. nov, verifiserte trades = cTrader-bekreftet
+  # eller rekonstruert fra balanse): energi -12,9R på 19 trades (16 %
+  # vinn) av -18,3R totalt på 74. NATGAS 0/6 (0/22 i hele demoen), gapper
+  # gjennom SL (tap opptil -3,4R). OIL WTI 1/8. 27 av 31 energi-trades
+  # siden 19. sep var BUY mens olje svingte 100 → 88 → 107 → 93 —
+  # trend-/posisjonerings-scoren snur for sent i dette regimet.
+  # Reaktiveres ved å fjerne kommentartegnene, etter at energi-scoringen
+  # er gjennomgått. Åpne energi-posisjoner styres videre av exit-laget.
+  # CrudeOil: "OIL WTI"
+  # Brent: "OIL BRENT"
+  # NaturalGas: NATGAS
 
   # Indices
   SP500: SPX500
