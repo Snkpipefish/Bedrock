@@ -119,8 +119,13 @@ mapping:
 # - SWING/MAKRO: B — disse horisontene fikk aldri en ærlig test (SWING
 #   hadde scalp-stops fra generator-buggen, MAKRO ble kvalt av 1H-trail).
 #   C droppes overalt (19 % winrate, ingen horisont i pluss).
+#
+# Oppdatert 2026-11-09 (5. sep → 9. nov, risikobasert sizing, verifiserte
+# trades utenom energi): grade A +6,5R på 26 trades (42 % vinn, PF 1,58),
+# grade B -10,0R på 25 trades (24 % vinn, PF 0,34). SWING/MAKRO har nå
+# fått sin ærlige test — B heves til A på begge.
 gates:
   min_grade_by_horizon:
     scalp: A
-    swing: B
-    makro: B
+    swing: A
+    makro: A

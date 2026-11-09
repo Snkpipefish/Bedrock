@@ -203,7 +203,7 @@ def test_passes_grade_gate_unlisted_horizon_passes() -> None:
 
 
 def test_repo_whitelist_yaml_gates_are_valid() -> None:
-    """Den faktiske bot_whitelist.yaml skal ha gyldige gates (A/B/B)."""
+    """Den faktiske bot_whitelist.yaml skal ha gyldige gates (A/A/A)."""
     from pathlib import Path
 
     from bedrock.cli.signals_all import _load_bot_gates
@@ -213,4 +213,4 @@ def test_repo_whitelist_yaml_gates_are_valid() -> None:
         pytest.skip("config/bot_whitelist.yaml mangler i denne kjøringen")
 
     gates = _load_bot_gates(repo_wl)
-    assert gates.min_grade_by_horizon == {"scalp": "A", "swing": "B", "makro": "B"}
+    assert gates.min_grade_by_horizon == {"scalp": "A", "swing": "A", "makro": "A"}
