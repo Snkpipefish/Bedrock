@@ -63,7 +63,7 @@ import logging
 import os
 import re
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
 from typing import TYPE_CHECKING, Any
@@ -101,6 +101,38 @@ def _as_int(value: Any) -> int:
 
 def _as_float(value: Any) -> float:
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0.0
+
+
+# cTrader begrenser deal-oppslag til én uke per forespørsel; 6 dager gir
+# margin (samme valg som scripts/backfill_lost_close_pnl.py).
+_DEAL_LOOKUP_WINDOW = timedelta(days=6)
+# Loggens åpningstid har minutt-oppløsning og skrives etter fill.
+_DEAL_LOOKUP_OPEN_MARGIN = timedelta(hours=1)
+_LOG_TS_FORMAT = "%Y-%m-%d %H:%M timezone.utc"
+
+
+def _parse_log_ts(raw: Any) -> datetime | None:
+    """Parse signal_log-tidsstempel ("YYYY-MM-DD HH:MM timezone.utc")."""
+    if not isinstance(raw, str) or len(raw) < 16:
+        return None
+    try:
+        return datetime.strptime(raw[:16], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def _close_deal_amounts(deal: Any) -> tuple[float, float, float]:
+    """(gross, swap, commission) i kontovaluta fra en closing-deal."""
+    cpd = deal.closePositionDetail
+    digits = (
+        _as_int(getattr(cpd, "moneyDigits", 0)) or _as_int(getattr(deal, "moneyDigits", 0)) or 2
+    )
+    div = 10**digits
+    return (
+        _as_int(getattr(cpd, "grossProfit", 0)) / div,
+        _as_int(getattr(cpd, "swap", 0)) / div,
+        _as_int(getattr(cpd, "commission", 0)) / div,
+    )
 
 
 def _position_closed(event: Any) -> bool | None:
@@ -1507,8 +1539,13 @@ class ExitEngine:
         uten broker-posisjon er en fantom (close-event tapt under
         frakobling/nedetid) som ellers blokkerer nye entries via
         KONFLIKT/KORRELASJON og sender døde amends (POSITION_NOT_FOUND).
-        Logges som `lost-close` med estimert PnL — `scripts/
-        backfill_lost_close_pnl.py` henter ekte deal-tall etterpå.
+        Logges først som `lost-close` med estimert PnL (pris nå), slik
+        at cooldown og daglig tap virker umiddelbart. Deretter hentes
+        posisjonens deals fra cTrader og entryen patches med ekte fill,
+        PnL, lukketid og exit-årsak (`_request_lost_close_deals`).
+        Estimatet overvurderte vinnere systematisk: prisen ved
+        oppvåkning ≠ trail-SL-en som faktisk stengte (12. okt → 9. nov
+        2026: logget +44,6k, reelt +17,0k NOK).
         """
         broker_ids = {p.positionId for p in res.position}
         with self._lock:
@@ -1534,6 +1571,189 @@ class ExitEngine:
             with self._lock:
                 if state in self._active_states:
                     self._active_states.remove(state)
+            self._request_lost_close_deals(state)
+
+    # ─────────────────────────────────────────────────────────
+    # Lost-close: ekte deal-tall fra cTrader
+    # ─────────────────────────────────────────────────────────
+
+    def _lost_close_log_entry(
+        self, data: dict[str, Any], position_id: int | None
+    ) -> dict[str, Any] | None:
+        """Entryen som ble logget `lost-close` for posisjonen og ikke
+        allerede har ekte PnL."""
+        if position_id is None:
+            return None
+        for e in data.get("entries", []):
+            if not isinstance(e, dict) or e.get("exit_reason") != "lost-close":
+                continue
+            if (e.get("signal") or {}).get("position_id") != position_id:
+                continue
+            if (e.get("pnl") or {}).get("pnl_real"):
+                continue
+            return e
+        return None
+
+    def _request_lost_close_deals(
+        self,
+        state: TradeState,
+        *,
+        opened_at: datetime | None = None,
+        to_dt: datetime | None = None,
+        closes: dict[int, Any] | None = None,
+    ) -> None:
+        """Be cTrader om posisjonens deals, ett ≤6-dagers vindu av gangen
+        bakover fra nå til åpningstidspunktet (så tidligere partial-
+        closes også kommer med). Svaret patches inn i
+        `_on_lost_close_deals`. Feil her lar estimatet stå."""
+        position_id = state.position_id
+        if position_id is None:
+            return
+        try:
+            now = datetime.now(timezone.utc)
+            if opened_at is None:
+                if not self._trade_log_path.exists():
+                    return
+                data = json.loads(self._trade_log_path.read_text(encoding="utf-8"))
+                entry = self._lost_close_log_entry(data, position_id)
+                if entry is None:
+                    return
+                opened = _parse_log_ts(entry.get("timestamp")) or (now - _DEAL_LOOKUP_WINDOW)
+                opened_at = min(opened - _DEAL_LOOKUP_OPEN_MARGIN, now - timedelta(minutes=1))
+            to_dt = to_dt or now
+            from_dt = max(opened_at, to_dt - _DEAL_LOOKUP_WINDOW)
+            collected = closes if closes is not None else {}
+            self._client.request_position_deals(
+                position_id,
+                int(from_dt.timestamp() * 1000),
+                int(to_dt.timestamp() * 1000),
+                lambda _pid, deals: self._on_lost_close_deals(
+                    state, deals, opened_at=opened_at, from_dt=from_dt, closes=collected
+                ),
+            )
+        except Exception as exc:
+            log.warning(
+                "[LOST-CLOSE] %s pos #%s — deal-oppslag feilet (%s); estimatet står.",
+                state.signal_id,
+                position_id,
+                exc,
+            )
+
+    def _on_lost_close_deals(
+        self,
+        state: TradeState,
+        deals: list[Any] | None,
+        *,
+        opened_at: datetime,
+        from_dt: datetime,
+        closes: dict[int, Any],
+    ) -> None:
+        if deals is None:
+            log.warning(
+                "[LOST-CLOSE] %s pos #%s — fikk ikke deal-historikk fra cTrader; "
+                "estimatet står. Rett med scripts/backfill_lost_close_pnl.py.",
+                state.signal_id,
+                state.position_id,
+            )
+            return
+        for deal in deals:
+            if deal.HasField("closePositionDetail"):
+                closes[_as_int(getattr(deal, "dealId", 0)) or id(deal)] = deal
+        if from_dt > opened_at:
+            self._request_lost_close_deals(state, opened_at=opened_at, to_dt=from_dt, closes=closes)
+            return
+        if not closes:
+            log.warning(
+                "[LOST-CLOSE] %s pos #%s — ingen closing-deal funnet siden %s; estimatet står.",
+                state.signal_id,
+                state.position_id,
+                opened_at.strftime("%Y-%m-%d %H:%M UTC"),
+            )
+            return
+        self._patch_log_lost_close(state, list(closes.values()))
+
+    def _patch_log_lost_close(self, state: TradeState, close_deals: list[Any]) -> None:
+        """Erstatt lost-close-estimatet med summen av posisjonens ekte
+        closing-deals: PnL, fill-pris, lukketid og exit-årsak. Korrigerer
+        daglig tap med differansen og registrerer loss-cooldown hvis
+        estimatet var vinn, men fasiten tap. Idempotent."""
+        try:
+            close_deals = sorted(
+                close_deals, key=lambda d: _as_int(getattr(d, "executionTimestamp", 0))
+            )
+            gross = swap = commission = 0.0
+            for deal in close_deals:
+                g, s, c = _close_deal_amounts(deal)
+                gross, swap, commission = gross + g, swap + s, commission + c
+            total = round(gross + swap + commission, 2)
+            last = close_deals[-1]
+            exec_price = _as_float(getattr(last, "executionPrice", 0))
+            exec_ms = _as_int(getattr(last, "executionTimestamp", 0))
+
+            data = json.loads(self._trade_log_path.read_text(encoding="utf-8"))
+            entry = self._lost_close_log_entry(data, state.position_id)
+            if entry is None:
+                return
+            pnl = dict(entry.get("pnl") or {})
+            est = pnl.get("pnl_usd")
+            pnl.pop("pnl_real_partial", None)
+            # Pips/close_price regnes på hele posisjonen fra ekte fill.
+            geometry = self._calc_pnl(state, exec_price) if exec_price else {}
+            for key in ("close_price", "pips"):
+                if key in geometry:
+                    pnl[key] = geometry[key]
+            pnl["lost_close_est"] = est
+            pnl["pnl_usd"] = total
+            pnl["pnl_real"] = True
+            pnl["pnl_ccy"] = (self._config.sizing.account_currency or "USD").upper()
+            pnl["gross_profit"] = round(gross, 2)
+            pnl["swap"] = round(swap, 2)
+            pnl["commission"] = round(commission, 2)
+            pnl["backfilled"] = True
+            # Daglig tap ble akkumulert med estimatet — korriger til ekte tall.
+            prev_added = float(pnl.get("daily_loss_added") or 0.0)
+            new_loss = abs(total) if total < 0 else 0.0
+            if abs(new_loss - prev_added) > 0.005:
+                self._safety.adjust_loss(new_loss - prev_added)
+                log.info(
+                    "[DAGLIG TAP] Korrigert med ekte deal: %+.2f → akkumulert %.0f",
+                    new_loss - prev_added,
+                    self._safety.daily_loss,
+                )
+            pnl["daily_loss_added"] = new_loss
+            prev_result = entry.get("result")
+            result = "win" if total > 0 else ("loss" if total < 0 else "managed")
+            reason = self._classify_server_close(state, exec_price)
+            entry["pnl"] = pnl
+            entry["result"] = result
+            entry["exit_reason"] = reason
+            if exec_ms:
+                entry["closed_at"] = datetime.fromtimestamp(
+                    exec_ms / 1000, tz=timezone.utc
+                ).strftime(_LOG_TS_FORMAT)
+            data["last_updated"] = datetime.now(timezone.utc).strftime(_LOG_TS_FORMAT)
+            self._atomic_write_json(data)
+            log.info(
+                "[LOST-CLOSE] %s pos #%s — ekte deal: %s @ %.5f, %+.2f %s (estimat var %s). "
+                "Lukket %s.",
+                state.signal_id,
+                state.position_id,
+                reason,
+                exec_price,
+                total,
+                pnl["pnl_ccy"],
+                f"{est:+.2f}" if isinstance(est, (int, float)) else "ukjent",
+                entry.get("closed_at"),
+            )
+            if result == "loss" and prev_result != "loss" and state.signal_id:
+                self._entry.record_lost_signal(state.signal_id, state.entry_price)
+        except Exception as exc:
+            log.warning(
+                "[LOST-CLOSE] %s pos #%s — patch med ekte deal feilet: %s",
+                state.signal_id,
+                state.position_id,
+                exc,
+            )
 
     def on_reconcile(self, res: Any) -> None:
         """Ta over åpne SE-posisjoner ved oppstart.

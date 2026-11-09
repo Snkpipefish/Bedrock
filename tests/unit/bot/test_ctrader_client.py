@@ -494,6 +494,102 @@ def test_request_historical_bars_h1_uses_h1_period(client: CtraderClient) -> Non
 
 
 # ─────────────────────────────────────────────────────────────
+# Deal-oppslag per posisjon (ekte PnL for lost-close)
+# ─────────────────────────────────────────────────────────────
+
+
+def _deal_list_message(position_id: int, gross_cents: int) -> Any:
+    """Ekte ProtoMessage med ett closing-deal, slik biblioteket leverer den."""
+    from ctrader_open_api.messages.OpenApiCommonMessages_pb2 import ProtoMessage
+    from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOADealListByPositionIdRes
+
+    res = ProtoOADealListByPositionIdRes()
+    res.ctidTraderAccountId = 12345
+    res.hasMore = 0
+    deal = res.deal.add()
+    deal.dealId = 9001
+    deal.orderId = 1
+    deal.positionId = position_id
+    deal.volume = 100_000
+    deal.filledVolume = 100_000
+    deal.symbolId = 1
+    deal.createTimestamp = 1_700_000_000_000
+    deal.executionTimestamp = 1_700_000_000_500
+    deal.tradeSide = 2
+    deal.dealStatus = 2
+    deal.executionPrice = 1.0790
+    cpd = deal.closePositionDetail
+    cpd.entryPrice = 1.0800
+    cpd.grossProfit = gross_cents
+    cpd.swap = -150
+    cpd.commission = 0
+    cpd.balance = 10_000_000
+    cpd.moneyDigits = 2
+    return ProtoMessage(payloadType=res.payloadType, payload=res.SerializeToString())
+
+
+def test_request_position_deals_builds_request_and_delivers_deals(
+    client: CtraderClient,
+) -> None:
+    """Gitt et svar på deal-oppslaget skal `on_result` få posisjons-id og
+    de parsede dealene; forespørselen skal bære posisjon og tidsvindu."""
+    from twisted.internet.defer import Deferred
+
+    d: Deferred = Deferred()
+    got: list[tuple[int, list[Any] | None]] = []
+    with patch.object(client, "send", return_value=d) as send:
+        client.request_position_deals(42, 1000, 2000, lambda pid, deals: got.append((pid, deals)))
+    req = send.call_args.args[0]
+    assert (req.positionId, req.fromTimestamp, req.toTimestamp) == (42, 1000, 2000)
+    assert req.ctidTraderAccountId == 12345
+    assert got == []  # ikke svart ennå
+
+    d.callback(_deal_list_message(42, gross_cents=-12_345))
+    assert len(got) == 1
+    pid, deals = got[0]
+    assert pid == 42
+    assert deals is not None and len(deals) == 1
+    assert deals[0].closePositionDetail.grossProfit == -12_345
+
+
+def test_request_position_deals_reports_none_on_timeout_or_error(
+    client: CtraderClient,
+) -> None:
+    """Timeout (stille errback → None) og feilsvar (annen payloadType)
+    skal gi `deals=None`, ikke tom liste — kaller skal beholde estimatet."""
+    from ctrader_open_api.messages.OpenApiCommonMessages_pb2 import ProtoMessage
+    from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOAErrorRes
+    from twisted.internet.defer import Deferred
+
+    for response in (None, ProtoMessage(payloadType=ProtoOAErrorRes().payloadType, payload=b"")):
+        d: Deferred = Deferred()
+        got: list[tuple[int, list[Any] | None]] = []
+        with patch.object(client, "send", return_value=d):
+            client.request_position_deals(
+                7, 1, 2, lambda pid, deals, sink=got: sink.append((pid, deals))
+            )
+        d.callback(response)
+        assert got == [(7, None)]
+
+
+def test_request_position_deals_without_connection_reports_none(
+    client: CtraderClient,
+) -> None:
+    """Uten tilkobling (`send` → None) kalles `on_result` straks med None."""
+    got: list[tuple[int, list[Any] | None]] = []
+    client.request_position_deals(7, 1, 2, lambda pid, deals: got.append((pid, deals)))
+    assert got == [(7, None)]
+
+
+def test_deal_list_response_is_not_logged_as_unhandled(client: CtraderClient) -> None:
+    """Svaret går også gjennom den globale dispatcheren — det skal ha en
+    (no-op) handler så det ikke logges som «Uhåndtert type»."""
+    from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOADealListByPositionIdRes
+
+    assert ProtoOADealListByPositionIdRes().payloadType in client._handlers()
+
+
+# ─────────────────────────────────────────────────────────────
 # Ordre-APIs (session 44)
 # ─────────────────────────────────────────────────────────────
 

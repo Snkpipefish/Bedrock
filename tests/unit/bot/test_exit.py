@@ -3204,3 +3204,224 @@ def test_trailing_sl_event_unknown_position_or_zero_ignored(
     ex.on_trailing_sl_changed(_trail_event(999, 4350.0))  # ukjent posisjon
     ex.on_trailing_sl_changed(_trail_event(42, 0.0))  # tom SL
     assert st.stop_price == 4314.0
+
+
+# ─────────────────────────────────────────────────────────────
+# Lost-close: estimat erstattes med ekte deal fra cTrader
+# ─────────────────────────────────────────────────────────────
+
+
+def _close_deal(
+    deal_id: int,
+    *,
+    gross_cents: int,
+    price: float,
+    ts_ms: int,
+    swap_cents: int = 0,
+    commission_cents: int = 0,
+) -> MagicMock:
+    deal = MagicMock()
+    deal.HasField.side_effect = lambda name: name == "closePositionDetail"
+    deal.dealId = deal_id
+    deal.executionPrice = price
+    deal.executionTimestamp = ts_ms
+    deal.moneyDigits = 2
+    deal.closePositionDetail.moneyDigits = 2
+    deal.closePositionDetail.grossProfit = gross_cents
+    deal.closePositionDetail.swap = swap_cents
+    deal.closePositionDetail.commission = commission_cents
+    return deal
+
+
+def _open_deal(deal_id: int) -> MagicMock:
+    deal = MagicMock()
+    deal.HasField.return_value = False
+    deal.dealId = deal_id
+    return deal
+
+
+def _prune_phantom(
+    *,
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+    last_bid: float,
+    opened: str = "2026-04-23 10:00 timezone.utc",
+) -> tuple[MagicMock, EntryEngine, ExitEngine, TradeState]:
+    """Sett opp en IN_TRADE-state uten broker-posisjon og kjør reconcile.
+    Klokka i `bot.exit` er frosset til 2026-04-23 12:00 UTC."""
+    config.sizing.account_currency = "USD"
+    client = _make_client_stub(
+        symbol_map={"EURUSD": 1},
+        last_bid={1: last_bid},
+        symbol_price_digits={1: 5},
+        symbol_info={1: {"lot_size": 100_000, "min_volume": 1000, "step_volume": 1000}},
+    )
+    entry, ex = _make_engines(
+        client=client, safety=safety, config=config, active_states=active_states, tmp_path=tmp_path
+    )
+    phantom = _in_trade_state(position_id=42, full_volume=100_000)
+    phantom.signal_id = "eur-phantom"
+    active_states.append(phantom)
+    log_entry = _open_entry("eur-phantom", 42)
+    log_entry["timestamp"] = opened
+    _write_open_log(tmp_path / "signal_log.json", log_entry)
+    res = MagicMock()
+    res.position = []
+    ex.on_reconcile(res)
+    return client, entry, ex, phantom
+
+
+def _logged(tmp_path: Path) -> dict:
+    return json.loads((tmp_path / "signal_log.json").read_text())["entries"][0]
+
+
+def test_lost_close_estimate_replaced_by_real_trailing_stop_deal(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Gitt at prisen ved oppvåkning er 1.0900 (estimat +10), men
+    cTrader stengte på trail-SL 1.0810 (+3,50 netto etter swap), skal
+    loggen vise ekte PnL, fill, lukketid og årsak — ikke estimatet."""
+    client, entry, _ex, _ = _prune_phantom(
+        safety=safety, config=config, active_states=active_states, tmp_path=tmp_path, last_bid=1.09
+    )
+    before = _logged(tmp_path)
+    assert before["exit_reason"] == "lost-close"
+    assert before["pnl"]["pnl_usd"] == pytest.approx(10.0)
+
+    pos_id, from_ms, to_ms, on_result = client.request_position_deals.call_args.args
+    assert pos_id == 42
+    assert to_ms == int(datetime(2026, 4, 23, 12, 0, tzinfo=timezone.utc).timestamp() * 1000)
+    assert from_ms < int(datetime(2026, 4, 23, 10, 0, tzinfo=timezone.utc).timestamp() * 1000)
+
+    closed = datetime(2026, 4, 23, 3, 17, tzinfo=timezone.utc)
+    on_result(
+        42,
+        [
+            _open_deal(1),
+            _close_deal(
+                2,
+                gross_cents=500,
+                swap_cents=-150,
+                price=1.0810,
+                ts_ms=int(closed.timestamp() * 1000),
+            ),
+        ],
+    )
+    after = _logged(tmp_path)
+    assert after["exit_reason"] == "TRAIL"
+    assert after["result"] == "win"
+    assert after["closed_at"] == "2026-04-23 03:17 timezone.utc"
+    assert after["pnl"]["pnl_usd"] == pytest.approx(3.5)
+    assert after["pnl"]["pnl_real"] is True
+    assert after["pnl"]["lost_close_est"] == pytest.approx(10.0)
+    assert after["pnl"]["close_price"] == pytest.approx(1.0810)
+    assert after["pnl"]["swap"] == pytest.approx(-1.5)
+    assert safety.daily_loss == 0.0
+    assert "eur-phantom" not in entry._lost_signal_ids
+
+
+def test_lost_close_estimated_win_but_real_loss_registers_cooldown_and_daily_loss(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Estimatet sier vinn (pris nå over entry), men posisjonen ble stoppet
+    ut på SL mens boten sov. Da skal tapet inn i daglig tap og nivået i
+    loss-cooldown — sikkerhetsnettene skal følge fasiten."""
+    client, entry, _ex, _ = _prune_phantom(
+        safety=safety, config=config, active_states=active_states, tmp_path=tmp_path, last_bid=1.09
+    )
+    assert safety.daily_loss == 0.0
+    assert "eur-phantom" not in entry._lost_signal_ids
+    on_result = client.request_position_deals.call_args.args[3]
+    on_result(42, [_close_deal(2, gross_cents=-20_000, price=1.0780, ts_ms=1_776_900_000_000)])
+    after = _logged(tmp_path)
+    assert after["result"] == "loss"
+    assert after["exit_reason"] == "SL"
+    assert after["pnl"]["pnl_usd"] == pytest.approx(-200.0)
+    assert safety.daily_loss == pytest.approx(200.0)
+    assert "eur-phantom" in entry._lost_signal_ids
+
+
+def test_lost_close_keeps_estimate_when_deal_lookup_fails(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Uten svar fra cTrader (deals=None) skal estimatet stå urørt."""
+    client, _entry, _ex, _ = _prune_phantom(
+        safety=safety, config=config, active_states=active_states, tmp_path=tmp_path, last_bid=1.07
+    )
+    before = _logged(tmp_path)
+    client.request_position_deals.call_args.args[3](42, None)
+    assert _logged(tmp_path) == before
+    assert before["exit_reason"] == "lost-close"
+
+
+def test_lost_close_walks_back_in_windows_and_sums_partial_closes(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Posisjon åpnet for 13 dager siden: cTrader gir maks én uke per
+    oppslag, så boten må spørre vindu for vindu bakover til åpningen og
+    summere alle closing-deals (T1-partial + siste lukking). Samme deal
+    i to vinduer telles én gang."""
+    client, _entry, _ex, _ = _prune_phantom(
+        safety=safety,
+        config=config,
+        active_states=active_states,
+        tmp_path=tmp_path,
+        last_bid=1.09,
+        opened="2026-04-10 10:00 timezone.utc",
+    )
+    final = _close_deal(5, gross_cents=30_000, price=1.0810, ts_ms=1_776_900_000_000)
+    partial = _close_deal(3, gross_cents=25_000, price=1.0850, ts_ms=1_776_000_000_000)
+
+    calls = client.request_position_deals.call_args_list
+    assert len(calls) == 1
+    first_from = calls[0].args[1]
+    calls[0].args[3](42, [final])
+    assert _logged(tmp_path)["exit_reason"] == "lost-close"  # ikke ferdig ennå
+
+    assert len(calls) == 2
+    assert calls[1].args[2] == first_from  # neste vindu slutter der forrige startet
+    calls[1].args[3](42, [final, partial])
+
+    assert len(calls) == 3  # 13 dager = tre vinduer à 6 dager
+    opened_ms = int(datetime(2026, 4, 10, 10, 0, tzinfo=timezone.utc).timestamp() * 1000)
+    assert calls[2].args[1] < opened_ms
+    calls[2].args[3](42, [_open_deal(1)])
+
+    assert len(calls) == 3
+    after = _logged(tmp_path)
+    assert after["pnl"]["pnl_usd"] == pytest.approx(550.0)
+    assert after["pnl"]["close_price"] == pytest.approx(1.0810)
+    assert after["exit_reason"] == "TRAIL"
+
+
+def test_lost_close_patch_is_idempotent(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    active_states: list[TradeState],
+    tmp_path: Path,
+) -> None:
+    """Et duplikat-svar skal ikke endre en entry som alt har ekte tall."""
+    client, _entry, _ex, _ = _prune_phantom(
+        safety=safety, config=config, active_states=active_states, tmp_path=tmp_path, last_bid=1.07
+    )
+    on_result = client.request_position_deals.call_args.args[3]
+    on_result(42, [_close_deal(2, gross_cents=-20_000, price=1.0780, ts_ms=1_776_900_000_000)])
+    first = _logged(tmp_path)
+    loss_after_first = safety.daily_loss
+    on_result(42, [_close_deal(9, gross_cents=-99_900, price=1.0700, ts_ms=1_776_900_000_000)])
+    assert _logged(tmp_path) == first
+    assert safety.daily_loss == loss_after_first

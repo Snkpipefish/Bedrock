@@ -72,6 +72,8 @@ from ctrader_open_api.messages.OpenApiMessages_pb2 import (
     ProtoOAApplicationAuthRes,
     ProtoOACancelOrderReq,
     ProtoOAClosePositionReq,
+    ProtoOADealListByPositionIdReq,
+    ProtoOADealListByPositionIdRes,
     ProtoOAErrorRes,
     ProtoOAExecutionEvent,
     ProtoOAGetAccountListByAccessTokenRes,
@@ -469,6 +471,8 @@ class CtraderClient:
             ProtoOAErrorRes().payloadType: self._on_error_res,
             ProtoOAReconcileRes().payloadType: self._on_reconcile,
             ProtoOAGetAccountListByAccessTokenRes().payloadType: _noop,
+            # Svaret håndteres via Deferred-en i `request_position_deals`.
+            ProtoOADealListByPositionIdRes().payloadType: _noop,
             ProtoHeartbeatEvent().payloadType: _noop,
         }
 
@@ -516,6 +520,44 @@ class CtraderClient:
         req.fromTimestamp = from_ms
         req.toTimestamp = now_ms
         self.send(req)
+
+    def request_position_deals(
+        self,
+        position_id: int,
+        from_ms: int,
+        to_ms: int,
+        on_result: Callable[[int, list[Any] | None], None],
+    ) -> None:
+        """Hent deals for én posisjon i [from_ms, to_ms] (maks én uke).
+
+        `on_result(position_id, deals)` kalles når svaret kommer. `deals`
+        er None ved sendefeil, timeout eller feilsvar — kaller må da
+        beholde det den hadde. Brukes av exit-laget til å erstatte
+        estimert PnL på lost-close med ekte deal-tall.
+        """
+        req = ProtoOADealListByPositionIdReq()
+        req.ctidTraderAccountId = self._creds.account_id
+        req.positionId = position_id
+        req.fromTimestamp = from_ms
+        req.toTimestamp = to_ms
+        d = self.send(req)
+        if d is None:
+            on_result(position_id, None)
+            return
+        expected = ProtoOADealListByPositionIdRes().payloadType
+
+        def _done(message: Any) -> Any:
+            # `send` har en stille errback → timeout/feil kommer hit som None.
+            deals: list[Any] | None = None
+            if message is not None and getattr(message, "payloadType", None) == expected:
+                deals = list(getattr(Protobuf.extract(message), "deal", []))
+            try:
+                on_result(position_id, deals)
+            except Exception:
+                log.exception("[CALLBACK] on_result for deals pos #%s feilet", position_id)
+            return message
+
+        d.addCallback(_done)
 
     # ─────────────────────────────────────────────────────────
     #  Ordre-APIs (transport-only; state bor i entry/exit-laget)
