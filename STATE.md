@@ -2,6 +2,50 @@
 
 ## Session log (most recent first)
 
+### 2026-11-09 — full disk i natt: 9 bedrock-units feilet, én trade-lukking ikke loggført
+
+**Hva:** Operatør meldte sju feilede fetch-tjenester (agsi, alsi,
+crypto_sentiment, fred_macro, isma_india, news_intel, weather), feilet
+02:45–07:00. `session_health.sh` → RØD (9 units: de sju +
+`yahoo_macro` + `signals-bot-morning`; monitor grønn).
+
+**Funn:**
+
+1. **Rotårsak: `/` (sda3, 117 G) var 100 % full ca. 02:45–08:30.**
+   Alle feilet i `DataStore.__init__` med `sqlite3.OperationalError:
+   disk I/O error`; rsyslog logget ~217k `No space left on device`
+   06:50–08:30, og cropwatch-git skrev «Out of diskspace» 07:24.
+   fred_macro-fetchen gikk selv OK — det var `signals_bot_regen.sh`
+   (ExecStartPost) som feilet. Ingen bedrock-kodefeil.
+2. **Hva som fylte disken er ikke bevist** — journalen før 06:50 ble
+   rotert bort av plassmangelen. Sterkeste indisium: geodata-jobben i
+   `~/prosjekter/forlatte hus` (12 G nå) lastet ned kommune for kommune
+   fra 8. nov 18:35, stoppet 02:22 og fortsatte 08:45 — nøyaktig
+   full-disk-vinduet. Nå 34 G ledig (70 %).
+3. **Boten mistet en trade-lukking.** 07:15 CET stengte 8-CANDLE
+   GBPUSD SELL `8c337a294125` (pos 17667688, åpnet 00:15 UTC, −43 %
+   progress), men `_log_trade_closed` kastet `[Errno 28]` i
+   `_atomic_write_json`. Følger: entry står fortsatt åpen i
+   `signal_log.json` (closed_at=null), tapet er ikke lagt i daglig tap,
+   og `record_lost_signal` ble aldri kalt → ingen loss-cooldown. Boten
+   re-entret samme signal 16:30 UTC (pos 17671032, entry 1.34146 vs.
+   tapt 1.33644 = 0,7×ATR, dvs. innenfor cooldown-toleransen).
+4. Laptopen sov 09:14–12:56 i dag (lokk-søvn, fortsatt ubesluttet).
+
+**Endringer:** Ingen kode. `bedrock.db` `PRAGMA quick_check` = ok. Alle
+ni units kjørt på nytt sekvensielt 17:27–17:35 → success (agsi 145
+rader, isma 19, crypto 34, weather 7/7, news 39; signals_bot.json 66
+entries fra 19/19 instrumenter).
+
+**Verifisert:** `session_health.sh` → GRØNN.
+
+**Neste:** (a) Rydd foreldreløs GBPUSD-entry (pos 17667688) i
+signal_log med ekte deal-PnL (dealId 30457276). (b) Herd
+`_log_trade_closed`: cooldown + daglig tap må registreres selv om
+logg-skrivingen feiler. (c) Ikke-bedrock, urørt: `sugar11-update`
+(cropwatch) står failed; `setups.service` og `cot-explorer.service`
+feilet også i vinduet.
+
 ### 2026-11-06 — fetch-prices feilet på WiFi-blipp; Yahoo-fetcher fikk retry
 
 **Hva:** Operatør meldte «bedrock feilmelding på fetch prices».
@@ -710,6 +754,10 @@ Verifikasjon: pyright 0/0, ruff clean, **pytest 2929/2929 grønt** (5 min).
 
 ## Current state
 
+- **Drift (2026-11-09):** `/` var full ca. 02:45–08:30 → 9 bedrock-units
+  feilet med SQLite `disk I/O error`. Kjørt på nytt, helse GRØNN, DB ok.
+  **Åpent:** GBPUSD-lukking 07:15 (pos 17667688) ble ikke loggført —
+  foreldreløs åpen entry i signal_log, ingen cooldown/daglig tap.
 - **Drift (2026-11-06):** fetch-prices feilet én gang (20:40) på et
   WiFi-blipp — 2/22 tickere `Network is unreachable`. Yahoo-fetcheren
   har nå retry (3 forsøk). Kjørt på nytt 22/22, helse GRØNN.
@@ -1254,6 +1302,14 @@ ferdig og 12.6-rebalansering er gjort.
   `git status` før retry; aldri `git add -u`.
 
 ## Open questions to user
+
+### Session 2026-11-09 — full disk
+
+- **Hva fylte disken natt til 9. nov?** Trolig geodata-jobben i
+  `~/prosjekter/forlatte hus` (ubevist). Kjøres den igjen over natten
+  uten plass-sjekk, kan bedrock (og boten sin trade-logg) falle ut på nytt.
+- **Skal GBPUSD-re-entryen (pos 17671032) stå?** Den ble åpnet 16:30 UTC
+  fordi loss-cooldown manglet etter den uloggførte lukkingen.
 
 ### Session 2026-09-19 — laptop-søvn
 
