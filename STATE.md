@@ -37,14 +37,30 @@ ni units kjørt på nytt sekvensielt 17:27–17:35 → success (agsi 145
 rader, isma 19, crypto 34, weather 7/7, news 39; signals_bot.json 66
 entries fra 19/19 instrumenter).
 
-**Verifisert:** `session_health.sh` → GRØNN.
+**Oppfølging samme dag (operatør: «fiks begge»):**
 
-**Neste:** (a) Rydd foreldreløs GBPUSD-entry (pos 17667688) i
-signal_log med ekte deal-PnL (dealId 30457276). (b) Herd
-`_log_trade_closed`: cooldown + daglig tap må registreres selv om
-logg-skrivingen feiler. (c) Ikke-bedrock, urørt: `sugar11-update`
-(cropwatch) står failed; `setups.service` og `cot-explorer.service`
-feilet også i vinduet.
+- `8bcb17b` fix(bot): `_log_trade_closed` fanger OSError fra
+  `_atomic_write_json` lokalt og fortsetter til `record_lost_signal` +
+  `add_loss`; skrivefeilen logges som ERROR med position_id og peker til
+  backfill-skriptet. 1 ny test. Selve logg-entryen blir fortsatt stående
+  åpen ved skrivefeil — må rettes med skriptet.
+- Boten stoppet 17:39:18–17:39:45. `backfill_lost_close_pnl.py
+  --position-ids 17667688 --apply`: close 1.33859 kl. 06:15 UTC, ekte
+  PnL **−3 932,97 NOK** (backup `signal_log.json.bak-20261109T163939`).
+  Etterpå rettet for hånd: `exit_reason` SL → `8-CANDLE-LOSS` (skriptets
+  heuristikk gjettet SL), + `pips`/`pnl_ccy`/`pnl_real`/
+  `daily_loss_added`. `daily_loss_state.json` 802,92 → 4 735,89 (grense
+  2 % ≈ 9,8k, ikke nådd).
+- Boten startet med ny kode: daglig tap 4736 lastet, 53 cooldown-ids,
+  9 posisjoner tatt over i reconcile.
+
+**Verifisert:** 154 bot-tester grønne, ruff/pyright rene.
+`session_health.sh` → GRØNN.
+
+**Neste:** (a) GBPUSD-re-entryen (pos 17671032) står åpen — operatør
+avgjør. (b) Ikke-bedrock, urørt: `sugar11-update` (cropwatch) står
+failed; `setups.service` og `cot-explorer.service` feilet også i
+vinduet. (c) Finn hva som fylte disken før neste nattkjøring.
 
 ### 2026-11-06 — fetch-prices feilet på WiFi-blipp; Yahoo-fetcher fikk retry
 
@@ -756,8 +772,10 @@ Verifikasjon: pyright 0/0, ruff clean, **pytest 2929/2929 grønt** (5 min).
 
 - **Drift (2026-11-09):** `/` var full ca. 02:45–08:30 → 9 bedrock-units
   feilet med SQLite `disk I/O error`. Kjørt på nytt, helse GRØNN, DB ok.
-  **Åpent:** GBPUSD-lukking 07:15 (pos 17667688) ble ikke loggført —
-  foreldreløs åpen entry i signal_log, ingen cooldown/daglig tap.
+  GBPUSD-lukking 07:15 (pos 17667688) ble ikke loggført pga. ENOSPC —
+  backfilt (−3 933 NOK, 8-CANDLE-LOSS) og lagt i daglig tap. Boten
+  kjører ny kode fra 17:39: cooldown + daglig tap registreres selv om
+  logg-skriving feiler (`8bcb17b`).
 - **Drift (2026-11-06):** fetch-prices feilet én gang (20:40) på et
   WiFi-blipp — 2/22 tickere `Network is unreachable`. Yahoo-fetcheren
   har nå retry (3 forsøk). Kjørt på nytt 22/22, helse GRØNN.
