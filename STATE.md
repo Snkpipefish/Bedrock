@@ -54,13 +54,34 @@ entries fra 19/19 instrumenter).
 - Boten startet med ny kode: daglig tap 4736 lastet, 53 cooldown-ids,
   9 posisjoner tatt over i reconcile.
 
+- **Re-entryen stengt på operatørens ordre («steng den»).** Boten har
+  ingen fungerende manuell stenging (se funn under), så pos 17671032
+  ble stengt med engangsskript mot demo-API-et mens boten var stoppet
+  (17:43:48–17:44:21): reconcile-verifisert SELL 14 600 000 @ 1.34146,
+  fill 1.34160, dealId 30461643, **−192,36 NOK**. Loggført via
+  backfill-skriptet (backup `…bak-20261109T164421`), `exit_reason`
+  satt til `MANUAL`; daglig tap → 4 928,25. Boten oppe igjen: 8
+  posisjoner, 147 cooldown-nivåer (+1).
+
+**Funn underveis (ikke fikset):**
+
+- **Kill-switch virker ikke.** Boten poller `GET /kill` og venter en
+  liste signal-ids (`comms.fetch_kill_ids`), men serveren har bare
+  `POST /kill` (slot-basert instrument+horisont) og `GET /kills` →
+  boten får 405 og tolker det som «ingen kills». P2-kill i ExitEngine
+  kan dermed aldri utløses.
+- **To eldre foreldreløse åpne entries i signal_log** uten posisjon hos
+  megler: NATGAS pos 17268156 og OIL WTI pos 17260893. Kan rettes med
+  `backfill_lost_close_pnl.py --position-ids` (bot stoppet).
+
 **Verifisert:** 154 bot-tester grønne, ruff/pyright rene.
 `session_health.sh` → GRØNN.
 
-**Neste:** (a) GBPUSD-re-entryen (pos 17671032) står åpen — operatør
-avgjør. (b) Ikke-bedrock, urørt: `sugar11-update` (cropwatch) står
-failed; `setups.service` og `cot-explorer.service` feilet også i
-vinduet. (c) Finn hva som fylte disken før neste nattkjøring.
+**Neste:** (a) Reparer kill-switch-kontrakten bot↔server. (b) Backfill
+de to foreldreløse entryene. (c) Ikke-bedrock, urørt: `sugar11-update`
+(cropwatch) står failed; `setups.service` og `cot-explorer.service`
+feilet også i vinduet. (d) Finn hva som fylte disken før neste
+nattkjøring.
 
 ### 2026-11-06 — fetch-prices feilet på WiFi-blipp; Yahoo-fetcher fikk retry
 
@@ -775,7 +796,9 @@ Verifikasjon: pyright 0/0, ruff clean, **pytest 2929/2929 grønt** (5 min).
   GBPUSD-lukking 07:15 (pos 17667688) ble ikke loggført pga. ENOSPC —
   backfilt (−3 933 NOK, 8-CANDLE-LOSS) og lagt i daglig tap. Boten
   kjører ny kode fra 17:39: cooldown + daglig tap registreres selv om
-  logg-skriving feiler (`8bcb17b`).
+  logg-skriving feiler (`8bcb17b`). Re-entryen i GBPUSD (pos 17671032)
+  stengt manuelt 16:44 UTC (−192 NOK); 8 åpne posisjoner.
+  **Åpent:** kill-switch virker ikke (bot GET `/kill` → 405).
 - **Drift (2026-11-06):** fetch-prices feilet én gang (20:40) på et
   WiFi-blipp — 2/22 tickere `Network is unreachable`. Yahoo-fetcheren
   har nå retry (3 forsøk). Kjørt på nytt 22/22, helse GRØNN.
@@ -1326,8 +1349,11 @@ ferdig og 12.6-rebalansering er gjort.
 - **Hva fylte disken natt til 9. nov?** Trolig geodata-jobben i
   `~/prosjekter/forlatte hus` (ubevist). Kjøres den igjen over natten
   uten plass-sjekk, kan bedrock (og boten sin trade-logg) falle ut på nytt.
-- **Skal GBPUSD-re-entryen (pos 17671032) stå?** Den ble åpnet 16:30 UTC
-  fordi loss-cooldown manglet etter den uloggførte lukkingen.
+- ~~Skal GBPUSD-re-entryen (pos 17671032) stå?~~ Stengt 16:44 UTC på
+  operatørens ordre (−192,36 NOK).
+- **Kill-switch er død (bot GET `/kill` → 405).** Skal den repareres
+  som signal-id-liste (botens forventning) eller slot-basert (serverens
+  modell)?
 
 ### Session 2026-09-19 — laptop-søvn
 
