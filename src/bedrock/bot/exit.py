@@ -779,7 +779,23 @@ class ExitEngine:
                 if pnl:
                     target["pnl"] = pnl
             data["last_updated"] = now
-            self._atomic_write_json(data)
+            # Skrivefeil skal ikke hoppe over loss-cooldown og daglig tap
+            # under — de er sikkerhetsnett uavhengig av loggen (2026-11-09:
+            # full disk → [Errno 28] her, ingen cooldown, re-entry på
+            # samme nivå 10 t senere).
+            try:
+                self._atomic_write_json(data)
+            except OSError as exc:
+                log.error(
+                    "[TRADE-LOG] %s pos #%s — lukking (%s) IKKE skrevet til logg: %s. "
+                    "Entry står åpen; rett med scripts/backfill_lost_close_pnl.py "
+                    "--position-ids %s.",
+                    state.signal_id,
+                    state.position_id,
+                    reason,
+                    exc,
+                    state.position_id,
+                )
             # Loss-cooldown: registrer signal_id + entry-nivå slik at
             # EntryEngine blokkerer re-entry på samme nivå. Verner mot
             # loss → re-entry → loss-loop i sideways-marked.

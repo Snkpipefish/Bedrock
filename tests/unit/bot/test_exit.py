@@ -1191,6 +1191,74 @@ def test_log_trade_closed_updates_entry_and_accumulates_daily_loss(
     assert safety.daily_loss > 0
 
 
+def test_log_trade_closed_write_failure_still_registers_cooldown_and_daily_loss(
+    safety: SafetyMonitor,
+    config: ReloadableConfig,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Full disk ved logg-skriving → cooldown + daily_loss registreres likevel."""
+    log_path = tmp_path / "signal_log.json"
+    log_path.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {
+                        "signal": {"id": "sig-1", "position_id": 5},
+                        "result": None,
+                        "closed_at": None,
+                        "exit_reason": None,
+                    }
+                ]
+            }
+        )
+    )
+    client = _make_client_stub(
+        symbol_map={"EURUSD": 1},
+        last_bid={1: 1.07},
+        symbol_price_digits={1: 5},
+    )
+    entry = EntryEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=[],
+        stats_path=tmp_path / "s.json",
+    )
+    ex = ExitEngine(
+        client=client,
+        safety=safety,
+        config=config,
+        active_states=[],
+        entry=entry,
+        trade_log_path=log_path,
+    )
+
+    def _disk_full(_data: dict[str, object]) -> None:
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(ex, "_atomic_write_json", _disk_full)
+    state = TradeState(
+        signal_id="sig-1",
+        symbol_id=1,
+        instrument="EURUSD",
+        direction="buy",
+        entry_price=1.08,
+        full_volume=100_000,
+        remaining_volume=100_000,
+        position_id=5,
+        phase=TradePhase.IN_TRADE,
+    )
+    ex._log_trade_closed(state, "8-CANDLE-LOSS", 1.07)
+    # Loggen er urørt (skrivingen feilet) …
+    assert json.loads(log_path.read_text())["entries"][0]["result"] is None
+    # … men sikkerhetsnettene gjelder
+    assert safety.daily_loss > 0
+    lost = entry._lost_signal_ids["sig-1"]
+    assert len(lost) == 1
+    assert lost[0].entry_price == 1.08
+
+
 def test_log_trade_closed_no_op_when_file_missing(
     safety: SafetyMonitor,
     config: ReloadableConfig,
