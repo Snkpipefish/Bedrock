@@ -359,3 +359,120 @@ def test_refresh_token_error_attrs() -> None:
     assert err.status_code == 503
     assert err.body == "down"
     assert "503" in str(err)
+
+
+# ─────────────────────────────────────────────────────────────
+# Disk-reload — tokens rotert utenfor prosessen (bug 2026-11-11)
+# ─────────────────────────────────────────────────────────────
+
+
+def test_on_error_res_newer_tokens_on_disk_reauths_without_refresh(
+    creds_with_refresh: CtraderCredentials,
+    startup_cfg: StartupOnlyConfig,
+    _empty_secrets_on_disk: MagicMock,
+) -> None:
+    """Gitt at secrets.env har andre tokens enn prosessen → bruk dem og
+    re-auth, uten OAuth-refresh-kall og uten FATAL."""
+    _empty_secrets_on_disk.return_value = {
+        "CTRADER_ACCESS_TOKEN": "disk_access",
+        "CTRADER_REFRESH_TOKEN": "disk_refresh",
+    }
+    c = _client(creds_with_refresh, startup_cfg)
+    err = MagicMock()
+    err.errorCode = "CH_ACCESS_TOKEN_INVALID"
+    with (
+        patch("bedrock.bot.ctrader_client.requests.post") as post,
+        patch("bedrock.bot.ctrader_client.update_secrets_env_var") as upd,
+        patch.object(c, "_fatal_exit") as fatal,
+        patch.object(c, "_authenticate_application") as auth,
+    ):
+        c._on_error_res(err)
+
+    fatal.assert_not_called()
+    auth.assert_called_once()
+    post.assert_not_called()
+    upd.assert_not_called()
+    assert c._creds.access_token == "disk_access"
+    assert c._creds.refresh_token == "disk_refresh"
+    assert c._refresh_attempted is False  # refresh er fortsatt tilgjengelig
+
+
+def test_on_error_res_disk_tokens_also_rejected_falls_through_to_refresh(
+    creds_with_refresh: CtraderCredentials,
+    startup_cfg: StartupOnlyConfig,
+    _empty_secrets_on_disk: MagicMock,
+) -> None:
+    """Andre auth-feil etter disk-reload → refresh med refresh-tokenet
+    fra disk, ikke ny disk-reload."""
+    _empty_secrets_on_disk.return_value = {
+        "CTRADER_ACCESS_TOKEN": "disk_access",
+        "CTRADER_REFRESH_TOKEN": "disk_refresh",
+    }
+    c = _client(creds_with_refresh, startup_cfg)
+    err = MagicMock()
+    err.errorCode = "CH_ACCESS_TOKEN_INVALID"
+    with (
+        patch("bedrock.bot.ctrader_client.requests.post", return_value=_ok_response()) as post,
+        patch("bedrock.bot.ctrader_client.update_secrets_env_var"),
+        patch.object(c, "_fatal_exit") as fatal,
+        patch.object(c, "_authenticate_application") as auth,
+    ):
+        c._on_error_res(err)
+        c._on_error_res(err)
+
+    fatal.assert_not_called()
+    assert auth.call_count == 2
+    post.assert_called_once()
+    assert post.call_args.kwargs["data"]["refresh_token"] == "disk_refresh"
+    assert c._creds.access_token == "new_access"
+    assert _empty_secrets_on_disk.call_count == 1
+
+
+def test_on_error_res_same_tokens_on_disk_goes_straight_to_refresh(
+    creds_with_refresh: CtraderCredentials,
+    startup_cfg: StartupOnlyConfig,
+    _empty_secrets_on_disk: MagicMock,
+) -> None:
+    """Disk har samme access-token som prosessen → ingen reload-re-auth,
+    vanlig refresh-flyt i samme kall."""
+    _empty_secrets_on_disk.return_value = {
+        "CTRADER_ACCESS_TOKEN": "old_access",
+        "CTRADER_REFRESH_TOKEN": "old_refresh",
+    }
+    c = _client(creds_with_refresh, startup_cfg)
+    err = MagicMock()
+    err.errorCode = "ACCESS_TOKEN_EXPIRED"
+    with (
+        patch("bedrock.bot.ctrader_client.requests.post", return_value=_ok_response()) as post,
+        patch("bedrock.bot.ctrader_client.update_secrets_env_var"),
+        patch.object(c, "_fatal_exit") as fatal,
+        patch.object(c, "_authenticate_application") as auth,
+    ):
+        c._on_error_res(err)
+
+    fatal.assert_not_called()
+    post.assert_called_once()
+    auth.assert_called_once()
+    assert c._creds.access_token == "new_access"
+
+
+def test_on_error_res_unreadable_secrets_file_falls_back_to_refresh(
+    creds_with_refresh: CtraderCredentials,
+    startup_cfg: StartupOnlyConfig,
+    _empty_secrets_on_disk: MagicMock,
+) -> None:
+    """Lesefeil på secrets.env skal ikke krasje — vi går videre til refresh."""
+    _empty_secrets_on_disk.side_effect = OSError("permission denied")
+    c = _client(creds_with_refresh, startup_cfg)
+    err = MagicMock()
+    err.errorCode = "CH_ACCESS_TOKEN_INVALID"
+    with (
+        patch("bedrock.bot.ctrader_client.requests.post", return_value=_ok_response()) as post,
+        patch("bedrock.bot.ctrader_client.update_secrets_env_var"),
+        patch.object(c, "_fatal_exit") as fatal,
+        patch.object(c, "_authenticate_application"),
+    ):
+        c._on_error_res(err)
+
+    fatal.assert_not_called()
+    post.assert_called_once()

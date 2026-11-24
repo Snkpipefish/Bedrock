@@ -109,7 +109,7 @@ from bedrock.bot.instruments import (
     INSTRUMENT_MAP,
     PRICE_FEED_MAP,
 )
-from bedrock.config.secrets import DEFAULT_SECRETS_PATH, update_secrets_env_var
+from bedrock.config.secrets import DEFAULT_SECRETS_PATH, load_secrets, update_secrets_env_var
 
 log = logging.getLogger("bedrock.bot.ctrader")
 
@@ -334,6 +334,13 @@ class CtraderClient:
         # Refresh-token-flow: maks ett forsøk per prosess-livsløp.
         # Hindrer evig retry hvis cTrader rejecter også den nye tokenen.
         self._refresh_attempted: bool = False
+
+        # Disk-reload av tokens: maks ett forsøk per prosess-livsløp.
+        # Dekker tilfellet der tokens er rotert utenfor prosessen (manuelt
+        # eller av annen prosess) slik at secrets.env har gyldige tokens
+        # mens in-memory-kopien er død. (Bug 2026-11-11: bot nede i 13
+        # dager med gyldige tokens på disk.)
+        self._disk_reload_attempted: bool = False
 
         # Exit-kode fra `_fatal_exit` — leses av `bot/__main__.py` etter at
         # reactor har stoppet, slik at prosessen faktisk avslutter med
@@ -997,6 +1004,16 @@ class CtraderClient:
         # Auth-fatal-koder: prøv refresh-flow én gang før FATAL-exit.
         err_code = getattr(event, "errorCode", "")
         if err_code in AUTH_FATAL_ERROR_CODES:
+            if not self._disk_reload_attempted:
+                self._disk_reload_attempted = True
+                if self._try_reload_tokens_from_disk():
+                    log.warning(
+                        "[AUTH] %s — secrets.env har nyere tokens enn prosessen; "
+                        "re-autentiserer med dem.",
+                        err_code,
+                    )
+                    self._authenticate_application()
+                    return
             if self._creds.refresh_token and not self._refresh_attempted:
                 self._refresh_attempted = True
                 log.warning(
@@ -1015,6 +1032,32 @@ class CtraderClient:
             self._callbacks.on_error_res(event)
         except Exception:
             log.exception("[CALLBACK] on_error_res feilet")
+
+    def _try_reload_tokens_from_disk(self) -> bool:
+        """Les tokens fra secrets.env og ta dem i bruk hvis de er endret.
+
+        Leser fila direkte (ikke `os.environ` — env er et øyeblikksbilde
+        fra prosess-start og er nettopp det som er utdatert). Returnerer
+        True kun hvis access-tokenet på disk er forskjellig fra det i
+        minnet; da er in-memory creds oppdatert og caller skal re-auth.
+        Refresh-token tas med i samme slengen siden Spotware roterer
+        begge samtidig.
+        """
+        try:
+            on_disk = load_secrets(DEFAULT_SECRETS_PATH)
+        except Exception:
+            log.exception("[AUTH] Klarte ikke å lese secrets.env for token-reload")
+            return False
+
+        disk_access = on_disk.get("CTRADER_ACCESS_TOKEN")
+        if not disk_access or disk_access == self._creds.access_token:
+            return False
+
+        self._creds.access_token = disk_access
+        disk_refresh = on_disk.get("CTRADER_REFRESH_TOKEN")
+        if disk_refresh:
+            self._creds.refresh_token = disk_refresh
+        return True
 
     def _try_refresh_and_reauth(self) -> bool:
         """Refresh OAuth-tokens og re-trigg app-auth.
