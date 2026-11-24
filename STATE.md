@@ -2,6 +2,57 @@
 
 ## Session log (most recent first)
 
+### 2026-11-24 — boten død i 13 dager: cTrader-tokens rotert av Regnbue-prosjektet
+
+**Hva:** Operatør meldte monitor-feil `bot_process: ingen bedrock.bot-
+prosess funnet`. `session_health.sh` RØD: `bedrock-bot.service` failed
+siden 11. nov 14:58 (exit 78), `bedrock-monitor.service` failed som
+følge av det.
+
+**Rotårsak:**
+
+- `~/prosjekter/setups` (Regnbue, `setups.service`) bruker samme
+  cTrader-app og samme `~/.bedrock/secrets.env` som boten. Ved
+  token-feil kjører `setups/ctrader_prices.py` OAuth-refresh og skriver
+  nye access- og refresh-tokens til fila.
+- 11. nov: laptopen våknet 14:41:19 etter 13 t søvn, `setups.service`
+  hentet cTrader-priser 14:41:22, `secrets.env` skrevet 14:41:31.
+  Spotware ugyldiggjør de gamle tokenene ved refresh, så boten satt
+  igjen med to døde tokens i minnet. Ved reconnect 14:58:
+  `CH_ACCESS_TOKEN_INVALID` → refresh `ACCESS_DENIED` → FATAL exit 78
+  (som systemd bevisst ikke restarter).
+- Tokenene på disk var gyldige hele tiden; en ren restart løste det.
+
+**Gjort:**
+
+- Bot restartet 17:37 → autentisert, balanse 425 024 NOK, 2 åpne
+  MAKRO-posisjoner tatt over (hadde stått 13 dager med kun megler-SL).
+- `6fcd23a` fix(bot): ved auth-fatal-feil leser boten `secrets.env` fra
+  disk (ikke `os.environ`) før refresh. Er access-tokenet der et annet
+  enn i minnet, tas disk-tokenene i bruk og boten re-autentiserer.
+  Rekkefølge: disk-reload → OAuth-refresh → exit 78, hvert steg maks én
+  gang per prosess. 4 nye tester + `tests/unit/bot/conftest.py` som
+  hindrer at bot-testene leser ekte `secrets.env`.
+- Bot restartet 17:48 med ny kode: 3 åpne posisjoner (én ny åpnet
+  mellom restartene, ikke undersøkt).
+- Levetid sjekket mot Spotwares dokumentasjon
+  (help.ctrader.com/open-api/account-authentication): access-token
+  2 628 000 s (~30 dager), refresh-token utløper ikke, refresh over
+  HTTP ugyldiggjør begge gamle tokens. Manuelt bytte er altså ikke
+  nødvendig så lenge auto-refresh virker.
+
+**Verifisert:** 541 tester grønne (bot/ctrader/secrets-utvalg), ruff og
+pyright rene, monitor `bot_process: OK`. Disk-reload-stien er kun
+dekket av tester — ikke utløst mot cTrader ennå.
+`bedrock-monitor.service` (system-unit) står som failed til neste
+timer-kjøring.
+
+**Neste:** (1) Ved neste Regnbue-refresh (~30 dager): bekreft
+`[AUTH] … secrets.env har nyere tokens`-linje i bot-loggen. (2) Ingen
+trades 11.–24. nov — gjennomgangen under de nye reglene fra 9. nov
+forskyves tilsvarende. (3) Fortsatt åpent fra 9. nov: `[LOST-CLOSE]`-
+verifisering, energi-scoring, kill-switch, lokk-søvn.
+
 ### 2026-11-09 — setup-gjennomgang: hva funker og ikke (demo 5. sep → 9. nov)
 
 **Hva:** Operatør ba om gjennomgangen som ble utsatt 30. sep («nr. 3»).
@@ -888,6 +939,12 @@ Verifikasjon: pyright 0/0, ruff clean, **pytest 2929/2929 grønt** (5 min).
 
 ## Current state
 
+- **Drift (2026-11-24):** boten var død 11.–24. nov (exit 78) fordi
+  Regnbue (`~/prosjekter/setups`) fornyet de delte cTrader-tokenene i
+  `secrets.env` og dermed drepte botens in-memory-tokens. Restartet;
+  fra `6fcd23a` leser boten tokens fra disk på nytt ved auth-feil før
+  refresh/FATAL. Balanse 425 024 NOK, 3 åpne posisjoner. Access-token
+  varer ~30 dager, refresh-token utløper ikke (Spotware-docs).
 - **Edge (2026-11-09, gjennomgang 5. sep → 9. nov):** verifisert
   −18,3R på 74 trades; konto 397,7k (−18,6 % siden 14. sep). Energi
   −12,9R (NATGAS 0/22 i demoen), grade B −10,0R vs A +6,5R utenom
@@ -1450,6 +1507,13 @@ ferdig og 12.6-rebalansering er gjort.
   `git status` før retry; aldri `git add -u`.
 
 ## Open questions to user
+
+### Session 2026-11-24 — tokens delt med Regnbue
+
+- **Rest-risiko:** boten og Regnbue kan forsøke refresh i samme sekund;
+  den som taper sitter med ugyldig refresh-token til den leser fila på
+  nytt. Boten henter seg inn via disk-reload. Skal de to prosjektene
+  ha hver sin cTrader-app/token for å fjerne koblingen helt?
 
 ### Session 2026-11-09 — full disk
 
