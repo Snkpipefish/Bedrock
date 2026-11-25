@@ -10,7 +10,8 @@ for tirsdag-posisjoner i ICE-listede futures: Brent Crude, Low Sulphur
 Gasoil, og TTF Natural Gas.
 
 CSV-format: ICE leverer en årlig CSV (én fil per år) på
-``https://www.ice.com/publicdocs/futures/COTHist{YEAR}.csv`` i CFTC
+``https://www.ice.com/publicdocs/cot_report/automated/COTHist{YEAR}.csv``
+(inneværende år; eldre år under ``publicdocs/futures/``) i CFTC
 disaggregated-format (samme kolonnenavn: ``M_Money_Positions_Long_All``,
 ``Prod_Merc_Positions_Long_All``, etc.). Cot-explorer-referansen
 importerer openpyxl, men ``main()`` der bruker kun CSV-parsing — Excel-
@@ -85,11 +86,25 @@ ICE_MARKETS: dict[str, str] = {
 }
 
 
+# ICE flyttet inneværende års fil til ``cot_report/automated/`` (oppdaget
+# 2026-11-25). Den gamle ``futures/``-stien svarer fortsatt 200, men ble
+# ikke oppdatert etter 2026-11-06 — derfor må ny sti prøves FØRST, ellers
+# returnerer vi en frossen fil uten feil. Eldre år ligger fortsatt under
+# ``futures/``. Lenkene er hentet fra https://www.ice.com/report/122.
+_ICE_BASE_AUTOMATED = "https://www.ice.com/publicdocs/cot_report/automated"
+_ICE_BASE_LEGACY = "https://www.ice.com/publicdocs/futures"
+
+
 def _ice_urls(year: int) -> list[str]:
-    """ICE-URL-er for current og foregående år. Sekvensiell prøving."""
+    """ICE-URL-er for current og foregående år. Sekvensiell prøving.
+
+    Per år prøves ny sti (``cot_report/automated``) før gammel
+    (``futures``). Første URL som gir gyldig CSV vinner.
+    """
     return [
-        f"https://www.ice.com/publicdocs/futures/COTHist{year}.csv",
-        f"https://www.ice.com/publicdocs/futures/COTHist{year - 1}.csv",
+        f"{base}/COTHist{y}.csv"
+        for y in (year, year - 1)
+        for base in (_ICE_BASE_AUTOMATED, _ICE_BASE_LEGACY)
     ]
 
 

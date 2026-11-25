@@ -330,3 +330,19 @@ def test_normalize_market_softs() -> None:
     assert _normalize_market("ICE Wheat Futures - ICE Futures Europe") == "ice wheat"
     # 'and Options'-rader skippes for softs også
     assert _normalize_market("ICE Cocoa Futures and Options - ICE Futures Europe") is None
+
+
+def test_ice_urls_prefers_automated_path_over_frozen_legacy_path() -> None:
+    """ICE flyttet årsfila til cot_report/automated/ (nov 2026).
+
+    Den gamle futures/-stien svarer fortsatt 200 med en frossen fil, så
+    ny sti må komme først for hvert år — ellers får vi stale data uten feil.
+    """
+    from bedrock.fetch.cot_ice import _ice_urls
+
+    assert _ice_urls(2026) == [
+        "https://www.ice.com/publicdocs/cot_report/automated/COTHist2026.csv",
+        "https://www.ice.com/publicdocs/futures/COTHist2026.csv",
+        "https://www.ice.com/publicdocs/cot_report/automated/COTHist2025.csv",
+        "https://www.ice.com/publicdocs/futures/COTHist2025.csv",
+    ]
