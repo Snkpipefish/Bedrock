@@ -2,6 +2,34 @@
 
 ## Session log (most recent first)
 
+### 2026-11-25 — cot_ice stale: ICE flyttet årsfila til ny adresse
+
+**Hva:** Operatør meldte monitor-feil. `session_health.sh` RØD:
+`fetcher_freshness` — `cot_ice` stale (siste `report_date` 3. nov,
+grense 264 t). De 8 «aging»-kildene var kun etterslep etter lokk-søvn
+(monitor kjørte i samme sekund som laptopen våknet 17:27).
+
+**Rotårsak:** ICE har flyttet inneværende års fil fra
+`publicdocs/futures/COTHist2026.csv` til
+`publicdocs/cot_report/automated/COTHist2026.csv`. Gammel adresse
+svarer fortsatt 200, men fila er frosset (Last-Modified 6. nov), så
+henteren fikk gyldig CSV uten nye uker og uten feil. Ingen rundskriv
+fra ICE om endringen. Ny adresse funnet i rapportsenteret
+(ice.com/report/122 — krever vilkårsaksept + reCAPTCHA i nettleser,
+operatør klikket gjennom).
+
+**Gjort:** `b54ab82` fix(fetch): `_ice_urls` prøver ny sti før gammel,
+for inneværende og foregående år. 1 ny test. Manuell kjøring hentet
+10. og 17. nov (276 rader, 6 markeder). Monitor kjørt på nytt: GRØNN.
+
+**Verifisert:** 31 tester grønne (cot_ice-utvalg), ruff og pyright
+rene, `cot_ice` har `report_date` 2026-11-17 i `data/bedrock.db`.
+
+**Neste:** (1) Januar 2027: sjekk at `COTHist2027.csv` dukker opp under
+ny sti, og hvor ICE legger 2026-fila da. (2) Svakhet som står igjen:
+en frossen fil på en adresse som svarer 200 oppdages bare av
+stale-grensen (11 dager). (3) Åpne punkter fra 24. nov uendret.
+
 ### 2026-11-24 — boten død i 13 dager: cTrader-tokens rotert av Regnbue-prosjektet
 
 **Hva:** Operatør meldte monitor-feil `bot_process: ingen bedrock.bot-
